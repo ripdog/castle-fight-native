@@ -130,7 +130,7 @@ All of these survive tick boundaries and therefore must be restored exactly.
 
 ### 5.5 Corpses
 
-A corpse stores `SimId`, `Position`, source unit/player/team, corpse definition, creation tick, and optional expiry tick. Source ownership is retained after the live unit disappears so presentation/statistical provenance does not fall back to team identity. Optional expiry presence is authoritative; an immortal corpse must not alias an expiry sentinel.
+A corpse stores `SimId`, `Position`, source unit/player/team, corpse definition, creation tick, decay-start/eligibility tick, and optional expiry tick. Source ownership is retained after the live unit disappears so presentation/statistical provenance does not fall back to team identity. The decay-start tick is authoritative because corpse selection, resurrection, and consumption must reject a fresh death until its imported Warcraft `death_time` has elapsed. Optional expiry presence is authoritative; an immortal corpse must not alias an expiry sentinel.
 
 ## 6. State reconstructed inside a tick
 

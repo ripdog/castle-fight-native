@@ -386,7 +386,9 @@ impl Simulation {
                         .iter_entities()
                         .filter_map(|entity| {
                             let corpse = entity.get::<Corpse>()?;
-                            if !crate::content::vessel_corpse_qualifies_927(corpse.definition) {
+                            if !corpse.is_usable_at(self.next_tick)
+                                || !crate::content::vessel_corpse_qualifies_927(corpse.definition)
+                            {
                                 return None;
                             }
                             let corpse_position = entity.get::<Position>()?.0;
@@ -550,6 +552,7 @@ impl Simulation {
             .iter(&self.world)
             .filter_map(|(entity, id, corpse, position)| {
                 (corpse.source_team == team
+                    && corpse.is_usable_at(self.next_tick)
                     && corpse
                         .resurrection
                         .is_some_and(|definition| !definition.properties.mechanical)
@@ -670,7 +673,9 @@ impl Simulation {
                     let Some(corpse) = entity.get::<Corpse>() else {
                         continue;
                     };
-                    if !crate::content::vessel_corpse_qualifies_927(corpse.definition) {
+                    if !corpse.is_usable_at(self.next_tick)
+                        || !crate::content::vessel_corpse_qualifies_927(corpse.definition)
+                    {
                         continue;
                     }
                     let Some(position) = entity.get::<Position>().map(|position| position.0) else {
@@ -989,7 +994,10 @@ impl Simulation {
                     && self.world.iter_entities().any(|entity| {
                         entity.get::<SimId>() == Some(&id)
                             && entity.get::<Corpse>().is_some_and(|corpse| {
-                                crate::content::vessel_corpse_qualifies_927(corpse.definition)
+                                corpse.is_usable_at(self.next_tick)
+                                    && crate::content::vessel_corpse_qualifies_927(
+                                        corpse.definition,
+                                    )
                             })
                             && entity
                                 .get::<Position>()
@@ -1006,6 +1014,73 @@ impl Simulation {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resurrection_waits_until_corpse_decay_start_tick() {
+        let mut sim = Simulation::new(SimulationConfig::default(), 1);
+        let position = SimPoint::new(10 * SUBUNITS_PER_WORLD_UNIT, 0);
+        let definition = ResolvedUnitDefinition {
+            template: crate::components::UnitTemplate {
+                health: 80,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    damage: 7,
+                    range: SUBUNITS_PER_WORLD_UNIT,
+                    acquisition_range: 5 * SUBUNITS_PER_WORLD_UNIT,
+                    cooldown_ticks: 30,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            properties: UnitGameplayProperties::default(),
+            spellcasting: None,
+        };
+        let id = sim.allocate_id();
+        sim.world.spawn((
+            id,
+            Position(position),
+            Corpse {
+                source_unit: id,
+                source_owner: PlayerId(0),
+                source_team: Team(0),
+                definition: CorpseDefinitionId(1),
+                created_tick: 0,
+                decay_start_tick: 2,
+                expires_tick: None,
+                resurrection: Some(definition),
+            },
+        ));
+
+        assert_eq!(
+            sim.resurrect_friendly_corpses(
+                Team(0),
+                AbilitySourceOrigin::Unit(position),
+                SUBUNITS_PER_WORLD_UNIT,
+                1,
+            ),
+            0
+        );
+        sim.step();
+        assert_eq!(
+            sim.resurrect_friendly_corpses(
+                Team(0),
+                AbilitySourceOrigin::Unit(position),
+                SUBUNITS_PER_WORLD_UNIT,
+                1,
+            ),
+            0
+        );
+        sim.step();
+        assert_eq!(sim.tick(), 2);
+        assert_eq!(
+            sim.resurrect_friendly_corpses(
+                Team(0),
+                AbilitySourceOrigin::Unit(position),
+                SUBUNITS_PER_WORLD_UNIT,
+                1,
+            ),
+            1
+        );
+    }
 
     #[test]
     fn resurrection_uses_friendly_corpse_template_and_survives_snapshot_restore() {
@@ -1042,6 +1117,7 @@ mod tests {
                     source_team: team,
                     definition: CorpseDefinitionId(1),
                     created_tick: 0,
+                    decay_start_tick: 0,
                     expires_tick: None,
                     resurrection: Some(definition),
                 },

@@ -67,7 +67,7 @@ SimId -> presentation/render entity or instance handle
 
 The mapping is process-local and rebuildable.
 
-A simulation entity spawn causes presentation creation. When a corpse-producing unit dies, presentation should transition from the living unit to the authoritative corpse entity/state rather than replacing gameplay state with a cosmetic-only corpse. The client may still layer non-authoritative death animation, particles, decals, or later visual remains around that corpse. For units/content that do not produce authoritative corpses, despawn may leave cosmetic death remnants provided they have no gameplay effect.
+A simulation entity spawn causes presentation creation. When a corpse-producing unit dies, presentation should transition from the living unit to the authoritative corpse entity/state rather than replacing gameplay state with a cosmetic-only corpse. The imported Death clip plays at its authored/native rate; if it finishes before the authoritative decay-start tick, presentation holds its final pose rather than stretching the clip. At the decay-start tick presentation enters the decay sequence, matching the same boundary that makes the corpse eligible to gameplay. The client may still layer non-authoritative death animation, particles, decals, or later visual remains around that corpse. For units/content that do not produce authoritative corpses, despawn may leave cosmetic death remnants provided they have no gameplay effect.
 
 ## 5. Interpolation
 

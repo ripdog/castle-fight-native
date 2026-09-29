@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 10;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 11;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -379,6 +379,7 @@ pub struct CorpseView {
     pub source_team: Team,
     pub definition: CorpseDefinitionId,
     pub created_tick: u64,
+    pub decay_start_tick: u64,
     pub expires_tick: Option<u64>,
 }
 
@@ -892,6 +893,10 @@ impl Simulation {
                 continue;
             };
             let id = self.allocate_id();
+            let decay_start_tick = self
+                .next_tick
+                .checked_add(u64::from(profile.decay_start_ticks))
+                .expect("corpse decay-start tick overflow");
             let expires_tick = profile.lifetime_ticks.map(|lifetime_ticks| {
                 self.next_tick
                     .checked_add(u64::from(lifetime_ticks))
@@ -906,6 +911,7 @@ impl Simulation {
                     source_team,
                     definition: profile.definition,
                     created_tick: self.next_tick,
+                    decay_start_tick,
                     expires_tick,
                     resurrection,
                 },
@@ -1703,6 +1709,9 @@ impl Simulation {
             corpse_spawns
         {
             let id = self.allocate_id();
+            let decay_start_tick = completed_tick
+                .checked_add(u64::from(profile.decay_start_ticks))
+                .expect("corpse decay-start tick overflow");
             let expires_tick = profile.lifetime_ticks.map(|lifetime_ticks| {
                 completed_tick
                     .checked_add(u64::from(lifetime_ticks))
@@ -1717,6 +1726,7 @@ impl Simulation {
                     source_team,
                     definition: profile.definition,
                     created_tick: completed_tick,
+                    decay_start_tick,
                     expires_tick,
                     resurrection,
                 },
@@ -3633,8 +3643,16 @@ fn validate_unit_spawn(unit: UnitSpawn) {
 }
 
 fn validate_corpse_profile(corpse: CorpseProfile) {
+    assert!(
+        corpse.decay_start_ticks > 0,
+        "corpse decay-start delay must be positive"
+    );
     if let Some(lifetime_ticks) = corpse.lifetime_ticks {
         assert!(lifetime_ticks > 0, "corpse lifetime must be positive");
+        assert!(
+            corpse.decay_start_ticks < lifetime_ticks,
+            "corpse decay-start delay must precede expiry"
+        );
     }
 }
 
@@ -3674,6 +3692,7 @@ fn corpse_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<Cor
         source_team: corpse.source_team,
         definition: corpse.definition,
         created_tick: corpse.created_tick,
+        decay_start_tick: corpse.decay_start_tick,
         expires_tick: corpse.expires_tick,
     })
 }

@@ -2312,8 +2312,7 @@ fn update_imported_death_remnant(
 struct CorpseAnimationPlayback {
     state: ImportedUnitAnimationState,
     clip: UnitAnimationClip,
-    elapsed_ticks: u64,
-    duration_ticks: u64,
+    seek_seconds: f32,
 }
 
 fn update_imported_corpse_animation(
@@ -2333,10 +2332,7 @@ fn update_imported_corpse_animation(
     let Some(animation) = player.animation_mut(playback.clip.node) else {
         return;
     };
-    let phase = playback.elapsed_ticks as f32 / playback.duration_ticks.max(1) as f32;
-    animation
-        .set_seek_time(playback.clip.duration_seconds * phase.clamp(0.0, 1.0))
-        .pause();
+    animation.set_seek_time(playback.seek_seconds).pause();
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2367,21 +2363,27 @@ fn corpse_animation_playback(
     Some(CorpseAnimationPlayback {
         state: phase.state,
         clip,
-        elapsed_ticks: phase.elapsed_ticks,
-        duration_ticks: phase.duration_ticks,
+        seek_seconds: corpse_animation_seek_seconds(phase, clip.duration_seconds),
     })
 }
 
+fn corpse_animation_seek_seconds(phase: CorpseAnimationPhase, clip_duration_seconds: f32) -> f32 {
+    if phase.state == ImportedUnitAnimationState::Death {
+        return (phase.elapsed_ticks as f32 / CASTLE_FIGHT_SIMULATION_HZ as f32)
+            .min(clip_duration_seconds);
+    }
+    let normalized = phase.elapsed_ticks as f32 / phase.duration_ticks.max(1) as f32;
+    clip_duration_seconds * normalized.clamp(0.0, 1.0)
+}
+
 fn corpse_animation_phase(current_tick: u64, corpse: &CorpseView) -> Option<CorpseAnimationPhase> {
-    let total_ticks = corpse
-        .expires_tick
-        .map(|expires| expires.saturating_sub(corpse.created_tick))?;
-    let death_ticks = total_ticks
-        .saturating_sub(FLESH_DECAY_TICKS + BONE_DECAY_TICKS)
+    let death_ticks = corpse
+        .decay_start_tick
+        .saturating_sub(corpse.created_tick)
         .max(1);
     let age = current_tick.saturating_sub(corpse.created_tick);
 
-    if age < death_ticks {
+    if current_tick < corpse.decay_start_tick {
         return Some(CorpseAnimationPhase {
             state: ImportedUnitAnimationState::Death,
             elapsed_ticks: age,
@@ -2389,7 +2391,7 @@ fn corpse_animation_phase(current_tick: u64, corpse: &CorpseView) -> Option<Corp
         });
     }
 
-    let flesh_age = age.saturating_sub(death_ticks);
+    let flesh_age = current_tick.saturating_sub(corpse.decay_start_tick);
     if flesh_age < FLESH_DECAY_TICKS {
         return Some(CorpseAnimationPhase {
             state: ImportedUnitAnimationState::DecayFlesh,
@@ -2400,7 +2402,7 @@ fn corpse_animation_phase(current_tick: u64, corpse: &CorpseView) -> Option<Corp
 
     Some(CorpseAnimationPhase {
         state: ImportedUnitAnimationState::DecayBone,
-        elapsed_ticks: age.saturating_sub(death_ticks + FLESH_DECAY_TICKS),
+        elapsed_ticks: flesh_age.saturating_sub(FLESH_DECAY_TICKS),
         duration_ticks: BONE_DECAY_TICKS,
     })
 }
@@ -6001,6 +6003,7 @@ mod tests {
             source_team: Team(0),
             definition: CorpseDefinitionId(u32::from_be_bytes(*b"n015")),
             created_tick: 100,
+            decay_start_tick: 190,
             expires_tick: Some(1_000),
         };
 
@@ -6036,6 +6039,30 @@ mod tests {
                 duration_ticks: 750,
             })
         );
+    }
+
+    #[test]
+    fn death_animation_advances_at_native_rate_then_holds_final_pose() {
+        let early = CorpseAnimationPhase {
+            state: ImportedUnitAnimationState::Death,
+            elapsed_ticks: 15,
+            duration_ticks: 153,
+        };
+        assert!((corpse_animation_seek_seconds(early, 1.5) - 0.5).abs() < 1.0e-6);
+
+        let held = CorpseAnimationPhase {
+            state: ImportedUnitAnimationState::Death,
+            elapsed_ticks: 120,
+            duration_ticks: 153,
+        };
+        assert!((corpse_animation_seek_seconds(held, 1.5) - 1.5).abs() < 1.0e-6);
+
+        let decay = CorpseAnimationPhase {
+            state: ImportedUnitAnimationState::DecayFlesh,
+            elapsed_ticks: FLESH_DECAY_TICKS / 2,
+            duration_ticks: FLESH_DECAY_TICKS,
+        };
+        assert!((corpse_animation_seek_seconds(decay, 2.0) - 1.0).abs() < 1.0e-6);
     }
 
     #[test]

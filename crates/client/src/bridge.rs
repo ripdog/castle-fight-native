@@ -385,6 +385,7 @@ mod tests {
             },
             CorpseProfile {
                 definition: CorpseDefinitionId(7),
+                decay_start_ticks: 1,
                 lifetime_ticks: Some(5),
             },
         );

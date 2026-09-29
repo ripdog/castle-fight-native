@@ -1687,6 +1687,10 @@ mod tests {
         sim.spawn_resolved_unit(Team(0), SimPoint::new(650 * world, 0), footman.resolved());
         assert_eq!(sim.debug_damage_all_units(99_999), 1);
         assert_eq!(sim.corpses().len(), 1);
+        let decay_start_tick = sim.corpses()[0].decay_start_tick;
+        while sim.tick() < decay_start_tick {
+            sim.step();
+        }
 
         let paladin = CastleFightUnitKind::Paladin.definition();
         let mut paladin_spellcasting = paladin.spellcasting.unwrap();
@@ -1913,6 +1917,32 @@ mod tests {
             .unwrap();
         let recasts = (0..210).map(|_| sim.step().ability_casts).sum::<usize>();
         assert_eq!(recasts, 1);
+    }
+
+    #[test]
+    fn vessel_of_purity_waits_for_decay_before_targeting_a_corpse() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 1);
+        let footman = CastleFightUnitKind::Footman.definition();
+        sim.spawn_resolved_unit(Team(1), SimPoint::new(40 * world, 0), footman.resolved());
+        assert_eq!(sim.debug_damage_all_units(99_999), 1);
+        let corpse = sim.corpses()[0];
+        assert!(corpse.decay_start_tick > corpse.created_tick);
+
+        let vessel = CastleFightTowerKind::VesselOfPurity.definition();
+        let mut spawn = vessel.spawn(Team(0), BuildingFootprint::new(10, 0, 4, 4));
+        let mut spellcasting = spawn.spellcasting.expect("Vessel has Purification");
+        spellcasting.mana.starting = spellcasting.ability.mana_cost;
+        spawn.spellcasting = Some(spellcasting);
+        sim.spawn_building_with_properties(spawn, vessel.gameplay_properties());
+
+        while sim.tick() < corpse.decay_start_tick {
+            assert_eq!(sim.step().ability_casts, 0);
+            assert_eq!(sim.corpse_count(), 1);
+        }
+        let cast = sim.step();
+        assert_eq!(cast.ability_casts, 1);
+        assert_eq!(sim.corpse_count(), 0);
     }
 
     #[test]
@@ -2953,6 +2983,7 @@ mod tests {
                 duel_unit(1, victim_position.x, 0, 100),
                 CorpseProfile {
                     definition: CorpseDefinitionId(42),
+                    decay_start_ticks: 1,
                     lifetime_ticks: Some(2),
                 },
             );
@@ -2971,6 +3002,7 @@ mod tests {
             assert_eq!(corpse.source_team, Team(1));
             assert_eq!(corpse.definition, CorpseDefinitionId(42));
             assert_eq!(corpse.created_tick, 1);
+            assert_eq!(corpse.decay_start_tick, 2);
             assert_eq!(corpse.expires_tick, Some(3));
             assert_eq!(sim.unit(attacker).unwrap().health, 100);
             let after_death = sim.checksum();
@@ -3025,6 +3057,7 @@ mod tests {
             },
             CorpseProfile {
                 definition: CorpseDefinitionId(7),
+                decay_start_ticks: 1,
                 lifetime_ticks: None,
             },
         );
@@ -3058,6 +3091,7 @@ mod tests {
             production_building(1, BuildingFootprint::new(10, 0, 1, 1), 2),
             CorpseProfile {
                 definition: CorpseDefinitionId(19),
+                decay_start_ticks: 1,
                 lifetime_ticks: None,
             },
         );
@@ -3099,6 +3133,7 @@ mod tests {
             UnitGameplayProperties {
                 corpse: Some(CorpseProfile {
                     definition: CorpseDefinitionId(23),
+                    decay_start_ticks: 1,
                     lifetime_ticks: None,
                 }),
                 collision_radius: Some(CollisionRadius(world / 8)),
@@ -5383,6 +5418,7 @@ mod tests {
             },
             CorpseProfile {
                 definition: CorpseDefinitionId(42),
+                decay_start_ticks: 1,
                 lifetime_ticks: Some(60),
             },
         );

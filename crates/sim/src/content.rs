@@ -30,7 +30,7 @@ use crate::{
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r7";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r8";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -2025,6 +2025,7 @@ fn hash_unit_definition(hash: &mut ContentHash64, definition: CastleFightUnitDef
         Some(corpse) => {
             hash.write_u8(1);
             hash.write_u32(corpse.definition.0);
+            hash.write_u32(corpse.decay_start_ticks);
             match corpse.lifetime_ticks {
                 Some(ticks) => {
                     hash.write_u8(1);
@@ -2571,6 +2572,7 @@ struct ExtractedProduction927 {
 #[derive(Debug, Clone, Copy)]
 struct ExtractedCorpse927 {
     does_decay: bool,
+    decay_start_ticks: u32,
     lifetime_ticks: Option<u32>,
 }
 
@@ -3013,6 +3015,7 @@ impl ExtractedContent927 {
             }
             let rawcode = parse_rawcode(columns[2]);
             let does_decay = columns[9] == "1";
+            let decay_start_ticks = parse_seconds_to_ticks_u32_927(columns[10])?;
             let lifetime_ticks = if does_decay && !columns[13].is_empty() {
                 Some(parse_seconds_to_ticks_u32_927(columns[13])?)
             } else {
@@ -3022,6 +3025,7 @@ impl ExtractedContent927 {
                 rawcode,
                 ExtractedCorpse927 {
                     does_decay,
+                    decay_start_ticks,
                     lifetime_ticks,
                 },
             );
@@ -4019,6 +4023,7 @@ fn extracted_unit_definition_927(
         );
         Some(CorpseProfile {
             definition: CorpseDefinitionId(rawcode),
+            decay_start_ticks: corpse.decay_start_ticks,
             lifetime_ticks: corpse.lifetime_ticks,
         })
     } else {
@@ -4266,6 +4271,26 @@ mod tests {
     }
 
     #[test]
+    fn imported_corpse_decay_start_uses_wc3_death_time() {
+        assert_eq!(
+            CastleFightUnitKind::Warlock
+                .definition()
+                .corpse
+                .expect("Warlock has a corpse")
+                .decay_start_ticks,
+            3 * CASTLE_FIGHT_SIMULATION_HZ as u32
+        );
+        assert_eq!(
+            CastleFightUnitKind::HolyWarrior
+                .definition()
+                .corpse
+                .expect("Holy Warrior has a corpse")
+                .decay_start_ticks,
+            153
+        );
+    }
+
+    #[test]
     fn current_content_bundle_freezes_the_development_slice() {
         let bundle = castle_fight_content_bundle(MapVersion::CASTLE_FIGHT_9_27).unwrap();
         assert_eq!(bundle.revision, CASTLE_FIGHT_CONTENT_REVISION_927);
@@ -4277,7 +4302,7 @@ mod tests {
             bundle.identity.schema_version,
             CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION
         );
-        assert_eq!(bundle.identity.gameplay_hash, 10983885818666937429);
+        assert_eq!(bundle.identity.gameplay_hash, 17650247164964876168);
         assert_eq!(bundle.behaviors().len(), 41);
         assert!(
             bundle

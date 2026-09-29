@@ -280,6 +280,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                     Some(corpse) => {
                         hash.write_u8(1);
                         hash.write_u64(u64::from(corpse.definition.0));
+                        hash.write_u32(corpse.decay_start_ticks);
                         hash_optional_u32(&mut hash, corpse.lifetime_ticks);
                     }
                     None => hash.write_u8(0),
@@ -399,6 +400,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         Some(corpse) => {
                             hash.write_u8(1);
                             hash.write_u64(u64::from(corpse.definition.0));
+                            hash.write_u32(corpse.decay_start_ticks);
                             hash_optional_u32(&mut hash, corpse.lifetime_ticks);
                         }
                         None => hash.write_u8(0),
@@ -618,6 +620,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(corpse.corpse.source_team.0);
                 hash.write_u64(u64::from(corpse.corpse.definition.0));
                 hash.write_u64(corpse.corpse.created_tick);
+                hash.write_u64(corpse.corpse.decay_start_tick);
                 hash_optional_u64(&mut hash, corpse.corpse.expires_tick);
                 match corpse.corpse.resurrection {
                     Some(definition) => {
@@ -635,6 +638,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u8(properties.corpse.is_some() as u8);
                         if let Some(profile) = properties.corpse {
                             hash.write_u32(profile.definition.0);
+                            hash.write_u32(profile.decay_start_ticks);
                             hash_optional_u32(&mut hash, profile.lifetime_ticks);
                         }
                         hash.write_i32(properties.collision_radius.map_or(-1, |radius| radius.0));
@@ -1129,6 +1133,7 @@ fn hash_building_definition(
         if let Some(corpse) = unit.corpse {
             hash.write_u8(1);
             hash.write_u64(u64::from(corpse.definition.0));
+            hash.write_u32(corpse.decay_start_ticks);
             hash_optional_u32(hash, corpse.lifetime_ticks);
         } else {
             hash.write_u8(0);

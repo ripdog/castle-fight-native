@@ -192,6 +192,7 @@ pub struct CorpseDefinitionId(pub u32);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CorpseProfile {
     pub definition: CorpseDefinitionId,
+    pub decay_start_ticks: u32,
     pub lifetime_ticks: Option<u32>,
 }
 
@@ -540,8 +541,16 @@ pub(crate) struct Corpse {
     pub source_team: Team,
     pub definition: CorpseDefinitionId,
     pub created_tick: u64,
+    pub decay_start_tick: u64,
     pub expires_tick: Option<u64>,
     pub resurrection: Option<ResolvedUnitDefinition>,
+}
+
+impl Corpse {
+    #[must_use]
+    pub(crate) const fn is_usable_at(self, tick: u64) -> bool {
+        tick >= self.decay_start_tick
+    }
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
