@@ -9,6 +9,7 @@ license.workspace = true
 bevy = { workspace = true, features = ["3d", "png", "ui", "custom_cursor", "bevy_audio", "flac", "vorbis"] }
 bytemuck.workspace = true
 castle-fight-protocol = { path = "../protocol" }
+castle-fight-server = { path = "../server" }
 castle-fight-sim = { path = "../sim" }
 serde.workspace = true
 serde_json.workspace = true

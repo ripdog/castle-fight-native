@@ -8,6 +8,7 @@ mod demo;
 mod doodads;
 mod inspection;
 mod lobby;
+mod main_menu;
 mod network;
 mod particle_renderer;
 mod performance_ui;
@@ -62,6 +63,7 @@ use demo::{BuildKind, DEVELOPMENT_MATCH_SEED, create_demo_world_for_match_config
 use doodads::DoodadPresentationPlugin;
 use inspection::InspectionPlugin;
 use lobby::{LobbyPlugin, LobbyState};
+use main_menu::{MainMenuPlugin, MainMenuState};
 use network::{NetworkClient, NetworkEvent};
 use performance_ui::{
     PerformanceCounters, PerformanceUiPlugin, SystemTraceDisplay, performance_trace_layer,
@@ -113,6 +115,8 @@ pub(crate) struct AuthoritativeSimulation {
     expected_execution_batch: Option<(u64, Vec<WireCommandExecution>)>,
     catch_up: Option<SnapshotCatchUp>,
     authority: AuthorityMode,
+    network_lobby_status: Option<castle_fight_protocol::LobbyStatus>,
+    network_lobby_error: Option<String>,
     commands_enabled: bool,
 }
 
@@ -127,6 +131,8 @@ impl AuthoritativeSimulation {
             expected_execution_batch: None,
             catch_up: None,
             authority: AuthorityMode::Local,
+            network_lobby_status: None,
+            network_lobby_error: None,
             commands_enabled: true,
         }
     }
@@ -153,6 +159,8 @@ impl AuthoritativeSimulation {
                 connected: true,
                 pending_handoff_position: None,
             },
+            network_lobby_status: None,
+            network_lobby_error: None,
             commands_enabled: true,
         }
     }
@@ -160,6 +168,22 @@ impl AuthoritativeSimulation {
     #[must_use]
     fn is_networked(&self) -> bool {
         matches!(self.authority, AuthorityMode::Network { .. })
+    }
+
+    pub(crate) fn request_network_start(&mut self) -> Result<(), String> {
+        let AuthorityMode::Network {
+            client, connected, ..
+        } = &mut self.authority
+        else {
+            return Err("match is not connected to a server".to_owned());
+        };
+        if !*connected {
+            return Err("network session is unavailable".to_owned());
+        }
+        self.network_lobby_error = None;
+        client
+            .send(ClientMessage::StartMatch)
+            .map_err(|error| error.to_string())
     }
 
     pub(crate) fn submit_local_command(
@@ -392,9 +416,12 @@ fn main() {
     };
 
     let view_state = ViewState::load();
-    let show_lobby = options.profile_quicksave.is_none() && options.stress_units.is_none();
-    authoritative.commands_enabled = !show_lobby;
-    let lobby_state = LobbyState::new(options.clone(), local_player, networked);
+    let interactive_frontend = options.profile_quicksave.is_none()
+        && options.stress_units.is_none()
+        && options.stress_visual.is_none()
+        && !options.profile;
+    let show_main_menu = interactive_frontend && !networked;
+    authoritative.commands_enabled = !show_main_menu;
     let mut app = App::new();
     app.insert_resource(ClearColor(Color::srgb(0.025, 0.03, 0.04)))
         .insert_resource(ViewStatePersistence::new(view_state))
@@ -408,7 +435,7 @@ fn main() {
         })
         .insert_resource(authoritative)
         .insert_resource(SimulationPlayback {
-            paused: show_lobby || options.is_profiling(),
+            paused: show_main_menu || options.is_profiling(),
         })
         .insert_resource(PresentationSamples::new(initial_snapshot))
         .insert_resource(demo.metrics)
@@ -501,8 +528,12 @@ fn main() {
         )
         .add_systems(FixedUpdate, advance_authoritative_simulation);
 
-    if show_lobby {
-        app.insert_resource(lobby_state).add_plugins(LobbyPlugin);
+    if interactive_frontend {
+        app.add_plugins(LobbyPlugin);
+    }
+    if show_main_menu {
+        app.insert_resource(MainMenuState::new(options.clone()))
+            .add_plugins(MainMenuPlugin);
     }
 
     if options.stress_units.is_some() || options.stress_visual.is_some() || options.is_profiling() {
@@ -1074,11 +1105,14 @@ fn handle_quicksave_hotkeys(
 fn toggle_simulation_pause(
     keys: Res<ButtonInput<KeyCode>>,
     lobby: Option<Res<LobbyState>>,
+    main_menu: Option<Res<MainMenuState>>,
     action_panel: Option<Res<build_ui::ActionPanelState>>,
     authoritative: Res<AuthoritativeSimulation>,
     mut playback: ResMut<SimulationPlayback>,
 ) {
-    if lobby.as_ref().is_some_and(|lobby| lobby.active()) {
+    if lobby.as_ref().is_some_and(|lobby| lobby.active())
+        || main_menu.as_ref().is_some_and(|menu| menu.active())
+    {
         return;
     }
     if authoritative.is_networked() {
@@ -1239,6 +1273,23 @@ fn process_network_events(
                     .push(format!("Reconnect attempt failed: {reason}"));
             }
             NetworkEvent::Message(message) => match message {
+                ServerMessage::LobbyStatus { status } => {
+                    authoritative.network_lobby_error = None;
+                    authoritative.network_lobby_status = Some(status);
+                }
+                ServerMessage::LobbyStartRejected { reason } => {
+                    authoritative.network_lobby_error = Some(match reason {
+                        castle_fight_protocol::LobbyStartRejectReason::NotHost => {
+                            "Only the host can start the match.".to_owned()
+                        }
+                        castle_fight_protocol::LobbyStartRejectReason::WaitingForPlayers => {
+                            "Waiting for all configured player slots to connect.".to_owned()
+                        }
+                        castle_fight_protocol::LobbyStartRejectReason::AlreadyStarted => {
+                            "The match has already started.".to_owned()
+                        }
+                    });
+                }
                 ServerMessage::SnapshotBegin { begin } => {
                     begin_snapshot_catch_up(authoritative, begin)?;
                 }

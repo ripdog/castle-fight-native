@@ -20,8 +20,7 @@ pub(crate) struct LobbyPlugin;
 
 impl Plugin for LobbyPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_lobby)
-            .add_systems(Update, handle_lobby_buttons);
+        app.add_systems(Update, (ensure_lobby_visible, handle_lobby_buttons).chain());
     }
 }
 
@@ -31,6 +30,9 @@ pub(crate) struct LobbyState {
     team_size: usize,
     local_player: PlayerId,
     networked: bool,
+    connected_players: Vec<PlayerId>,
+    host_player: Option<PlayerId>,
+    required_players: usize,
     open_race: Option<u8>,
     active: bool,
     error: Option<String>,
@@ -41,6 +43,9 @@ impl LobbyState {
         Self {
             team_size: options.team_size,
             local_player,
+            required_players: options.team_size * 2,
+            connected_players: vec![local_player],
+            host_player: None,
             options,
             networked,
             open_race: None,
@@ -70,6 +75,35 @@ impl LobbyState {
         }
     }
 
+    fn player_label(&self, player: PlayerId) -> String {
+        let Some(index) = self
+            .connected_players
+            .iter()
+            .position(|connected| *connected == player)
+        else {
+            return "Empty".to_owned();
+        };
+        if player == self.local_player {
+            format!("Player {} (You)", index + 1)
+        } else {
+            format!("Player {}", index + 1)
+        }
+    }
+
+    fn action_disabled(&self, action: LobbyAction) -> bool {
+        if !self.networked {
+            return false;
+        }
+        match action {
+            LobbyAction::TeamSize(_) | LobbyAction::Position(_) => true,
+            LobbyAction::Start => {
+                self.host_player != Some(self.local_player)
+                    || self.connected_players.len() < self.required_players
+            }
+            LobbyAction::RaceDropdown(_) | LobbyAction::RaceHuman(_) => false,
+        }
+    }
+
     pub(crate) fn active(&self) -> bool {
         self.active
     }
@@ -87,8 +121,17 @@ enum LobbyAction {
     Start,
 }
 
-fn setup_lobby(mut commands: Commands, lobby: Res<LobbyState>) {
-    spawn_lobby(&mut commands, &lobby);
+fn ensure_lobby_visible(
+    mut commands: Commands,
+    lobby: Option<Res<LobbyState>>,
+    roots: Query<Entity, With<LobbyRoot>>,
+) {
+    let Some(lobby) = lobby else {
+        return;
+    };
+    if lobby.active && roots.is_empty() {
+        spawn_lobby(&mut commands, &lobby);
+    }
 }
 
 fn spawn_lobby(commands: &mut Commands, lobby: &LobbyState) {
@@ -195,7 +238,21 @@ fn spawn_lobby(commands: &mut Commands, lobby: &LobbyState) {
                 if lobby.networked {
                     label(
                         panel,
-                        "Server positions and settings are fixed for this session.",
+                        format!(
+                            "Connected players: {} / {}",
+                            lobby.connected_players.len(),
+                            lobby.required_players
+                        ),
+                        13.0,
+                        MUTED,
+                    );
+                    label(
+                        panel,
+                        if lobby.host_player == Some(lobby.local_player()) {
+                            "You are the host. Start when every slot is connected."
+                        } else {
+                            "Waiting for the host to start the match."
+                        },
                         13.0,
                         MUTED,
                     );
@@ -203,7 +260,16 @@ fn spawn_lobby(commands: &mut Commands, lobby: &LobbyState) {
                 if let Some(error) = &lobby.error {
                     label(panel, error.clone(), 14.0, Color::srgb(1.0, 0.45, 0.4));
                 }
-                button(panel, "START GAME", LobbyAction::Start, true, false);
+                let start_disabled = lobby.networked
+                    && (lobby.host_player != Some(lobby.local_player())
+                        || lobby.connected_players.len() < lobby.required_players);
+                button(
+                    panel,
+                    "START GAME",
+                    LobbyAction::Start,
+                    true,
+                    start_disabled,
+                );
             });
         });
 }
@@ -227,11 +293,7 @@ fn spawn_position_row(
             label(row, format!("{}", slot + 1), 13.0, MUTED);
             button(
                 row,
-                if player == lobby.local_player() {
-                    "Player 1"
-                } else {
-                    "Empty"
-                },
+                lobby.player_label(player),
                 LobbyAction::Position(player),
                 player == lobby.local_player(),
                 lobby.networked,
@@ -336,11 +398,14 @@ struct LobbyGame<'w> {
 
 fn handle_lobby_buttons(
     mut commands: Commands,
-    mut lobby: ResMut<LobbyState>,
+    lobby: Option<ResMut<LobbyState>>,
     mut buttons: LobbyButtonQuery<'_, '_>,
     roots: Query<Entity, With<LobbyRoot>>,
     mut game: LobbyGame<'_>,
 ) {
+    let Some(mut lobby) = lobby else {
+        return;
+    };
     if !lobby.active {
         return;
     }
@@ -348,9 +413,39 @@ fn handle_lobby_buttons(
         return;
     };
     let mut redraw = false;
+    if lobby.networked {
+        if let Some(status) = game.authoritative.network_lobby_status.clone() {
+            let connected_players = status
+                .connected_player_ids
+                .into_iter()
+                .map(PlayerId)
+                .collect::<Vec<_>>();
+            let host_player = Some(PlayerId(status.host_player_id));
+            let required_players = usize::from(status.required_players);
+            if lobby.connected_players != connected_players
+                || lobby.host_player != host_player
+                || lobby.required_players != required_players
+            {
+                lobby.connected_players = connected_players;
+                lobby.host_player = host_player;
+                lobby.required_players = required_players;
+                redraw = true;
+            }
+            if status.started {
+                lobby.active = false;
+                game.authoritative.commands_enabled = true;
+                game.playback.paused = false;
+                commands.entity(root).despawn();
+                return;
+            }
+        }
+        if lobby.error != game.authoritative.network_lobby_error {
+            lobby.error = game.authoritative.network_lobby_error.clone();
+            redraw = true;
+        }
+    }
     for (interaction, action, mut background) in &mut buttons {
-        let disabled = lobby.networked
-            && matches!(action, LobbyAction::TeamSize(_) | LobbyAction::Position(_));
+        let disabled = lobby.action_disabled(*action);
         match interaction {
             Interaction::Hovered => {
                 if !disabled {
@@ -364,6 +459,7 @@ fn handle_lobby_buttons(
                     BUTTON
                 };
             }
+            Interaction::Pressed if disabled => {}
             Interaction::Pressed => match *action {
                 LobbyAction::TeamSize(size) if !lobby.networked => {
                     lobby.set_team_size(size);
@@ -384,34 +480,39 @@ fn handle_lobby_buttons(
                     }
                 }
                 LobbyAction::Start => {
-                    if !lobby.networked {
-                        lobby.options.team_size = lobby.team_size;
-                        let result = client_match_config(&lobby.options).and_then(|config| {
-                            create_demo_world_for_match_config(default_worker_count(), None, config)
-                        });
-                        match result {
-                            Ok(demo) => {
-                                *game.authoritative =
-                                    AuthoritativeSimulation::new(demo.simulation, demo.content);
-                                *game.presentation = PresentationSamples::new(
-                                    PresentationSnapshot::capture(&game.authoritative.simulation),
-                                );
-                                game.selected_match.content = demo.content;
-                                game.selected_match.direct_buildings = demo.direct_buildings;
-                                game.selected_match.local_player = lobby.local_player();
-                                if let Some(camera_focus) = game.camera_focus.as_deref_mut() {
-                                    camera_focus.0 = game
-                                        .authoritative
-                                        .simulation
-                                        .builder_for_player(lobby.local_player())
-                                        .map(|builder| builder.id);
-                                }
+                    if lobby.networked {
+                        if let Err(error) = game.authoritative.request_network_start() {
+                            lobby.error = Some(error);
+                            redraw = true;
+                        }
+                        continue;
+                    }
+                    lobby.options.team_size = lobby.team_size;
+                    let result = client_match_config(&lobby.options).and_then(|config| {
+                        create_demo_world_for_match_config(default_worker_count(), None, config)
+                    });
+                    match result {
+                        Ok(demo) => {
+                            *game.authoritative =
+                                AuthoritativeSimulation::new(demo.simulation, demo.content);
+                            *game.presentation = PresentationSamples::new(
+                                PresentationSnapshot::capture(&game.authoritative.simulation),
+                            );
+                            game.selected_match.content = demo.content;
+                            game.selected_match.direct_buildings = demo.direct_buildings;
+                            game.selected_match.local_player = lobby.local_player();
+                            if let Some(camera_focus) = game.camera_focus.as_deref_mut() {
+                                camera_focus.0 = game
+                                    .authoritative
+                                    .simulation
+                                    .builder_for_player(lobby.local_player())
+                                    .map(|builder| builder.id);
                             }
-                            Err(error) => {
-                                lobby.error = Some(error.to_string());
-                                redraw = true;
-                                continue;
-                            }
+                        }
+                        Err(error) => {
+                            lobby.error = Some(error.to_string());
+                            redraw = true;
+                            continue;
                         }
                     }
                     lobby.active = false;

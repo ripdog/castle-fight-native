@@ -1,7 +1,8 @@
 use std::{net::SocketAddr, time::Duration};
 
 use castle_fight_server::{
-    AuthoritativeMatch, DEFAULT_DISCONNECT_TIMEOUT, ServerMatchOptions, tcp::TcpAuthoritativeServer,
+    AuthoritativeMatch, DEFAULT_DISCONNECT_TIMEOUT, DEFAULT_GAME_PORT, ServerMatchOptions,
+    tcp::TcpAuthoritativeServer,
 };
 use castle_fight_sim::{
     CastleFightBuilderRace, CastleFightMatchConfig, CastleFightParticipantConfig, MapVersion,
@@ -22,9 +23,7 @@ struct ServerOptions {
 impl ServerOptions {
     fn parse() -> Self {
         let mut options = Self {
-            bind: "127.0.0.1:6112"
-                .parse()
-                .expect("valid default bind address"),
+            bind: SocketAddr::from(([127, 0, 0, 1], DEFAULT_GAME_PORT)),
             map_version: MapVersion::CASTLE_FIGHT_9_27,
             release_revision: "r1".to_owned(),
             seed: 0x4341_5354_4c45,

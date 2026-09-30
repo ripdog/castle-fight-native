@@ -8,9 +8,10 @@ use std::{
 };
 
 use castle_fight_protocol::{
-    CatchUpComplete, ClientMessage, FrameError, HandshakeRejectReason, MAX_SNAPSHOT_BYTES,
-    ProtocolEnvelope, ProtocolErrorCode, ProtocolSchemaError, SNAPSHOT_CHUNK_BYTES, ServerMessage,
-    SnapshotChunk, SnapshotTransferBegin, WireCanonicalStreamRecord, read_frame, write_frame,
+    CatchUpComplete, ClientMessage, FrameError, HandshakeRejectReason, LobbyStartRejectReason,
+    LobbyStatus, MAX_SNAPSHOT_BYTES, ProtocolEnvelope, ProtocolErrorCode, ProtocolSchemaError,
+    SNAPSHOT_CHUNK_BYTES, ServerMessage, SnapshotChunk, SnapshotTransferBegin,
+    WireCanonicalStreamRecord, read_frame, write_frame,
 };
 use castle_fight_sim::{
     CASTLE_FIGHT_SIMULATION_HZ, CanonicalStreamRecord, InputStreamPosition, MatchLifecycle,
@@ -121,6 +122,8 @@ pub struct TcpAuthoritativeServer {
     next_connection_id: u64,
     next_transfer_id: u64,
     started: bool,
+    lobby_mode: bool,
+    host_session: Option<SessionId>,
     team_disconnect_since: [Option<Instant>; 2],
 }
 
@@ -128,6 +131,21 @@ impl TcpAuthoritativeServer {
     pub fn bind<A: ToSocketAddrs>(
         address: A,
         authoritative: AuthoritativeMatch,
+    ) -> Result<Self, TcpServerError> {
+        Self::bind_inner(address, authoritative, false)
+    }
+
+    pub fn bind_lobby<A: ToSocketAddrs>(
+        address: A,
+        authoritative: AuthoritativeMatch,
+    ) -> Result<Self, TcpServerError> {
+        Self::bind_inner(address, authoritative, true)
+    }
+
+    fn bind_inner<A: ToSocketAddrs>(
+        address: A,
+        authoritative: AuthoritativeMatch,
+        lobby_mode: bool,
     ) -> Result<Self, TcpServerError> {
         let listener = TcpListener::bind(address)?;
         listener.set_nonblocking(true)?;
@@ -142,6 +160,8 @@ impl TcpAuthoritativeServer {
             next_connection_id: 1,
             next_transfer_id: 1,
             started: false,
+            lobby_mode,
+            host_session: None,
             team_disconnect_since: [None; 2],
         })
     }
@@ -178,7 +198,7 @@ impl TcpAuthoritativeServer {
                 Err(TryRecvError::Disconnected) => break,
             }
         }
-        if !self.started && self.authoritative.all_players_connected() {
+        if !self.lobby_mode && !self.started && self.authoritative.all_players_connected() {
             self.started = true;
         }
         self.update_disconnect_timeouts(now)
@@ -344,6 +364,9 @@ impl TcpAuthoritativeServer {
                 return Ok(());
             }
         };
+        if matches!(message, ClientMessage::StartMatch) {
+            return self.process_start_match(connection_id, session_id);
+        }
         let checkpoint_reported = matches!(&message, ClientMessage::CheckpointReport { .. });
         let outbound = self
             .authoritative
@@ -382,8 +405,15 @@ impl TcpAuthoritativeServer {
                 let result = self.authoritative.accept_hello(hello);
                 if let HandshakeResult::Accepted { session_id, .. } = &result {
                     self.bind_session_connection(connection_id, *session_id);
+                    if self.lobby_mode && self.host_session.is_none() {
+                        self.host_session = Some(*session_id);
+                    }
                 }
-                self.send_to_connection(connection_id, result.message())
+                self.send_to_connection(connection_id, result.message())?;
+                if self.lobby_mode && matches!(result, HandshakeResult::Accepted { .. }) {
+                    self.broadcast_lobby_status()?;
+                }
+                Ok(())
             }
             ClientMessage::Reconnect { reconnect } => {
                 let session_id = match self.authoritative.authenticate_reconnect(&reconnect) {
@@ -416,6 +446,33 @@ impl TcpAuthoritativeServer {
                         return Ok(());
                     }
                 };
+
+                if self.lobby_mode && !self.started {
+                    self.authoritative
+                        .set_lobby_session_connected(session_id, true);
+                    let assignment = self
+                        .authoritative
+                        .session_assignment(session_id)
+                        .expect("authenticated reconnect session must still exist");
+                    self.send_to_connection(
+                        connection_id,
+                        ServerMessage::HelloAccepted { assignment },
+                    )?;
+                    self.send_snapshot_handoff(
+                        connection_id,
+                        SnapshotHandoff {
+                            snapshot_stream_position,
+                            snapshot_completed_tick,
+                            snapshot_checksum,
+                            handoff_stream_position: snapshot_stream_position,
+                            snapshot_bytes: &snapshot_bytes,
+                            history_tail: &[],
+                        },
+                    )?;
+                    self.bind_session_connection(connection_id, session_id);
+                    self.broadcast_lobby_status()?;
+                    return Ok(());
+                }
 
                 // The replacement socket is deliberately still unbound here, so this canonical
                 // reconnect record broadcasts only to already-live peers. Subsequent live records
@@ -462,14 +519,63 @@ impl TcpAuthoritativeServer {
                 self.bind_session_connection(connection_id, session_id);
                 Ok(())
             }
-            ClientMessage::SubmitCommand { .. } | ClientMessage::CheckpointReport { .. } => self
-                .send_to_connection(
-                    connection_id,
-                    ServerMessage::ProtocolError {
-                        code: ProtocolErrorCode::ExpectedHello,
-                    },
-                ),
+            ClientMessage::StartMatch
+            | ClientMessage::SubmitCommand { .. }
+            | ClientMessage::CheckpointReport { .. } => self.send_to_connection(
+                connection_id,
+                ServerMessage::ProtocolError {
+                    code: ProtocolErrorCode::ExpectedHello,
+                },
+            ),
         }
+    }
+
+    fn process_start_match(
+        &mut self,
+        connection_id: ConnectionId,
+        session_id: SessionId,
+    ) -> Result<(), TcpServerError> {
+        let rejection = if !self.lobby_mode || self.host_session != Some(session_id) {
+            Some(LobbyStartRejectReason::NotHost)
+        } else if self.started {
+            Some(LobbyStartRejectReason::AlreadyStarted)
+        } else if !self.authoritative.all_players_connected() {
+            Some(LobbyStartRejectReason::WaitingForPlayers)
+        } else {
+            None
+        };
+        if let Some(reason) = rejection {
+            return self
+                .send_to_connection(connection_id, ServerMessage::LobbyStartRejected { reason });
+        }
+        self.started = true;
+        self.broadcast_lobby_status()
+    }
+
+    fn lobby_status(&self) -> Option<LobbyStatus> {
+        let host_session = self.host_session?;
+        let host_player_id = self.authoritative.session_player(host_session)?.0;
+        let required_players = u8::try_from(self.authoritative.required_player_count()).ok()?;
+        Some(LobbyStatus {
+            host_player_id,
+            connected_player_ids: self
+                .authoritative
+                .connected_player_ids()
+                .into_iter()
+                .map(|player| player.0)
+                .collect(),
+            required_players,
+            started: self.started,
+        })
+    }
+
+    fn broadcast_lobby_status(&mut self) -> Result<(), TcpServerError> {
+        let Some(status) = self.lobby_status() else {
+            return Ok(());
+        };
+        self.dispatch_all(vec![OutboundMessage::broadcast(
+            ServerMessage::LobbyStatus { status },
+        )])
     }
 
     fn send_live_state_replacement(
@@ -629,8 +735,14 @@ impl TcpAuthoritativeServer {
         let _ = connection.shutdown.shutdown(Shutdown::Both);
         if let Some(session_id) = connection.session_id {
             self.session_connections.remove(&session_id);
-            let outbound = self.authoritative.disconnect_session(session_id)?;
-            self.dispatch_all(outbound)?;
+            if self.lobby_mode && !self.started {
+                self.authoritative
+                    .set_lobby_session_connected(session_id, false);
+                self.broadcast_lobby_status()?;
+            } else {
+                let outbound = self.authoritative.disconnect_session(session_id)?;
+                self.dispatch_all(outbound)?;
+            }
         }
         Ok(())
     }
@@ -730,6 +842,15 @@ mod tests {
                 .unwrap();
         let authoritative = AuthoritativeMatch::new(config, 1, options).unwrap();
         TcpAuthoritativeServer::bind("127.0.0.1:0", authoritative).unwrap()
+    }
+
+    fn lobby_server() -> TcpAuthoritativeServer {
+        let config =
+            CastleFightMatchConfig::development_subset(MapVersion::CASTLE_FIGHT_9_27, "r1", 0x1234)
+                .unwrap();
+        let authoritative =
+            AuthoritativeMatch::new(config, 1, ServerMatchOptions::default()).unwrap();
+        TcpAuthoritativeServer::bind_lobby("127.0.0.1:0", authoritative).unwrap()
     }
 
     fn connect(server: &TcpAuthoritativeServer) -> TcpStream {
@@ -914,6 +1035,95 @@ mod tests {
             ServerMessage::HelloAccepted {
                 assignment: SessionAssignment { player_id: 6, .. }
             }
+        ));
+    }
+
+    #[test]
+    fn host_controlled_lobby_waits_for_host_start_and_broadcasts_roster() {
+        let mut server = lobby_server();
+        let mut host = connect(&server);
+        server.poll_network().unwrap();
+        send_client(&mut host, hello(&server, 1));
+        pump_until(&mut server, |view| view.authenticated == 1);
+        assert!(!server.is_started());
+        assert!(matches!(
+            receive_server(&mut host),
+            ServerMessage::HelloAccepted {
+                assignment: SessionAssignment { player_id: 0, .. }
+            }
+        ));
+        assert!(matches!(
+            receive_server(&mut host),
+            ServerMessage::LobbyStatus {
+                status: LobbyStatus {
+                    host_player_id: 0,
+                    required_players: 2,
+                    started: false,
+                    ..
+                }
+            }
+        ));
+
+        send_client(&mut host, ClientMessage::StartMatch);
+        pump_network(&mut server);
+        assert!(!server.is_started());
+        assert!(matches!(
+            receive_server(&mut host),
+            ServerMessage::LobbyStartRejected {
+                reason: LobbyStartRejectReason::WaitingForPlayers
+            }
+        ));
+
+        let mut guest = connect(&server);
+        server.poll_network().unwrap();
+        send_client(&mut guest, hello(&server, 2));
+        pump_until(&mut server, |view| view.authenticated == 2);
+        assert!(!server.is_started());
+        assert!(matches!(
+            receive_server(&mut guest),
+            ServerMessage::HelloAccepted {
+                assignment: SessionAssignment { player_id: 6, .. }
+            }
+        ));
+        for stream in [&mut host, &mut guest] {
+            match receive_server(stream) {
+                ServerMessage::LobbyStatus { status } => {
+                    assert_eq!(status.host_player_id, 0);
+                    assert_eq!(status.connected_player_ids, vec![0, 6]);
+                    assert_eq!(status.required_players, 2);
+                    assert!(!status.started);
+                }
+                message => panic!("expected populated lobby status, got {message:?}"),
+            }
+        }
+
+        send_client(&mut guest, ClientMessage::StartMatch);
+        pump_network(&mut server);
+        assert!(matches!(
+            receive_server(&mut guest),
+            ServerMessage::LobbyStartRejected {
+                reason: LobbyStartRejectReason::NotHost
+            }
+        ));
+        assert!(!server.is_started());
+
+        send_client(&mut host, ClientMessage::StartMatch);
+        pump_until(&mut server, |view| view.started);
+        for stream in [&mut host, &mut guest] {
+            match receive_server(stream) {
+                ServerMessage::LobbyStatus { status } => assert!(status.started),
+                message => panic!("expected started lobby status, got {message:?}"),
+            }
+        }
+
+        server.finalize_next_tick().unwrap();
+        assert!(matches!(
+            receive_server(&mut host),
+            ServerMessage::StreamRecord { .. }
+        ));
+        assert!(matches!(
+            receive_server(&mut guest),
+            ServerMessage::StreamRecord { .. }
         ));
     }
 

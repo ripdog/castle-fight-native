@@ -14,7 +14,7 @@ use castle_fight_sim::{
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-pub const PROTOCOL_SCHEMA_VERSION: u32 = 5;
+pub const PROTOCOL_SCHEMA_VERSION: u32 = 6;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub const MAX_RELEASE_REVISION_BYTES: usize = 64;
 pub const RECONNECT_TOKEN_BYTES: usize = 32;
@@ -383,10 +383,28 @@ pub enum HandshakeRejectReason {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LobbyStatus {
+    pub host_player_id: u8,
+    pub connected_player_ids: Vec<u8>,
+    pub required_players: u8,
+    pub started: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LobbyStartRejectReason {
+    NotHost,
+    WaitingForPlayers,
+    AlreadyStarted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ClientMessage {
     Hello { hello: ClientHello },
     Reconnect { reconnect: ReconnectHello },
+    StartMatch,
     SubmitCommand { request: CommandRequest },
     CheckpointReport { report: CheckpointReport },
 }
@@ -399,6 +417,12 @@ pub enum ServerMessage {
     },
     HelloRejected {
         reason: HandshakeRejectReason,
+    },
+    LobbyStatus {
+        status: LobbyStatus,
+    },
+    LobbyStartRejected {
+        reason: LobbyStartRejectReason,
     },
     CommandAcknowledged {
         acknowledgement: CommandAcknowledgement,

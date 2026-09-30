@@ -1963,6 +1963,7 @@ dependencies = [
  "bevy",
  "bytemuck",
  "castle-fight-protocol",
+ "castle-fight-server",
  "castle-fight-sim",
  "serde",
  "serde_json",

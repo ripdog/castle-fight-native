@@ -16,6 +16,7 @@ use castle_fight_sim::{
 };
 use constant_time_eq::constant_time_eq_32;
 
+pub const DEFAULT_GAME_PORT: u16 = 6112;
 pub const DEFAULT_CHECKPOINT_INTERVAL_TICKS: u64 = 30;
 pub const DEFAULT_DISCONNECT_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -248,6 +249,26 @@ impl AuthoritativeMatch {
                 .player_claims
                 .values()
                 .all(|session_id| self.session_is_connected(*session_id))
+    }
+
+    #[must_use]
+    pub fn required_player_count(&self) -> usize {
+        self.game.match_config.participants.len()
+    }
+
+    #[must_use]
+    pub fn connected_player_ids(&self) -> Vec<PlayerId> {
+        self.sessions
+            .values()
+            .filter(|session| session.connected)
+            .map(|session| session.player)
+            .collect()
+    }
+
+    pub(crate) fn set_lobby_session_connected(&mut self, session_id: SessionId, connected: bool) {
+        if let Some(session) = self.sessions.get_mut(&session_id) {
+            session.connected = connected;
+        }
     }
 
     #[must_use]
@@ -525,7 +546,9 @@ impl AuthoritativeMatch {
         }
 
         match message {
-            ClientMessage::Hello { .. } | ClientMessage::Reconnect { .. } => {
+            ClientMessage::Hello { .. }
+            | ClientMessage::Reconnect { .. }
+            | ClientMessage::StartMatch => {
                 vec![OutboundMessage::to_session(
                     session_id,
                     ServerMessage::ProtocolError {
