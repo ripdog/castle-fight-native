@@ -506,6 +506,8 @@ impl PerformanceReport {
         )
         .unwrap();
         push_distribution(&mut output, "wall", &frame_wall);
+        push_frame_windows(&mut output, &frame_wall);
+        push_slowest_frames(&mut output, &self.frames);
         push_average_timing(
             &mut output,
             "main CPU",
@@ -1088,6 +1090,73 @@ fn gpu_pass_timings(diagnostics: &DiagnosticsStore) -> Vec<(&str, f64)> {
     });
     passes.truncate(MAX_GPU_PASSES);
     passes
+}
+
+fn push_frame_windows(output: &mut String, samples: &[Duration]) {
+    output.push_str("  frame windows (seconds since first captured frame; unsmoothed)\n");
+    let budget = Duration::from_secs_f64(1.0 / 60.0);
+    let mut elapsed = Duration::ZERO;
+    let mut window_start = Duration::ZERO;
+    let mut first = 0;
+    let mut next_boundary = Duration::from_secs(1);
+    for (index, &wall) in samples.iter().enumerate() {
+        elapsed += wall;
+        if elapsed < next_boundary && index + 1 < samples.len() {
+            continue;
+        }
+        let window = &samples[first..=index];
+        let seconds = (elapsed - window_start).as_secs_f64();
+        let fps = if seconds > 0.0 {
+            window.len() as f64 / seconds
+        } else {
+            0.0
+        };
+        let late = window.iter().filter(|&&frame| frame > budget).count();
+        writeln!(
+            output,
+            "    {:>5.2}..{:>5.2}s {:>4} frames {:>6.2} FPS p95 {:>7.3}ms max {:>7.3}ms over 16.67ms {:>5.1}%",
+            window_start.as_secs_f64(),
+            elapsed.as_secs_f64(),
+            window.len(),
+            fps,
+            duration_percentile(window, 95).as_secs_f64() * 1000.0,
+            window.iter().copied().max().unwrap_or_default().as_secs_f64() * 1000.0,
+            late as f64 / window.len() as f64 * 100.0,
+        ).unwrap();
+        first = index + 1;
+        window_start = elapsed;
+        next_boundary = Duration::from_secs(elapsed.as_secs() + 1);
+    }
+}
+
+fn push_slowest_frames(output: &mut String, samples: &[FrameSample]) {
+    let mut elapsed = Duration::ZERO;
+    let mut ordered = samples
+        .iter()
+        .map(|sample| {
+            let start = elapsed;
+            elapsed += sample.wall;
+            (start, sample)
+        })
+        .collect::<Vec<_>>();
+    ordered.sort_by_key(|(_, sample)| std::cmp::Reverse(sample.wall));
+    output.push_str(
+        "  slowest frames (start seconds; wall/main/fixed/Update/SpawnScene/PostUpdate ms)\n",
+    );
+    for (start, sample) in ordered.into_iter().take(5) {
+        writeln!(
+            output,
+            "    {:>6.3}s {:>8.3} / {:>8.3} / {:>7.3} / {:>7.3} / {:>7.3} / {:>7.3}",
+            start.as_secs_f64(),
+            duration_ms(sample.wall),
+            duration_ms(sample.main_cpu),
+            duration_ms(sample.schedules.fixed_loop),
+            duration_ms(sample.schedules.update),
+            duration_ms(sample.schedules.spawn_scene),
+            duration_ms(sample.schedules.post_update),
+        )
+        .unwrap();
+    }
 }
 
 fn push_distribution(output: &mut String, label: &str, samples: &[Duration]) {

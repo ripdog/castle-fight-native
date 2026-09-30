@@ -51,6 +51,9 @@ pub(crate) enum RenderExperiment {
     Bindless128,
     Bindless256,
     NoBindless,
+    ParticleSharedView,
+    ParticleCull,
+    ParticlePartialBindings,
 }
 
 impl RenderExperiment {
@@ -77,8 +80,11 @@ impl RenderExperiment {
             "bindless-128" => Ok(Self::Bindless128),
             "bindless-256" => Ok(Self::Bindless256),
             "no-bindless" => Ok(Self::NoBindless),
+            "particle-shared-view" => Ok(Self::ParticleSharedView),
+            "particle-cull" => Ok(Self::ParticleCull),
+            "particle-partial-bindings" => Ok(Self::ParticlePartialBindings),
             _ => Err(format!(
-                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, bindless-auto, bindless-64, bindless-128, bindless-256, or no-bindless"
+                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, bindless-auto, bindless-64, bindless-128, bindless-256, no-bindless, particle-shared-view, particle-cull, or particle-partial-bindings"
             )),
         }
     }
@@ -130,6 +136,7 @@ struct Measurements {
     started: Option<Instant>,
     stages: [StageTiming; STAGES.len()],
     transparent: Option<(usize, usize, usize)>,
+    particles: Option<crate::particle_renderer::Wc3ParticleQueueStats>,
 }
 
 #[derive(Resource, Clone, Default)]
@@ -178,6 +185,13 @@ impl RenderAudit {
                 "  skin palette staging: {palette_bytes} bytes uploaded/frame (latest sample)"
             )
             .unwrap();
+        }
+        if let Some(particles) = measurements.particles {
+            writeln!(output,
+                "  particle queue: {} candidates, {} queued, {} zero-alpha rejects, {} frustum rejects; texture slots {}/{} populated/bound (latest sample, all views)",
+                particles.candidates, particles.queued, particles.zero_alpha,
+                particles.outside, particles.populated_slots, particles.bound_slots,
+            ).unwrap();
         }
         output
     }
@@ -285,6 +299,7 @@ fn freeze_animation_poses(
 fn sample_transparent_batches(
     phases: Res<ViewSortedRenderPhases<Transparent3d>>,
     skins: Res<SkinUniforms>,
+    particles: Res<crate::particle_renderer::Wc3ParticleQueueStats>,
     audit: Res<RenderAudit>,
     mut last_sample: Local<Option<Instant>>,
 ) {
@@ -306,15 +321,13 @@ fn sample_transparent_batches(
             index += count.max(1);
         }
     }
-    audit
-        .0
-        .lock()
-        .expect("render audit mutex poisoned")
-        .transparent = Some((
+    let mut measurements = audit.0.lock().expect("render audit mutex poisoned");
+    measurements.transparent = Some((
         items,
         draws,
         skins.current_staging_buffer.len() * size_of::<Mat4>(),
     ));
+    measurements.particles = Some(*particles);
 }
 
 type ExperimentMeshes<'w, 's> = Query<
@@ -392,7 +405,10 @@ fn apply_render_experiment(
             | RenderExperiment::Bindless64
             | RenderExperiment::Bindless128
             | RenderExperiment::Bindless256
-            | RenderExperiment::NoBindless => false,
+            | RenderExperiment::NoBindless
+            | RenderExperiment::ParticleSharedView
+            | RenderExperiment::ParticleCull
+            | RenderExperiment::ParticlePartialBindings => false,
             RenderExperiment::FreezeBounds => {
                 if dynamic && has_bounds {
                     commands.entity(entity).remove::<DynamicSkinnedMeshBounds>();

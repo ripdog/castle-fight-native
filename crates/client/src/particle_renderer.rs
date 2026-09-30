@@ -12,6 +12,7 @@ use std::{collections::HashMap, mem::size_of, num::NonZeroU32};
 
 use bevy::{
     asset::AssetId,
+    camera::primitives::{Frustum, Sphere},
     core_pipeline::core_3d::{CORE_3D_DEPTH_FORMAT, Transparent3d, TransparentSortingInfo3d},
     ecs::{
         query::ROQueryItem,
@@ -21,9 +22,10 @@ use bevy::{
         },
     },
     mesh::VertexBufferLayout,
+    pbr::{MeshPipelineViewLayoutKey, MeshPipelineViewLayouts, MeshViewBindGroup, ViewKeyCache},
     prelude::*,
     render::{
-        Extract, ExtractSchedule, Render, RenderApp, RenderSystems,
+        Extract, ExtractSchedule, Render, RenderApp, RenderStartup, RenderSystems,
         render_asset::RenderAssets,
         render_phase::{
             AddRenderCommand, DrawFunctions, PhaseItem, PhaseItemExtraIndex, RenderCommand,
@@ -72,7 +74,12 @@ impl Plugin for Wc3ParticleRenderPlugin {
             .init_resource::<ExtractedWc3Particles>()
             .init_resource::<Wc3ParticleGpuBuffer>()
             .init_resource::<Wc3ParticleTextureBindGroups>()
-            .init_resource::<Wc3ParticlePipeline>()
+            .init_resource::<Wc3ParticleQueueStats>()
+            .add_systems(
+                RenderStartup,
+                (|mut commands: Commands| commands.init_resource::<Wc3ParticlePipeline>())
+                    .after(bevy::pbr::init_mesh_pipeline_view_layouts),
+            )
             .init_resource::<SpecializedRenderPipelines<Wc3ParticlePipeline>>()
             .add_render_command::<Transparent3d, DrawWc3BillboardParticles>()
             .add_systems(ExtractSchedule, extract_wc3_particles)
@@ -116,6 +123,7 @@ struct ExtractedWc3Particles {
     particles: Vec<ExtractedWc3Particle>,
     slab_entities: Vec<Entity>,
     slab_textures: Vec<Vec<Option<AssetId<Image>>>>,
+    experiment: RenderExperiment,
 }
 
 fn extract_wc3_particles(
@@ -127,6 +135,7 @@ fn extract_wc3_particles(
 ) {
     extracted.particles.clear();
     extracted.slab_textures.clear();
+    extracted.experiment = **experiment;
 
     let hide_particles = matches!(
         **experiment,
@@ -195,19 +204,39 @@ impl Default for Wc3ParticleGpuBuffer {
 #[derive(Resource, Default)]
 struct Wc3ParticleTextureBindGroups(HashMap<Entity, BindGroup>);
 
+#[derive(Resource, Clone, Copy, Default)]
+pub(crate) struct Wc3ParticleQueueStats {
+    pub(crate) candidates: usize,
+    pub(crate) queued: usize,
+    pub(crate) zero_alpha: usize,
+    pub(crate) outside: usize,
+    pub(crate) populated_slots: usize,
+    pub(crate) bound_slots: usize,
+}
+
 #[derive(Component)]
 struct Wc3ParticleViewBindGroup(BindGroup);
 
 #[derive(Resource)]
 struct Wc3ParticlePipeline {
     view_layout: BindGroupLayoutDescriptor,
+    mesh_view_layouts: MeshPipelineViewLayouts,
     single_texture_layout: BindGroupLayoutDescriptor,
     texture_array_layout: BindGroupLayoutDescriptor,
     texture_slab_size: usize,
+    partial_binding_arrays: bool,
     shader: Handle<Shader>,
 }
 
 impl Wc3ParticlePipeline {
+    fn bound_texture_count(&self, experiment: RenderExperiment, populated: usize) -> usize {
+        if experiment == RenderExperiment::ParticlePartialBindings && self.partial_binding_arrays {
+            populated
+        } else {
+            self.texture_slab_size
+        }
+    }
+
     fn texture_slab_size(&self) -> usize {
         self.texture_slab_size
     }
@@ -248,6 +277,9 @@ impl FromWorld for Wc3ParticlePipeline {
         let required_features = WgpuFeatures::TEXTURE_BINDING_ARRAY
             | WgpuFeatures::SAMPLED_TEXTURE_AND_STORAGE_BUFFER_ARRAY_NON_UNIFORM_INDEXING;
         let limits = render_device.limits();
+        let partial_binding_arrays = render_device
+            .features()
+            .contains(WgpuFeatures::PARTIALLY_BOUND_BINDING_ARRAY);
         let max_array_size = limits
             .max_binding_array_elements_per_shader_stage
             .min(limits.max_binding_array_sampler_elements_per_shader_stage)
@@ -277,9 +309,11 @@ impl FromWorld for Wc3ParticlePipeline {
             .load(WC3_PARTICLE_SHADER_PATH);
         Self {
             view_layout,
+            mesh_view_layouts: world.resource::<MeshPipelineViewLayouts>().clone(),
             single_texture_layout,
             texture_array_layout,
             texture_slab_size,
+            partial_binding_arrays,
             shader,
         }
     }
@@ -291,6 +325,7 @@ struct Wc3ParticlePipelineKey {
     sample_count: u32,
     texture_slab_size: u32,
     blend_mode: Wc3ParticleBlendMode,
+    shared_view: Option<MeshPipelineViewLayoutKey>,
 }
 
 impl SpecializedRenderPipeline for Wc3ParticlePipeline {
@@ -319,6 +354,14 @@ impl SpecializedRenderPipeline for Wc3ParticlePipeline {
         } else {
             self.single_texture_layout.clone()
         };
+        let layout = if let Some(view_key) = key.shared_view {
+            let view = self.mesh_view_layouts.get_view_layout(view_key);
+            shader_defs.push(ShaderDefVal::UInt("PARTICLE_TEXTURE_GROUP".into(), 2));
+            vec![view.main_layout, view.binding_array_layout, texture_layout]
+        } else {
+            shader_defs.push(ShaderDefVal::UInt("PARTICLE_TEXTURE_GROUP".into(), 1));
+            vec![self.view_layout.clone(), texture_layout]
+        };
         let blend = match key.blend_mode {
             Wc3ParticleBlendMode::Alpha => BlendState::ALPHA_BLENDING,
             Wc3ParticleBlendMode::Add => BlendState::PREMULTIPLIED_ALPHA_BLENDING,
@@ -333,7 +376,7 @@ impl SpecializedRenderPipeline for Wc3ParticlePipeline {
         };
         RenderPipelineDescriptor {
             label: Some("wc3 particle pipeline".into()),
-            layout: vec![self.view_layout.clone(), texture_layout],
+            layout,
             vertex: VertexState {
                 shader: self.shader.clone(),
                 shader_defs: shader_defs.clone(),
@@ -401,23 +444,47 @@ impl SpecializedRenderPipeline for Wc3ParticlePipeline {
     }
 }
 
+type Wc3ParticleQueuePipelines<'w> = (
+    Res<'w, PipelineCache>,
+    Res<'w, Wc3ParticlePipeline>,
+    ResMut<'w, SpecializedRenderPipelines<Wc3ParticlePipeline>>,
+);
+
 fn queue_wc3_particles(
     draw_functions: Res<DrawFunctions<Transparent3d>>,
-    pipeline_cache: Res<PipelineCache>,
-    pipeline: Res<Wc3ParticlePipeline>,
-    mut pipelines: ResMut<SpecializedRenderPipelines<Wc3ParticlePipeline>>,
+    pipeline_state: Wc3ParticleQueuePipelines<'_>,
     extracted: Res<ExtractedWc3Particles>,
     mut phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
-    views: Query<(&ExtractedView, &Msaa)>,
+    view_keys: Res<ViewKeyCache>,
+    views: Query<(&ExtractedView, &Msaa, Option<&Frustum>)>,
+    mut stats: ResMut<Wc3ParticleQueueStats>,
 ) {
+    let (pipeline_cache, pipeline, mut pipelines) = pipeline_state;
+    *stats = Wc3ParticleQueueStats {
+        populated_slots: extracted.slab_textures.iter().map(Vec::len).sum(),
+        bound_slots: extracted
+            .slab_textures
+            .iter()
+            .map(|textures| pipeline.bound_texture_count(extracted.experiment, textures.len()))
+            .sum(),
+        ..default()
+    };
     if extracted.particles.is_empty() {
         return;
     }
     let draw_function = draw_functions.read().id::<DrawWc3BillboardParticles>();
 
-    for (view, msaa) in &views {
+    for (view, msaa, frustum) in &views {
         let Some(phase) = phases.get_mut(&view.retained_view_entity) else {
             continue;
+        };
+        let shared_view = if extracted.experiment == RenderExperiment::ParticleSharedView {
+            let Some(view_key) = view_keys.get(&view.retained_view_entity) else {
+                continue;
+            };
+            Some(MeshPipelineViewLayoutKey::from(*view_key))
+        } else {
+            None
         };
         let mut pipeline_id = |blend_mode| {
             pipelines.specialize(
@@ -428,6 +495,7 @@ fn queue_wc3_particles(
                     sample_count: msaa.samples(),
                     texture_slab_size: pipeline.texture_slab_size as u32,
                     blend_mode,
+                    shared_view,
                 },
             )
         };
@@ -436,6 +504,30 @@ fn queue_wc3_particles(
         let multiply_pipeline = pipeline_id(Wc3ParticleBlendMode::Multiply);
 
         for (index, particle) in extracted.particles.iter().enumerate() {
+            stats.candidates += 1;
+            if extracted.experiment == RenderExperiment::ParticleCull {
+                let [x, y, z, scale] = particle.instance.position_scale;
+                // A camera-facing square fits inside this sphere at any camera angle.
+                // All three transparent blend modes leave the destination unchanged
+                // at exactly zero alpha. Keep their simulation/lifetime work intact.
+                if particle.instance.color[3] == 0.0 {
+                    stats.zero_alpha += 1;
+                    continue;
+                }
+                if frustum.is_some_and(|frustum| {
+                    !frustum.intersects_sphere(
+                        &Sphere {
+                            center: Vec3::new(x, y, z).into(),
+                            radius: scale.abs() * std::f32::consts::FRAC_1_SQRT_2,
+                        },
+                        false,
+                    )
+                }) {
+                    stats.outside += 1;
+                    continue;
+                }
+            }
+            stats.queued += 1;
             let particle_index = index as u32;
             // Sorted phases require a unique (render entity, main entity) key.
             // The render entity identifies the texture slab; the synthetic main
@@ -566,8 +658,11 @@ fn prepare_wc3_particle_texture_bind_groups(
         };
         let bind_group = if pipeline.uses_binding_arrays() {
             let fallback = &fallback_image.d2;
-            let mut texture_views = vec![&*fallback.texture_view; pipeline.texture_slab_size];
-            let mut samplers = vec![&*fallback.sampler; pipeline.texture_slab_size];
+            // All instance slots address this populated prefix. Unsupported devices
+            // retain full arrays; an empty slab is never emitted by extraction.
+            let bound_count = pipeline.bound_texture_count(extracted.experiment, textures.len());
+            let mut texture_views = vec![&*fallback.texture_view; bound_count];
+            let mut samplers = vec![&*fallback.sampler; bound_count];
             let mut ready = true;
             for (slot, texture) in textures.iter().copied().enumerate() {
                 let Some(texture) = texture else {
@@ -615,15 +710,20 @@ impl<P: PhaseItem> RenderCommand<P> for DrawWc3BillboardParticleCommand {
     type Param = (
         SRes<Wc3ParticleGpuBuffer>,
         SRes<Wc3ParticleTextureBindGroups>,
+        SRes<ExtractedWc3Particles>,
     );
-    type ViewQuery = (Read<ViewUniformOffset>, Read<Wc3ParticleViewBindGroup>);
+    type ViewQuery = (
+        Read<ViewUniformOffset>,
+        Read<Wc3ParticleViewBindGroup>,
+        Option<Read<MeshViewBindGroup>>,
+    );
     type ItemQuery = ();
 
     fn render<'w>(
         item: &P,
-        (view_uniform, view_bind_group): ROQueryItem<'w, '_, Self::ViewQuery>,
+        (view_uniform, view_bind_group, mesh_view): ROQueryItem<'w, '_, Self::ViewQuery>,
         _item_query: Option<ROQueryItem<'w, '_, Self::ItemQuery>>,
-        (gpu, texture_bind_groups): SystemParamItem<'w, '_, Self::Param>,
+        (gpu, texture_bind_groups, extracted): SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
         let gpu = gpu.into_inner();
@@ -635,8 +735,17 @@ impl<P: PhaseItem> RenderCommand<P> for DrawWc3BillboardParticleCommand {
             return RenderCommandResult::Skip;
         };
 
-        pass.set_bind_group(0, &view_bind_group.0, &[view_uniform.offset]);
-        pass.set_bind_group(1, texture_bind_group, &[]);
+        if extracted.into_inner().experiment == RenderExperiment::ParticleSharedView {
+            let Some(mesh_view) = mesh_view else {
+                return RenderCommandResult::Skip;
+            };
+            pass.set_bind_group(0, &mesh_view.main, &mesh_view.main_offsets);
+            pass.set_bind_group(1, &mesh_view.binding_array, &[]);
+            pass.set_bind_group(2, texture_bind_group, &[]);
+        } else {
+            pass.set_bind_group(0, &view_bind_group.0, &[view_uniform.offset]);
+            pass.set_bind_group(1, texture_bind_group, &[]);
+        }
         pass.set_vertex_buffer(0, instance_buffer.slice(..));
         pass.draw(0..6, item.batch_range().clone());
         RenderCommandResult::Success

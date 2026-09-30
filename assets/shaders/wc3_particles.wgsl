@@ -2,11 +2,11 @@
 
 @group(0) @binding(0) var<uniform> view: View;
 #ifdef PARTICLE_BINDING_ARRAY
-@group(1) @binding(0) var particle_textures: binding_array<texture_2d<f32>, #{PARTICLE_TEXTURE_SLAB_SIZE}>;
-@group(1) @binding(1) var particle_samplers: binding_array<sampler, #{PARTICLE_TEXTURE_SLAB_SIZE}>;
+@group(#{PARTICLE_TEXTURE_GROUP}) @binding(0) var particle_textures: binding_array<texture_2d<f32>, #{PARTICLE_TEXTURE_SLAB_SIZE}>;
+@group(#{PARTICLE_TEXTURE_GROUP}) @binding(1) var particle_samplers: binding_array<sampler, #{PARTICLE_TEXTURE_SLAB_SIZE}>;
 #else
-@group(1) @binding(0) var particle_texture: texture_2d<f32>;
-@group(1) @binding(1) var particle_sampler: sampler;
+@group(#{PARTICLE_TEXTURE_GROUP}) @binding(0) var particle_texture: texture_2d<f32>;
+@group(#{PARTICLE_TEXTURE_GROUP}) @binding(1) var particle_sampler: sampler;
 #endif
 
 struct VertexInput {

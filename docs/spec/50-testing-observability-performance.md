@@ -323,6 +323,17 @@ mode and MUST NOT affect the authoritative simulation. They deliberately change 
   Bevy's ordinary material-binding fallback. It keeps geometry, skin components, simulation and
   authored visual parameters intact. Profiling logs report whether StandardMaterial actually uses
   bindless resources. This comparison changes batching as well as resource tracking costs.
+- `particle-shared-view` reuses the exact PBR view layouts and bind groups for compact particles,
+  moving their texture group to slot 2. It retains particle sorting and blend operations.
+- `particle-cull` skips compact particles with exactly zero alpha or whose conservative billboard
+  sphere is outside the view frustum. It retains emission, simulation and lifetime work. Missing
+  frustum data keeps the particle; far-plane rejection is disabled conservatively.
+- `particle-partial-bindings` binds only the populated prefix of each particle texture array when
+  the device enables `PARTIALLY_BOUND_BINDING_ARRAY`. Instance texture indices MUST stay inside
+  that prefix. Unsupported devices retain fully padded arrays. No texture or particle is omitted.
+
+These particle experiments remain opt-in; none changes the default rendering policy. Particle queue
+counters report candidate/queued counts, culling rejections and populated/bound texture slots.
 
 Experiments apply throughout warm-up and capture. Their differences are not additive cost budgets:
 removing geometry also changes visibility, batching, GPU work and pipeline overlap. Compare the
@@ -347,6 +358,13 @@ final entity counts, source path, and actual capture duration. The 1% low is the
 mean frame time in the slowest one percent of captured frames (rounded up to at least one frame).
 Frame, simulation, and presentation samples come from the same counters as the in-game performance
 panel so interactive and automated investigations measure the same work.
+The report also groups complete frame samples into approximately one-second windows with FPS,
+p95/maximum frame time and the percentage over the 16.67 ms budget, and lists the five slowest
+frames with their main-schedule timings. Windows use accumulated captured frame durations; a frame
+is never split across windows. A long frame can cross multiple nominal second boundaries.
+For 700-unit acceptance, distinguish the initial living population, active battle and settled-corpse
+periods. A battle average after mass casualties MUST NOT be presented as sustained 700-living-unit
+performance. Include the combat activation hitch, not only the later steady state.
 
 ## 16. Tick budget
 
