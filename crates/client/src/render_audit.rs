@@ -60,6 +60,7 @@ pub(crate) enum RenderExperiment {
     ParticleSharedMesh,
     ParticleSharedMeshPartialBindings,
     CompactMaterial,
+    CompiledEventTracks,
     ParticleCull,
     ParticlePartialBindings,
     ParticleUncachedBindings,
@@ -95,6 +96,7 @@ impl RenderExperiment {
             "bindless-256" => Ok(Self::Bindless256),
             "no-bindless" => Ok(Self::NoBindless),
             "compact-material" => Ok(Self::CompactMaterial),
+            "compiled-event-tracks" => Ok(Self::CompiledEventTracks),
             "particle-shared-view" => Ok(Self::ParticleSharedView),
             "particle-shared-mesh" => Ok(Self::ParticleSharedMesh),
             "particle-shared-mesh-partial-bindings" => Ok(Self::ParticleSharedMeshPartialBindings),
@@ -105,7 +107,7 @@ impl RenderExperiment {
             "particle-overlap-audit" => Ok(Self::ParticleOverlapAudit),
             "particle-overlap-batching" => Ok(Self::ParticleOverlapBatching),
             _ => Err(format!(
-                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, bindless-auto, bindless-16, bindless-32, bindless-64, bindless-128, bindless-256, no-bindless, compact-material, particle-shared-view, particle-shared-mesh, particle-shared-mesh-partial-bindings, particle-cull, particle-partial-bindings, particle-uncached-bindings, cold-effect-pools, particle-overlap-audit, or particle-overlap-batching"
+                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, bindless-auto, bindless-16, bindless-32, bindless-64, bindless-128, bindless-256, no-bindless, compact-material, compiled-event-tracks, particle-shared-view, particle-shared-mesh, particle-shared-mesh-partial-bindings, particle-cull, particle-partial-bindings, particle-uncached-bindings, cold-effect-pools, particle-overlap-audit, or particle-overlap-batching"
             )),
         }
     }
@@ -527,6 +529,7 @@ fn apply_render_experiment(
             | RenderExperiment::ParticleSharedMesh
             | RenderExperiment::ParticleSharedMeshPartialBindings
             | RenderExperiment::CompactMaterial
+            | RenderExperiment::CompiledEventTracks
             | RenderExperiment::ParticleCull
             | RenderExperiment::ParticlePartialBindings
             | RenderExperiment::ParticleUncachedBindings
@@ -572,6 +575,7 @@ fn apply_render_experiment(
             | RenderExperiment::ParticleSharedMesh
             | RenderExperiment::ParticleSharedMeshPartialBindings
             | RenderExperiment::CompactMaterial
+            | RenderExperiment::CompiledEventTracks
             | RenderExperiment::ParticleCull
             | RenderExperiment::ParticlePartialBindings
             | RenderExperiment::ParticleUncachedBindings
@@ -643,6 +647,7 @@ pub(crate) struct SceneCensus<'w, 's> {
     windows: Query<'w, 's, &'static Window>,
     cameras: Query<'w, 's, &'static GlobalTransform, With<Camera3d>>,
     effect_reserves: Res<'w, crate::presentation::Wc3EffectPrewarmPlan>,
+    event_metadata: Res<'w, crate::wc3_effects::Wc3ComposedMetadataCache>,
 }
 
 impl SceneCensus<'_, '_> {
@@ -763,6 +768,7 @@ impl SceneCensus<'_, '_> {
             .unwrap();
         }
         writeln!(output, "  collapsed_visible={collapsed_visible} (zero determinant; candidates for geoset visibility)").unwrap();
+        output.push_str(&self.event_metadata.format());
         output
     }
 }

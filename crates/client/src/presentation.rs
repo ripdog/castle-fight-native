@@ -57,12 +57,13 @@ use crate::{
     unit_models::{UnitAnimationClip, UnitAnimationSet, UnitModelAsset, UnitModelSet},
     wc3_effects::{
         Wc3AbilityVisualAnchor, Wc3AnimatedAlphaMaterial, Wc3AttachToNode, Wc3AttachmentOwner,
-        Wc3ConvertedModelRegistry, Wc3EffectReusePending, Wc3EffectWarmup, Wc3EmitterSource,
-        Wc3MaterialProcessed, Wc3ModelSequenceSelection, Wc3ParticleAssets, Wc3RibbonSource,
-        Wc3SplatMaterial, Wc3StatusVisualKind, Wc3TeamColorMaterial, Wc3TeamTint, Wc3VertexTint,
-        Wc3VisualAnimationGraphs, Wc3VisualAnimationSource, Wc3VisualModel, Wc3VisualSet,
-        advance_wc3_model_sequence_clocks, apply_wc3_non_inheritance, emit_wc3_model_particles,
-        emit_wc3_particles, emit_wc3_sound_events, emit_wc3_spawn_events, emit_wc3_splat_events,
+        Wc3ComposedMetadataCache, Wc3ConvertedModelRegistry, Wc3EffectReusePending,
+        Wc3EffectWarmup, Wc3EmitterSource, Wc3MaterialProcessed, Wc3ModelSequenceSelection,
+        Wc3ParticleAssets, Wc3RibbonSource, Wc3SplatMaterial, Wc3StatusVisualKind,
+        Wc3TeamColorMaterial, Wc3TeamTint, Wc3VertexTint, Wc3VisualAnimationGraphs,
+        Wc3VisualAnimationSource, Wc3VisualModel, Wc3VisualSet, advance_wc3_model_sequence_clocks,
+        apply_wc3_non_inheritance, emit_wc3_model_particles, emit_wc3_particles,
+        emit_wc3_sound_events, emit_wc3_spawn_events, emit_wc3_splat_events,
         fix_wc3_scene_materials, flush_wc3_particle_buffers, index_wc3_model_attachments,
         mark_wc3_effect_warmup_hierarchy, reset_reused_wc3_effect_instances,
         resolve_wc3_emitter_nodes, resolve_wc3_visual_attachments,
@@ -1032,6 +1033,7 @@ impl Plugin for CastlePresentationPlugin {
             .init_resource::<BuildingModelSet>()
             .init_resource::<Wc3VisualSet>()
             .init_resource::<Wc3ConvertedModelRegistry>()
+            .init_resource::<Wc3ComposedMetadataCache>()
             .init_resource::<Wc3VisualAnimationGraphs>()
             .init_resource::<FpsDisplay>()
             .init_resource::<MapGridState>()

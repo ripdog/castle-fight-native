@@ -938,13 +938,78 @@ struct Wc3EventObjectSpec {
     global_sequence_durations_ms: Vec<u32>,
 }
 
-#[derive(Component, Debug, Clone)]
-pub(crate) struct Wc3SpawnEventRuntime {
-    child_model: RegisteredConvertedModel,
+// Immutable event phases are compiled once for byte-identical node extras. Source paths,
+// assets and mutable playback remain instance-owned and are resolved during setup.
+#[derive(Debug)]
+struct Wc3CompiledEventWindow {
+    name: String,
+    duration_ms: f32,
+    non_looping: bool,
+    phases_ms: Box<[f32]>,
+}
+
+#[derive(Debug)]
+struct Wc3CompiledEventTrack {
+    global: Option<(f32, Box<[f32]>)>,
+    windows: Box<[Wc3CompiledEventWindow]>,
+}
+
+impl Wc3CompiledEventTrack {
+    fn new(spec: &Wc3EventObjectSpec) -> Self {
+        let global = spec
+            .global_sequence_id
+            .and_then(|id| spec.global_sequence_durations_ms.get(id as usize))
+            .copied()
+            .filter(|duration| *duration != 0)
+            .map(|duration| {
+                (
+                    duration as f32,
+                    spec.event_track_times
+                        .iter()
+                        .map(|time| *time as f32)
+                        .collect(),
+                )
+            });
+        let windows = spec
+            .sequence_windows
+            .iter()
+            .map(|window| Wc3CompiledEventWindow {
+                name: window.name.clone(),
+                duration_ms: window.end_ms.saturating_sub(window.start_ms).max(1) as f32,
+                non_looping: window.non_looping,
+                // Keep authored ordering and duplicate keys, including both window endpoints.
+                phases_ms: spec
+                    .event_track_times
+                    .iter()
+                    .copied()
+                    .filter(|time| *time >= window.start_ms && *time <= window.end_ms)
+                    .map(|time| time.saturating_sub(window.start_ms) as f32)
+                    .collect(),
+            })
+            .collect();
+        Self { global, windows }
+    }
+}
+
+#[derive(Debug)]
+struct Wc3EventTrack {
     spec: Wc3EventObjectSpec,
+    compiled: Option<Wc3CompiledEventTrack>,
+}
+
+#[derive(Debug, Default, Clone)]
+struct Wc3EventCursor {
     previous_sequence_name: Option<String>,
     previous_sequence_elapsed_ms: Option<f32>,
     previous_global_elapsed_ms: Option<f32>,
+    selected_window_index: Option<usize>,
+}
+
+#[derive(Component, Debug, Clone)]
+pub(crate) struct Wc3SpawnEventRuntime {
+    child_model: RegisteredConvertedModel,
+    track: Arc<Wc3EventTrack>,
+    cursor: Wc3EventCursor,
 }
 
 #[derive(Component, Debug, Clone, Copy)]
@@ -955,23 +1020,19 @@ pub(crate) struct Wc3SpawnedEventModel {
 
 #[derive(Component, Debug, Clone)]
 pub(crate) struct Wc3SoundEventRuntime {
-    spec: Wc3EventObjectSpec,
+    track: Arc<Wc3EventTrack>,
     sound: Wc3EventSoundSpec,
     files: Vec<Handle<AudioSource>>,
-    previous_sequence_name: Option<String>,
-    previous_sequence_elapsed_ms: Option<f32>,
-    previous_global_elapsed_ms: Option<f32>,
+    cursor: Wc3EventCursor,
     sequence: u32,
 }
 
 #[derive(Component, Debug, Clone)]
 pub(crate) struct Wc3SplatEventRuntime {
-    spec: Wc3EventObjectSpec,
+    track: Arc<Wc3EventTrack>,
     splat: Wc3EventSplatSpec,
     texture: Handle<Image>,
-    previous_sequence_name: Option<String>,
-    previous_sequence_elapsed_ms: Option<f32>,
-    previous_global_elapsed_ms: Option<f32>,
+    cursor: Wc3EventCursor,
 }
 
 #[derive(Component, Debug, Clone)]
@@ -1027,6 +1088,63 @@ struct Wc3NodeExtras {
     wc3_model_particle_emitter: Option<Wc3LegacyModelEmitterSpec>,
     #[serde(rename = "wc3EventObject", default)]
     wc3_event_object: Option<Wc3EventObjectSpec>,
+}
+
+struct Wc3ComposedNodeMetadata {
+    extras: Wc3NodeExtras,
+    event_track: Option<Arc<Wc3EventTrack>>,
+}
+
+impl Wc3ComposedNodeMetadata {
+    fn parse(raw: &str, compiled: bool) -> Option<Self> {
+        let mut extras = serde_json::from_str::<Wc3NodeExtras>(raw).ok()?;
+        let event_track = extras.wc3_event_object.take().map(|spec| {
+            let compiled = compiled.then(|| Wc3CompiledEventTrack::new(&spec));
+            Arc::new(Wc3EventTrack { spec, compiled })
+        });
+        Some(Self {
+            extras,
+            event_track,
+        })
+    }
+}
+
+#[derive(Resource, Default)]
+pub(crate) struct Wc3ComposedMetadataCache {
+    // Content keys never alias changed metadata on asset replacement. Identical extras
+    // may safely share tracks across asset paths; handles are resolved per instance.
+    nodes: HashMap<String, Arc<Wc3ComposedNodeMetadata>>,
+    hits: usize,
+}
+
+impl Wc3ComposedMetadataCache {
+    pub(crate) fn format(&self) -> String {
+        let (tracks, windows, empty) = self
+            .nodes
+            .values()
+            .filter_map(|node| node.event_track.as_ref())
+            .filter_map(|track| track.compiled.as_ref())
+            .fold((0, 0, 0), |(tracks, windows, empty), track| {
+                (
+                    tracks + 1,
+                    windows + track.windows.len(),
+                    empty
+                        + track
+                            .windows
+                            .iter()
+                            .filter(|window| window.phases_ms.is_empty())
+                            .count(),
+                )
+            });
+        format!(
+            "  compiled event metadata: {} node sources, {} cache hits, {} tracks, {}/{} empty windows (cumulative setup, unique content)\n",
+            self.nodes.len(),
+            self.hits,
+            tracks,
+            empty,
+            windows
+        )
+    }
 }
 
 fn inherited_world_asset_path(
@@ -1108,66 +1226,123 @@ fn registered_child_model_for_node(
     })
 }
 
-pub fn setup_wc3_model_composed_features(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    registry: Res<Wc3ConvertedModelRegistry>,
-    nodes: Query<(Entity, &GltfExtras), Added<GltfExtras>>,
-    parents: Query<&ChildOf>,
-    roots: Query<&WorldAssetRoot>,
-) {
+#[derive(SystemParam)]
+pub(crate) struct Wc3ComposedFeatureSetup<'w, 's> {
+    asset_server: Res<'w, AssetServer>,
+    registry: Res<'w, Wc3ConvertedModelRegistry>,
+    experiment: Option<Res<'w, RenderExperiment>>,
+    metadata: ResMut<'w, Wc3ComposedMetadataCache>,
+    nodes: Query<'w, 's, (Entity, Ref<'static, GltfExtras>), Changed<GltfExtras>>,
+    removed: RemovedComponents<'w, 's, GltfExtras>,
+    parents: Query<'w, 's, &'static ChildOf>,
+    roots: Query<'w, 's, &'static WorldAssetRoot>,
+}
+
+pub fn setup_wc3_model_composed_features(mut commands: Commands, setup: Wc3ComposedFeatureSetup) {
+    let Wc3ComposedFeatureSetup {
+        asset_server,
+        registry,
+        experiment,
+        mut metadata,
+        nodes,
+        mut removed,
+        parents,
+        roots,
+    } = setup;
+    for entity in removed.read() {
+        if let Ok(mut entity_commands) = commands.get_entity(entity) {
+            entity_commands.remove::<(
+                Wc3SpawnEventRuntime,
+                Wc3SoundEventRuntime,
+                Wc3SplatEventRuntime,
+            )>();
+        }
+    }
+    let compiled =
+        experiment.is_some_and(|experiment| *experiment == RenderExperiment::CompiledEventTracks);
     for (entity, raw_extras) in &nodes {
-        let Ok(extras) = serde_json::from_str::<Wc3NodeExtras>(&raw_extras.value) else {
-            continue;
+        if !raw_extras.is_added() {
+            // Replacing/removing an event spec must also replace its cursor and assets.
+            commands.entity(entity).remove::<(
+                Wc3SpawnEventRuntime,
+                Wc3SoundEventRuntime,
+                Wc3SplatEventRuntime,
+            )>();
+        }
+        let node = if compiled {
+            if let Some(node) = metadata.nodes.get(&raw_extras.value).cloned() {
+                metadata.hits += 1;
+                node
+            } else {
+                let Some(node) = Wc3ComposedNodeMetadata::parse(&raw_extras.value, true) else {
+                    continue;
+                };
+                let node = Arc::new(node);
+                metadata
+                    .nodes
+                    .insert(raw_extras.value.clone(), Arc::clone(&node));
+                node
+            }
+        } else {
+            let Some(node) = Wc3ComposedNodeMetadata::parse(&raw_extras.value, false) else {
+                continue;
+            };
+            Arc::new(node)
         };
-        if extras.wc3_geoset.is_some() {
-            commands
-                .entity(entity)
-                .insert(Wc3GeosetVisibility::default());
-        }
-        if let Some(non_inheritance) = Wc3NonInheritance::from_node_flags(extras.wc3_node_flags) {
-            commands.entity(entity).insert(non_inheritance);
-        }
-        if let Some(spec) = extras.wc3_attachment
-            && let Some(child_model) = registered_child_model_for_node(
-                entity,
-                &spec.gltf,
-                &asset_server,
-                &registry,
-                &parents,
-                &roots,
-            )
-        {
-            commands.entity(entity).insert(Wc3ModelAttachmentRuntime {
-                child_model,
-                visibility_track: spec.visibility_track,
-                sequence_windows: spec.sequence_windows,
-                global_sequence_durations_ms: spec.global_sequence_durations_ms,
-                fallback_elapsed_ms: 0.0,
-                child: None,
-            });
-        }
-        if let Some(spec) = extras.wc3_model_particle_emitter
-            && let Some(child_model) = registered_child_model_for_node(
-                entity,
-                &spec.gltf,
-                &asset_server,
-                &registry,
-                &parents,
-                &roots,
-            )
-        {
-            commands
-                .entity(entity)
-                .insert(Wc3LegacyModelEmitterRuntime {
+        let extras = &node.extras;
+        // These composed features retain their existing setup and ownership lifecycle.
+        if raw_extras.is_added() {
+            if extras.wc3_geoset.is_some() {
+                commands
+                    .entity(entity)
+                    .insert(Wc3GeosetVisibility::default());
+            }
+            if let Some(non_inheritance) = Wc3NonInheritance::from_node_flags(extras.wc3_node_flags)
+            {
+                commands.entity(entity).insert(non_inheritance);
+            }
+            if let Some(spec) = &extras.wc3_attachment
+                && let Some(child_model) = registered_child_model_for_node(
+                    entity,
+                    &spec.gltf,
+                    &asset_server,
+                    &registry,
+                    &parents,
+                    &roots,
+                )
+            {
+                commands.entity(entity).insert(Wc3ModelAttachmentRuntime {
                     child_model,
-                    spec,
+                    visibility_track: spec.visibility_track.clone(),
+                    sequence_windows: spec.sequence_windows.clone(),
+                    global_sequence_durations_ms: spec.global_sequence_durations_ms.clone(),
                     fallback_elapsed_ms: 0.0,
-                    accumulator: 0.0,
-                    sequence: 0,
+                    child: None,
                 });
+            }
+            if let Some(spec) = &extras.wc3_model_particle_emitter
+                && let Some(child_model) = registered_child_model_for_node(
+                    entity,
+                    &spec.gltf,
+                    &asset_server,
+                    &registry,
+                    &parents,
+                    &roots,
+                )
+            {
+                commands
+                    .entity(entity)
+                    .insert(Wc3LegacyModelEmitterRuntime {
+                        child_model,
+                        spec: spec.clone(),
+                        fallback_elapsed_ms: 0.0,
+                        accumulator: 0.0,
+                        sequence: 0,
+                    });
+            }
         }
-        if let Some(spec) = extras.wc3_event_object {
+        if let Some(track) = &node.event_track {
+            let spec = &track.spec;
             match spec.kind {
                 Wc3EventObjectKind::Spawn => {
                     if let Some(gltf) = spec.gltf.as_deref()
@@ -1182,10 +1357,8 @@ pub fn setup_wc3_model_composed_features(
                     {
                         commands.entity(entity).insert(Wc3SpawnEventRuntime {
                             child_model,
-                            spec,
-                            previous_sequence_name: None,
-                            previous_sequence_elapsed_ms: None,
-                            previous_global_elapsed_ms: None,
+                            track: Arc::clone(track),
+                            cursor: Wc3EventCursor::default(),
                         });
                     }
                 }
@@ -1202,12 +1375,10 @@ pub fn setup_wc3_model_composed_features(
                             .collect::<Vec<_>>();
                         if !files.is_empty() {
                             commands.entity(entity).insert(Wc3SoundEventRuntime {
-                                spec,
+                                track: Arc::clone(track),
                                 sound,
                                 files,
-                                previous_sequence_name: None,
-                                previous_sequence_elapsed_ms: None,
-                                previous_global_elapsed_ms: None,
+                                cursor: Wc3EventCursor::default(),
                                 sequence: 0,
                             });
                         }
@@ -1224,12 +1395,10 @@ pub fn setup_wc3_model_composed_features(
                             pack_relative_asset_path(&parent_asset_path, &splat.texture)
                     {
                         commands.entity(entity).insert(Wc3SplatEventRuntime {
-                            spec,
+                            track: Arc::clone(track),
                             splat,
                             texture: asset_server.load(path),
-                            previous_sequence_name: None,
-                            previous_sequence_elapsed_ms: None,
-                            previous_global_elapsed_ms: None,
+                            cursor: Wc3EventCursor::default(),
                         });
                     }
                 }
@@ -1714,13 +1883,12 @@ fn periodic_event_crossings(previous: f32, current: f32, phase: f32, period: f32
 }
 
 fn wc3_event_crossings(
-    spec: &Wc3EventObjectSpec,
-    previous_sequence_name: &mut Option<String>,
-    previous_sequence_elapsed_ms: &mut Option<f32>,
-    previous_global_elapsed_ms: &mut Option<f32>,
+    track: &Wc3EventTrack,
+    cursor: &mut Wc3EventCursor,
     clock: &Wc3ModelSequenceClock,
     dt_ms: f32,
 ) -> u32 {
+    let spec = &track.spec;
     if let Some(global_sequence_id) = spec.global_sequence_id
         && let Some(duration) = spec
             .global_sequence_durations_ms
@@ -1729,7 +1897,7 @@ fn wc3_event_crossings(
             .filter(|duration| *duration != 0)
     {
         let current = clock.global_elapsed_ms.max(0.0);
-        let previous = (*previous_global_elapsed_ms).unwrap_or_else(|| {
+        let previous = cursor.previous_global_elapsed_ms.unwrap_or_else(|| {
             let previous = (current - dt_ms).max(0.0);
             if previous <= f32::EPSILON {
                 -0.001
@@ -1737,7 +1905,15 @@ fn wc3_event_crossings(
                 previous
             }
         });
-        *previous_global_elapsed_ms = Some(current);
+        cursor.previous_global_elapsed_ms = Some(current);
+        if let Some(compiled) = &track.compiled
+            && let Some((duration, phases)) = &compiled.global
+        {
+            return phases
+                .iter()
+                .map(|phase| periodic_event_crossings(previous, current, *phase, *duration))
+                .sum();
+        }
         return spec
             .event_track_times
             .iter()
@@ -1749,12 +1925,15 @@ fn wc3_event_crossings(
     }
 
     let current = clock.sequence_elapsed_ms.max(0.0);
-    let same_sequence = previous_sequence_name
+    let same_sequence = cursor
+        .previous_sequence_name
         .as_deref()
         .is_some_and(|name| name.eq_ignore_ascii_case(&clock.sequence_name));
     let previous = if same_sequence {
-        (*previous_sequence_elapsed_ms).unwrap_or((current - dt_ms).max(0.0))
-    } else if previous_sequence_name.is_some() {
+        cursor
+            .previous_sequence_elapsed_ms
+            .unwrap_or((current - dt_ms).max(0.0))
+    } else if cursor.previous_sequence_name.is_some() {
         -0.001
     } else {
         let previous = (current - dt_ms).max(0.0);
@@ -1765,9 +1944,36 @@ fn wc3_event_crossings(
         }
     };
     if !same_sequence {
-        *previous_sequence_name = Some(clock.sequence_name.clone());
+        cursor.previous_sequence_name = Some(clock.sequence_name.clone());
+        if let Some(compiled) = &track.compiled {
+            cursor.selected_window_index = compiled
+                .windows
+                .iter()
+                .position(|window| window.name.eq_ignore_ascii_case(&clock.sequence_name));
+        }
     }
-    *previous_sequence_elapsed_ms = Some(current);
+    cursor.previous_sequence_elapsed_ms = Some(current);
+
+    if let Some(compiled) = &track.compiled {
+        let Some(window) = cursor
+            .selected_window_index
+            .and_then(|index| compiled.windows.get(index))
+        else {
+            return 0;
+        };
+        // An empty window does no per-key work, but the instance cursor above still advances.
+        return window
+            .phases_ms
+            .iter()
+            .map(|phase| {
+                if window.non_looping {
+                    u32::from(*phase > previous && *phase <= current.min(window.duration_ms))
+                } else {
+                    periodic_event_crossings(previous, current, *phase, window.duration_ms)
+                }
+            })
+            .sum();
+    }
 
     let Some(window) = spec
         .sequence_windows
@@ -1797,14 +2003,7 @@ fn wc3_spawn_event_crossings(
     clock: &Wc3ModelSequenceClock,
     dt_ms: f32,
 ) -> u32 {
-    wc3_event_crossings(
-        &runtime.spec,
-        &mut runtime.previous_sequence_name,
-        &mut runtime.previous_sequence_elapsed_ms,
-        &mut runtime.previous_global_elapsed_ms,
-        clock,
-        dt_ms,
-    )
+    wc3_event_crossings(&runtime.track, &mut runtime.cursor, clock, dt_ms)
 }
 
 fn registered_model_event_lifespan_seconds(model: &RegisteredConvertedModel) -> f32 {
@@ -1912,14 +2111,7 @@ pub fn emit_wc3_sound_events(
         };
         let count = {
             let runtime = &mut *runtime;
-            wc3_event_crossings(
-                &runtime.spec,
-                &mut runtime.previous_sequence_name,
-                &mut runtime.previous_sequence_elapsed_ms,
-                &mut runtime.previous_global_elapsed_ms,
-                clock,
-                dt_ms,
-            )
+            wc3_event_crossings(&runtime.track, &mut runtime.cursor, clock, dt_ms)
         };
         if count == 0 || runtime.files.is_empty() {
             continue;
@@ -2126,14 +2318,7 @@ pub fn emit_wc3_splat_events(
         };
         let count = {
             let runtime = &mut *runtime;
-            wc3_event_crossings(
-                &runtime.spec,
-                &mut runtime.previous_sequence_name,
-                &mut runtime.previous_sequence_elapsed_ms,
-                &mut runtime.previous_global_elapsed_ms,
-                clock,
-                dt_ms,
-            )
+            wc3_event_crossings(&runtime.track, &mut runtime.cursor, clock, dt_ms)
         };
         if count == 0 {
             continue;
@@ -4095,20 +4280,14 @@ pub(crate) fn reset_reused_wc3_effect_instances(
                 emitter.sequence = 0;
             }
             if let Ok(mut event) = state.spawn_events.get_mut(entity) {
-                event.previous_sequence_name = None;
-                event.previous_sequence_elapsed_ms = None;
-                event.previous_global_elapsed_ms = None;
+                event.cursor = Wc3EventCursor::default();
             }
             if let Ok(mut event) = state.sound_events.get_mut(entity) {
-                event.previous_sequence_name = None;
-                event.previous_sequence_elapsed_ms = None;
-                event.previous_global_elapsed_ms = None;
+                event.cursor = Wc3EventCursor::default();
                 event.sequence = 0;
             }
             if let Ok(mut event) = state.splat_events.get_mut(entity) {
-                event.previous_sequence_name = None;
-                event.previous_sequence_elapsed_ms = None;
-                event.previous_global_elapsed_ms = None;
+                event.cursor = Wc3EventCursor::default();
             }
         }
         commands.entity(root).remove::<Wc3EffectReusePending>();
@@ -6498,19 +6677,20 @@ mod tests {
                     attachments: Vec::new(),
                 },
             },
-            spec: Wc3EventObjectSpec {
-                kind: Wc3EventObjectKind::Spawn,
-                gltf: Some("models/spawn.gltf".to_owned()),
-                sound: None,
-                splat: None,
-                global_sequence_id,
-                event_track_times,
-                sequence_windows,
-                global_sequence_durations_ms,
-            },
-            previous_sequence_name: None,
-            previous_sequence_elapsed_ms: None,
-            previous_global_elapsed_ms: None,
+            track: Arc::new(Wc3EventTrack {
+                spec: Wc3EventObjectSpec {
+                    kind: Wc3EventObjectKind::Spawn,
+                    gltf: Some("models/spawn.gltf".to_owned()),
+                    sound: None,
+                    splat: None,
+                    global_sequence_id,
+                    event_track_times,
+                    sequence_windows,
+                    global_sequence_durations_ms,
+                },
+                compiled: None,
+            }),
+            cursor: Wc3EventCursor::default(),
         }
     }
 
@@ -6795,8 +6975,8 @@ mod tests {
             None,
             Vec::new(),
         );
-        runtime.previous_sequence_name = Some("Stand".to_owned());
-        runtime.previous_sequence_elapsed_ms = Some(900.0);
+        runtime.cursor.previous_sequence_name = Some("Stand".to_owned());
+        runtime.cursor.previous_sequence_elapsed_ms = Some(900.0);
         let clock = Wc3ModelSequenceClock {
             sequence_name: "Stand".to_owned(),
             sequence_elapsed_ms: 1_250.0,
@@ -6808,7 +6988,7 @@ mod tests {
     #[test]
     fn spawn_event_crossing_handles_global_sequence_wraps() {
         let mut runtime = test_spawn_event_runtime(vec![100], Vec::new(), Some(0), vec![1_000]);
-        runtime.previous_global_elapsed_ms = Some(950.0);
+        runtime.cursor.previous_global_elapsed_ms = Some(950.0);
         let clock = Wc3ModelSequenceClock {
             sequence_name: "Stand".to_owned(),
             sequence_elapsed_ms: 150.0,

@@ -353,6 +353,16 @@ mode and MUST NOT affect the authoritative simulation. They deliberately change 
   eye-plane crossings, morph meshes, ribbons, unknown draws and prebatched model items are ordering
   barriers. Potentially overlapping items retain their sorted precedence. Counters report proposed
   safe moves, overlap rejections and barrier stops; these are search events, not unique draw counts.
+- `compiled-event-tracks` shares parsed composed-node extras and immutable event tracks for
+  byte-identical metadata. It precomputes each sequence window's relative event phases and caches
+  the selected window per instance until the sequence changes. Empty windows MUST still advance
+  that instance's cursor. Authored key ordering, duplicates, inclusive endpoints, initial/time-zero
+  crossings, skipped frames, looping, global periods and invalid-global fallback MUST retain the
+  existing crossing semantics. Mutable cursors, sound counters, assets and spawned-child ownership
+  MUST remain per instance. Changed/removed extras MUST replace/remove event runtimes; changed content
+  MUST select fresh metadata. Reuse MUST reset the selected window and all crossing cursors. Clock
+  owners are still resolved through the current hierarchy on every update. Census counters report
+  cumulative content sources/cache hits and unique compiled tracks/windows. This control is opt-in.
 - `compact-material` uses render-only proxies for WC3 animated-alpha and team-colour extensions
   whose base material has no image inputs other than base colour. It retains the complete Bevy
   material uniform and delegates material/pipeline properties to StandardMaterial, binding only
