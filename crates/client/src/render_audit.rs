@@ -18,8 +18,10 @@ use bevy::{
     pbr::SkinUniforms,
     prelude::*,
     render::{
-        Render, RenderApp, RenderSystems, batching::NoAutomaticBatching,
-        pipelined_rendering::RenderExtractApp, render_phase::ViewSortedRenderPhases,
+        Render, RenderApp, RenderSystems,
+        batching::NoAutomaticBatching,
+        pipelined_rendering::RenderExtractApp,
+        render_phase::{DrawFunctions, ViewSortedRenderPhases},
     },
 };
 
@@ -147,10 +149,24 @@ impl StageTiming {
 }
 
 #[derive(Default)]
+struct TransparentSample {
+    items: usize,
+    draws: usize,
+    particle_draws: usize,
+    particle_instances: usize,
+    max_particle_batch: usize,
+    pipelines: usize,
+    pipeline_changes: usize,
+    command_changes: usize,
+    particle_mesh_changes: usize,
+    palette_bytes: usize,
+}
+
+#[derive(Default)]
 struct Measurements {
     started: Option<Instant>,
     stages: [StageTiming; STAGES.len()],
-    transparent: Option<(usize, usize, usize)>,
+    transparent: Option<TransparentSample>,
     particles: Option<crate::particle_renderer::Wc3ParticleQueueStats>,
     scene_requests: BTreeMap<String, SceneRequestCounts>,
 }
@@ -202,11 +218,14 @@ impl RenderAudit {
                 .unwrap();
             }
         }
-        if let Some((items, draws, palette_bytes)) = measurements.transparent {
-            writeln!(output, "  transparent phase: {items} items, {draws} draw-function calls (latest sampled frame, all views)").unwrap();
+        if let Some(sample) = &measurements.transparent {
+            writeln!(output, "  transparent phase: {} items, {} draw-function calls (latest sampled frame, all views)", sample.items, sample.draws).unwrap();
+            writeln!(output, "  transparent submission: {} particle / {} mesh-or-other calls, {} particle instances, largest particle batch {}", sample.particle_draws, sample.draws - sample.particle_draws, sample.particle_instances, sample.max_particle_batch).unwrap();
+            writeln!(output, "  transparent transitions: {} distinct pipelines, {} pipeline changes, {} command changes, {} particle/mesh changes (first binding per view excluded)", sample.pipelines, sample.pipeline_changes, sample.command_changes, sample.particle_mesh_changes).unwrap();
             writeln!(
                 output,
-                "  skin palette staging: {palette_bytes} bytes uploaded/frame (latest sample)"
+                "  skin palette staging: {} bytes uploaded/frame (latest sample)",
+                sample.palette_bytes,
             )
             .unwrap();
         }
@@ -392,6 +411,7 @@ fn freeze_animation_poses(
 
 fn sample_transparent_batches(
     phases: Res<ViewSortedRenderPhases<Transparent3d>>,
+    draw_functions: Res<DrawFunctions<Transparent3d>>,
     skins: Res<SkinUniforms>,
     particles: Res<crate::particle_renderer::Wc3ParticleQueueStats>,
     audit: Res<RenderAudit>,
@@ -402,25 +422,41 @@ fn sample_transparent_batches(
         return;
     }
     *last_sample = Some(now);
-    let mut items = 0;
-    let mut draws = 0;
+    let particle_draw = crate::particle_renderer::particle_draw_function_id(&draw_functions);
+    let mut sample = TransparentSample::default();
+    let mut pipelines = HashSet::new();
     for phase in phases.values() {
-        items += phase.items.len();
+        sample.items += phase.items.len();
+        let mut previous = None;
         // Follow SortedRenderPhase::render_range: a batch's representative
         // advances over the instances it draws; empty ranges don't issue a call.
         let mut index = 0;
         while index < phase.items.len() {
-            let count = phase.items[index].batch_range.len();
-            draws += usize::from(count > 0);
+            let item = &phase.items[index];
+            let count = item.batch_range.len();
+            if count > 0 {
+                let particle = item.draw_function == particle_draw;
+                sample.draws += 1;
+                sample.particle_draws += usize::from(particle);
+                if particle {
+                    sample.particle_instances += count;
+                    sample.max_particle_batch = sample.max_particle_batch.max(count);
+                }
+                pipelines.insert(item.pipeline);
+                if let Some((pipeline, command, was_particle)) = previous {
+                    sample.pipeline_changes += usize::from(pipeline != item.pipeline);
+                    sample.command_changes += usize::from(command != item.draw_function);
+                    sample.particle_mesh_changes += usize::from(was_particle != particle);
+                }
+                previous = Some((item.pipeline, item.draw_function, particle));
+            }
             index += count.max(1);
         }
     }
+    sample.pipelines = pipelines.len();
+    sample.palette_bytes = skins.current_staging_buffer.len() * size_of::<Mat4>();
     let mut measurements = audit.0.lock().expect("render audit mutex poisoned");
-    measurements.transparent = Some((
-        items,
-        draws,
-        skins.current_staging_buffer.len() * size_of::<Mat4>(),
-    ));
+    measurements.transparent = Some(sample);
     measurements.particles = Some(*particles);
 }
 

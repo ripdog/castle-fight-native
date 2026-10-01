@@ -378,12 +378,14 @@ removing geometry also changes visibility, batching, GPU work and pipeline overl
 same save, build, view, resolution and capture duration, and repeat baseline runs.
 
 Automated profiling also reports CPU time around render-world extraction/handoff and render
-schedule stages, a scene census, sampled transparent draw-function calls after batching, and recent
+schedule stages, a scene census, sampled transparent draw-function calls after batching (including
+particle/mesh counts, particle batch sizes and pipeline/command transitions), and recent
 CPU/GPU pass diagnostics. Main-thread handoff includes extraction and any wait for the render thread;
 these overlapping scopes MUST NOT be summed with main or GPU time. Pass diagnostics are recent
 rolling samples, not averages over the entire capture. Mesh/material pairs and skin counts are not
-draw-call counts. A `SYSTEM CPU` report with no samples does not imply zero engine-system cost;
-per-system tracing requires Bevy's tracing feature.
+draw-call counts. Transparent transition counts MUST reset at each view and exclude its first
+binding; they describe submitted phase order, not GPU execution time. A `SYSTEM CPU` report with no
+samples does not imply zero engine-system cost; per-system tracing requires Bevy's tracing feature.
 
 ```text
 tools/cargo-interactive run --release -p castle-fight-client -- --stress-units 500 --profile --profile-paused --profile-warmup 10 --profile-duration 10

@@ -34,9 +34,9 @@ use bevy::{
         Extract, ExtractSchedule, Render, RenderApp, RenderStartup, RenderSystems,
         render_asset::RenderAssets,
         render_phase::{
-            AddRenderCommand, DrawFunctions, PhaseItem, PhaseItemExtraIndex, RenderCommand,
-            RenderCommandResult, SetItemPipeline, SortedRenderPhase, TrackedRenderPass,
-            ViewSortedRenderPhases,
+            AddRenderCommand, DrawFunctionId, DrawFunctions, PhaseItem, PhaseItemExtraIndex,
+            RenderCommand, RenderCommandResult, SetItemPipeline, SortedRenderPhase,
+            TrackedRenderPass, ViewSortedRenderPhases,
         },
         render_resource::{
             BindGroup, BindGroupEntries, BindGroupLayoutDescriptor, BindGroupLayoutEntries,
@@ -1046,6 +1046,12 @@ impl<P: PhaseItem> RenderCommand<P> for DrawWc3BillboardParticleCommand {
 }
 
 type DrawWc3BillboardParticles = (SetItemPipeline, DrawWc3BillboardParticleCommand);
+
+pub(crate) fn particle_draw_function_id(
+    draw_functions: &DrawFunctions<Transparent3d>,
+) -> DrawFunctionId {
+    draw_functions.read().id::<DrawWc3BillboardParticles>()
+}
 
 #[cfg(test)]
 mod tests {
