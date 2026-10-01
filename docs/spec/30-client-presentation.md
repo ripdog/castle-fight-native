@@ -294,6 +294,20 @@ Classic WC3 model events for SPL/FPT/UBR MUST resolve through the version-scoped
 
 Generated unit packs SHOULD retain per-object tint and passive ability target art attached to named model points, even when multiple rawcodes share a source mesh. Transient unit effects SHOULD follow the appropriate animated attachment node when the effect belongs to a held item or shield. An effect's particle emitters MUST follow its selected model sequence; a looping Stand effect must not emit Birth or Death particles. These details remain cosmetic and never affect authoritative combat.
 
+The client MAY prepare hidden effect hierarchies ahead of use and retain completed instances.
+Prepared reserves MUST finish scene spawning, WC3 node/material setup and animation setup before
+activation; preparation MUST NOT emit particles, model children, splats or sounds. Acquisition MUST
+restore visibility and reset animation, sequence/global clocks, emission counters and event cursors
+while preserving scene-local node bindings and full skin identity. Timed and looping playback
+MUST use separate reserves even when they share a source scene, so persistent Stand effects cannot
+acquire timed Birth playback. Released attached effects MUST
+leave their previous owner hierarchy before retention. Ribbon/attachment scenes that cannot safely
+retain their transient child ownership MAY use prepared instances once, then follow ordinary
+cleanup. Reserve exhaustion MUST use ordinary spawning without dropping or delaying an effect.
+Reloading/replacing a source scene MUST invalidate prepared/retained reserves and node bindings.
+Reserve sizing and creation budgets are renderer policies; gameplay parameters used to estimate
+occupancy MUST come from the selected version's content definitions.
+
 An authoritative ordinary-attack miss SHOULD produce clear transient client feedback. The current client renders `MISS` above the missed target for approximately one second when the corresponding authoritative `AttackEvent` has `missed = true`. This text is cosmetic and MUST NOT perform or infer its own accuracy roll.
 
 ## 16. Historical event suppression

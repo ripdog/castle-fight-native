@@ -55,6 +55,7 @@ pub(crate) enum RenderExperiment {
     ParticleSharedView,
     ParticleCull,
     ParticlePartialBindings,
+    ColdEffectPools,
 }
 
 impl RenderExperiment {
@@ -84,8 +85,9 @@ impl RenderExperiment {
             "particle-shared-view" => Ok(Self::ParticleSharedView),
             "particle-cull" => Ok(Self::ParticleCull),
             "particle-partial-bindings" => Ok(Self::ParticlePartialBindings),
+            "cold-effect-pools" => Ok(Self::ColdEffectPools),
             _ => Err(format!(
-                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, bindless-auto, bindless-64, bindless-128, bindless-256, no-bindless, particle-shared-view, particle-cull, or particle-partial-bindings"
+                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, bindless-auto, bindless-64, bindless-128, bindless-256, no-bindless, particle-shared-view, particle-cull, particle-partial-bindings, or cold-effect-pools"
             )),
         }
     }
@@ -446,6 +448,7 @@ fn apply_render_experiment(
             | RenderExperiment::Bindless128
             | RenderExperiment::Bindless256
             | RenderExperiment::NoBindless
+            | RenderExperiment::ColdEffectPools
     ) {
         return;
     }
@@ -481,7 +484,8 @@ fn apply_render_experiment(
             | RenderExperiment::NoBindless
             | RenderExperiment::ParticleSharedView
             | RenderExperiment::ParticleCull
-            | RenderExperiment::ParticlePartialBindings => false,
+            | RenderExperiment::ParticlePartialBindings
+            | RenderExperiment::ColdEffectPools => false,
             RenderExperiment::FreezeBounds => {
                 if dynamic && has_bounds {
                     commands.entity(entity).remove::<DynamicSkinnedMeshBounds>();
@@ -546,6 +550,7 @@ pub(crate) struct SceneCensus<'w, 's> {
     entities: Query<'w, 's, Entity>,
     windows: Query<'w, 's, &'static Window>,
     cameras: Query<'w, 's, &'static GlobalTransform, With<Camera3d>>,
+    effect_reserves: Res<'w, crate::presentation::Wc3EffectPrewarmPlan>,
 }
 
 impl SceneCensus<'_, '_> {
@@ -644,6 +649,7 @@ impl SceneCensus<'_, '_> {
             joint_references,
             joints.len()
         );
+        output.push_str(&self.effect_reserves.format());
         for window in &self.windows {
             writeln!(
                 output,

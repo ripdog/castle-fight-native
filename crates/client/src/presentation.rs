@@ -1,7 +1,10 @@
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::{BTreeMap, HashMap},
+    time::Duration,
+};
 
 use bevy::{
-    asset::{AssetId, RenderAssetUsages},
+    asset::{AssetEvent, AssetId, RenderAssetUsages},
     audio::SpatialListener,
     camera::{
         Exposure,
@@ -26,12 +29,13 @@ use bevy::{
     shader::ShaderRef,
     time::Fixed,
     window::PrimaryWindow,
-    world_serialization::{WorldAsset, WorldInstance},
+    world_serialization::{WorldAsset, WorldInstance, WorldInstanceSpawner},
 };
 use castle_fight_sim::{
     AbilityCastTarget, AbilityEffect, AttackDelivery, BuildingFootprint,
-    CASTLE_FIGHT_SIMULATION_HZ, CorpseView, MovementClass, PlayerId, ProjectileView,
-    ProjectileViewKind, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, SimulationConfig, Team,
+    CASTLE_FIGHT_SIMULATION_HZ, CorpseView, MovementClass, PassiveUnitEffect, PlayerId,
+    ProjectileView, ProjectileViewKind, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, SimulationConfig,
+    Team,
 };
 
 use crate::{
@@ -53,15 +57,16 @@ use crate::{
     unit_models::{UnitAnimationClip, UnitAnimationSet, UnitModelAsset, UnitModelSet},
     wc3_effects::{
         Wc3AbilityVisualAnchor, Wc3AnimatedAlphaMaterial, Wc3AttachToNode, Wc3AttachmentOwner,
-        Wc3ConvertedModelRegistry, Wc3EffectReusePending, Wc3EmitterSource,
+        Wc3ConvertedModelRegistry, Wc3EffectReusePending, Wc3EffectWarmup, Wc3EmitterSource,
         Wc3ModelSequenceSelection, Wc3ParticleAssets, Wc3RibbonSource, Wc3SplatMaterial,
         Wc3StatusVisualKind, Wc3TeamColorMaterial, Wc3TeamTint, Wc3VertexTint,
-        Wc3VisualAnimationGraphs, Wc3VisualModel, Wc3VisualSet, advance_wc3_model_sequence_clocks,
-        apply_wc3_non_inheritance, emit_wc3_model_particles, emit_wc3_particles,
-        emit_wc3_sound_events, emit_wc3_spawn_events, emit_wc3_splat_events,
+        Wc3VisualAnimationGraphs, Wc3VisualAnimationSource, Wc3VisualModel, Wc3VisualSet,
+        advance_wc3_model_sequence_clocks, apply_wc3_non_inheritance, emit_wc3_model_particles,
+        emit_wc3_particles, emit_wc3_sound_events, emit_wc3_spawn_events, emit_wc3_splat_events,
         fix_wc3_scene_materials, flush_wc3_particle_buffers, index_wc3_model_attachments,
-        reset_reused_wc3_effect_instances, resolve_wc3_emitter_nodes,
-        resolve_wc3_visual_attachments, setup_wc3_model_composed_features, setup_wc3_model_lights,
+        mark_wc3_effect_warmup_hierarchy, reset_reused_wc3_effect_instances,
+        resolve_wc3_emitter_nodes, resolve_wc3_visual_attachments,
+        setup_wc3_model_composed_features, setup_wc3_model_lights,
         setup_wc3_visual_animation_players, spawn_wc3_ribbon_trails, update_wc3_material_alpha,
         update_wc3_material_texture, update_wc3_model_attachments, update_wc3_model_lights,
         update_wc3_model_particles, update_wc3_particles, update_wc3_ribbon_trails,
@@ -559,6 +564,7 @@ struct PresentedProjectile {
     entity: Entity,
     last_position: Vec3,
     missile_arc: Option<f32>,
+    pooled_visual: Option<(Entity, Wc3EffectPoolKey)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -577,7 +583,7 @@ struct RenderMap {
     corpses: HashMap<SimId, Entity>,
     projectiles: HashMap<SimId, PresentedProjectile>,
     stun_effects: HashMap<SimId, Entity>,
-    status_effects: HashMap<StatusEffectKey, Entity>,
+    status_effects: HashMap<StatusEffectKey, PresentedStatusEffect>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -619,7 +625,7 @@ struct TimedWc3Effect {
     mesh: Option<Handle<Mesh>>,
     fade_material: Option<Handle<StandardMaterial>>,
     pooled_lightning: bool,
-    pooled_scene: Option<AssetId<WorldAsset>>,
+    pooled_scene: Option<Wc3EffectPoolKey>,
 }
 
 #[derive(Debug, Clone)]
@@ -632,11 +638,97 @@ struct PooledLightningEffect {
 #[derive(Resource, Default)]
 struct TimedWc3Effects(Vec<TimedWc3Effect>);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Wc3EffectPlayback {
+    OneShot,
+    Looping,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct Wc3EffectPoolKey {
+    scene: AssetId<WorldAsset>,
+    playback: Wc3EffectPlayback,
+}
+
+impl Wc3EffectPlayback {
+    fn key(self, model: &Wc3VisualModel) -> Wc3EffectPoolKey {
+        Wc3EffectPoolKey {
+            scene: model.pool_key(),
+            playback: self,
+        }
+    }
+
+    fn emitter_source(self, model: &Wc3VisualModel) -> Wc3EmitterSource {
+        match self {
+            Self::OneShot => model.emitter_source(),
+            Self::Looping => model.looping_emitter_source(),
+        }
+    }
+
+    fn animation_source(self, model: &Wc3VisualModel) -> Option<Wc3VisualAnimationSource> {
+        match self {
+            Self::OneShot => model.animation_source(),
+            Self::Looping => model.looping_animation_source(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct PresentedStatusEffect {
+    entity: Entity,
+    pooled_scene: Option<Wc3EffectPoolKey>,
+}
+
 #[derive(Resource, Default)]
 struct TimedWc3EffectPool {
     lightning: Vec<PooledLightningEffect>,
-    scenes: HashMap<AssetId<WorldAsset>, Vec<Entity>>,
+    scenes: HashMap<Wc3EffectPoolKey, Vec<Entity>>,
 }
+
+struct Wc3EffectPrewarmRequest {
+    model: Wc3VisualModel,
+    playback: Wc3EffectPlayback,
+    remaining: usize,
+    capacity: usize,
+    activation_capacity: usize,
+    desired_capacity: usize,
+}
+
+#[derive(Resource, Default)]
+pub(crate) struct Wc3EffectPrewarmPlan {
+    populations: BTreeMap<u32, usize>,
+    requests: Vec<Wc3EffectPrewarmRequest>,
+    prepared_total: usize,
+}
+
+impl Wc3EffectPrewarmPlan {
+    pub(crate) fn format(&self) -> String {
+        format!(
+            "  effect reserves: {} templates, {} planned roots, {} still awaiting creation, {} prepared in total\n",
+            self.requests.len(),
+            self.requests
+                .iter()
+                .map(|request| request.capacity)
+                .sum::<usize>(),
+            self.requests
+                .iter()
+                .map(|request| request.remaining)
+                .sum::<usize>(),
+            self.prepared_total
+        )
+    }
+}
+
+#[derive(Component)]
+struct PrewarmingWc3Effect {
+    key: Wc3EffectPoolKey,
+    needs_animation: bool,
+}
+
+// Renderer resource budgets, independent of Castle Fight content/tuning.
+const EFFECT_PREWARM_ROOTS_PER_FRAME: usize = 8;
+const EFFECT_PREWARM_ROOTS_PER_TEMPLATE: usize = 128;
+const EFFECT_PREWARM_TOTAL_ROOTS: usize = 1024;
 
 #[derive(Resource)]
 pub(crate) struct DebugPresentation {
@@ -950,9 +1042,11 @@ impl Plugin for CastlePresentationPlugin {
             .init_resource::<AbilityAreaImpacts>()
             .init_resource::<TimedWc3Effects>()
             .init_resource::<TimedWc3EffectPool>()
+            .init_resource::<Wc3EffectPrewarmPlan>()
             .init_gizmo_group::<ProjectileEffectGizmos>()
             .init_gizmo_group::<MapGridGizmos>()
             .add_observer(index_wc3_model_attachments)
+            .add_observer(mark_wc3_effect_warmup_hierarchy)
             .insert_resource(DebugPresentation {
                 health_bars: self.health_bars,
                 ..default()
@@ -967,6 +1061,7 @@ impl Plugin for CastlePresentationPlugin {
                     finish_camera_profile,
                     prepare_unit_model_animations,
                     prepare_building_model_animations,
+                    (invalidate_wc3_effect_pool_assets, prewarm_timed_wc3_effects).chain(),
                     finish_model_prep_profile,
                     sync_render_entities,
                     finish_entity_sync_profile,
@@ -980,7 +1075,11 @@ impl Plugin for CastlePresentationPlugin {
                     (setup_wc3_model_lights, setup_wc3_model_composed_features),
                     resolve_wc3_visual_attachments,
                     resolve_wc3_emitter_nodes,
-                    setup_wc3_visual_animation_players,
+                    (
+                        setup_wc3_visual_animation_players,
+                        retain_prewarmed_wc3_effects,
+                    )
+                        .chain(),
                     setup_imported_unit_animation_players,
                     setup_imported_building_animation_players,
                     finish_scene_setup_profile,
@@ -2829,42 +2928,363 @@ fn spawn_persistent_unit_attachments(
     }
 }
 
+fn invalidate_wc3_effect_pool_assets(
+    mut commands: Commands,
+    mut events: MessageReader<AssetEvent<WorldAsset>>,
+    mut pool: ResMut<TimedWc3EffectPool>,
+    mut plan: ResMut<Wc3EffectPrewarmPlan>,
+    pending: Query<(Entity, &PrewarmingWc3Effect)>,
+) {
+    for event in events.read() {
+        let (AssetEvent::Modified { id } | AssetEvent::Removed { id }) = event else {
+            continue;
+        };
+        pool.scenes.retain(|key, entities| {
+            if key.scene != *id {
+                return true;
+            }
+            for &entity in entities.iter() {
+                commands.entity(entity).try_despawn();
+            }
+            false
+        });
+        for (entity, warmup) in &pending {
+            if warmup.key.scene == *id {
+                commands.entity(entity).try_despawn();
+            }
+        }
+        for request in &mut plan.requests {
+            if request.model.pool_key() == *id {
+                request.remaining = request.capacity;
+            }
+        }
+    }
+}
+
+fn prewarm_timed_wc3_effects(
+    mut commands: Commands,
+    selected: Res<SelectedMatch>,
+    samples: Res<PresentationSamples>,
+    visuals: Res<Wc3VisualSet>,
+    asset_server: Res<AssetServer>,
+    experiment: Res<RenderExperiment>,
+    mut plan: ResMut<Wc3EffectPrewarmPlan>,
+) {
+    if matches!(
+        *experiment,
+        RenderExperiment::LegacyEffectPooling | RenderExperiment::ColdEffectPools
+    ) {
+        return;
+    }
+    if samples.is_changed() {
+        let mut populations = BTreeMap::<u32, usize>::new();
+        for unit in samples.current.units.values() {
+            if let Some(content) = unit.content {
+                *populations.entry(content.rawcode).or_default() += 1;
+            }
+        }
+        let mut changed = false;
+        for (rawcode, population) in populations {
+            let previous = plan.populations.entry(rawcode).or_default();
+            if population > *previous {
+                *previous = population;
+                changed = true;
+            }
+        }
+        if changed {
+            let mut capacities = HashMap::<Wc3EffectPoolKey, (Wc3VisualModel, usize, usize)>::new();
+            for definition in selected.content.unit_definitions() {
+                let Some(&population) = plan.populations.get(&definition.rawcode) else {
+                    continue;
+                };
+                let mut reserve = |model: &Wc3VisualModel,
+                                   playback: Wc3EffectPlayback,
+                                   lifetime: f32,
+                                   interval_ticks: u16| {
+                    let interval =
+                        f32::from(interval_ticks.max(1)) / CASTLE_FIGHT_SIMULATION_HZ as f32;
+                    let concurrent = (lifetime / interval).ceil().max(1.0) as usize;
+                    let entry = capacities
+                        .entry(playback.key(model))
+                        .or_insert_with(|| (model.clone(), 0, 0));
+                    entry.1 = (entry.1 + population.saturating_mul(concurrent))
+                        .min(EFFECT_PREWARM_ROOTS_PER_TEMPLATE);
+                    entry.2 = (entry.2 + population).min(EFFECT_PREWARM_ROOTS_PER_TEMPLATE);
+                };
+                if let Some(visual) = visuals.projectile(definition.rawcode) {
+                    let lifetime = match definition.attack.delivery {
+                        AttackDelivery::Melee => 0.0,
+                        AttackDelivery::RangedInstant => visual
+                            .model
+                            .effect_lifetime_seconds(ABILITY_MODEL_EFFECT_SECONDS),
+                        AttackDelivery::RangedGuaranteedHit { speed_per_tick }
+                        | AttackDelivery::RangedBallistic { speed_per_tick, .. } => {
+                            definition.attack.range.max(0) as f32
+                                / speed_per_tick.max(1) as f32
+                                / CASTLE_FIGHT_SIMULATION_HZ as f32
+                        }
+                        AttackDelivery::Bounce {
+                            speed_per_tick,
+                            bounce_range,
+                            max_bounces,
+                            ..
+                        } => {
+                            (definition.attack.range.max(0) as f32
+                                + bounce_range.max(0) as f32 * f32::from(max_bounces))
+                                / speed_per_tick.max(1) as f32
+                                / CASTLE_FIGHT_SIMULATION_HZ as f32
+                        }
+                    };
+                    reserve(
+                        &visual.model,
+                        Wc3EffectPlayback::OneShot,
+                        lifetime,
+                        definition.attack.cooldown_ticks,
+                    );
+                }
+                let automatic = definition.spellcasting.map(|spell| {
+                    let status = match spell.ability.effect {
+                        AbilityEffect::ModifyMovementSpeedPercent {
+                            modifier,
+                            duration_ticks,
+                            ..
+                        }
+                        | AbilityEffect::HolyAid {
+                            modifier,
+                            duration_ticks,
+                            ..
+                        }
+                        | AbilityEffect::Prayer {
+                            modifier,
+                            duration_ticks,
+                            ..
+                        }
+                        | AbilityEffect::HolyFervour {
+                            modifier,
+                            duration_ticks,
+                            ..
+                        } => Some((modifier.0, duration_ticks)),
+                        AbilityEffect::FrostArmor {
+                            modifier,
+                            armor_duration_ticks,
+                            ..
+                        } => Some((modifier.0, armor_duration_ticks)),
+                        AbilityEffect::Damage { .. }
+                        | AbilityEffect::Stun { .. }
+                        | AbilityEffect::AreaDamage { .. }
+                        | AbilityEffect::Purification { .. }
+                        | AbilityEffect::ArtilleryBombardment { .. } => None,
+                    };
+                    (spell.ability.id.0, spell.ability.cooldown_ticks, status)
+                });
+                let passive = definition
+                    .passive_effects
+                    .iter()
+                    .filter_map(|effect| match effect {
+                        PassiveUnitEffect::Defend(profile) => {
+                            Some((profile.ability.0, u16::MAX, None))
+                        }
+                        PassiveUnitEffect::TriggeredSpellProc(profile) => {
+                            Some((profile.ability.0, definition.attack.cooldown_ticks, None))
+                        }
+                        _ => None,
+                    });
+                for (ability, interval, status) in automatic.into_iter().chain(passive) {
+                    for visual in visuals.ability_for_source(ability, Some(definition.rawcode)) {
+                        reserve(
+                            &visual.model,
+                            Wc3EffectPlayback::OneShot,
+                            visual
+                                .model
+                                .effect_lifetime_seconds(ABILITY_MODEL_EFFECT_SECONDS),
+                            interval,
+                        );
+                    }
+                    // Persistent status visuals use Stand/looping playback, so they
+                    // must never acquire a timed Birth instance of the same scene.
+                    let (status_id, duration) = status.unwrap_or((ability, 0));
+                    for visual in visuals.status(status_id) {
+                        reserve(
+                            &visual.model,
+                            Wc3EffectPlayback::Looping,
+                            f32::from(duration) / CASTLE_FIGHT_SIMULATION_HZ as f32,
+                            interval,
+                        );
+                    }
+                }
+            }
+            // Stable asset-path ordering keeps startup budgets reproducible; this has
+            // no connection to authoritative simulation ordering.
+            let mut requests: Vec<_> = capacities
+                .into_iter()
+                .map(|(key, (model, desired_capacity, activation_capacity))| {
+                    Wc3EffectPrewarmRequest {
+                        model,
+                        playback: key.playback,
+                        remaining: 0,
+                        capacity: 0,
+                        activation_capacity,
+                        desired_capacity,
+                    }
+                })
+                .collect();
+            requests.sort_by_key(|request| {
+                (
+                    asset_server
+                        .get_path(request.model.scene.id())
+                        .map(|path| path.to_string()),
+                    matches!(request.playback, Wc3EffectPlayback::Looping),
+                )
+            });
+            let allocated: usize = plan.requests.iter().map(|request| request.capacity).sum();
+            let mut available = EFFECT_PREWARM_TOTAL_ROOTS.saturating_sub(allocated);
+            for request in &mut requests {
+                if let Some(previous) = plan.requests.iter().find(|previous| {
+                    previous.playback.key(&previous.model) == request.playback.key(&request.model)
+                }) {
+                    request.capacity = previous.capacity;
+                    request.remaining = previous.remaining;
+                }
+            }
+            // Share the finite budget across activation waves before allocating
+            // extra concurrent occupancy. Asset-path priority alone can otherwise
+            // reserve long-lived buffs while leaving an entire missile wave cold.
+            for activation_wave in [true, false] {
+                loop {
+                    let mut allocated = false;
+                    for request in &mut requests {
+                        if available == 0 {
+                            break;
+                        }
+                        let target = if activation_wave {
+                            request.activation_capacity
+                        } else {
+                            request.desired_capacity
+                        };
+                        if request.capacity < target {
+                            request.capacity += 1;
+                            request.remaining += 1;
+                            available -= 1;
+                            allocated = true;
+                        }
+                    }
+                    if !allocated || available == 0 {
+                        break;
+                    }
+                }
+            }
+            plan.requests = requests;
+        }
+    }
+    let mut budget = EFFECT_PREWARM_ROOTS_PER_FRAME;
+    for request in &mut plan.requests {
+        if budget == 0 {
+            break;
+        }
+        if request.remaining == 0 || !request.model.assets_ready(&asset_server) {
+            continue;
+        }
+        let count = request.remaining.min(budget);
+        for _ in 0..count {
+            let mut entity = commands.spawn((
+                WorldAssetRoot(request.model.scene.clone()),
+                Transform::IDENTITY,
+                Visibility::Hidden,
+                Wc3EffectWarmup,
+                request.playback.emitter_source(&request.model),
+                PrewarmingWc3Effect {
+                    key: request.playback.key(&request.model),
+                    needs_animation: request.playback.animation_source(&request.model).is_some(),
+                },
+            ));
+            if let Some(animation) = request.playback.animation_source(&request.model) {
+                entity.insert(animation);
+            }
+        }
+        request.remaining -= count;
+        budget -= count;
+    }
+}
+
+fn retain_prewarmed_wc3_effects(
+    mut commands: Commands,
+    spawner: Res<WorldInstanceSpawner>,
+    roots: Query<(
+        Entity,
+        &WorldInstance,
+        &PrewarmingWc3Effect,
+        Has<Wc3ModelSequenceSelection>,
+    )>,
+    mut pool: ResMut<TimedWc3EffectPool>,
+    mut plan: ResMut<Wc3EffectPrewarmPlan>,
+) {
+    // This runs after all WC3 node/material/animation setup and its deferred
+    // commands. A root request alone is insufficient to enter the reserve.
+    for (entity, instance, warmup, animation_ready) in &roots {
+        if !spawner.instance_is_ready(**instance) || (warmup.needs_animation && !animation_ready) {
+            continue;
+        }
+        commands
+            .entity(entity)
+            .remove::<PrewarmingWc3Effect>()
+            .insert_recursive::<Children>(Disabled);
+        pool.scenes.entry(warmup.key).or_default().push(entity);
+        plan.prepared_total += 1;
+    }
+}
+
 fn spawn_or_reuse_timed_wc3_visual(
     commands: &mut Commands,
     pool: &mut TimedWc3EffectPool,
     model: &Wc3VisualModel,
     transform: Transform,
     pooling_enabled: bool,
-) -> (Entity, Option<AssetId<WorldAsset>>) {
-    let pool_key = model.pool_key();
-    if pooling_enabled
-        && model.poolable_instance()
-        && let Some(entity) = pool.scenes.get_mut(&pool_key).and_then(Vec::pop)
-    {
+) -> (Entity, Option<Wc3EffectPoolKey>) {
+    spawn_or_reuse_wc3_visual(
+        commands,
+        pool,
+        model,
+        transform,
+        pooling_enabled,
+        Wc3EffectPlayback::OneShot,
+    )
+}
+
+fn spawn_or_reuse_wc3_visual(
+    commands: &mut Commands,
+    pool: &mut TimedWc3EffectPool,
+    model: &Wc3VisualModel,
+    transform: Transform,
+    pooling_enabled: bool,
+    playback: Wc3EffectPlayback,
+) -> (Entity, Option<Wc3EffectPoolKey>) {
+    let pool_key = playback.key(model);
+    if pooling_enabled && let Some(entity) = pool.scenes.get_mut(&pool_key).and_then(Vec::pop) {
         commands
             .entity(entity)
             .remove_recursive::<Children, Disabled>()
-            .insert((
-                transform,
-                model.emitter_source(),
-                Wc3RibbonSource::new(&model.ribbons),
-                Wc3EffectReusePending,
-            ));
-        if let Some(animation) = model.animation_source() {
-            commands.entity(entity).insert(animation);
+            .remove_recursive::<Children, Wc3EffectWarmup>()
+            .insert((transform, Visibility::Inherited, Wc3EffectReusePending));
+        // Scene-local emitter bindings survive reuse; the reset system rewinds
+        // counters/clocks without reparsing the hierarchy. Ribbon scenes are
+        // prepared for one use and create their trails only when activated.
+        if !model.ribbons.is_empty() {
+            commands
+                .entity(entity)
+                .insert(Wc3RibbonSource::new(&model.ribbons));
         }
-        return (entity, Some(pool_key));
+        return (entity, model.poolable_instance().then_some(pool_key));
     }
 
     let entity = commands
         .spawn((
             WorldAssetRoot(model.scene.clone()),
             transform,
-            model.emitter_source(),
+            playback.emitter_source(model),
             Wc3RibbonSource::new(&model.ribbons),
         ))
         .id();
-    if let Some(animation) = model.animation_source() {
+    if let Some(animation) = playback.animation_source(model) {
         commands.entity(entity).insert(animation);
     }
     let pooled_scene = (pooling_enabled && model.poolable_instance()).then_some(pool_key);
@@ -2878,6 +3298,7 @@ fn sync_render_entities(
     mut render_map: ResMut<RenderMap>,
     effects: SyncRenderEffects<'_>,
     imported_roots: Query<(Entity, &ImportedUnitModelRoot)>,
+    world_instances: Query<(), With<WorldInstance>>,
 ) {
     let (metrics, terrain, assets, unit_models, building_models, wc3_visuals, experiment) = world;
     let (
@@ -3052,6 +3473,15 @@ fn sync_render_entities(
         .collect();
     for id in stale_projectiles {
         if let Some(projectile_entry) = render_map.projectiles.remove(&id) {
+            if let Some((model_root, key)) = projectile_entry.pooled_visual
+                && world_instances.contains(model_root)
+            {
+                commands
+                    .entity(model_root)
+                    .remove::<ChildOf>()
+                    .insert_recursive::<Children>(Disabled);
+                effect_pool.scenes.entry(key).or_default().push(model_root);
+            }
             commands.entity(projectile_entry.entity).despawn();
             if let Some(projectile) = samples.previous.projectiles.get(&id) {
                 projectile_impacts.0.push(ProjectileImpact {
@@ -3252,28 +3682,24 @@ fn sync_render_entities(
             let owner_model_root = imported_roots
                 .iter()
                 .find_map(|(entity, root)| (root.sim_id == unit.id).then_some(entity));
-            let entity = commands
-                .spawn((
-                    WorldAssetRoot(visual.model.scene.clone()),
-                    if owner_model_root.is_some() {
-                        Transform::IDENTITY
-                    } else {
-                        Transform::from_translation(position)
-                    },
-                    visual.model.emitter_source(),
-                    Wc3RibbonSource::new(&visual.model.ribbons),
-                    Wc3VertexTint([255; 3]),
-                ))
-                .id();
+            let (entity, pooled_scene) = spawn_or_reuse_timed_wc3_visual(
+                &mut commands,
+                &mut effect_pool,
+                &visual.model,
+                if owner_model_root.is_some() {
+                    Transform::IDENTITY
+                } else {
+                    Transform::from_translation(position)
+                },
+                !legacy_effect_pooling,
+            );
+            commands.entity(entity).insert(Wc3VertexTint([255; 3]));
             if let Some(root) = owner_model_root {
                 commands.entity(root).add_child(entity);
                 commands.entity(entity).insert(Wc3AttachToNode {
                     owner_root: root,
                     attachment_point: "hand left".to_owned(),
                 });
-            }
-            if let Some(animation) = visual.model.animation_source() {
-                commands.entity(entity).insert(animation);
             }
             let lifetime = visual
                 .model
@@ -3285,7 +3711,7 @@ fn sync_render_entities(
                 mesh: None,
                 fade_material: None,
                 pooled_lightning: false,
-                pooled_scene: None,
+                pooled_scene,
             });
         }
     }
@@ -3446,8 +3872,21 @@ fn sync_render_entities(
         })
         .collect();
     for key in stale_status_effects {
-        if let Some(entity) = render_map.status_effects.remove(&key) {
-            commands.entity(entity).despawn();
+        if let Some(effect) = render_map.status_effects.remove(&key) {
+            if let Some(pool_key) = effect.pooled_scene
+                && world_instances.contains(effect.entity)
+            {
+                commands
+                    .entity(effect.entity)
+                    .insert_recursive::<Children>(Disabled);
+                effect_pool
+                    .scenes
+                    .entry(pool_key)
+                    .or_default()
+                    .push(effect.entity);
+            } else {
+                commands.entity(effect.entity).despawn();
+            }
         }
     }
     for unit in samples.current.units.values() {
@@ -3459,7 +3898,7 @@ fn sync_render_entities(
             spawn_unit_status_visuals(
                 &mut commands,
                 &mut render_map,
-                &wc3_visuals,
+                (&wc3_visuals, &mut effect_pool, !legacy_effect_pooling),
                 unit,
                 modifier.id.0,
                 Wc3StatusVisualKind::Movement,
@@ -3474,7 +3913,7 @@ fn sync_render_entities(
             spawn_unit_status_visuals(
                 &mut commands,
                 &mut render_map,
-                &wc3_visuals,
+                (&wc3_visuals, &mut effect_pool, !legacy_effect_pooling),
                 unit,
                 modifier.id.0,
                 Wc3StatusVisualKind::Armor,
@@ -3489,7 +3928,7 @@ fn sync_render_entities(
             spawn_unit_status_visuals(
                 &mut commands,
                 &mut render_map,
-                &wc3_visuals,
+                (&wc3_visuals, &mut effect_pool, !legacy_effect_pooling),
                 unit,
                 modifier.id.0,
                 Wc3StatusVisualKind::AttackSpeed,
@@ -3700,22 +4139,20 @@ fn sync_render_entities(
         let imported_projectile = projectile_source_rawcode(projectile, &samples)
             .and_then(|rawcode| wc3_visuals.projectile(rawcode));
         let missile_arc = imported_projectile.map(|visual| visual.missile_arc);
+        let mut pooled_visual = None;
         let entity = if let Some(visual) = imported_projectile {
             let model = &visual.model;
             let entity = commands
                 .spawn((Transform::from_translation(position), Visibility::default()))
                 .id();
-            let model_root = commands
-                .spawn((
-                    WorldAssetRoot(model.scene.clone()),
-                    Transform::from_rotation(Quat::from_rotation_y(WC3_PROJECTILE_FACING_OFFSET)),
-                    model.emitter_source(),
-                    Wc3RibbonSource::new(&model.ribbons),
-                ))
-                .id();
-            if let Some(animation) = model.animation_source() {
-                commands.entity(model_root).insert(animation);
-            }
+            let (model_root, pooled_scene) = spawn_or_reuse_timed_wc3_visual(
+                &mut commands,
+                &mut effect_pool,
+                model,
+                Transform::from_rotation(Quat::from_rotation_y(WC3_PROJECTILE_FACING_OFFSET)),
+                !legacy_effect_pooling,
+            );
+            pooled_visual = pooled_scene.map(|key| (model_root, key));
             commands.entity(entity).add_child(model_root);
             entity
         } else {
@@ -3733,6 +4170,7 @@ fn sync_render_entities(
                 entity,
                 last_position: position,
                 missile_arc,
+                pooled_visual,
             },
         );
     }
@@ -3827,7 +4265,7 @@ fn interpolate_render_transforms(
         }
     }
 
-    for (key, entity) in &render_map.status_effects {
+    for (key, effect) in &render_map.status_effects {
         let Some(current) = samples.current.units.get(&key.target) else {
             continue;
         };
@@ -3847,7 +4285,7 @@ fn interpolate_render_transforms(
             alpha,
             &terrain,
         ) + Vec3::Y * bob;
-        if let Ok(mut transform) = transforms.get_mut(*entity)
+        if let Ok(mut transform) = transforms.get_mut(effect.entity)
             && transform.translation != position
         {
             transform.translation = position;
@@ -4094,12 +4532,13 @@ fn unit_status_visual_is_active(
 fn spawn_unit_status_visuals(
     commands: &mut Commands,
     render_map: &mut RenderMap,
-    wc3_visuals: &Wc3VisualSet,
+    visuals: (&Wc3VisualSet, &mut TimedWc3EffectPool, bool),
     unit: &UnitSample,
     ability_rawcode: u32,
     kind: Wc3StatusVisualKind,
     terrain: &TerrainSurface,
 ) {
+    let (wc3_visuals, pool, pooling_enabled) = visuals;
     let position = unit_ground_position(unit.position, unit.movement_class, terrain);
     for (slot, visual) in wc3_visuals.status(ability_rawcode).iter().enumerate() {
         if visual.kind != kind {
@@ -4114,18 +4553,21 @@ fn spawn_unit_status_visuals(
         if render_map.status_effects.contains_key(&key) {
             continue;
         }
-        let entity = commands
-            .spawn((
-                WorldAssetRoot(visual.model.scene.clone()),
-                Transform::from_translation(position),
-                visual.model.looping_emitter_source(),
-                Wc3RibbonSource::new(&visual.model.ribbons),
-            ))
-            .id();
-        if let Some(animation) = visual.model.looping_animation_source() {
-            commands.entity(entity).insert(animation);
-        }
-        render_map.status_effects.insert(key, entity);
+        let (entity, pooled_scene) = spawn_or_reuse_wc3_visual(
+            commands,
+            pool,
+            &visual.model,
+            Transform::from_translation(position),
+            pooling_enabled,
+            Wc3EffectPlayback::Looping,
+        );
+        render_map.status_effects.insert(
+            key,
+            PresentedStatusEffect {
+                entity,
+                pooled_scene,
+            },
+        );
     }
 }
 
@@ -4268,6 +4710,8 @@ fn age_timed_wc3_effects(
                 if world_instances.get(effect.entity).is_ok() {
                     commands
                         .entity(effect.entity)
+                        .remove::<ChildOf>()
+                        .remove::<Wc3AttachToNode>()
                         .insert_recursive::<Children>(Disabled);
                     effect_pool
                         .scenes

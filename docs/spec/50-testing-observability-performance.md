@@ -323,6 +323,20 @@ mode and MUST NOT affect the authoritative simulation. They deliberately change 
   Bevy's ordinary material-binding fallback. It keeps geometry, skin components, simulation and
   authored visual parameters intact. Profiling logs report whether StandardMaterial actually uses
   bindless resources. This comparison changes batching as well as resource tracking costs.
+- `cold-effect-pools` retains completed effects but disables preparation of hidden reserves.
+  Ordinary rendering prepares at most 8 roots/frame, 128/template and 1,024 total reserved roots,
+  using observed unit-population high-water marks and versioned attack/cast intervals and estimated
+  visual/flight lifetimes. Only simulated automatic/proc/Defend abilities, their persistent status
+  art and projectile art are candidates. Timed and looping playback have separate reserve keys.
+  Persistent art is selected by the applied modifier ID from the versioned ability effect, which
+  may differ from the casting ability ID. Status lifetime and cast interval estimate occupancy.
+  The finite budget is shared across activation waves before extra concurrent occupancy, so
+  stable asset ordering cannot leave whole missile templates unprepared. Existing reservations
+  survive population growth. Status instances can return to their looping reserve after expiry;
+  ribbon/attachment scenes use
+  ordinary cleanup. Free instances wait for scene/WC3/animation setup; node bindings survive acquisition.
+  Ribbon scenes receive prepared instances for one use. Source replacement clears free/pending
+  reserves and reissues their requests. Reserve counters include warm-up preparation.
 - `particle-shared-view` reuses the exact PBR view layouts and bind groups for compact particles,
   moving their texture group to slot 2. It retains particle sorting and blend operations.
 - `particle-cull` skips compact particles with exactly zero alpha or whose conservative billboard

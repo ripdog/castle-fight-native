@@ -117,6 +117,11 @@ impl Wc3VisualModel {
         self.scene.id()
     }
 
+    pub(crate) fn assets_ready(&self, asset_server: &AssetServer) -> bool {
+        asset_server.is_loaded_with_dependencies(self.scene.id())
+            && asset_server.is_loaded_with_dependencies(self.gltf.id())
+    }
+
     #[must_use]
     pub const fn poolable_instance(&self) -> bool {
         self.poolable_instance
@@ -481,6 +486,37 @@ pub struct Wc3VisualAnimationController;
 
 #[derive(Component)]
 pub(crate) struct Wc3EffectReusePending;
+
+/// Scene setup may run during warm-up, but authored events must stay silent.
+#[derive(Component, Clone, Copy)]
+pub(crate) struct Wc3EffectWarmup;
+
+pub(crate) fn mark_wc3_effect_warmup_hierarchy(
+    event: On<WorldInstanceReady>,
+    roots: Query<(), With<Wc3EffectWarmup>>,
+    mut commands: Commands,
+    mut emitters: Query<&mut Wc3EmitterSource>,
+    mut ribbons: Query<&mut Wc3RibbonSource>,
+) {
+    // A reloaded scene has new node entities even when the root is retained.
+    if let Ok(mut source) = emitters.get_mut(event.entity) {
+        source.node_binding_complete = false;
+        for emitter in &mut source.emitters {
+            emitter.source_node = None;
+        }
+    }
+    if let Ok(mut source) = ribbons.get_mut(event.entity) {
+        source.node_binding_complete = false;
+        for ribbon in &mut source.ribbons {
+            ribbon.source_node = None;
+        }
+    }
+    if roots.contains(event.entity) {
+        commands
+            .entity(event.entity)
+            .insert_recursive::<Children>(Wc3EffectWarmup);
+    }
+}
 
 #[derive(Resource, Default)]
 pub struct Wc3VisualAnimationGraphs {
@@ -1492,13 +1528,13 @@ pub fn update_wc3_model_attachments(
     asset_server: Res<AssetServer>,
     parents: Query<&ChildOf>,
     clocks: Query<&Wc3ModelSequenceClock>,
-    mut attachments: Query<(Entity, &mut Wc3ModelAttachmentRuntime)>,
+    mut attachments: Query<(Entity, &mut Wc3ModelAttachmentRuntime), Without<Wc3EffectWarmup>>,
 ) {
     let dt_ms = time.delta_secs().max(0.0) * 1000.0;
     for (entity, mut attachment) in &mut attachments {
         attachment.fallback_elapsed_ms += dt_ms;
         let clock = inherited_wc3_model_sequence_clock(entity, &parents, &clocks);
-        let visible = model_attachment_visibility(&attachment, clock.as_ref()) > 0.001;
+        let visible = model_attachment_visibility(&attachment, clock) > 0.001;
         match (visible, attachment.child) {
             (true, None) => {
                 attachment.child = Some(spawn_registered_converted_model(
@@ -1587,13 +1623,16 @@ pub fn emit_wc3_model_particles(
     asset_server: Res<AssetServer>,
     parents: Query<&ChildOf>,
     clocks: Query<&Wc3ModelSequenceClock>,
-    mut emitters: Query<(Entity, &GlobalTransform, &mut Wc3LegacyModelEmitterRuntime)>,
+    mut emitters: Query<
+        (Entity, &GlobalTransform, &mut Wc3LegacyModelEmitterRuntime),
+        Without<Wc3EffectWarmup>,
+    >,
 ) {
     let dt = time.delta_secs().min(0.1);
     let dt_ms = dt * 1000.0;
     for (entity, transform, mut emitter) in &mut emitters {
         let clock = inherited_wc3_model_sequence_clock(entity, &parents, &clocks);
-        let sample = sample_legacy_model_emitter(&emitter, clock.as_ref());
+        let sample = sample_legacy_model_emitter(&emitter, clock);
         emitter.fallback_elapsed_ms += dt_ms;
         if sample.visibility <= 0.001 {
             emitter.accumulator = 0.0;
@@ -1725,7 +1764,9 @@ fn wc3_event_crossings(
             previous
         }
     };
-    *previous_sequence_name = Some(clock.sequence_name.clone());
+    if !same_sequence {
+        *previous_sequence_name = Some(clock.sequence_name.clone());
+    }
     *previous_sequence_elapsed_ms = Some(current);
 
     let Some(window) = spec
@@ -1780,14 +1821,17 @@ pub fn emit_wc3_spawn_events(
     asset_server: Res<AssetServer>,
     parents: Query<&ChildOf>,
     clocks: Query<&Wc3ModelSequenceClock>,
-    mut events: Query<(Entity, &GlobalTransform, &mut Wc3SpawnEventRuntime)>,
+    mut events: Query<
+        (Entity, &GlobalTransform, &mut Wc3SpawnEventRuntime),
+        Without<Wc3EffectWarmup>,
+    >,
 ) {
     let dt_ms = time.delta_secs().max(0.0) * 1000.0;
     for (entity, source_transform, mut runtime) in &mut events {
         let Some(clock) = inherited_wc3_model_sequence_clock(entity, &parents, &clocks) else {
             continue;
         };
-        let count = wc3_spawn_event_crossings(&mut runtime, &clock, dt_ms);
+        let count = wc3_spawn_event_crossings(&mut runtime, clock, dt_ms);
         if count == 0 {
             continue;
         }
@@ -1855,7 +1899,10 @@ pub fn emit_wc3_sound_events(
     parents: Query<&ChildOf>,
     clocks: Query<&Wc3ModelSequenceClock>,
     listeners: Query<&GlobalTransform, With<SpatialListener>>,
-    mut events: Query<(Entity, &GlobalTransform, &mut Wc3SoundEventRuntime)>,
+    mut events: Query<
+        (Entity, &GlobalTransform, &mut Wc3SoundEventRuntime),
+        Without<Wc3EffectWarmup>,
+    >,
 ) {
     let dt_ms = time.delta_secs().max(0.0) * 1000.0;
     let listener_position = listeners.iter().next().map(GlobalTransform::translation);
@@ -1870,7 +1917,7 @@ pub fn emit_wc3_sound_events(
                 &mut runtime.previous_sequence_name,
                 &mut runtime.previous_sequence_elapsed_ms,
                 &mut runtime.previous_global_elapsed_ms,
-                &clock,
+                clock,
                 dt_ms,
             )
         };
@@ -2067,7 +2114,10 @@ pub fn emit_wc3_splat_events(
     parents: Query<&ChildOf>,
     clocks: Query<&Wc3ModelSequenceClock>,
     mut assets: Wc3SplatSpawnAssets,
-    mut events: Query<(Entity, &GlobalTransform, &mut Wc3SplatEventRuntime)>,
+    mut events: Query<
+        (Entity, &GlobalTransform, &mut Wc3SplatEventRuntime),
+        Without<Wc3EffectWarmup>,
+    >,
 ) {
     let dt_ms = time.delta_secs().max(0.0) * 1000.0;
     for (entity, source_transform, mut runtime) in &mut events {
@@ -2081,7 +2131,7 @@ pub fn emit_wc3_splat_events(
                 &mut runtime.previous_sequence_name,
                 &mut runtime.previous_sequence_elapsed_ms,
                 &mut runtime.previous_global_elapsed_ms,
-                &clock,
+                clock,
                 dt_ms,
             )
         };
@@ -3604,18 +3654,30 @@ pub fn fix_wc3_scene_materials(
             TEAM_COLOR_OVERLAY_DEPTH_BIAS_OFFSET
         };
         let material_template = {
-            let Some(mut material) = materials.get_mut(&material_handle.0) else {
+            let Some(material) = materials.get(&material_handle.0) else {
                 continue;
             };
-            if let Some(filter_mode) = extras.filter_mode.as_deref() {
-                material.alpha_mode = wc3_material_alpha_mode(filter_mode, material.alpha_mode);
-            }
-            material.depth_bias = wc3_material_depth_bias(
+            let alpha_mode = extras
+                .filter_mode
+                .as_deref()
+                .map_or(material.alpha_mode, |filter_mode| {
+                    wc3_material_alpha_mode(filter_mode, material.alpha_mode)
+                });
+            let depth_bias = wc3_material_depth_bias(
                 extras.priority_plane,
                 extras.team_color_underlay,
                 overlay_depth_bias,
             );
-            material.clone()
+            if material.alpha_mode != alpha_mode || material.depth_bias != depth_bias {
+                let mut material = materials
+                    .get_mut(&material_handle.0)
+                    .expect("source material was just resolved");
+                material.alpha_mode = alpha_mode;
+                material.depth_bias = depth_bias;
+                material.clone()
+            } else {
+                material.clone()
+            }
         };
 
         if extras.team_glow_layer
@@ -4047,15 +4109,15 @@ pub(crate) fn reset_reused_wc3_effect_instances(
     }
 }
 
-fn inherited_wc3_model_sequence_clock(
+fn inherited_wc3_model_sequence_clock<'a>(
     entity: Entity,
     parents: &Query<&ChildOf>,
-    clocks: &Query<&Wc3ModelSequenceClock>,
-) -> Option<Wc3ModelSequenceClock> {
+    clocks: &'a Query<&Wc3ModelSequenceClock>,
+) -> Option<&'a Wc3ModelSequenceClock> {
     let mut current = entity;
     for _ in 0..128 {
         if let Ok(clock) = clocks.get(current) {
-            return Some(clock.clone());
+            return Some(clock);
         }
         let Ok(parent) = parents.get(current) else {
             return None;
@@ -4149,7 +4211,7 @@ pub fn update_wc3_model_lights(
     for (entity, transform, mut light, mut animation) in &mut lights {
         animation.fallback_elapsed_ms += dt_ms;
         let inherited = inherited_wc3_model_sequence_clock(entity, &parents, &clocks);
-        let (sequence_time_ms, global_elapsed_ms) = inherited.as_ref().map_or(
+        let (sequence_time_ms, global_elapsed_ms) = inherited.map_or(
             (animation.fallback_elapsed_ms, animation.fallback_elapsed_ms),
             |clock| {
                 (
@@ -4219,7 +4281,7 @@ pub fn update_wc3_material_alpha(
     for (entity, material_handle, mut animation) in &mut animated {
         animation.fallback_elapsed_ms += dt_ms;
         let inherited = inherited_wc3_model_sequence_clock(entity, &parents, &clocks);
-        let (sequence_time_ms, global_elapsed_ms) = inherited.as_ref().map_or(
+        let (sequence_time_ms, global_elapsed_ms) = inherited.map_or(
             (animation.fallback_elapsed_ms, animation.fallback_elapsed_ms),
             |clock| {
                 (
@@ -4283,7 +4345,7 @@ pub fn update_wc3_material_texture(
     for (entity, mut standard_handle, mut alpha_handle, mut animation) in &mut animated {
         animation.fallback_elapsed_ms += dt_ms;
         let inherited = inherited_wc3_model_sequence_clock(entity, &parents, &clocks);
-        let (sequence_time_ms, global_elapsed_ms) = inherited.as_ref().map_or(
+        let (sequence_time_ms, global_elapsed_ms) = inherited.map_or(
             (animation.fallback_elapsed_ms, animation.fallback_elapsed_ms),
             |clock| {
                 (
@@ -4767,7 +4829,7 @@ pub fn emit_wc3_particles(
     time: Res<Time>,
     mut assets: Wc3ParticleRenderAssets,
     mut billboard_particles: ResMut<Wc3BillboardParticles>,
-    mut sources: Query<(Entity, &GlobalTransform, &mut Wc3EmitterSource)>,
+    mut sources: Query<(Entity, &GlobalTransform, &mut Wc3EmitterSource), Without<Wc3EffectWarmup>>,
     transforms: Query<&GlobalTransform>,
 ) {
     let dt = time.delta_secs().min(0.1);
