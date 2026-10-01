@@ -353,6 +353,17 @@ mode and MUST NOT affect the authoritative simulation. They deliberately change 
   eye-plane crossings, morph meshes, ribbons, unknown draws and prebatched model items are ordering
   barriers. Potentially overlapping items retain their sorted precedence. Counters report proposed
   safe moves, overlap rejections and barrier stops; these are search events, not unique draw counts.
+- `compact-material` uses render-only proxies for WC3 animated-alpha and team-colour extensions
+  whose base material has no image inputs other than base colour. It retains the complete Bevy
+  material uniform and delegates material/pipeline properties to StandardMaterial, binding only
+  that uniform, base-colour image/sampler and the original WC3 extension data. The PBR input helper
+  is derived from the loaded engine shader, specializing only texture branches known to be false
+  for eligible materials; unfamiliar shader structure MUST retain the original material path.
+  Source handles, animation state, alpha slots, skin/palette identity and main-world setup MUST
+  remain unchanged. Unsupported textures and unprepared proxy assets MUST use original materials.
+  Source material asset replacement/removal MUST invalidate proxies; substitutions MUST dirty
+  pipeline specialization and refresh GPU mesh material bindings. Counters distinguish selected,
+  pending and unsupported visible extension instances. This control remains opt-in.
 - `particle-shared-view` reuses the exact PBR view layouts and bind groups for compact particles,
   moving their texture group to slot 2. It retains particle sorting and blend operations.
 - `particle-shared-mesh` additionally preserves the preceding supported PBR mesh layout in slot 2,

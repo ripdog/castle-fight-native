@@ -2,6 +2,7 @@ mod bridge;
 mod build_ui;
 mod builder_controls;
 mod building_models;
+mod compact_material;
 mod cursor;
 mod debug_menu;
 mod demo;
@@ -483,6 +484,7 @@ fn main() {
         .add_plugins(StandardMaterialBindlessSlabPlugin::new(
             options.render_experiment.standard_material_bindless_slots(),
         ))
+        .add_plugins(compact_material::CompactMaterialPlugin)
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins((
             CastlePresentationPlugin::new(options.health_bars),
