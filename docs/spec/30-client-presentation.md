@@ -298,8 +298,9 @@ The client MAY prepare hidden effect hierarchies ahead of use and retain complet
 Prepared reserves MUST finish scene spawning, WC3 node/material setup and animation setup before
 activation; preparation MUST NOT emit particles, model children, splats or sounds. Acquisition MUST
 restore visibility and reset animation, sequence/global clocks, emission counters and event cursors
-while preserving scene-local node bindings and full skin identity. Timed and looping playback
-MUST use separate reserves even when they share a source scene, so persistent Stand effects cannot
+while preserving scene-local node bindings and full skin identity. Disabling a retained instance
+MUST NOT release its GPU state slots; those remain owned until their component/entity is removed.
+Timed and looping playback MUST use separate reserves even when they share a source scene, so persistent Stand effects cannot
 acquire timed Birth playback. Released attached effects MUST
 leave their previous owner hierarchy before retention. Ribbon/attachment scenes that cannot safely
 retain their transient child ownership MAY use prepared instances once, then follow ordinary

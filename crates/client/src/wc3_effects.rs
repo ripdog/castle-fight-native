@@ -10,7 +10,7 @@ use bevy::{
     asset::{AssetId, RenderAssetUsages},
     audio::{AudioPlayer, AudioSource, PlaybackSettings, SpatialListener, SpatialScale, Volume},
     camera::visibility::DynamicSkinnedMeshBounds,
-    ecs::system::SystemParam,
+    ecs::{entity_disabling::Disabled, system::SystemParam},
     gltf::{Gltf, GltfExtras, GltfMaterialExtras},
     mesh::{Indices, MeshTag, MeshVertexBufferLayoutRef, PrimitiveTopology, skinning::SkinnedMesh},
     pbr::{ExtendedMaterial, Material, MaterialExtension, MaterialPipeline, MaterialPipelineKey},
@@ -3198,7 +3198,7 @@ impl Wc3ParticleAssets {
 
     fn reclaim_animated_alpha_slots(
         &mut self,
-        animated: &Query<(), With<Wc3AnimatedMaterialAlpha>>,
+        animated: &Query<Has<Disabled>, With<Wc3AnimatedMaterialAlpha>>,
     ) {
         let Self {
             animated_alpha_slots,
@@ -3208,6 +3208,8 @@ impl Wc3ParticleAssets {
             ..
         } = self;
         animated_alpha_slots.retain(|entity, slot| {
+            // Disabled reserves still own their slots. Mentioning Disabled in
+            // the ownership query includes both active and retained instances.
             if animated.contains(*entity) {
                 return true;
             }
@@ -5060,7 +5062,7 @@ pub fn update_wc3_particles(
 pub fn flush_wc3_particle_buffers(
     mut particle_assets: ResMut<Wc3ParticleAssets>,
     mut shader_buffers: ResMut<Assets<ShaderBuffer>>,
-    animated_alpha: Query<(), With<Wc3AnimatedMaterialAlpha>>,
+    animated_alpha: Query<Has<Disabled>, With<Wc3AnimatedMaterialAlpha>>,
 ) {
     particle_assets.reclaim_animated_alpha_slots(&animated_alpha);
     particle_assets.flush_animated_alpha_buffer(&mut shader_buffers);
