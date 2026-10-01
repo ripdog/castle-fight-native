@@ -74,6 +74,7 @@ captures were recorded. The raw files above retain every individual run and ever
 | — | Partial particle arrays with prepared reserves | candidate | 700 combat | 45.94 / 21.767 | 43.69 / 22.887 | -4.9% | 2026-10-01 follow-up raw |
 | — | Conservative overlap regrouping | prototype, small draw reduction | 700 combat | 42.44 / 23.561 | 43.69 / 22.887 | +2.9% | 2026-10-01 follow-up raw |
 | — | StandardMaterial slabs 16 / 32 | rejected default change | 700 combat | 44.12 / 22.666; 42.93 / 23.294 | 44.30 / 22.575 timed-reserve mean | no repeatable gain | 2026-10-01 follow-up raw |
+| — | Retained alpha-slot ownership and submission census | shipped, a5010e4 / 4f91fd1 | 700 combat | 44.90 / 22.274 | — | correctness/attribution; no gain claimed | 2026-10-01 discovery raw |
 
 The progression rows are not one continuous synthetic benchmark: fixture changes are explicit above,
 and each percentage is relative only to its recorded control. In particular, the h02W texture test
@@ -82,7 +83,11 @@ independent same-binary legacy switches; their gains are not additive.
 
 ## Current conclusions
 
-The target is not met. The latest same-binary bracketing comparison with prepared reserves averages
+The target is not met. After correcting retained alpha-slot ownership, a fresh default capture
+reaches 45.62 FPS / 21.919 ms and the later repeat reaches 44.90 FPS / 22.274 ms (p95 34.680 ms,
+p99 39.857 ms, worst 41.471 ms). An intervening same-binary capture reaches only 36.31 FPS /
+27.539 ms; retain that outlier and do not infer a throughput gain from the ownership fix or profiler
+counters. The earlier same-binary bracketing comparison with prepared reserves averages
 43.69 FPS / 22.887 ms, versus 43.24 FPS / 23.126 ms with reserve preparation disabled. The earlier
 46.8 FPS series is historical; compare each optimization with its own contemporary control. The latest partial particle
 array capture reaches 45.94 FPS / 21.767 ms, and remains opt-in pending exact parity and broader device
@@ -104,6 +109,9 @@ reserves. The default bracketing runs have worst frames of 43.252 and 47.588 ms,
 versus 90.378 ms with cold reserves (47–52% lower worst-frame time). SpawnScene in the cold
 activation frame costs 64.327 ms; the corresponding prepared activation frames cost 1.915 and
 2.065 ms. Residual startup Update still reaches 20–24 ms, so activation remains over budget.
+Retained disabled hierarchies now keep their animated-alpha GPU slots: Bevy's default query filtering
+previously made those owners appear absent and recycled slots still referenced by their meshes.
+Earlier prepared-reserve captures predate this correction and do not validate alpha-state fidelity.
 
 Particle/model submission remains the main steady-state opportunity: roughly 2,500–2,600 draw
 functions in sampled late frames. A bounded conservative overlap search found 322 safe moves in its
@@ -123,25 +131,60 @@ comparison was noisy and does not establish a throughput gain. Source-material n
 avoids unchanged writes, and inherited sequence clocks are borrowed instead of cloning their names
 for each event/emitter lookup.
 
+The new submission census finds 2,466–2,488 calls, split into 1,167–1,176 particle and 1,299–1,312
+mesh/other calls in two late sampled frames. They use only 20–21 distinct pipelines but change
+pipelines 2,308–2,309 times, including 1,842 particle/mesh transitions. Nearly every draw switches
+pipeline; cached texture-group creation alone cannot eliminate this cost. A source audit of the
+initial roster's 12 unique models finds 48 materials, all with only a base-color texture. That
+supports investigating compact faithful material bindings, while preserving lighting, alpha modes,
+team layers, skinning and runtime material features. It is not a measured FPS improvement.
+The existing shared-view prototype keeps PBR groups 0/1 but puts particle textures in group 2,
+where models bind mesh/skinning data. Preserving that compatible mesh-layout prefix and moving
+particle textures to group 3 is another submission candidate. It needs explicit handling of
+model-only, skinned, motion, morph and uniform-buffer layouts; it is not implemented or measured.
+
+A 99 Hz CPU sample attributes 16.74% of sampled cycles to the largest animation-target evaluation
+symbol, 7.34% to descendant propagation, 3.52% to skinned bounds, 3.14% to wgpu render-pass encoding
+and 1.92% to event crossings. These are exclusive CPU-cycle shares across threads, not frame-time
+budgets. The preceding 199 Hz sample lost 5.58% of events; use the 99 Hz sample for attribution.
+Authored roster metadata contains 5,300 event objects across the initial 700 copies; 57,550 of
+63,050 event/sequence windows (91.3%) contain no timestamps. The current crossing code still
+searches sequence names and filters timestamps each frame. Compile shared per-sequence event phases
+and cache selected windows/clock owners, keeping crossing cursors and reset semantics per instance.
+
 Animation was expensive in prior CPU samples (target evaluation 14.1% of sampled cycles, descendant
 propagation 9.25%), yet freezing poses changed 700-unit throughput essentially not at all. Reassess
 it after submission and activation churn are lower. The fixture still rapidly loses living units;
 these averages do not prove 60 FPS with 700 continuously living attackers or 60 FPS throughout combat.
+Conservative rest-channel pruning removes zero of the roster's 6,878 channels across its 12 models
+(the entire unit pack has only 1,792 removable channels out of 91,887). Deprioritize that avenue.
+An independent geometry audit finds 346,700 of 539,600 weighted roster vertices use one influence
+(64.3%), but only 105,650 vertices (19.6%) belong to whole primitives whose highest nonzero weight
+slot is one. Source Bevy skinning evaluates all four slots. Per-primitive one/two/three-slot shader
+specialization is a new candidate; retain full palettes, all nonzero weights, normal transforms,
+previous-frame skinning and every material/pass path. These authored counts exclude visibility,
+material-layer copies and actual vertex invocations; they predict neither GPU savings nor FPS.
 
 ## Next measured work
 
-1. Reduce faithful transparent submission/resource tracking cost. The current 32-item overlap
+1. Reduce faithful transparent submission/resource tracking cost, prioritizing compact material
+   bindings and compatible particle/model layout prefixes given the base-color-only roster audit
+   and near-per-draw pipeline changes. The current 32-item overlap
    prototype has limited value; measure whether larger safely bounded opportunities exist before
    expanding it. Keep potentially overlapping precedence and unknown-draw barriers.
 2. Validate partial particle binding arrays across unsupported-feature/device paths and exact image
    parity when visual verification is requested; promote only after that evidence exists.
-3. Address remaining cold sources identified by the final census, especially resurrected Rifleman
+3. Compile immutable WC3 node/material/event metadata once per source. Cache selected sequence
+   windows and clock owners, and skip empty event windows while preserving initial/time-zero,
+   global-sequence, skipped-frame, looping and reuse behavior. Existing extras are still deserialized
+   per new instance. Keep clocks, cursors, GPU slots, emitter counters and child ownership per instance;
+   invalidate caches on asset replacement and owner bindings on reparenting/reinstancing.
+4. Prototype per-primitive skin-influence specialization behind a profiling control, preserving
+   full skin identity. Compare GPU pass timing and whole-battle frame tails, not asset counts alone.
+5. Address remaining cold sources identified by the final census, especially resurrected Rifleman
    unit hierarchies and event-spawned children. Unit reserves need owner/team/material/animation
    setup and full skin identity, not timed-effect reuse assumptions. Re-measure whole-battle tail
    latency and reserve growth during ordinary live production as well as paused warm-up fixtures.
-4. Compile immutable WC3 node/material/event metadata once per source and cache shared rest bounds.
-   Existing node/material extras are still deserialized per new instance. Keep clocks, cursors, GPU
-   slots, emitter counters and child ownership per instance; invalidate caches on asset replacement.
 
 No further tests were run after the user's instruction to skip them. Follow-up validation used
 formatting, Clippy with warnings denied, release builds and native frame/census captures. Early
