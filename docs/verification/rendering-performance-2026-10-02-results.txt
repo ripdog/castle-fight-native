@@ -1,0 +1,1675 @@
+Rendering performance — 2026-10-02 mesh-layout-prefix comparison
+
+Implementation: c56da61 on master, based on 02a146c; all captures use that implementation binary.
+Fixture: visible 3840x2160 window, AutoNoVsync, locked centre camera; release build; 700 initial units; 10 s paused warm-up + 10 s live combat.
+No tests, image inspection, CPU sampling or overlapping builds. All comparisons use the same binary.
+
+An earlier uncommitted prototype selected binding metadata before final mesh batching and failed wgpu layout validation before a capture report. It is rejected; selection now runs in PrepareBindGroups and keys metadata by view + particle item identity. Earlier temporary captures are not used for this comparison.
+
+Validation: cargo fmt --all; tools/cargo-interactive clippy -p castle-fight-client -- -D warnings (passed).
+
+Release build: tools/cargo-interactive build --release -p castle-fight-client (passed).
+
+=== Corrected mesh-prefix validation capture ===
+Command: target/release/castle-fight-client --stress-units 700 --profile --profile-warmup 10 --profile-duration 10 --render-experiment particle-shared-mesh
+Loaded 2360 generated WC3 UI icon binding(s) and 4 cursor atlas binding(s) for Castle Fight 9.27
+client-profile standard_material_bindless=true
+2026-10-01T18:40:25.759091Z  WARN bevy_winit::winit_windows: Can't select current monitor on window creation or cannot find current monitor!
+spawned 1184 Warcraft III doodad/destructable scene instances
+Loaded 29 generated WC3 unit model(s)
+Loaded 24 generated WC3 building model(s)
+Loaded 158 WC3 projectile visual(s), 240 ability visual(s), 15 status visual id(s), and 5 chain-lightning id(s)
+client-profile source=stress-units=700 final_tick=300 builders=2 units=121 buildings=2 corpses=529 projectiles=2
+client-profile paused=false experiment=ParticleSharedMesh
+PROFILE RESULTS
+  elapsed                10.008s
+
+FRAME  samples     362  avg FPS   36.24  1% low   16.94
+  wall               avg   27.593ms  p95   41.291ms  p99   56.935ms  max   60.819ms
+  frame windows (seconds since first captured frame; unsmoothed)
+     0.00.. 1.01s   28 frames  27.81 FPS p95  44.221ms max  58.920ms over 16.67ms  96.4%
+     1.01.. 2.03s   28 frames  27.49 FPS p95  43.214ms max  45.545ms over 16.67ms 100.0%
+     2.03.. 3.04s   28 frames  27.70 FPS p95  41.291ms max  41.355ms over 16.67ms 100.0%
+     3.04.. 4.01s   27 frames  27.76 FPS p95  43.757ms max  45.266ms over 16.67ms 100.0%
+     4.01.. 5.00s   30 frames  30.22 FPS p95  43.263ms max  48.475ms over 16.67ms 100.0%
+     5.00.. 6.00s   40 frames  40.05 FPS p95  30.415ms max  32.987ms over 16.67ms 100.0%
+     6.00.. 7.00s   47 frames  46.82 FPS p95  24.207ms max  24.352ms over 16.67ms  97.9%
+     7.00.. 8.01s   40 frames  39.78 FPS p95  35.173ms max  60.819ms over 16.67ms 100.0%
+     8.01.. 9.01s   39 frames  39.04 FPS p95  44.754ms max  59.434ms over 16.67ms  97.4%
+     9.01.. 9.99s   55 frames  56.11 FPS p95  23.128ms max  24.095ms over 16.67ms  60.0%
+  slowest frames (start seconds; wall/main/fixed/Update/SpawnScene/PostUpdate ms)
+     7.788s   60.819 /   57.137 /   7.659 /  21.368 /   0.112 /  24.452
+     8.088s   59.434 /   54.622 /   9.988 /   8.166 /   2.362 /  30.448
+     0.743s   58.920 /   45.672 /   8.372 /  11.015 /   0.093 /  24.205
+     7.576s   56.935 /   54.427 /   3.310 /  12.151 /   0.193 /  38.170
+     4.155s   48.475 /   33.943 /   2.705 /  10.195 /   0.265 /  19.839
+  main CPU            19.400ms
+  outside main         8.194ms
+  fixed loop           1.813ms
+  sim step/frame       1.557ms
+  main schedules (avg/frame)
+      First            0.092ms
+      PreUpdate        0.499ms
+      fixed loop       1.945ms
+      Update           5.884ms
+      SpawnScene       0.198ms
+      PostUpdate      10.706ms
+      Last             0.076ms
+
+SIM  ticks       300  range            0..=299  observed  29.98Hz
+  tick total         avg    1.879ms  p95    2.938ms  p99    5.486ms  max   20.455ms
+  topology             0.000ms
+  timers/build         0.109ms
+  production           0.005ms
+  snapshot/spatial     0.236ms
+  abilities            0.152ms
+  targeting            0.105ms
+  combat               0.052ms
+  move intent          0.148ms
+  crowd/collision      0.230ms
+  crowd separate       0.110ms
+  hard collision       0.120ms
+  fallback search      0.000ms
+  ballistic            0.002ms
+  commit               0.081ms
+  checksum             0.746ms
+  fallback calls           0.10/tick
+  fallback checks          0.98/tick
+  fallback max ring           3
+
+3D CPU  samples     363  average/frame
+  total                5.769ms
+  camera               0.015ms
+  model prep           0.193ms
+  entity sync          0.363ms
+  scene setup          1.009ms
+  animations           2.597ms
+  transforms           0.155ms
+  effects              1.247ms
+  overlays/gizmos      0.189ms
+
+RENDER CPU  avg/call, max, calls (overlapping scopes; do not sum)
+  handoff incl wait/extract    8.083ms   21.166ms 363
+  world sync/extract           3.630ms   10.493ms 363
+  extract commands             0.131ms    2.115ms 363
+  prepare assets               0.291ms    1.262ms 363
+  prepare meshes               1.208ms    3.890ms 363
+  create views                 0.119ms    1.066ms 363
+  specialize                   0.109ms    1.557ms 363
+  prepare views                0.165ms    1.542ms 363
+  queue                        0.610ms    3.297ms 363
+  phase sort                   0.961ms    3.295ms 363
+  prepare resources            4.981ms   12.747ms 362
+  render/submit/present       14.643ms   37.004ms 362
+  cleanup                      0.019ms    1.269ms 363
+  post cleanup                 0.033ms    0.695ms 363
+  transparent phase: 6425 items, 2554 draw-function calls (latest sampled frame, all views)
+  transparent submission: 1315 particle / 1239 mesh-or-other calls, 3416 particle instances, largest particle batch 230
+  transparent transitions: 23 distinct pipelines, 2430 pipeline changes, 1890 command changes, 1888 particle/mesh changes (first binding per view excluded)
+  skin palette staging: 15757824 bytes uploaded/frame (latest sample)
+  particle queue: 3416 candidates, 3416 queued, 0 zero-alpha rejects, 0 frustum rejects; texture slots 8/64 populated/bound (latest sample, all views)
+  particle texture groups: 0 created, 1 reused (latest frame)
+  particle overlap audit: 0 safe moves, 0 overlap rejects, 0 unknown barriers (latest frame)
+  particle mesh prefix: 1315 compatible batches, 0 fallback batches (latest frame)
+
+COLD SCENE REQUESTS  new roots, not completed spawns; template entity counts are estimates
+     18 roots  peak/frame   15  template   80 entities  first  2.092s  wc3/units/models/units__human__rifleman__rifleman.gltf#Scene0
+    120 roots  peak/frame   39  template    7 entities  first  0.053s  wc3/effects/models/abilities__spells__human__thunderclap__thunderclaptarget.gltf#Scene0
+    149 roots  peak/frame  100  template    5 entities  first  0.111s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodrifleman.gltf#Scene0
+    100 roots  peak/frame   41  template    5 entities  first  0.111s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodknight.gltf#Scene0
+     50 roots  peak/frame   32  template    5 entities  first  0.181s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodmortarteam.gltf#Scene0
+     11 roots  peak/frame    9  template   14 entities  first  2.092s  wc3/effects/models/abilities__weapons__cannontowermissile__cannontowermissile.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.111s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodfootman.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.111s  wc3/units/models/objects__spawnmodels__nightelf__nightelfblood__nightelfbloodarcher.gltf#Scene0
+
+SCENE  entities=90754 meshes=8559 visible=4880 skinned=5785 dynamic_bounds=5785 particles=3189 transparent_visible=6213 no_auto_batch=0
+  mesh_assets=3063 material_assets=242 visible_mesh_material_pairs=368 animation_players=1121 animated_texture_tracks=0 joint_references=257462 unique_joints=35054
+  effect reserves: 18 templates, 1024 planned roots, 0 still awaiting creation, 1024 prepared in total
+  window=3840x2160 present=AutoNoVsync visible=true
+  camera_position=Vec3(0.0, 3394.0002, 3060.0) camera_forward=Dir3(Vec3(-0.0, -0.7270132, -0.6866236))
+  collapsed_visible=0 (zero determinant; candidates for geoset visibility)
+
+RENDER PASSES  recent diagnostic average (not whole capture)
+  render/bin_unpacking/elapsed_cpu 0.008ms
+  render/bin_unpacking/elapsed_gpu 0.089ms
+  render/clustering/elapsed_cpu 0.019ms
+  render/clustering/elapsed_gpu 0.061ms
+  render/early_mesh_preprocessing/elapsed_cpu 0.003ms
+  render/early_mesh_preprocessing/elapsed_gpu 0.016ms
+  render/main_opaque_pass_3d/elapsed_cpu 0.104ms
+  render/main_opaque_pass_3d/elapsed_gpu 6.043ms
+  render/main_transparent_pass_3d/elapsed_cpu 2.755ms
+  render/main_transparent_pass_3d/elapsed_gpu 3.404ms
+  render/ui/elapsed_cpu 0.013ms
+  render/ui/elapsed_gpu 0.062ms
+  render/upscaling/elapsed_cpu 0.003ms
+  render/upscaling/elapsed_gpu 0.070ms
+SYSTEM CPU  no samples
+
+
+=== Baseline A ===
+Command: target/release/castle-fight-client --stress-units 700 --profile --profile-warmup 10 --profile-duration 10
+Loaded 2360 generated WC3 UI icon binding(s) and 4 cursor atlas binding(s) for Castle Fight 9.27
+client-profile standard_material_bindless=true
+2026-10-01T18:41:33.589584Z  WARN bevy_winit::winit_windows: Can't select current monitor on window creation or cannot find current monitor!
+spawned 1184 Warcraft III doodad/destructable scene instances
+Loaded 29 generated WC3 unit model(s)
+Loaded 24 generated WC3 building model(s)
+Loaded 158 WC3 projectile visual(s), 240 ability visual(s), 15 status visual id(s), and 5 chain-lightning id(s)
+client-profile source=stress-units=700 final_tick=300 builders=2 units=121 buildings=2 corpses=529 projectiles=2
+client-profile paused=false experiment=Baseline
+PROFILE RESULTS
+  elapsed                10.001s
+
+FRAME  samples     430  avg FPS   43.05  1% low   16.03
+  wall               avg   23.230ms  p95   38.365ms  p99   54.935ms  max   71.590ms
+  frame windows (seconds since first captured frame; unsmoothed)
+     0.00.. 1.02s   22 frames  21.57 FPS p95  69.436ms max  71.590ms over 16.67ms 100.0%
+     1.02.. 2.00s   31 frames  31.54 FPS p95  40.666ms max  41.442ms over 16.67ms 100.0%
+     2.00.. 3.03s   35 frames  34.00 FPS p95  34.599ms max  35.522ms over 16.67ms 100.0%
+     3.03.. 4.01s   39 frames  39.76 FPS p95  30.328ms max  30.712ms over 16.67ms 100.0%
+     4.01.. 5.01s   42 frames  42.24 FPS p95  26.719ms max  27.913ms over 16.67ms 100.0%
+     5.01.. 6.01s   48 frames  48.07 FPS p95  23.729ms max  24.363ms over 16.67ms  97.9%
+     6.01.. 7.01s   50 frames  49.72 FPS p95  22.947ms max  25.039ms over 16.67ms  98.0%
+     7.01.. 8.01s   50 frames  49.97 FPS p95  23.024ms max  27.005ms over 16.67ms 100.0%
+     8.01.. 9.01s   55 frames  54.90 FPS p95  20.826ms max  20.998ms over 16.67ms  89.1%
+     9.01.. 9.99s   58 frames  59.46 FPS p95  20.420ms max  21.925ms over 16.67ms  41.4%
+  slowest frames (start seconds; wall/main/fixed/Update/SpawnScene/PostUpdate ms)
+     0.910s   71.590 /   17.521 /   2.186 /   4.643 /   0.073 /  10.229
+     0.131s   69.436 /   64.072 /   7.801 /  33.368 /   7.176 /  14.518
+     0.071s   60.056 /   54.401 /   5.031 /  29.777 /   2.133 /  16.792
+     0.248s   55.934 /   48.998 /  11.797 /  14.067 /   1.384 /  20.251
+     0.435s   54.935 /   39.803 /  10.030 /   7.321 /   0.253 /  21.551
+  main CPU            15.697ms
+  outside main         7.533ms
+  fixed loop           1.283ms
+  sim step/frame       1.101ms
+  main schedules (avg/frame)
+      First            0.066ms
+      PreUpdate        0.339ms
+      fixed loop       1.368ms
+      Update           4.872ms
+      SpawnScene       0.147ms
+      PostUpdate       8.843ms
+      Last             0.061ms
+
+SIM  ticks       300  range            0..=299  observed  30.00Hz
+  tick total         avg    1.579ms  p95    2.512ms  p99    6.199ms  max   20.723ms
+  topology             0.000ms
+  timers/build         0.092ms
+  production           0.004ms
+  snapshot/spatial     0.187ms
+  abilities            0.115ms
+  targeting            0.086ms
+  combat               0.046ms
+  move intent          0.127ms
+  crowd/collision      0.199ms
+  crowd separate       0.093ms
+  hard collision       0.105ms
+  fallback search      0.000ms
+  ballistic            0.002ms
+  commit               0.067ms
+  checksum             0.643ms
+  fallback calls           0.10/tick
+  fallback checks          0.98/tick
+  fallback max ring           3
+
+3D CPU  samples     431  average/frame
+  total                4.772ms
+  camera               0.010ms
+  model prep           0.149ms
+  entity sync          0.260ms
+  scene setup          0.753ms
+  animations           2.207ms
+  transforms           0.139ms
+  effects              1.085ms
+  overlays/gizmos      0.169ms
+
+RENDER CPU  avg/call, max, calls (overlapping scopes; do not sum)
+  handoff incl wait/extract    7.450ms   53.991ms 431
+  world sync/extract           2.527ms   35.768ms 431
+  extract commands             0.098ms    1.071ms 431
+  prepare assets               0.224ms    1.323ms 431
+  prepare meshes               0.959ms    3.551ms 431
+  create views                 0.096ms    0.666ms 431
+  specialize                   0.082ms    1.157ms 431
+  prepare views                0.121ms    1.819ms 431
+  queue                        0.535ms    5.810ms 431
+  phase sort                   0.876ms    3.701ms 431
+  prepare resources            3.965ms   10.032ms 430
+  render/submit/present       13.186ms   29.601ms 431
+  cleanup                      0.013ms    0.154ms 431
+  post cleanup                 0.031ms    1.773ms 431
+  transparent phase: 6288 items, 2474 draw-function calls (latest sampled frame, all views)
+  transparent submission: 1161 particle / 1313 mesh-or-other calls, 3269 particle instances, largest particle batch 225
+  transparent transitions: 21 distinct pipelines, 2301 pipeline changes, 1826 command changes, 1824 particle/mesh changes (first binding per view excluded)
+  skin palette staging: 15757824 bytes uploaded/frame (latest sample)
+  particle queue: 3269 candidates, 3269 queued, 0 zero-alpha rejects, 0 frustum rejects; texture slots 8/64 populated/bound (latest sample, all views)
+  particle texture groups: 0 created, 1 reused (latest frame)
+  particle overlap audit: 0 safe moves, 0 overlap rejects, 0 unknown barriers (latest frame)
+  particle mesh prefix: 0 compatible batches, 0 fallback batches (latest frame)
+
+COLD SCENE REQUESTS  new roots, not completed spawns; template entity counts are estimates
+     18 roots  peak/frame   15  template   80 entities  first  2.047s  wc3/units/models/units__human__rifleman__rifleman.gltf#Scene0
+    120 roots  peak/frame   39  template    7 entities  first  0.033s  wc3/effects/models/abilities__spells__human__thunderclap__thunderclaptarget.gltf#Scene0
+    149 roots  peak/frame  100  template    5 entities  first  0.113s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodrifleman.gltf#Scene0
+    100 roots  peak/frame   41  template    5 entities  first  0.113s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodknight.gltf#Scene0
+     50 roots  peak/frame   32  template    5 entities  first  0.231s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodmortarteam.gltf#Scene0
+     11 roots  peak/frame    9  template   14 entities  first  2.047s  wc3/effects/models/abilities__weapons__cannontowermissile__cannontowermissile.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.113s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodfootman.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.113s  wc3/units/models/objects__spawnmodels__nightelf__nightelfblood__nightelfbloodarcher.gltf#Scene0
+
+SCENE  entities=90751 meshes=8556 visible=4879 skinned=5785 dynamic_bounds=5785 particles=3228 transparent_visible=6251 no_auto_batch=0
+  mesh_assets=3060 material_assets=241 visible_mesh_material_pairs=368 animation_players=1121 animated_texture_tracks=0 joint_references=257462 unique_joints=35054
+  effect reserves: 18 templates, 1024 planned roots, 0 still awaiting creation, 1024 prepared in total
+  window=3840x2160 present=AutoNoVsync visible=true
+  camera_position=Vec3(0.0, 3394.0002, 3060.0) camera_forward=Dir3(Vec3(-0.0, -0.7270132, -0.6866236))
+  collapsed_visible=0 (zero determinant; candidates for geoset visibility)
+
+RENDER PASSES  recent diagnostic average (not whole capture)
+  render/bin_unpacking/elapsed_cpu 0.006ms
+  render/bin_unpacking/elapsed_gpu 0.078ms
+  render/clustering/elapsed_cpu 0.016ms
+  render/clustering/elapsed_gpu 0.059ms
+  render/early_mesh_preprocessing/elapsed_cpu 0.002ms
+  render/early_mesh_preprocessing/elapsed_gpu 0.015ms
+  render/main_opaque_pass_3d/elapsed_cpu 0.081ms
+  render/main_opaque_pass_3d/elapsed_gpu 7.321ms
+  render/main_transparent_pass_3d/elapsed_cpu 1.909ms
+  render/main_transparent_pass_3d/elapsed_gpu 3.609ms
+  render/ui/elapsed_cpu 0.011ms
+  render/ui/elapsed_gpu 0.065ms
+  render/upscaling/elapsed_cpu 0.002ms
+  render/upscaling/elapsed_gpu 0.071ms
+SYSTEM CPU  no samples
+
+=== Shared-view control ===
+Command: target/release/castle-fight-client --stress-units 700 --profile --profile-warmup 10 --profile-duration 10 --render-experiment particle-shared-view
+Loaded 2360 generated WC3 UI icon binding(s) and 4 cursor atlas binding(s) for Castle Fight 9.27
+client-profile standard_material_bindless=true
+2026-10-01T18:42:28.885787Z  WARN bevy_winit::winit_windows: Can't select current monitor on window creation or cannot find current monitor!
+spawned 1184 Warcraft III doodad/destructable scene instances
+Loaded 29 generated WC3 unit model(s)
+Loaded 24 generated WC3 building model(s)
+Loaded 158 WC3 projectile visual(s), 240 ability visual(s), 15 status visual id(s), and 5 chain-lightning id(s)
+client-profile source=stress-units=700 final_tick=300 builders=2 units=121 buildings=2 corpses=529 projectiles=2
+client-profile paused=false experiment=ParticleSharedView
+PROFILE RESULTS
+  elapsed                10.009s
+
+FRAME  samples     459  avg FPS   45.91  1% low   22.60
+  wall               avg   21.780ms  p95   36.029ms  p99   41.002ms  max   53.324ms
+  frame windows (seconds since first captured frame; unsmoothed)
+     0.00.. 1.01s   31 frames  30.83 FPS p95  43.572ms max  53.324ms over 16.67ms  96.8%
+     1.01.. 2.00s   29 frames  29.16 FPS p95  41.002ms max  41.332ms over 16.67ms 100.0%
+     2.00.. 3.01s   33 frames  32.60 FPS p95  35.932ms max  39.587ms over 16.67ms 100.0%
+     3.01.. 4.01s   39 frames  39.05 FPS p95  28.690ms max  31.412ms over 16.67ms 100.0%
+     4.01.. 5.00s   40 frames  40.26 FPS p95  29.470ms max  31.899ms over 16.67ms 100.0%
+     5.00.. 6.01s   51 frames  50.59 FPS p95  23.483ms max  24.594ms over 16.67ms 100.0%
+     6.01.. 7.00s   52 frames  52.60 FPS p95  20.875ms max  22.688ms over 16.67ms 100.0%
+     7.00.. 8.00s   56 frames  55.99 FPS p95  21.864ms max  22.749ms over 16.67ms  80.4%
+     8.00.. 9.01s   63 frames  62.17 FPS p95  17.381ms max  17.765ms over 16.67ms  28.6%
+     9.01..10.00s   65 frames  66.19 FPS p95  17.126ms max  17.483ms over 16.67ms  12.3%
+  slowest frames (start seconds; wall/main/fixed/Update/SpawnScene/PostUpdate ms)
+     0.111s   53.324 /   50.294 /   6.973 /  25.395 /   6.476 /  10.501
+     0.067s   43.572 /   39.443 /   4.113 /  20.048 /   2.004 /  12.995
+     0.847s   42.044 /   22.455 /   4.614 /   5.840 /   0.083 /  11.519
+     1.123s   41.332 /   18.583 /   2.325 /   5.107 /   0.059 /  10.628
+     1.082s   41.002 /   21.111 /   4.212 /   5.129 /   0.215 /  11.046
+  main CPU            14.735ms
+  outside main         7.045ms
+  fixed loop           1.162ms
+  sim step/frame       0.993ms
+  main schedules (avg/frame)
+      First            0.060ms
+      PreUpdate        0.325ms
+      fixed loop       1.256ms
+      Update           4.698ms
+      SpawnScene       0.142ms
+      PostUpdate       8.192ms
+      Last             0.061ms
+
+SIM  ticks       300  range            0..=299  observed  29.97Hz
+  tick total         avg    1.520ms  p95    2.111ms  p99    3.162ms  max   19.859ms
+  topology             0.000ms
+  timers/build         0.083ms
+  production           0.004ms
+  snapshot/spatial     0.179ms
+  abilities            0.095ms
+  targeting            0.071ms
+  combat               0.044ms
+  move intent          0.118ms
+  crowd/collision      0.180ms
+  crowd separate       0.076ms
+  hard collision       0.103ms
+  fallback search      0.000ms
+  ballistic            0.002ms
+  commit               0.070ms
+  checksum             0.663ms
+  fallback calls           0.10/tick
+  fallback checks          0.98/tick
+  fallback max ring           3
+
+3D CPU  samples     460  average/frame
+  total                4.601ms
+  camera               0.009ms
+  model prep           0.141ms
+  entity sync          0.222ms
+  scene setup          0.737ms
+  animations           2.099ms
+  transforms           0.138ms
+  effects              1.086ms
+  overlays/gizmos      0.169ms
+
+RENDER CPU  avg/call, max, calls (overlapping scopes; do not sum)
+  handoff incl wait/extract    6.966ms   22.681ms 460
+  world sync/extract           2.339ms    6.631ms 460
+  extract commands             0.090ms    0.775ms 460
+  prepare assets               0.211ms    1.315ms 460
+  prepare meshes               0.901ms    4.428ms 460
+  create views                 0.090ms    0.615ms 460
+  specialize                   0.087ms    1.259ms 460
+  prepare views                0.125ms    1.223ms 460
+  queue                        0.504ms    2.694ms 460
+  phase sort                   0.876ms    2.985ms 460
+  prepare resources            3.937ms   10.003ms 459
+  render/submit/present       12.193ms   23.770ms 460
+  cleanup                      0.012ms    0.041ms 460
+  post cleanup                 0.024ms    0.124ms 460
+  transparent phase: 6369 items, 2553 draw-function calls (latest sampled frame, all views)
+  transparent submission: 1230 particle / 1323 mesh-or-other calls, 3363 particle instances, largest particle batch 231
+  transparent transitions: 20 distinct pipelines, 2397 pipeline changes, 1901 command changes, 1900 particle/mesh changes (first binding per view excluded)
+  skin palette staging: 15757824 bytes uploaded/frame (latest sample)
+  particle queue: 3363 candidates, 3363 queued, 0 zero-alpha rejects, 0 frustum rejects; texture slots 8/64 populated/bound (latest sample, all views)
+  particle texture groups: 0 created, 1 reused (latest frame)
+  particle overlap audit: 0 safe moves, 0 overlap rejects, 0 unknown barriers (latest frame)
+  particle mesh prefix: 0 compatible batches, 0 fallback batches (latest frame)
+
+COLD SCENE REQUESTS  new roots, not completed spawns; template entity counts are estimates
+     18 roots  peak/frame   15  template   80 entities  first  2.074s  wc3/units/models/units__human__rifleman__rifleman.gltf#Scene0
+    120 roots  peak/frame   39  template    7 entities  first  0.049s  wc3/effects/models/abilities__spells__human__thunderclap__thunderclaptarget.gltf#Scene0
+    149 roots  peak/frame  100  template    5 entities  first  0.099s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodrifleman.gltf#Scene0
+    100 roots  peak/frame   41  template    5 entities  first  0.099s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodknight.gltf#Scene0
+     50 roots  peak/frame   32  template    5 entities  first  0.185s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodmortarteam.gltf#Scene0
+     11 roots  peak/frame    9  template   14 entities  first  2.074s  wc3/effects/models/abilities__weapons__cannontowermissile__cannontowermissile.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.099s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodfootman.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.099s  wc3/units/models/objects__spawnmodels__nightelf__nightelfblood__nightelfbloodarcher.gltf#Scene0
+
+SCENE  entities=90748 meshes=8553 visible=4879 skinned=5785 dynamic_bounds=5785 particles=3255 transparent_visible=6277 no_auto_batch=0
+  mesh_assets=3057 material_assets=241 visible_mesh_material_pairs=368 animation_players=1121 animated_texture_tracks=0 joint_references=257462 unique_joints=35054
+  effect reserves: 18 templates, 1024 planned roots, 0 still awaiting creation, 1024 prepared in total
+  window=3840x2160 present=AutoNoVsync visible=true
+  camera_position=Vec3(0.0, 3394.0002, 3060.0) camera_forward=Dir3(Vec3(-0.0, -0.7270132, -0.6866236))
+  collapsed_visible=0 (zero determinant; candidates for geoset visibility)
+
+RENDER PASSES  recent diagnostic average (not whole capture)
+  render/bin_unpacking/elapsed_cpu 0.006ms
+  render/bin_unpacking/elapsed_gpu 0.079ms
+  render/clustering/elapsed_cpu 0.013ms
+  render/clustering/elapsed_gpu 0.059ms
+  render/early_mesh_preprocessing/elapsed_cpu 0.002ms
+  render/early_mesh_preprocessing/elapsed_gpu 0.015ms
+  render/main_opaque_pass_3d/elapsed_cpu 0.070ms
+  render/main_opaque_pass_3d/elapsed_gpu 7.261ms
+  render/main_transparent_pass_3d/elapsed_cpu 1.704ms
+  render/main_transparent_pass_3d/elapsed_gpu 3.602ms
+  render/ui/elapsed_cpu 0.008ms
+  render/ui/elapsed_gpu 0.065ms
+  render/upscaling/elapsed_cpu 0.002ms
+  render/upscaling/elapsed_gpu 0.071ms
+SYSTEM CPU  no samples
+
+=== Mesh-prefix A ===
+Command: target/release/castle-fight-client --stress-units 700 --profile --profile-warmup 10 --profile-duration 10 --render-experiment particle-shared-mesh
+Loaded 2360 generated WC3 UI icon binding(s) and 4 cursor atlas binding(s) for Castle Fight 9.27
+client-profile standard_material_bindless=true
+2026-10-01T18:43:06.193274Z  WARN bevy_winit::winit_windows: Can't select current monitor on window creation or cannot find current monitor!
+spawned 1184 Warcraft III doodad/destructable scene instances
+Loaded 29 generated WC3 unit model(s)
+Loaded 24 generated WC3 building model(s)
+Loaded 158 WC3 projectile visual(s), 240 ability visual(s), 15 status visual id(s), and 5 chain-lightning id(s)
+client-profile source=stress-units=700 final_tick=300 builders=2 units=121 buildings=2 corpses=529 projectiles=2
+client-profile paused=false experiment=ParticleSharedMesh
+PROFILE RESULTS
+  elapsed                10.005s
+
+FRAME  samples     452  avg FPS   45.25  1% low   23.97
+  wall               avg   22.100ms  p95   33.955ms  p99   39.549ms  max   48.872ms
+  frame windows (seconds since first captured frame; unsmoothed)
+     0.00.. 1.00s   33 frames  32.95 FPS p95  40.380ms max  48.872ms over 16.67ms  90.9%
+     1.00.. 2.02s   31 frames  30.49 FPS p95  39.549ms max  40.041ms over 16.67ms 100.0%
+     2.02.. 3.02s   34 frames  33.88 FPS p95  34.054ms max  34.173ms over 16.67ms 100.0%
+     3.02.. 4.01s   40 frames  40.43 FPS p95  29.059ms max  29.611ms over 16.67ms 100.0%
+     4.01.. 5.01s   44 frames  44.02 FPS p95  26.836ms max  29.606ms over 16.67ms 100.0%
+     5.01.. 6.01s   49 frames  48.87 FPS p95  24.381ms max  25.429ms over 16.67ms  98.0%
+     6.01.. 7.02s   51 frames  50.73 FPS p95  22.325ms max  24.384ms over 16.67ms  98.0%
+     7.02.. 8.01s   53 frames  53.70 FPS p95  20.968ms max  22.142ms over 16.67ms  96.2%
+     8.01.. 9.02s   58 frames  57.31 FPS p95  19.736ms max  20.528ms over 16.67ms  77.6%
+     9.02.. 9.99s   59 frames  60.74 FPS p95  18.871ms max  20.267ms over 16.67ms  39.0%
+  slowest frames (start seconds; wall/main/fixed/Update/SpawnScene/PostUpdate ms)
+     0.116s   48.872 /   45.618 /   6.044 /  22.847 /   6.188 /   9.868
+     0.076s   40.380 /   37.066 /   3.501 /  20.579 /   1.906 /  10.802
+     1.153s   40.041 /   18.862 /   3.724 /   5.023 /   0.057 /   9.710
+     0.887s   39.782 /   20.451 /   4.047 /   5.024 /   0.063 /  10.967
+     1.076s   39.549 /   18.349 /   2.142 /   4.672 /   0.052 /  10.941
+  main CPU            14.305ms
+  outside main         7.794ms
+  fixed loop           1.115ms
+  sim step/frame       0.952ms
+  main schedules (avg/frame)
+      First            0.057ms
+      PreUpdate        0.326ms
+      fixed loop       1.188ms
+      Update           4.504ms
+      SpawnScene       0.135ms
+      PostUpdate       8.045ms
+      Last             0.050ms
+
+SIM  ticks       300  range            0..=299  observed  29.98Hz
+  tick total         avg    1.437ms  p95    1.835ms  p99    3.048ms  max   21.281ms
+  topology             0.000ms
+  timers/build         0.081ms
+  production           0.004ms
+  snapshot/spatial     0.169ms
+  abilities            0.087ms
+  targeting            0.070ms
+  combat               0.039ms
+  move intent          0.116ms
+  crowd/collision      0.170ms
+  crowd separate       0.071ms
+  hard collision       0.100ms
+  fallback search      0.000ms
+  ballistic            0.001ms
+  commit               0.064ms
+  checksum             0.624ms
+  fallback calls           0.10/tick
+  fallback checks          0.98/tick
+  fallback max ring           3
+
+3D CPU  samples     453  average/frame
+  total                4.418ms
+  camera               0.008ms
+  model prep           0.120ms
+  entity sync          0.205ms
+  scene setup          0.690ms
+  animations           2.041ms
+  transforms           0.134ms
+  effects              1.056ms
+  overlays/gizmos      0.163ms
+
+RENDER CPU  avg/call, max, calls (overlapping scopes; do not sum)
+  handoff incl wait/extract    7.718ms   21.731ms 453
+  world sync/extract           2.106ms    4.632ms 453
+  extract commands             0.085ms    1.121ms 453
+  prepare assets               0.198ms    1.225ms 453
+  prepare meshes               0.878ms    2.633ms 453
+  create views                 0.087ms    0.579ms 453
+  specialize                   0.076ms    1.004ms 453
+  prepare views                0.112ms    0.965ms 453
+  queue                        0.503ms    2.906ms 453
+  phase sort                   0.879ms    3.803ms 453
+  prepare resources            4.312ms    9.786ms 452
+  render/submit/present       12.475ms   23.394ms 453
+  cleanup                      0.011ms    0.024ms 453
+  post cleanup                 0.023ms    0.146ms 453
+  transparent phase: 6298 items, 2592 draw-function calls (latest sampled frame, all views)
+  transparent submission: 1198 particle / 1394 mesh-or-other calls, 3260 particle instances, largest particle batch 220
+  transparent transitions: 22 distinct pipelines, 2419 pipeline changes, 1921 command changes, 1920 particle/mesh changes (first binding per view excluded)
+  skin palette staging: 15757824 bytes uploaded/frame (latest sample)
+  particle queue: 3260 candidates, 3260 queued, 0 zero-alpha rejects, 0 frustum rejects; texture slots 8/64 populated/bound (latest sample, all views)
+  particle texture groups: 1 created, 0 reused (latest frame)
+  particle overlap audit: 0 safe moves, 0 overlap rejects, 0 unknown barriers (latest frame)
+  particle mesh prefix: 1198 compatible batches, 0 fallback batches (latest frame)
+
+COLD SCENE REQUESTS  new roots, not completed spawns; template entity counts are estimates
+     18 roots  peak/frame   15  template   80 entities  first  2.094s  wc3/units/models/units__human__rifleman__rifleman.gltf#Scene0
+    120 roots  peak/frame   39  template    7 entities  first  0.061s  wc3/effects/models/abilities__spells__human__thunderclap__thunderclaptarget.gltf#Scene0
+    149 roots  peak/frame  100  template    5 entities  first  0.111s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodrifleman.gltf#Scene0
+    100 roots  peak/frame   41  template    5 entities  first  0.111s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodknight.gltf#Scene0
+     50 roots  peak/frame   32  template    5 entities  first  0.189s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodmortarteam.gltf#Scene0
+     11 roots  peak/frame    9  template   14 entities  first  2.094s  wc3/effects/models/abilities__weapons__cannontowermissile__cannontowermissile.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.111s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodfootman.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.111s  wc3/units/models/objects__spawnmodels__nightelf__nightelfblood__nightelfbloodarcher.gltf#Scene0
+
+SCENE  entities=90751 meshes=8556 visible=4881 skinned=5785 dynamic_bounds=5785 particles=3286 transparent_visible=6310 no_auto_batch=0
+  mesh_assets=3060 material_assets=244 visible_mesh_material_pairs=368 animation_players=1121 animated_texture_tracks=0 joint_references=257462 unique_joints=35054
+  effect reserves: 18 templates, 1024 planned roots, 0 still awaiting creation, 1024 prepared in total
+  window=3840x2160 present=AutoNoVsync visible=true
+  camera_position=Vec3(0.0, 3394.0002, 3060.0) camera_forward=Dir3(Vec3(-0.0, -0.7270132, -0.6866236))
+  collapsed_visible=0 (zero determinant; candidates for geoset visibility)
+
+RENDER PASSES  recent diagnostic average (not whole capture)
+  render/bin_unpacking/elapsed_cpu 0.007ms
+  render/bin_unpacking/elapsed_gpu 0.080ms
+  render/clustering/elapsed_cpu 0.015ms
+  render/clustering/elapsed_gpu 0.059ms
+  render/early_mesh_preprocessing/elapsed_cpu 0.002ms
+  render/early_mesh_preprocessing/elapsed_gpu 0.015ms
+  render/main_opaque_pass_3d/elapsed_cpu 0.072ms
+  render/main_opaque_pass_3d/elapsed_gpu 7.296ms
+  render/main_transparent_pass_3d/elapsed_cpu 2.064ms
+  render/main_transparent_pass_3d/elapsed_gpu 3.646ms
+  render/ui/elapsed_cpu 0.009ms
+  render/ui/elapsed_gpu 0.065ms
+  render/upscaling/elapsed_cpu 0.002ms
+  render/upscaling/elapsed_gpu 0.072ms
+SYSTEM CPU  no samples
+
+=== Partial-array control ===
+Command: target/release/castle-fight-client --stress-units 700 --profile --profile-warmup 10 --profile-duration 10 --render-experiment particle-partial-bindings
+Loaded 2360 generated WC3 UI icon binding(s) and 4 cursor atlas binding(s) for Castle Fight 9.27
+client-profile standard_material_bindless=true
+2026-10-01T18:43:43.919922Z  WARN bevy_winit::winit_windows: Can't select current monitor on window creation or cannot find current monitor!
+spawned 1184 Warcraft III doodad/destructable scene instances
+Loaded 29 generated WC3 unit model(s)
+Loaded 24 generated WC3 building model(s)
+Loaded 158 WC3 projectile visual(s), 240 ability visual(s), 15 status visual id(s), and 5 chain-lightning id(s)
+client-profile source=stress-units=700 final_tick=300 builders=2 units=121 buildings=2 corpses=529 projectiles=2
+client-profile paused=false experiment=ParticlePartialBindings
+PROFILE RESULTS
+  elapsed                10.004s
+
+FRAME  samples     455  avg FPS   45.56  1% low   23.74
+  wall               avg   21.949ms  p95   32.222ms  p99   38.890ms  max   48.771ms
+  frame windows (seconds since first captured frame; unsmoothed)
+     0.00.. 1.02s   36 frames  35.16 FPS p95  39.732ms max  48.771ms over 16.67ms  91.7%
+     1.02.. 2.01s   32 frames  32.44 FPS p95  39.841ms max  43.346ms over 16.67ms 100.0%
+     2.01.. 3.00s   36 frames  36.37 FPS p95  31.265ms max  34.544ms over 16.67ms 100.0%
+     3.00.. 4.01s   43 frames  42.69 FPS p95  26.434ms max  28.210ms over 16.67ms 100.0%
+     4.01.. 5.02s   45 frames  44.61 FPS p95  24.998ms max  26.628ms over 16.67ms 100.0%
+     5.02.. 6.01s   50 frames  50.28 FPS p95  23.042ms max  24.161ms over 16.67ms  98.0%
+     6.01.. 7.02s   50 frames  49.79 FPS p95  22.710ms max  23.358ms over 16.67ms 100.0%
+     7.02.. 8.01s   53 frames  53.44 FPS p95  21.449ms max  22.501ms over 16.67ms  90.6%
+     8.01.. 9.01s   56 frames  55.57 FPS p95  20.933ms max  21.900ms over 16.67ms  78.6%
+     9.01.. 9.99s   54 frames  55.54 FPS p95  20.967ms max  21.784ms over 16.67ms  74.1%
+  slowest frames (start seconds; wall/main/fixed/Update/SpawnScene/PostUpdate ms)
+     0.109s   48.771 /   46.027 /   5.361 /  23.954 /   6.153 /   9.860
+     1.024s   43.346 /   22.009 /   1.917 /   5.554 /   0.076 /  13.398
+     1.200s   39.841 /   26.329 /   2.099 /  12.200 /   0.073 /  11.583
+     0.069s   39.732 /   36.647 /   3.648 /  20.113 /   1.889 /  10.725
+     0.839s   38.890 /   21.777 /   2.259 /   4.379 /   0.063 /  14.676
+  main CPU            15.228ms
+  outside main         6.721ms
+  fixed loop           1.157ms
+  sim step/frame       0.989ms
+  main schedules (avg/frame)
+      First            0.061ms
+      PreUpdate        0.351ms
+      fixed loop       1.242ms
+      Update           4.787ms
+      SpawnScene       0.143ms
+      PostUpdate       8.584ms
+      Last             0.059ms
+
+SIM  ticks       300  range            0..=299  observed  29.99Hz
+  tick total         avg    1.505ms  p95    1.872ms  p99    2.934ms  max   19.900ms
+  topology             0.000ms
+  timers/build         0.088ms
+  production           0.004ms
+  snapshot/spatial     0.184ms
+  abilities            0.103ms
+  targeting            0.070ms
+  combat               0.043ms
+  move intent          0.121ms
+  crowd/collision      0.173ms
+  crowd separate       0.071ms
+  hard collision       0.102ms
+  fallback search      0.000ms
+  ballistic            0.002ms
+  commit               0.063ms
+  checksum             0.644ms
+  fallback calls           0.10/tick
+  fallback checks          0.98/tick
+  fallback max ring           3
+
+3D CPU  samples     456  average/frame
+  total                4.689ms
+  camera               0.011ms
+  model prep           0.139ms
+  entity sync          0.244ms
+  scene setup          0.702ms
+  animations           2.168ms
+  transforms           0.140ms
+  effects              1.109ms
+  overlays/gizmos      0.177ms
+
+RENDER CPU  avg/call, max, calls (overlapping scopes; do not sum)
+  handoff incl wait/extract    6.635ms   21.254ms 456
+  world sync/extract           2.435ms    4.715ms 456
+  extract commands             0.098ms    0.457ms 456
+  prepare assets               0.230ms    1.259ms 456
+  prepare meshes               0.984ms    2.871ms 456
+  create views                 0.100ms    1.137ms 456
+  specialize                   0.082ms    1.605ms 456
+  prepare views                0.135ms    1.740ms 456
+  queue                        0.538ms    3.018ms 456
+  phase sort                   0.913ms    4.068ms 456
+  prepare resources            4.039ms    8.647ms 456
+  render/submit/present       11.944ms   24.108ms 456
+  cleanup                      0.012ms    0.119ms 456
+  post cleanup                 0.028ms    0.634ms 456
+  transparent phase: 6435 items, 2607 draw-function calls (latest sampled frame, all views)
+  transparent submission: 1250 particle / 1357 mesh-or-other calls, 3399 particle instances, largest particle batch 233
+  transparent transitions: 20 distinct pipelines, 2433 pipeline changes, 1897 command changes, 1896 particle/mesh changes (first binding per view excluded)
+  skin palette staging: 15757824 bytes uploaded/frame (latest sample)
+  particle queue: 3399 candidates, 3399 queued, 0 zero-alpha rejects, 0 frustum rejects; texture slots 8/8 populated/bound (latest sample, all views)
+  particle texture groups: 0 created, 1 reused (latest frame)
+  particle overlap audit: 0 safe moves, 0 overlap rejects, 0 unknown barriers (latest frame)
+  particle mesh prefix: 0 compatible batches, 0 fallback batches (latest frame)
+
+COLD SCENE REQUESTS  new roots, not completed spawns; template entity counts are estimates
+     18 roots  peak/frame   15  template   80 entities  first  2.081s  wc3/units/models/units__human__rifleman__rifleman.gltf#Scene0
+    120 roots  peak/frame   39  template    7 entities  first  0.054s  wc3/effects/models/abilities__spells__human__thunderclap__thunderclaptarget.gltf#Scene0
+    149 roots  peak/frame  100  template    5 entities  first  0.103s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodrifleman.gltf#Scene0
+    100 roots  peak/frame   41  template    5 entities  first  0.103s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodknight.gltf#Scene0
+     50 roots  peak/frame   32  template    5 entities  first  0.179s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodmortarteam.gltf#Scene0
+     11 roots  peak/frame    9  template   14 entities  first  2.081s  wc3/effects/models/abilities__weapons__cannontowermissile__cannontowermissile.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.103s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodfootman.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.103s  wc3/units/models/objects__spawnmodels__nightelf__nightelfblood__nightelfbloodarcher.gltf#Scene0
+
+SCENE  entities=90760 meshes=8553 visible=4881 skinned=5785 dynamic_bounds=5785 particles=3249 transparent_visible=6272 no_auto_batch=0
+  mesh_assets=3057 material_assets=241 visible_mesh_material_pairs=368 animation_players=1123 animated_texture_tracks=0 joint_references=257462 unique_joints=35054
+  effect reserves: 18 templates, 1024 planned roots, 0 still awaiting creation, 1024 prepared in total
+  window=3840x2160 present=AutoNoVsync visible=true
+  camera_position=Vec3(0.0, 3394.0002, 3060.0) camera_forward=Dir3(Vec3(-0.0, -0.7270132, -0.6866236))
+  collapsed_visible=0 (zero determinant; candidates for geoset visibility)
+
+RENDER PASSES  recent diagnostic average (not whole capture)
+  render/bin_unpacking/elapsed_cpu 0.008ms
+  render/bin_unpacking/elapsed_gpu 0.085ms
+  render/clustering/elapsed_cpu 0.018ms
+  render/clustering/elapsed_gpu 0.060ms
+  render/early_mesh_preprocessing/elapsed_cpu 0.003ms
+  render/early_mesh_preprocessing/elapsed_gpu 0.015ms
+  render/main_opaque_pass_3d/elapsed_cpu 0.099ms
+  render/main_opaque_pass_3d/elapsed_gpu 7.287ms
+  render/main_transparent_pass_3d/elapsed_cpu 2.105ms
+  render/main_transparent_pass_3d/elapsed_gpu 3.643ms
+  render/ui/elapsed_cpu 0.013ms
+  render/ui/elapsed_gpu 0.065ms
+  render/upscaling/elapsed_cpu 0.003ms
+  render/upscaling/elapsed_gpu 0.072ms
+SYSTEM CPU  no samples
+
+=== Mesh-prefix + partial arrays A ===
+Command: target/release/castle-fight-client --stress-units 700 --profile --profile-warmup 10 --profile-duration 10 --render-experiment particle-shared-mesh-partial-bindings
+Loaded 2360 generated WC3 UI icon binding(s) and 4 cursor atlas binding(s) for Castle Fight 9.27
+client-profile standard_material_bindless=true
+2026-10-01T18:44:38.132958Z  WARN bevy_winit::winit_windows: Can't select current monitor on window creation or cannot find current monitor!
+spawned 1184 Warcraft III doodad/destructable scene instances
+Loaded 29 generated WC3 unit model(s)
+Loaded 24 generated WC3 building model(s)
+Loaded 158 WC3 projectile visual(s), 240 ability visual(s), 15 status visual id(s), and 5 chain-lightning id(s)
+client-profile source=stress-units=700 final_tick=300 builders=2 units=121 buildings=2 corpses=529 projectiles=2
+client-profile paused=false experiment=ParticleSharedMeshPartialBindings
+PROFILE RESULTS
+  elapsed                10.005s
+
+FRAME  samples     461  avg FPS   46.13  1% low   19.70
+  wall               avg   21.676ms  p95   37.411ms  p99   48.647ms  max   55.227ms
+  frame windows (seconds since first captured frame; unsmoothed)
+     0.00.. 1.00s   29 frames  28.96 FPS p95  45.408ms max  50.957ms over 16.67ms  96.6%
+     1.00.. 2.00s   26 frames  25.97 FPS p95  49.633ms max  55.227ms over 16.67ms 100.0%
+     2.00.. 3.02s   35 frames  34.44 FPS p95  33.951ms max  34.706ms over 16.67ms 100.0%
+     3.02.. 4.01s   41 frames  41.46 FPS p95  27.839ms max  32.019ms over 16.67ms 100.0%
+     4.01.. 5.01s   45 frames  44.90 FPS p95  25.471ms max  31.009ms over 16.67ms  97.8%
+     5.01.. 6.01s   50 frames  49.93 FPS p95  23.262ms max  24.033ms over 16.67ms  98.0%
+     6.01.. 7.00s   52 frames  52.47 FPS p95  21.082ms max  23.380ms over 16.67ms  96.2%
+     7.00.. 8.01s   57 frames  56.72 FPS p95  20.272ms max  21.411ms over 16.67ms  71.9%
+     8.01.. 9.00s   61 frames  61.31 FPS p95  18.137ms max  19.988ms over 16.67ms  34.4%
+     9.00.. 9.99s   65 frames  65.65 FPS p95  17.362ms max  18.658ms over 16.67ms  10.8%
+  slowest frames (start seconds; wall/main/fixed/Update/SpawnScene/PostUpdate ms)
+     1.090s   55.227 /   28.050 /   3.077 /   7.176 /   0.075 /  17.148
+     0.115s   50.957 /   47.771 /   6.662 /  23.477 /   6.213 /  10.534
+     1.395s   49.633 /   27.127 /   2.336 /   8.289 /   0.062 /  15.518
+     1.346s   49.299 /   35.518 /   6.204 /   9.306 /   0.061 /  19.511
+     1.297s   48.647 /   32.794 /   2.632 /  12.025 /   0.118 /  17.484
+  main CPU            15.001ms
+  outside main         6.675ms
+  fixed loop           1.194ms
+  sim step/frame       1.028ms
+  main schedules (avg/frame)
+      First            0.064ms
+      PreUpdate        0.307ms
+      fixed loop       1.268ms
+      Update           4.792ms
+      SpawnScene       0.149ms
+      PostUpdate       8.358ms
+      Last             0.062ms
+
+SIM  ticks       300  range            0..=299  observed  29.98Hz
+  tick total         avg    1.580ms  p95    2.483ms  p99    3.530ms  max   20.949ms
+  topology             0.000ms
+  timers/build         0.086ms
+  production           0.004ms
+  snapshot/spatial     0.188ms
+  abilities            0.125ms
+  targeting            0.080ms
+  combat               0.057ms
+  move intent          0.134ms
+  crowd/collision      0.192ms
+  crowd separate       0.089ms
+  hard collision       0.103ms
+  fallback search      0.000ms
+  ballistic            0.002ms
+  commit               0.062ms
+  checksum             0.639ms
+  fallback calls           0.10/tick
+  fallback checks          0.98/tick
+  fallback max ring           3
+
+3D CPU  samples     462  average/frame
+  total                4.686ms
+  camera               0.010ms
+  model prep           0.141ms
+  entity sync          0.239ms
+  scene setup          0.735ms
+  animations           2.150ms
+  transforms           0.136ms
+  effects              1.108ms
+  overlays/gizmos      0.167ms
+
+RENDER CPU  avg/call, max, calls (overlapping scopes; do not sum)
+  handoff incl wait/extract    6.592ms   27.084ms 462
+  world sync/extract           2.312ms    6.235ms 462
+  extract commands             0.088ms    0.267ms 462
+  prepare assets               0.224ms    2.050ms 462
+  prepare meshes               0.935ms    4.747ms 462
+  create views                 0.103ms    1.582ms 462
+  specialize                   0.083ms    1.142ms 462
+  prepare views                0.128ms    1.599ms 462
+  queue                        0.537ms    4.331ms 462
+  phase sort                   0.858ms    4.256ms 462
+  prepare resources            4.450ms   12.308ms 461
+  render/submit/present       11.497ms   28.085ms 462
+  cleanup                      0.012ms    0.181ms 462
+  post cleanup                 0.029ms    1.847ms 462
+  transparent phase: 6338 items, 2550 draw-function calls (latest sampled frame, all views)
+  transparent submission: 1223 particle / 1327 mesh-or-other calls, 3327 particle instances, largest particle batch 224
+  transparent transitions: 22 distinct pipelines, 2381 pipeline changes, 1911 command changes, 1910 particle/mesh changes (first binding per view excluded)
+  skin palette staging: 15757824 bytes uploaded/frame (latest sample)
+  particle queue: 3327 candidates, 3327 queued, 0 zero-alpha rejects, 0 frustum rejects; texture slots 8/8 populated/bound (latest sample, all views)
+  particle texture groups: 1 created, 0 reused (latest frame)
+  particle overlap audit: 0 safe moves, 0 overlap rejects, 0 unknown barriers (latest frame)
+  particle mesh prefix: 1223 compatible batches, 0 fallback batches (latest frame)
+
+COLD SCENE REQUESTS  new roots, not completed spawns; template entity counts are estimates
+     18 roots  peak/frame   15  template   80 entities  first  2.086s  wc3/units/models/units__human__rifleman__rifleman.gltf#Scene0
+    120 roots  peak/frame   39  template    7 entities  first  0.049s  wc3/effects/models/abilities__spells__human__thunderclap__thunderclaptarget.gltf#Scene0
+    149 roots  peak/frame  100  template    5 entities  first  0.105s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodrifleman.gltf#Scene0
+    100 roots  peak/frame   41  template    5 entities  first  0.105s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodknight.gltf#Scene0
+     50 roots  peak/frame   32  template    5 entities  first  0.191s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodmortarteam.gltf#Scene0
+     11 roots  peak/frame    9  template   14 entities  first  2.086s  wc3/effects/models/abilities__weapons__cannontowermissile__cannontowermissile.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.105s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodfootman.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.105s  wc3/units/models/objects__spawnmodels__nightelf__nightelfblood__nightelfbloodarcher.gltf#Scene0
+
+SCENE  entities=90751 meshes=8556 visible=4878 skinned=5785 dynamic_bounds=5785 particles=3199 transparent_visible=6221 no_auto_batch=0
+  mesh_assets=3060 material_assets=242 visible_mesh_material_pairs=368 animation_players=1121 animated_texture_tracks=0 joint_references=257462 unique_joints=35054
+  effect reserves: 18 templates, 1024 planned roots, 0 still awaiting creation, 1024 prepared in total
+  window=3840x2160 present=AutoNoVsync visible=true
+  camera_position=Vec3(0.0, 3394.0002, 3060.0) camera_forward=Dir3(Vec3(-0.0, -0.7270132, -0.6866236))
+  collapsed_visible=0 (zero determinant; candidates for geoset visibility)
+
+RENDER PASSES  recent diagnostic average (not whole capture)
+  render/bin_unpacking/elapsed_cpu 0.006ms
+  render/bin_unpacking/elapsed_gpu 0.087ms
+  render/clustering/elapsed_cpu 0.015ms
+  render/clustering/elapsed_gpu 0.059ms
+  render/early_mesh_preprocessing/elapsed_cpu 0.002ms
+  render/early_mesh_preprocessing/elapsed_gpu 0.015ms
+  render/main_opaque_pass_3d/elapsed_cpu 0.077ms
+  render/main_opaque_pass_3d/elapsed_gpu 7.224ms
+  render/main_transparent_pass_3d/elapsed_cpu 1.990ms
+  render/main_transparent_pass_3d/elapsed_gpu 3.583ms
+  render/ui/elapsed_cpu 0.010ms
+  render/ui/elapsed_gpu 0.065ms
+  render/upscaling/elapsed_cpu 0.002ms
+  render/upscaling/elapsed_gpu 0.072ms
+SYSTEM CPU  no samples
+
+=== Baseline B ===
+Command: target/release/castle-fight-client --stress-units 700 --profile --profile-warmup 10 --profile-duration 10
+Loaded 2360 generated WC3 UI icon binding(s) and 4 cursor atlas binding(s) for Castle Fight 9.27
+client-profile standard_material_bindless=true
+2026-10-01T18:45:15.829137Z  WARN bevy_winit::winit_windows: Can't select current monitor on window creation or cannot find current monitor!
+spawned 1184 Warcraft III doodad/destructable scene instances
+Loaded 29 generated WC3 unit model(s)
+Loaded 24 generated WC3 building model(s)
+Loaded 158 WC3 projectile visual(s), 240 ability visual(s), 15 status visual id(s), and 5 chain-lightning id(s)
+client-profile source=stress-units=700 final_tick=300 builders=2 units=121 buildings=2 corpses=529 projectiles=2
+client-profile paused=false experiment=Baseline
+PROFILE RESULTS
+  elapsed                10.005s
+
+FRAME  samples     457  avg FPS   45.76  1% low   22.39
+  wall               avg   21.853ms  p95   34.011ms  p99   42.820ms  max   47.125ms
+  frame windows (seconds since first captured frame; unsmoothed)
+     0.00.. 1.02s   36 frames  35.31 FPS p95  38.075ms max  42.157ms over 16.67ms  97.2%
+     1.02.. 2.02s   33 frames  33.10 FPS p95  35.557ms max  37.590ms over 16.67ms 100.0%
+     2.02.. 3.03s   30 frames  29.68 FPS p95  44.570ms max  47.125ms over 16.67ms 100.0%
+     3.03.. 4.01s   40 frames  40.77 FPS p95  27.571ms max  30.525ms over 16.67ms 100.0%
+     4.01.. 5.02s   45 frames  44.58 FPS p95  24.779ms max  25.329ms over 16.67ms 100.0%
+     5.02.. 6.01s   49 frames  49.43 FPS p95  22.378ms max  24.904ms over 16.67ms  98.0%
+     6.01.. 7.01s   48 frames  48.14 FPS p95  23.535ms max  45.950ms over 16.67ms  97.9%
+     7.01.. 8.01s   54 frames  53.96 FPS p95  20.723ms max  22.156ms over 16.67ms 100.0%
+     8.01.. 9.02s   61 frames  60.42 FPS p95  18.480ms max  18.782ms over 16.67ms  44.3%
+     9.02.. 9.99s   61 frames  62.86 FPS p95  17.875ms max  26.673ms over 16.67ms  23.0%
+  slowest frames (start seconds; wall/main/fixed/Update/SpawnScene/PostUpdate ms)
+     2.686s   47.125 /   28.096 /   2.927 /   9.891 /   0.074 /  14.509
+     6.265s   45.950 /   12.085 /   0.017 /   5.297 /   0.082 /   6.336
+     2.733s   44.570 /   27.464 /   2.749 /   8.329 /   0.087 /  15.588
+     2.479s   42.825 /   23.074 /   2.351 /   6.311 /   0.077 /  13.806
+     2.777s   42.820 /   28.614 /   4.091 /   7.812 /   0.093 /  16.056
+  main CPU            14.453ms
+  outside main         7.400ms
+  fixed loop           1.137ms
+  sim step/frame       0.971ms
+  main schedules (avg/frame)
+      First            0.060ms
+      PreUpdate        0.308ms
+      fixed loop       1.216ms
+      Update           4.614ms
+      SpawnScene       0.139ms
+      PostUpdate       8.064ms
+      Last             0.053ms
+
+SIM  ticks       300  range            0..=299  observed  29.98Hz
+  tick total         avg    1.479ms  p95    2.106ms  p99    3.250ms  max   20.203ms
+  topology             0.000ms
+  timers/build         0.084ms
+  production           0.004ms
+  snapshot/spatial     0.177ms
+  abilities            0.092ms
+  targeting            0.070ms
+  combat               0.040ms
+  move intent          0.118ms
+  crowd/collision      0.178ms
+  crowd separate       0.077ms
+  hard collision       0.101ms
+  fallback search      0.000ms
+  ballistic            0.001ms
+  commit               0.066ms
+  checksum             0.636ms
+  fallback calls           0.10/tick
+  fallback checks          0.98/tick
+  fallback max ring           3
+
+3D CPU  samples     458  average/frame
+  total                4.518ms
+  camera               0.009ms
+  model prep           0.129ms
+  entity sync          0.197ms
+  scene setup          0.749ms
+  animations           2.078ms
+  transforms           0.137ms
+  effects              1.053ms
+  overlays/gizmos      0.167ms
+
+RENDER CPU  avg/call, max, calls (overlapping scopes; do not sum)
+  handoff incl wait/extract    7.323ms   33.785ms 458
+  world sync/extract           2.170ms   15.039ms 458
+  extract commands             0.087ms    0.405ms 458
+  prepare assets               0.208ms    1.793ms 458
+  prepare meshes               0.887ms    4.725ms 458
+  create views                 0.081ms    0.703ms 458
+  specialize                   0.079ms    0.934ms 458
+  prepare views                0.115ms    1.070ms 458
+  queue                        0.487ms    2.374ms 458
+  phase sort                   0.853ms    2.519ms 458
+  prepare resources            3.873ms   10.106ms 457
+  render/submit/present       12.626ms   28.589ms 457
+  cleanup                      0.011ms    0.056ms 458
+  post cleanup                 0.025ms    0.259ms 458
+  transparent phase: 6377 items, 2635 draw-function calls (latest sampled frame, all views)
+  transparent submission: 1281 particle / 1354 mesh-or-other calls, 3372 particle instances, largest particle batch 231
+  transparent transitions: 21 distinct pipelines, 2473 pipeline changes, 1976 command changes, 1974 particle/mesh changes (first binding per view excluded)
+  skin palette staging: 15757824 bytes uploaded/frame (latest sample)
+  particle queue: 3372 candidates, 3372 queued, 0 zero-alpha rejects, 0 frustum rejects; texture slots 8/64 populated/bound (latest sample, all views)
+  particle texture groups: 0 created, 1 reused (latest frame)
+  particle overlap audit: 0 safe moves, 0 overlap rejects, 0 unknown barriers (latest frame)
+  particle mesh prefix: 0 compatible batches, 0 fallback batches (latest frame)
+
+COLD SCENE REQUESTS  new roots, not completed spawns; template entity counts are estimates
+     18 roots  peak/frame   15  template   80 entities  first  2.080s  wc3/units/models/units__human__rifleman__rifleman.gltf#Scene0
+    120 roots  peak/frame   39  template    7 entities  first  0.053s  wc3/effects/models/abilities__spells__human__thunderclap__thunderclaptarget.gltf#Scene0
+    149 roots  peak/frame  100  template    5 entities  first  0.107s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodrifleman.gltf#Scene0
+    100 roots  peak/frame   41  template    5 entities  first  0.107s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodknight.gltf#Scene0
+     50 roots  peak/frame   32  template    5 entities  first  0.169s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodmortarteam.gltf#Scene0
+     11 roots  peak/frame    9  template   14 entities  first  2.080s  wc3/effects/models/abilities__weapons__cannontowermissile__cannontowermissile.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.107s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodfootman.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.107s  wc3/units/models/objects__spawnmodels__nightelf__nightelfblood__nightelfbloodarcher.gltf#Scene0
+
+SCENE  entities=90749 meshes=8554 visible=4880 skinned=5785 dynamic_bounds=5785 particles=3210 transparent_visible=6232 no_auto_batch=0
+  mesh_assets=3058 material_assets=244 visible_mesh_material_pairs=368 animation_players=1121 animated_texture_tracks=0 joint_references=257462 unique_joints=35054
+  effect reserves: 18 templates, 1024 planned roots, 0 still awaiting creation, 1024 prepared in total
+  window=3840x2160 present=AutoNoVsync visible=true
+  camera_position=Vec3(0.0, 3394.0002, 3060.0) camera_forward=Dir3(Vec3(-0.0, -0.7270132, -0.6866236))
+  collapsed_visible=0 (zero determinant; candidates for geoset visibility)
+
+RENDER PASSES  recent diagnostic average (not whole capture)
+  render/bin_unpacking/elapsed_cpu 0.006ms
+  render/bin_unpacking/elapsed_gpu 0.080ms
+  render/clustering/elapsed_cpu 0.014ms
+  render/clustering/elapsed_gpu 0.058ms
+  render/early_mesh_preprocessing/elapsed_cpu 0.002ms
+  render/early_mesh_preprocessing/elapsed_gpu 0.015ms
+  render/main_opaque_pass_3d/elapsed_cpu 0.065ms
+  render/main_opaque_pass_3d/elapsed_gpu 5.955ms
+  render/main_transparent_pass_3d/elapsed_cpu 1.746ms
+  render/main_transparent_pass_3d/elapsed_gpu 3.293ms
+  render/ui/elapsed_cpu 0.008ms
+  render/ui/elapsed_gpu 0.065ms
+  render/upscaling/elapsed_cpu 0.002ms
+  render/upscaling/elapsed_gpu 0.071ms
+SYSTEM CPU  no samples
+
+=== Shared-view B ===
+Command: target/release/castle-fight-client --stress-units 700 --profile --profile-warmup 10 --profile-duration 10 --render-experiment particle-shared-view
+Loaded 2360 generated WC3 UI icon binding(s) and 4 cursor atlas binding(s) for Castle Fight 9.27
+client-profile standard_material_bindless=true
+2026-10-01T18:46:44.495145Z  WARN bevy_winit::winit_windows: Can't select current monitor on window creation or cannot find current monitor!
+spawned 1184 Warcraft III doodad/destructable scene instances
+Loaded 29 generated WC3 unit model(s)
+Loaded 24 generated WC3 building model(s)
+Loaded 158 WC3 projectile visual(s), 240 ability visual(s), 15 status visual id(s), and 5 chain-lightning id(s)
+client-profile source=stress-units=700 final_tick=300 builders=2 units=121 buildings=2 corpses=529 projectiles=2
+client-profile paused=false experiment=ParticleSharedView
+PROFILE RESULTS
+  elapsed                10.006s
+
+FRAME  samples     406  avg FPS   40.67  1% low   20.21
+  wall               avg   24.586ms  p95   41.292ms  p99   47.690ms  max   50.882ms
+  frame windows (seconds since first captured frame; unsmoothed)
+     0.00.. 1.04s   28 frames  26.87 FPS p95  49.456ms max  50.856ms over 16.67ms 100.0%
+     1.04.. 2.03s   25 frames  25.28 FPS p95  46.835ms max  50.882ms over 16.67ms 100.0%
+     2.03.. 3.02s   26 frames  26.16 FPS p95  47.026ms max  47.690ms over 16.67ms 100.0%
+     3.02.. 4.00s   35 frames  35.86 FPS p95  38.891ms max  39.882ms over 16.67ms 100.0%
+     4.00.. 5.01s   44 frames  43.60 FPS p95  26.954ms max  28.124ms over 16.67ms 100.0%
+     5.01.. 6.00s   47 frames  47.26 FPS p95  24.551ms max  25.544ms over 16.67ms 100.0%
+     6.00.. 7.01s   45 frames  44.67 FPS p95  25.702ms max  27.263ms over 16.67ms 100.0%
+     7.01.. 8.01s   49 frames  49.18 FPS p95  30.660ms max  33.626ms over 16.67ms  95.9%
+     8.01.. 9.02s   50 frames  49.63 FPS p95  25.959ms max  28.269ms over 16.67ms  94.0%
+     9.02.. 9.98s   57 frames  59.01 FPS p95  23.641ms max  27.318ms over 16.67ms  50.9%
+  slowest frames (start seconds; wall/main/fixed/Update/SpawnScene/PostUpdate ms)
+     1.179s   50.882 /   31.629 /   5.548 /   9.237 /   0.076 /  15.642
+     0.092s   50.856 /   46.589 /  10.609 /  19.876 /   2.310 /  13.383
+     0.143s   49.456 /   45.064 /   3.471 /  21.034 /   6.561 /  12.858
+     0.019s   48.568 /   44.920 /  23.176 /   7.057 /   1.326 /  12.632
+     2.711s   47.690 /   32.962 /   5.788 /   8.907 /   0.093 /  17.535
+  main CPU            17.851ms
+  outside main         6.735ms
+  fixed loop           1.581ms
+  sim step/frame       1.355ms
+  main schedules (avg/frame)
+      First            0.072ms
+      PreUpdate        0.417ms
+      fixed loop       1.689ms
+      Update           5.526ms
+      SpawnScene       0.174ms
+      PostUpdate       9.910ms
+      Last             0.063ms
+
+SIM  ticks       300  range            0..=299  observed  29.98Hz
+  tick total         avg    1.839ms  p95    3.028ms  p99    3.697ms  max   22.450ms
+  topology             0.000ms
+  timers/build         0.106ms
+  production           0.005ms
+  snapshot/spatial     0.272ms
+  abilities            0.115ms
+  targeting            0.077ms
+  combat               0.053ms
+  move intent          0.129ms
+  crowd/collision      0.206ms
+  crowd separate       0.085ms
+  hard collision       0.121ms
+  fallback search      0.000ms
+  ballistic            0.002ms
+  commit               0.086ms
+  checksum             0.774ms
+  fallback calls           0.10/tick
+  fallback checks          0.98/tick
+  fallback max ring           3
+
+3D CPU  samples     407  average/frame
+  total                5.401ms
+  camera               0.011ms
+  model prep           0.165ms
+  entity sync          0.297ms
+  scene setup          0.884ms
+  animations           2.536ms
+  transforms           0.142ms
+  effects              1.191ms
+  overlays/gizmos      0.174ms
+
+RENDER CPU  avg/call, max, calls (overlapping scopes; do not sum)
+  handoff incl wait/extract    6.648ms   19.133ms 407
+  world sync/extract           2.913ms   10.181ms 407
+  extract commands             0.119ms    0.602ms 407
+  prepare assets               0.253ms    1.558ms 407
+  prepare meshes               1.155ms    4.252ms 407
+  create views                 0.099ms    0.997ms 407
+  specialize                   0.102ms    1.011ms 407
+  prepare views                0.141ms    1.273ms 407
+  queue                        0.534ms    4.059ms 407
+  phase sort                   0.933ms    3.425ms 407
+  prepare resources            4.138ms   12.602ms 407
+  render/submit/present       13.547ms   24.962ms 406
+  cleanup                      0.014ms    0.040ms 407
+  post cleanup                 0.030ms    0.546ms 407
+  transparent phase: 6347 items, 2535 draw-function calls (latest sampled frame, all views)
+  transparent submission: 1226 particle / 1309 mesh-or-other calls, 3372 particle instances, largest particle batch 231
+  transparent transitions: 21 distinct pipelines, 2364 pipeline changes, 1870 command changes, 1868 particle/mesh changes (first binding per view excluded)
+  skin palette staging: 15757824 bytes uploaded/frame (latest sample)
+  particle queue: 3372 candidates, 3372 queued, 0 zero-alpha rejects, 0 frustum rejects; texture slots 8/64 populated/bound (latest sample, all views)
+  particle texture groups: 0 created, 1 reused (latest frame)
+  particle overlap audit: 0 safe moves, 0 overlap rejects, 0 unknown barriers (latest frame)
+  particle mesh prefix: 0 compatible batches, 0 fallback batches (latest frame)
+
+COLD SCENE REQUESTS  new roots, not completed spawns; template entity counts are estimates
+     18 roots  peak/frame   15  template   80 entities  first  2.104s  wc3/units/models/units__human__rifleman__rifleman.gltf#Scene0
+    120 roots  peak/frame   39  template    7 entities  first  0.068s  wc3/effects/models/abilities__spells__human__thunderclap__thunderclaptarget.gltf#Scene0
+    149 roots  peak/frame  100  template    5 entities  first  0.141s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodrifleman.gltf#Scene0
+    100 roots  peak/frame   41  template    5 entities  first  0.141s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodknight.gltf#Scene0
+     50 roots  peak/frame   32  template    5 entities  first  0.226s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodmortarteam.gltf#Scene0
+     11 roots  peak/frame    9  template   14 entities  first  2.104s  wc3/effects/models/abilities__weapons__cannontowermissile__cannontowermissile.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.141s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodfootman.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.141s  wc3/units/models/objects__spawnmodels__nightelf__nightelfblood__nightelfbloodarcher.gltf#Scene0
+
+SCENE  entities=90721 meshes=8526 visible=4853 skinned=5785 dynamic_bounds=5785 particles=3255 transparent_visible=6250 no_auto_batch=0
+  mesh_assets=3030 material_assets=243 visible_mesh_material_pairs=368 animation_players=1121 animated_texture_tracks=0 joint_references=257462 unique_joints=35054
+  effect reserves: 18 templates, 1024 planned roots, 0 still awaiting creation, 1024 prepared in total
+  window=3840x2160 present=AutoNoVsync visible=true
+  camera_position=Vec3(0.0, 3394.0002, 3060.0) camera_forward=Dir3(Vec3(-0.0, -0.7270132, -0.6866236))
+  collapsed_visible=0 (zero determinant; candidates for geoset visibility)
+
+RENDER PASSES  recent diagnostic average (not whole capture)
+  render/bin_unpacking/elapsed_cpu 0.007ms
+  render/bin_unpacking/elapsed_gpu 0.082ms
+  render/clustering/elapsed_cpu 0.017ms
+  render/clustering/elapsed_gpu 0.059ms
+  render/early_mesh_preprocessing/elapsed_cpu 0.008ms
+  render/early_mesh_preprocessing/elapsed_gpu 0.015ms
+  render/main_opaque_pass_3d/elapsed_cpu 0.083ms
+  render/main_opaque_pass_3d/elapsed_gpu 6.008ms
+  render/main_transparent_pass_3d/elapsed_cpu 2.035ms
+  render/main_transparent_pass_3d/elapsed_gpu 3.345ms
+  render/ui/elapsed_cpu 0.011ms
+  render/ui/elapsed_gpu 0.065ms
+  render/upscaling/elapsed_cpu 0.003ms
+  render/upscaling/elapsed_gpu 0.072ms
+SYSTEM CPU  no samples
+
+=== Mesh-prefix B ===
+Command: target/release/castle-fight-client --stress-units 700 --profile --profile-warmup 10 --profile-duration 10 --render-experiment particle-shared-mesh
+Loaded 2360 generated WC3 UI icon binding(s) and 4 cursor atlas binding(s) for Castle Fight 9.27
+client-profile standard_material_bindless=true
+2026-10-01T18:47:05.160266Z  WARN bevy_winit::winit_windows: Can't select current monitor on window creation or cannot find current monitor!
+spawned 1184 Warcraft III doodad/destructable scene instances
+Loaded 29 generated WC3 unit model(s)
+Loaded 24 generated WC3 building model(s)
+Loaded 158 WC3 projectile visual(s), 240 ability visual(s), 15 status visual id(s), and 5 chain-lightning id(s)
+client-profile source=stress-units=700 final_tick=301 builders=2 units=121 buildings=2 corpses=529 projectiles=2
+client-profile paused=false experiment=ParticleSharedMesh
+PROFILE RESULTS
+  elapsed                10.016s
+
+FRAME  samples     439  avg FPS   43.90  1% low   23.99
+  wall               avg   22.781ms  p95   36.276ms  p99   40.697ms  max   42.785ms
+  frame windows (seconds since first captured frame; unsmoothed)
+     0.00.. 1.02s   31 frames  30.54 FPS p95  40.320ms max  41.641ms over 16.67ms  96.8%
+     1.02.. 2.02s   29 frames  28.82 FPS p95  42.631ms max  42.785ms over 16.67ms 100.0%
+     2.02.. 3.01s   32 frames  32.34 FPS p95  35.704ms max  35.740ms over 16.67ms 100.0%
+     3.01.. 4.02s   39 frames  38.67 FPS p95  30.449ms max  31.672ms over 16.67ms 100.0%
+     4.02.. 5.00s   42 frames  42.77 FPS p95  27.784ms max  28.765ms over 16.67ms 100.0%
+     5.00.. 6.00s   48 frames  47.90 FPS p95  23.690ms max  25.612ms over 16.67ms  97.9%
+     6.00.. 7.02s   48 frames  47.34 FPS p95  24.767ms max  25.901ms over 16.67ms 100.0%
+     7.02.. 8.01s   48 frames  48.52 FPS p95  30.352ms max  31.660ms over 16.67ms  97.9%
+     8.01.. 9.02s   59 frames  58.47 FPS p95  19.442ms max  21.018ms over 16.67ms  57.6%
+     9.02..10.00s   63 frames  63.97 FPS p95  17.591ms max  18.139ms over 16.67ms  17.5%
+  slowest frames (start seconds; wall/main/fixed/Update/SpawnScene/PostUpdate ms)
+     1.258s   42.785 /   22.849 /   2.126 /   5.706 /   0.077 /  14.394
+     1.092s   42.631 /   21.222 /   2.190 /   6.097 /   0.152 /  12.347
+     0.053s   41.641 /   38.024 /   3.478 /  19.938 /   1.911 /  12.426
+     1.452s   40.704 /   24.622 /   3.287 /   5.734 /   0.668 /  13.081
+     1.526s   40.697 /   20.348 /   2.003 /   5.204 /   0.106 /  12.624
+  main CPU            15.047ms
+  outside main         7.734ms
+  fixed loop           1.211ms
+  sim step/frame       1.037ms
+  main schedules (avg/frame)
+      First            0.062ms
+      PreUpdate        0.319ms
+      fixed loop       1.294ms
+      Update           4.654ms
+      SpawnScene       0.152ms
+      PostUpdate       8.515ms
+      Last             0.052ms
+
+SIM  ticks       301  range            0..=300  observed  30.05Hz
+  tick total         avg    1.517ms  p95    2.077ms  p99    3.261ms  max   20.104ms
+  topology             0.000ms
+  timers/build         0.088ms
+  production           0.004ms
+  snapshot/spatial     0.181ms
+  abilities            0.094ms
+  targeting            0.074ms
+  combat               0.044ms
+  move intent          0.126ms
+  crowd/collision      0.178ms
+  crowd separate       0.074ms
+  hard collision       0.105ms
+  fallback search      0.000ms
+  ballistic            0.002ms
+  commit               0.067ms
+  checksum             0.648ms
+  fallback calls           0.10/tick
+  fallback checks          0.98/tick
+  fallback max ring           3
+
+3D CPU  samples     440  average/frame
+  total                4.567ms
+  camera               0.011ms
+  model prep           0.132ms
+  entity sync          0.228ms
+  scene setup          0.753ms
+  animations           2.092ms
+  transforms           0.135ms
+  effects              1.054ms
+  overlays/gizmos      0.163ms
+
+RENDER CPU  avg/call, max, calls (overlapping scopes; do not sum)
+  handoff incl wait/extract    7.657ms   21.992ms 440
+  world sync/extract           2.321ms    6.635ms 440
+  extract commands             0.093ms    0.778ms 440
+  prepare assets               0.226ms    1.319ms 440
+  prepare meshes               0.923ms    3.694ms 440
+  create views                 0.091ms    1.204ms 440
+  specialize                   0.079ms    1.016ms 440
+  prepare views                0.127ms    1.726ms 440
+  queue                        0.513ms    3.039ms 440
+  phase sort                   0.864ms    3.757ms 440
+  prepare resources            4.496ms   11.583ms 440
+  render/submit/present       12.640ms   24.041ms 440
+  cleanup                      0.011ms    0.025ms 440
+  post cleanup                 0.027ms    0.703ms 440
+  transparent phase: 6382 items, 2556 draw-function calls (latest sampled frame, all views)
+  transparent submission: 1228 particle / 1328 mesh-or-other calls, 3373 particle instances, largest particle batch 231
+  transparent transitions: 22 distinct pipelines, 2404 pipeline changes, 1905 command changes, 1904 particle/mesh changes (first binding per view excluded)
+  skin palette staging: 15757824 bytes uploaded/frame (latest sample)
+  particle queue: 3373 candidates, 3373 queued, 0 zero-alpha rejects, 0 frustum rejects; texture slots 8/64 populated/bound (latest sample, all views)
+  particle texture groups: 0 created, 1 reused (latest frame)
+  particle overlap audit: 0 safe moves, 0 overlap rejects, 0 unknown barriers (latest frame)
+  particle mesh prefix: 1228 compatible batches, 0 fallback batches (latest frame)
+
+COLD SCENE REQUESTS  new roots, not completed spawns; template entity counts are estimates
+     18 roots  peak/frame   15  template   80 entities  first  2.070s  wc3/units/models/units__human__rifleman__rifleman.gltf#Scene0
+    120 roots  peak/frame   39  template    7 entities  first  0.034s  wc3/effects/models/abilities__spells__human__thunderclap__thunderclaptarget.gltf#Scene0
+    149 roots  peak/frame  100  template    5 entities  first  0.086s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodrifleman.gltf#Scene0
+    100 roots  peak/frame   41  template    5 entities  first  0.086s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodknight.gltf#Scene0
+     50 roots  peak/frame   32  template    5 entities  first  0.161s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodmortarteam.gltf#Scene0
+     11 roots  peak/frame    9  template   14 entities  first  2.070s  wc3/effects/models/abilities__weapons__cannontowermissile__cannontowermissile.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.086s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodfootman.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.086s  wc3/units/models/objects__spawnmodels__nightelf__nightelfblood__nightelfbloodarcher.gltf#Scene0
+
+SCENE  entities=90752 meshes=8557 visible=4880 skinned=5785 dynamic_bounds=5785 particles=3187 transparent_visible=6211 no_auto_batch=0
+  mesh_assets=3061 material_assets=243 visible_mesh_material_pairs=368 animation_players=1121 animated_texture_tracks=0 joint_references=257462 unique_joints=35054
+  effect reserves: 18 templates, 1024 planned roots, 0 still awaiting creation, 1024 prepared in total
+  window=3840x2160 present=AutoNoVsync visible=true
+  camera_position=Vec3(0.0, 3394.0002, 3060.0) camera_forward=Dir3(Vec3(-0.0, -0.7270132, -0.6866236))
+  collapsed_visible=0 (zero determinant; candidates for geoset visibility)
+
+RENDER PASSES  recent diagnostic average (not whole capture)
+  render/bin_unpacking/elapsed_cpu 0.006ms
+  render/bin_unpacking/elapsed_gpu 0.079ms
+  render/clustering/elapsed_cpu 0.015ms
+  render/clustering/elapsed_gpu 0.060ms
+  render/early_mesh_preprocessing/elapsed_cpu 0.002ms
+  render/early_mesh_preprocessing/elapsed_gpu 0.015ms
+  render/main_opaque_pass_3d/elapsed_cpu 0.065ms
+  render/main_opaque_pass_3d/elapsed_gpu 7.244ms
+  render/main_transparent_pass_3d/elapsed_cpu 2.031ms
+  render/main_transparent_pass_3d/elapsed_gpu 3.588ms
+  render/ui/elapsed_cpu 0.009ms
+  render/ui/elapsed_gpu 0.065ms
+  render/upscaling/elapsed_cpu 0.002ms
+  render/upscaling/elapsed_gpu 0.072ms
+SYSTEM CPU  no samples
+
+=== Partial-array B ===
+Command: target/release/castle-fight-client --stress-units 700 --profile --profile-warmup 10 --profile-duration 10 --render-experiment particle-partial-bindings
+Loaded 2360 generated WC3 UI icon binding(s) and 4 cursor atlas binding(s) for Castle Fight 9.27
+client-profile standard_material_bindless=true
+2026-10-01T18:47:25.822323Z  WARN bevy_winit::winit_windows: Can't select current monitor on window creation or cannot find current monitor!
+spawned 1184 Warcraft III doodad/destructable scene instances
+Loaded 29 generated WC3 unit model(s)
+Loaded 24 generated WC3 building model(s)
+Loaded 158 WC3 projectile visual(s), 240 ability visual(s), 15 status visual id(s), and 5 chain-lightning id(s)
+client-profile source=stress-units=700 final_tick=301 builders=2 units=121 buildings=2 corpses=529 projectiles=2
+client-profile paused=false experiment=ParticlePartialBindings
+PROFILE RESULTS
+  elapsed                10.012s
+
+FRAME  samples     451  avg FPS   45.11  1% low   19.84
+  wall               avg   22.167ms  p95   37.398ms  p99   43.141ms  max   64.706ms
+  frame windows (seconds since first captured frame; unsmoothed)
+     0.00.. 1.01s   27 frames  26.61 FPS p95  48.690ms max  64.706ms over 16.67ms 100.0%
+     1.01.. 2.02s   29 frames  28.99 FPS p95  43.141ms max  49.166ms over 16.67ms 100.0%
+     2.02.. 3.00s   32 frames  32.42 FPS p95  39.488ms max  42.231ms over 16.67ms 100.0%
+     3.00.. 4.01s   40 frames  39.76 FPS p95  27.833ms max  29.002ms over 16.67ms 100.0%
+     4.01.. 5.01s   39 frames  38.82 FPS p95  32.835ms max  34.870ms over 16.67ms 100.0%
+     5.01.. 6.01s   45 frames  45.07 FPS p95  27.645ms max  31.726ms over 16.67ms 100.0%
+     6.01.. 7.00s   55 frames  55.38 FPS p95  19.872ms max  21.143ms over 16.67ms  92.7%
+     7.00.. 8.00s   59 frames  59.02 FPS p95  19.583ms max  20.487ms over 16.67ms  55.9%
+     8.00.. 9.00s   59 frames  58.95 FPS p95  20.524ms max  23.575ms over 16.67ms  42.4%
+     9.00..10.00s   66 frames  66.49 FPS p95  16.861ms max  21.215ms over 16.67ms   7.6%
+  slowest frames (start seconds; wall/main/fixed/Update/SpawnScene/PostUpdate ms)
+     0.109s   64.706 /   59.070 /   8.150 /  29.734 /   6.874 /  12.931
+     1.096s   49.166 /   28.569 /   4.868 /   8.348 /   0.347 /  14.382
+     0.061s   48.690 /   43.968 /   4.225 /  23.290 /   1.926 /  14.187
+     0.537s   46.296 /   24.032 /   2.476 /   5.599 /   0.072 /  15.333
+     1.282s   43.141 /   24.181 /   2.437 /   6.467 /   0.278 /  13.220
+  main CPU            15.711ms
+  outside main         6.456ms
+  fixed loop           1.249ms
+  sim step/frame       1.077ms
+  main schedules (avg/frame)
+      First            0.067ms
+      PreUpdate        0.338ms
+      fixed loop       1.335ms
+      Update           4.872ms
+      SpawnScene       0.156ms
+      PostUpdate       8.879ms
+      Last             0.063ms
+
+SIM  ticks       301  range            0..=300  observed  30.06Hz
+  tick total         avg    1.617ms  p95    2.394ms  p99    3.707ms  max   22.801ms
+  topology             0.000ms
+  timers/build         0.093ms
+  production           0.004ms
+  snapshot/spatial     0.191ms
+  abilities            0.112ms
+  targeting            0.092ms
+  combat               0.052ms
+  move intent          0.147ms
+  crowd/collision      0.195ms
+  crowd separate       0.088ms
+  hard collision       0.107ms
+  fallback search      0.000ms
+  ballistic            0.002ms
+  commit               0.066ms
+  checksum             0.651ms
+  fallback calls           0.10/tick
+  fallback checks          0.98/tick
+  fallback max ring           3
+
+3D CPU  samples     452  average/frame
+  total                4.775ms
+  camera               0.009ms
+  model prep           0.148ms
+  entity sync          0.250ms
+  scene setup          0.796ms
+  animations           2.167ms
+  transforms           0.141ms
+  effects              1.098ms
+  overlays/gizmos      0.166ms
+
+RENDER CPU  avg/call, max, calls (overlapping scopes; do not sum)
+  handoff incl wait/extract    6.373ms   22.182ms 452
+  world sync/extract           2.439ms    7.516ms 452
+  extract commands             0.096ms    0.379ms 452
+  prepare assets               0.224ms    1.574ms 452
+  prepare meshes               0.929ms    3.807ms 452
+  create views                 0.103ms    1.373ms 452
+  specialize                   0.086ms    1.073ms 452
+  prepare views                0.125ms    0.897ms 452
+  queue                        0.535ms    3.745ms 452
+  phase sort                   0.881ms    4.184ms 452
+  prepare resources            3.967ms   10.631ms 452
+  render/submit/present       12.245ms   25.477ms 452
+  cleanup                      0.013ms    0.072ms 452
+  post cleanup                 0.033ms    1.222ms 452
+  transparent phase: 6353 items, 2589 draw-function calls (latest sampled frame, all views)
+  transparent submission: 1229 particle / 1360 mesh-or-other calls, 3323 particle instances, largest particle batch 222
+  transparent transitions: 20 distinct pipelines, 2431 pipeline changes, 1891 command changes, 1890 particle/mesh changes (first binding per view excluded)
+  skin palette staging: 15757824 bytes uploaded/frame (latest sample)
+  particle queue: 3323 candidates, 3323 queued, 0 zero-alpha rejects, 0 frustum rejects; texture slots 8/8 populated/bound (latest sample, all views)
+  particle texture groups: 0 created, 0 reused (latest frame)
+  particle overlap audit: 0 safe moves, 0 overlap rejects, 0 unknown barriers (latest frame)
+  particle mesh prefix: 0 compatible batches, 0 fallback batches (latest frame)
+
+COLD SCENE REQUESTS  new roots, not completed spawns; template entity counts are estimates
+     18 roots  peak/frame   15  template   80 entities  first  2.076s  wc3/units/models/units__human__rifleman__rifleman.gltf#Scene0
+    120 roots  peak/frame   39  template    7 entities  first  0.037s  wc3/effects/models/abilities__spells__human__thunderclap__thunderclaptarget.gltf#Scene0
+    149 roots  peak/frame  100  template    5 entities  first  0.097s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodrifleman.gltf#Scene0
+    100 roots  peak/frame   41  template    5 entities  first  0.097s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodknight.gltf#Scene0
+     50 roots  peak/frame   32  template    5 entities  first  0.203s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodmortarteam.gltf#Scene0
+     11 roots  peak/frame    9  template   14 entities  first  2.076s  wc3/effects/models/abilities__weapons__cannontowermissile__cannontowermissile.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.097s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodfootman.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.097s  wc3/units/models/objects__spawnmodels__nightelf__nightelfblood__nightelfbloodarcher.gltf#Scene0
+
+SCENE  entities=90756 meshes=8561 visible=4885 skinned=5785 dynamic_bounds=5785 particles=3188 transparent_visible=6216 no_auto_batch=0
+  mesh_assets=3065 material_assets=244 visible_mesh_material_pairs=368 animation_players=1121 animated_texture_tracks=0 joint_references=257462 unique_joints=35054
+  effect reserves: 18 templates, 1024 planned roots, 0 still awaiting creation, 1024 prepared in total
+  window=3840x2160 present=AutoNoVsync visible=true
+  camera_position=Vec3(0.0, 3394.0002, 3060.0) camera_forward=Dir3(Vec3(-0.0, -0.7270132, -0.6866236))
+  collapsed_visible=0 (zero determinant; candidates for geoset visibility)
+
+RENDER PASSES  recent diagnostic average (not whole capture)
+  render/bin_unpacking/elapsed_cpu 0.006ms
+  render/bin_unpacking/elapsed_gpu 0.093ms
+  render/clustering/elapsed_cpu 0.015ms
+  render/clustering/elapsed_gpu 0.061ms
+  render/early_mesh_preprocessing/elapsed_cpu 0.002ms
+  render/early_mesh_preprocessing/elapsed_gpu 0.016ms
+  render/main_opaque_pass_3d/elapsed_cpu 0.082ms
+  render/main_opaque_pass_3d/elapsed_gpu 7.250ms
+  render/main_transparent_pass_3d/elapsed_cpu 1.830ms
+  render/main_transparent_pass_3d/elapsed_gpu 3.623ms
+  render/ui/elapsed_cpu 0.009ms
+  render/ui/elapsed_gpu 0.065ms
+  render/upscaling/elapsed_cpu 0.002ms
+  render/upscaling/elapsed_gpu 0.071ms
+SYSTEM CPU  no samples
+
+=== Mesh-prefix + partial arrays B ===
+Command: target/release/castle-fight-client --stress-units 700 --profile --profile-warmup 10 --profile-duration 10 --render-experiment particle-shared-mesh-partial-bindings
+Loaded 2360 generated WC3 UI icon binding(s) and 4 cursor atlas binding(s) for Castle Fight 9.27
+client-profile standard_material_bindless=true
+2026-10-01T18:47:46.496071Z  WARN bevy_winit::winit_windows: Can't select current monitor on window creation or cannot find current monitor!
+spawned 1184 Warcraft III doodad/destructable scene instances
+Loaded 29 generated WC3 unit model(s)
+Loaded 24 generated WC3 building model(s)
+Loaded 158 WC3 projectile visual(s), 240 ability visual(s), 15 status visual id(s), and 5 chain-lightning id(s)
+client-profile source=stress-units=700 final_tick=300 builders=2 units=121 buildings=2 corpses=529 projectiles=2
+client-profile paused=false experiment=ParticleSharedMeshPartialBindings
+PROFILE RESULTS
+  elapsed                10.016s
+
+FRAME  samples     397  avg FPS   39.71  1% low   19.96
+  wall               avg   25.185ms  p95   39.509ms  p99   46.229ms  max   59.603ms
+  frame windows (seconds since first captured frame; unsmoothed)
+     0.00.. 1.04s   29 frames  27.86 FPS p95  47.878ms max  59.603ms over 16.67ms  96.6%
+     1.04.. 2.02s   26 frames  26.57 FPS p95  45.946ms max  46.676ms over 16.67ms 100.0%
+     2.02.. 3.02s   29 frames  28.90 FPS p95  39.544ms max  39.581ms over 16.67ms 100.0%
+     3.02.. 4.02s   36 frames  35.95 FPS p95  32.661ms max  35.065ms over 16.67ms 100.0%
+     4.02.. 5.02s   38 frames  38.19 FPS p95  30.639ms max  31.973ms over 16.67ms 100.0%
+     5.02.. 6.00s   43 frames  43.81 FPS p95  26.383ms max  28.846ms over 16.67ms  97.7%
+     6.00.. 7.00s   45 frames  44.94 FPS p95  24.918ms max  25.177ms over 16.67ms 100.0%
+     7.00.. 8.01s   46 frames  45.72 FPS p95  25.115ms max  25.603ms over 16.67ms 100.0%
+     8.01.. 9.01s   51 frames  50.88 FPS p95  22.853ms max  23.960ms over 16.67ms  98.0%
+     9.01..10.00s   54 frames  54.68 FPS p95  21.610ms max  22.163ms over 16.67ms  85.2%
+  slowest frames (start seconds; wall/main/fixed/Update/SpawnScene/PostUpdate ms)
+     0.117s   59.603 /   55.886 /   7.712 /  26.296 /   7.744 /  13.046
+     0.069s   47.878 /   43.002 /   4.333 /  22.411 /   2.187 /  13.324
+     1.041s   46.676 /   25.093 /   2.591 /   8.863 /   0.144 /  12.915
+     0.871s   46.229 /   23.186 /   2.687 /   5.679 /   0.205 /  14.152
+     1.429s   45.946 /   25.775 /   2.712 /   7.138 /   0.412 /  15.024
+  main CPU            18.482ms
+  outside main         6.703ms
+  fixed loop           1.538ms
+  sim step/frame       1.324ms
+  main schedules (avg/frame)
+      First            0.109ms
+      PreUpdate        0.443ms
+      fixed loop       1.663ms
+      Update           5.590ms
+      SpawnScene       0.190ms
+      PostUpdate      10.401ms
+      Last             0.086ms
+
+SIM  ticks       300  range            0..=299  observed  29.95Hz
+  tick total         avg    1.753ms  p95    2.519ms  p99    3.590ms  max   20.632ms
+  topology             0.000ms
+  timers/build         0.096ms
+  production           0.004ms
+  snapshot/spatial     0.197ms
+  abilities            0.139ms
+  targeting            0.103ms
+  combat               0.064ms
+  move intent          0.152ms
+  crowd/collision      0.218ms
+  crowd separate       0.107ms
+  hard collision       0.111ms
+  fallback search      0.000ms
+  ballistic            0.002ms
+  commit               0.071ms
+  checksum             0.693ms
+  fallback calls           0.10/tick
+  fallback checks          0.98/tick
+  fallback max ring           3
+
+3D CPU  samples     398  average/frame
+  total                5.469ms
+  camera               0.011ms
+  model prep           0.179ms
+  entity sync          0.337ms
+  scene setup          0.957ms
+  animations           2.426ms
+  transforms           0.152ms
+  effects              1.197ms
+  overlays/gizmos      0.209ms
+
+RENDER CPU  avg/call, max, calls (overlapping scopes; do not sum)
+  handoff incl wait/extract    6.604ms   22.889ms 398
+  world sync/extract           2.919ms    8.630ms 398
+  extract commands             0.108ms    0.311ms 398
+  prepare assets               0.261ms    1.606ms 398
+  prepare meshes               1.109ms    3.802ms 398
+  create views                 0.117ms    0.900ms 398
+  specialize                   0.097ms    1.088ms 398
+  prepare views                0.176ms    1.542ms 398
+  queue                        0.615ms    3.032ms 398
+  phase sort                   0.949ms    3.498ms 398
+  prepare resources            4.734ms   13.288ms 397
+  render/submit/present       13.443ms   23.487ms 397
+  cleanup                      0.017ms    0.294ms 398
+  post cleanup                 0.046ms    1.540ms 398
+  transparent phase: 6431 items, 2612 draw-function calls (latest sampled frame, all views)
+  transparent submission: 1251 particle / 1361 mesh-or-other calls, 3400 particle instances, largest particle batch 230
+  transparent transitions: 22 distinct pipelines, 2456 pipeline changes, 1947 command changes, 1946 particle/mesh changes (first binding per view excluded)
+  skin palette staging: 15757824 bytes uploaded/frame (latest sample)
+  particle queue: 3400 candidates, 3400 queued, 0 zero-alpha rejects, 0 frustum rejects; texture slots 8/8 populated/bound (latest sample, all views)
+  particle texture groups: 0 created, 1 reused (latest frame)
+  particle overlap audit: 0 safe moves, 0 overlap rejects, 0 unknown barriers (latest frame)
+  particle mesh prefix: 1251 compatible batches, 0 fallback batches (latest frame)
+
+COLD SCENE REQUESTS  new roots, not completed spawns; template entity counts are estimates
+     18 roots  peak/frame   15  template   80 entities  first  2.080s  wc3/units/models/units__human__rifleman__rifleman.gltf#Scene0
+    120 roots  peak/frame   39  template    7 entities  first  0.052s  wc3/effects/models/abilities__spells__human__thunderclap__thunderclaptarget.gltf#Scene0
+    149 roots  peak/frame  100  template    5 entities  first  0.109s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodrifleman.gltf#Scene0
+    100 roots  peak/frame   41  template    5 entities  first  0.109s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodknight.gltf#Scene0
+     50 roots  peak/frame   32  template    5 entities  first  0.204s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodmortarteam.gltf#Scene0
+     11 roots  peak/frame    9  template   14 entities  first  2.080s  wc3/effects/models/abilities__weapons__cannontowermissile__cannontowermissile.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.109s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodfootman.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.109s  wc3/units/models/objects__spawnmodels__nightelf__nightelfblood__nightelfbloodarcher.gltf#Scene0
+
+SCENE  entities=90751 meshes=8556 visible=4879 skinned=5785 dynamic_bounds=5785 particles=3259 transparent_visible=6281 no_auto_batch=0
+  mesh_assets=3060 material_assets=244 visible_mesh_material_pairs=368 animation_players=1121 animated_texture_tracks=0 joint_references=257462 unique_joints=35054
+  effect reserves: 18 templates, 1024 planned roots, 0 still awaiting creation, 1024 prepared in total
+  window=3840x2160 present=AutoNoVsync visible=true
+  camera_position=Vec3(0.0, 3394.0002, 3060.0) camera_forward=Dir3(Vec3(-0.0, -0.7270132, -0.6866236))
+  collapsed_visible=0 (zero determinant; candidates for geoset visibility)
+
+RENDER PASSES  recent diagnostic average (not whole capture)
+  render/bin_unpacking/elapsed_cpu 0.007ms
+  render/bin_unpacking/elapsed_gpu 0.087ms
+  render/clustering/elapsed_cpu 0.022ms
+  render/clustering/elapsed_gpu 0.059ms
+  render/early_mesh_preprocessing/elapsed_cpu 0.003ms
+  render/early_mesh_preprocessing/elapsed_gpu 0.015ms
+  render/main_opaque_pass_3d/elapsed_cpu 0.099ms
+  render/main_opaque_pass_3d/elapsed_gpu 7.313ms
+  render/main_transparent_pass_3d/elapsed_cpu 2.528ms
+  render/main_transparent_pass_3d/elapsed_gpu 3.683ms
+  render/ui/elapsed_cpu 0.013ms
+  render/ui/elapsed_gpu 0.065ms
+  render/upscaling/elapsed_cpu 0.003ms
+  render/upscaling/elapsed_gpu 0.071ms
+SYSTEM CPU  no samples
+
+=== Baseline C ===
+Command: target/release/castle-fight-client --stress-units 700 --profile --profile-warmup 10 --profile-duration 10
+Loaded 2360 generated WC3 UI icon binding(s) and 4 cursor atlas binding(s) for Castle Fight 9.27
+client-profile standard_material_bindless=true
+2026-10-01T18:48:07.215074Z  WARN bevy_winit::winit_windows: Can't select current monitor on window creation or cannot find current monitor!
+spawned 1184 Warcraft III doodad/destructable scene instances
+Loaded 29 generated WC3 unit model(s)
+Loaded 24 generated WC3 building model(s)
+Loaded 158 WC3 projectile visual(s), 240 ability visual(s), 15 status visual id(s), and 5 chain-lightning id(s)
+client-profile source=stress-units=700 final_tick=301 builders=2 units=121 buildings=2 corpses=529 projectiles=2
+client-profile paused=false experiment=Baseline
+PROFILE RESULTS
+  elapsed                10.003s
+
+FRAME  samples     450  avg FPS   45.05  1% low   25.10
+  wall               avg   22.197ms  p95   31.571ms  p99   35.907ms  max   45.633ms
+  frame windows (seconds since first captured frame; unsmoothed)
+     0.00.. 1.01s   33 frames  32.69 FPS p95  42.732ms max  45.633ms over 16.67ms 100.0%
+     1.01.. 2.01s   35 frames  35.01 FPS p95  34.932ms max  38.819ms over 16.67ms 100.0%
+     2.01.. 3.01s   37 frames  37.14 FPS p95  30.826ms max  30.963ms over 16.67ms 100.0%
+     3.01.. 4.01s   39 frames  38.75 FPS p95  30.302ms max  30.573ms over 16.67ms 100.0%
+     4.01.. 5.02s   42 frames  41.76 FPS p95  27.221ms max  28.707ms over 16.67ms  97.6%
+     5.02.. 6.01s   42 frames  42.32 FPS p95  28.424ms max  35.907ms over 16.67ms 100.0%
+     6.01.. 7.00s   47 frames  47.32 FPS p95  24.190ms max  25.687ms over 16.67ms 100.0%
+     7.00.. 8.02s   54 frames  53.37 FPS p95  20.645ms max  21.584ms over 16.67ms  96.3%
+     8.02.. 9.00s   58 frames  58.90 FPS p95  18.808ms max  21.927ms over 16.67ms  62.1%
+     9.00.. 9.99s   63 frames  63.75 FPS p95  17.452ms max  22.109ms over 16.67ms  11.1%
+  slowest frames (start seconds; wall/main/fixed/Update/SpawnScene/PostUpdate ms)
+     0.065s   45.633 /   42.919 /  14.752 /  15.747 /   2.063 /   9.948
+     0.000s   42.732 /   38.862 /  22.940 /   4.631 /   1.220 /   9.754
+     1.402s   38.819 /   30.441 /   1.990 /   4.996 /   0.053 /  22.430
+     0.607s   36.083 /   24.119 /   2.441 /   6.123 /   0.080 /  14.696
+     5.507s   35.907 /   25.364 /   2.081 /   8.584 /   0.227 /  13.940
+  main CPU            15.056ms
+  outside main         7.140ms
+  fixed loop           1.255ms
+  sim step/frame       1.079ms
+  main schedules (avg/frame)
+      First            0.064ms
+      PreUpdate        0.324ms
+      fixed loop       1.344ms
+      Update           4.627ms
+      SpawnScene       0.146ms
+      PostUpdate       8.492ms
+      Last             0.060ms
+
+SIM  ticks       301  range            0..=300  observed  30.09Hz
+  tick total         avg    1.616ms  p95    2.256ms  p99    3.157ms  max   22.372ms
+  topology             0.000ms
+  timers/build         0.085ms
+  production           0.004ms
+  snapshot/spatial     0.183ms
+  abilities            0.122ms
+  targeting            0.093ms
+  combat               0.062ms
+  move intent          0.138ms
+  crowd/collision      0.189ms
+  crowd separate       0.085ms
+  hard collision       0.103ms
+  fallback search      0.000ms
+  ballistic            0.002ms
+  commit               0.065ms
+  checksum             0.663ms
+  fallback calls           0.10/tick
+  fallback checks          0.98/tick
+  fallback max ring           3
+
+3D CPU  samples     451  average/frame
+  total                4.535ms
+  camera               0.010ms
+  model prep           0.161ms
+  entity sync          0.217ms
+  scene setup          0.776ms
+  animations           1.985ms
+  transforms           0.138ms
+  effects              1.069ms
+  overlays/gizmos      0.179ms
+
+RENDER CPU  avg/call, max, calls (overlapping scopes; do not sum)
+  handoff incl wait/extract    7.055ms   15.849ms 451
+  world sync/extract           2.167ms    7.051ms 451
+  extract commands             0.091ms    0.810ms 451
+  prepare assets               0.202ms    1.012ms 451
+  prepare meshes               0.881ms    3.766ms 451
+  create views                 0.090ms    1.036ms 451
+  specialize                   0.085ms    1.162ms 451
+  prepare views                0.135ms    1.483ms 451
+  queue                        0.504ms    2.521ms 451
+  phase sort                   0.859ms    2.679ms 451
+  prepare resources            3.919ms    8.804ms 450
+  render/submit/present       12.868ms   27.582ms 451
+  cleanup                      0.011ms    0.027ms 451
+  post cleanup                 0.024ms    0.253ms 451
+  transparent phase: 6366 items, 2600 draw-function calls (latest sampled frame, all views)
+  transparent submission: 1259 particle / 1341 mesh-or-other calls, 3357 particle instances, largest particle batch 234
+  transparent transitions: 21 distinct pipelines, 2430 pipeline changes, 1904 command changes, 1902 particle/mesh changes (first binding per view excluded)
+  skin palette staging: 15757824 bytes uploaded/frame (latest sample)
+  particle queue: 3357 candidates, 3357 queued, 0 zero-alpha rejects, 0 frustum rejects; texture slots 8/64 populated/bound (latest sample, all views)
+  particle texture groups: 0 created, 1 reused (latest frame)
+  particle overlap audit: 0 safe moves, 0 overlap rejects, 0 unknown barriers (latest frame)
+  particle mesh prefix: 0 compatible batches, 0 fallback batches (latest frame)
+
+COLD SCENE REQUESTS  new roots, not completed spawns; template entity counts are estimates
+     18 roots  peak/frame   15  template   80 entities  first  2.052s  wc3/units/models/units__human__rifleman__rifleman.gltf#Scene0
+    120 roots  peak/frame   39  template    7 entities  first  0.037s  wc3/effects/models/abilities__spells__human__thunderclap__thunderclaptarget.gltf#Scene0
+    149 roots  peak/frame  100  template    5 entities  first  0.105s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodrifleman.gltf#Scene0
+    100 roots  peak/frame   41  template    5 entities  first  0.105s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodknight.gltf#Scene0
+     50 roots  peak/frame   32  template    5 entities  first  0.168s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodmortarteam.gltf#Scene0
+     11 roots  peak/frame    9  template   14 entities  first  2.052s  wc3/effects/models/abilities__weapons__cannontowermissile__cannontowermissile.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.105s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodfootman.gltf#Scene0
+     50 roots  peak/frame   50  template    0 entities  first  0.105s  wc3/units/models/objects__spawnmodels__nightelf__nightelfblood__nightelfbloodarcher.gltf#Scene0
+
+SCENE  entities=90752 meshes=8557 visible=4879 skinned=5785 dynamic_bounds=5785 particles=3197 transparent_visible=6220 no_auto_batch=0
+  mesh_assets=3061 material_assets=244 visible_mesh_material_pairs=368 animation_players=1121 animated_texture_tracks=0 joint_references=257462 unique_joints=35054
+  effect reserves: 18 templates, 1024 planned roots, 0 still awaiting creation, 1024 prepared in total
+  window=3840x2160 present=AutoNoVsync visible=true
+  camera_position=Vec3(0.0, 3394.0002, 3060.0) camera_forward=Dir3(Vec3(-0.0, -0.7270132, -0.6866236))
+  collapsed_visible=0 (zero determinant; candidates for geoset visibility)
+
+RENDER PASSES  recent diagnostic average (not whole capture)
+  render/bin_unpacking/elapsed_cpu 0.007ms
+  render/bin_unpacking/elapsed_gpu 0.084ms
+  render/clustering/elapsed_cpu 0.014ms
+  render/clustering/elapsed_gpu 0.059ms
+  render/early_mesh_preprocessing/elapsed_cpu 0.002ms
+  render/early_mesh_preprocessing/elapsed_gpu 0.016ms
+  render/main_opaque_pass_3d/elapsed_cpu 0.067ms
+  render/main_opaque_pass_3d/elapsed_gpu 6.090ms
+  render/main_transparent_pass_3d/elapsed_cpu 1.758ms
+  render/main_transparent_pass_3d/elapsed_gpu 3.325ms
+  render/ui/elapsed_cpu 0.008ms
+  render/ui/elapsed_gpu 0.065ms
+  render/upscaling/elapsed_cpu 0.002ms
+  render/upscaling/elapsed_gpu 0.072ms
+SYSTEM CPU  no samples
+
+=== Comparison summary ===
+
+Twelve native captures completed with frame reports and no GPU validation errors. Each recorded a visible 3840x2160 AutoNoVsync window and ended with 121 living units / 529 corpses. No capture sustains 700 living attackers throughout.
+
+Per-capture timings (FPS, mean/p95/p99/worst milliseconds):
+Corrected mesh-prefix validation capture      36.24  27.593  41.291  56.935  60.819
+Baseline A                                    43.05  23.230  38.365  54.935  71.590
+Shared-view control                           45.91  21.780  36.029  41.002  53.324
+Mesh-prefix A                                 45.25  22.100  33.955  39.549  48.872
+Partial-array control                         45.56  21.949  32.222  38.890  48.771
+Mesh-prefix + partial arrays A                46.13  21.676  37.411  48.647  55.227
+Baseline B                                    45.76  21.853  34.011  42.820  47.125
+Shared-view B                                 40.67  24.586  41.292  47.690  50.882
+Mesh-prefix B                                 43.90  22.781  36.276  40.697  42.785
+Partial-array B                               45.11  22.167  37.398  43.141  64.706
+Mesh-prefix + partial arrays B                39.71  25.185  39.509  46.229  59.603
+Baseline C                                    45.05  22.197  31.571  35.907  45.633
+
+Planned comparison series means, arithmetic mean of frame time; FPS = 1000 / mean frame time:
+Baseline                       3 captures   44.59 FPS  22.4267 ms
+Shared view                    2 captures   43.14 FPS  23.1830 ms
+Mesh prefix                    2 captures   44.56 FPS  22.4405 ms
+Partial arrays                 2 captures   45.34 FPS  22.0580 ms
+Mesh prefix + partial arrays   2 captures   42.68 FPS  23.4305 ms
+
+Mesh prefix versus baseline: +0.062% frame time, effectively unchanged. Combined versus partial-only: +6.222% frame time. Shared-view A/B varies substantially, so gains against its slow repeat do not establish a repeatable improvement. The first combined gain did not repeat.
+The initial validation capture is listed separately and retained: 36.24 FPS / 27.593 ms. Including it with the two planned mesh-prefix captures gives 24.158 ms; it provides no evidence of a gain.
+
+Disposition: keep particle-shared-mesh and particle-shared-mesh-partial-bindings opt-in. Default behavior remains unchanged. The 60 FPS throughout target remains unmet; do not expand this prefix prototype without new submission/driver evidence. Compact StandardMaterial bindings remain a separate, unimplemented part of the first candidate.
+Validation scope: formatting, Clippy with warnings denied, release build, native timing/resource-binding validation. No tests or image inspection. The measured storage-buffer device does not verify uniform-buffer, motion, morph, unknown-layout or unsupported-array fallbacks on other devices, or visual parity.

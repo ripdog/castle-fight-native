@@ -1,6 +1,6 @@
 # Rendering performance investigation — consolidated
 
-Last consolidated: 2026-10-01. Current target: a faithful 60 FPS presentation at the original
+Last consolidated: 2026-10-02. Current target: a faithful 60 FPS presentation at the original
 game's roughly 700-unit population.
 
 This is the canonical renderer-performance note. It intentionally keeps only benchmark history,
@@ -11,6 +11,7 @@ work. Detailed profiler output remains in the raw capture files:
 - [2026-09-28 combat captures](rendering-combat-performance-2026-09-28-results.txt)
 - [2026-09-29 raw captures](rendering-performance-2026-09-29-results.txt)
 - [2026-10-01 raw captures](rendering-performance-2026-10-01-results.txt)
+- [2026-10-02 binding-prefix captures](rendering-performance-2026-10-02-results.txt)
 
 Do not append long investigation diaries here. When a new optimization is measured, add one row to
 the benchmark ledger, update the current conclusions/next work if the result changes them, and keep
@@ -75,24 +76,35 @@ captures were recorded. The raw files above retain every individual run and ever
 | — | Conservative overlap regrouping | prototype, small draw reduction | 700 combat | 42.44 / 23.561 | 43.69 / 22.887 | +2.9% | 2026-10-01 follow-up raw |
 | — | StandardMaterial slabs 16 / 32 | rejected default change | 700 combat | 44.12 / 22.666; 42.93 / 23.294 | 44.30 / 22.575 timed-reserve mean | no repeatable gain | 2026-10-01 follow-up raw |
 | — | Retained alpha-slot ownership and submission census | shipped, a5010e4 / 4f91fd1 | 700 combat | 44.90 / 22.274 | — | correctness/attribution; no gain claimed | 2026-10-01 discovery raw |
+| — | Compatible particle/model mesh-layout prefix, A/B mean | implemented, opt-in; no repeatable gain | 700 combat | 44.56 / 22.441 | 44.59 / 22.427 default A/B/C mean | +0.06% | 2026-10-02 raw |
+| — | Mesh-layout prefix + partial particle arrays, A/B mean | opt-in; initial gain did not repeat | 700 combat | 42.68 / 23.431 | 45.34 / 22.058 partial-only A/B mean | +6.2% | 2026-10-02 raw |
 
 The progression rows are not one continuous synthetic benchmark: fixture changes are explicit above,
 and each percentage is relative only to its recorded control. In particular, the h02W texture test
 must not be compared numerically with combat runs. The two changes in ba3d546 were measured with
 independent same-binary legacy switches; their gains are not additive.
 
+The 2026-10-02 means cover the planned control series: three default and two of each experiment.
+Their FPS values are reciprocals of mean frame time. An additional initial mesh-prefix validation
+capture reached only 36.24 FPS / 27.593 ms; it is retained in the raw file separately from the planned
+series and supplies no evidence of a gain. Every capture, including slow repeats, is retained.
+
 ## Current conclusions
 
-The target is not met. After correcting retained alpha-slot ownership, a fresh default capture
-reaches 45.62 FPS / 21.919 ms and the later repeat reaches 44.90 FPS / 22.274 ms (p95 34.680 ms,
-p99 39.857 ms, worst 41.471 ms). An intervening same-binary capture reaches only 36.31 FPS /
-27.539 ms; retain that outlier and do not infer a throughput gain from the ownership fix or profiler
-counters. The earlier same-binary bracketing comparison with prepared reserves averages
-43.69 FPS / 22.887 ms, versus 43.24 FPS / 23.126 ms with reserve preparation disabled. The earlier
-46.8 FPS series is historical; compare each optimization with its own contemporary control. The latest partial particle
-array capture reaches 45.94 FPS / 21.767 ms, and remains opt-in pending exact parity and broader device
-validation. A final readiness-guard confirmation reaches 43.98 FPS / 22.736 ms with a 47.045 ms
-worst frame and all 1,024 reserves prepared. Native single-texture fallback successfully retained/reused all eight sampled texture
+The target is not met. The latest same-binary default captures reach 43.05–45.76 FPS /
+21.853–23.230 ms, averaging 22.427 ms. Their p95 is 31.571–38.365 ms, p99 35.907–54.935 ms,
+and worst frame 45.633–71.590 ms. Compatible particle/model mesh-layout prefixes average 22.441 ms
+in the planned A/B captures, effectively unchanged (+0.06%). Shared-view controls vary from 21.780
+to 24.586 ms, so the first mesh-prefix regression versus shared-view and later gain are inconclusive.
+The combined mesh-prefix/partial-array path varies from 21.676 to 25.185 ms and averages 6.2% slower
+than partial arrays alone. Keep both new controls opt-in; no default improvement is established.
+
+The earlier prepared-reserve comparison averages 43.69 FPS / 22.887 ms versus 43.24 FPS /
+23.126 ms with reserve preparation disabled. Its partial-array capture reaches 45.94 FPS /
+21.767 ms; the new partial-only repeats average 22.058 ms. Partial arrays remain opt-in pending
+broader device/fidelity validation. Earlier 46.8 FPS captures are historical; compare each change
+with its contemporary controls. The alpha-slot ownership fix is a correctness change, with no
+throughput gain claimed. Native single-texture fallback retained/reused all eight sampled texture
 bindings; one device/path does not establish complete fallback coverage.
 
 Prepared hierarchies remove cold resurrection, Defend and missile roots from the first activation
@@ -138,10 +150,19 @@ pipeline; cached texture-group creation alone cannot eliminate this cost. A sour
 initial roster's 12 unique models finds 48 materials, all with only a base-color texture. That
 supports investigating compact faithful material bindings, while preserving lighting, alpha modes,
 team layers, skinning and runtime material features. It is not a measured FPS improvement.
-The existing shared-view prototype keeps PBR groups 0/1 but puts particle textures in group 2,
-where models bind mesh/skinning data. Preserving that compatible mesh-layout prefix and moving
-particle textures to group 3 is another submission candidate. It needs explicit handling of
-model-only, skinned, motion, morph and uniform-buffer layouts; it is not implemented or measured.
+The new `particle-shared-mesh` experiment keeps compatible PBR groups 0/1/2 and moves particle
+textures to group 3. It selects final prepared draw representatives by view + particle item identity,
+matches exact engine layouts, and resolves current mesh bindings through Bevy's normal command.
+It supports model, lightmapped, skin/motion and morph storage layouts; unsupported uniform-offset
+paths, missing/unknown layouts and compiling variants retain the shared-view draw. No skin identity,
+palette, particle math, blending, sorting or batch membership changes. All 12 native captures finish
+without GPU validation errors; the new paths use 1,198–1,315 compatible particle batches and zero
+fallback batches in their sampled final frames. Other device/layout paths and visual parity remain
+unverified. This implements the binding-prefix part of the first candidate, not a compact replacement
+for StandardMaterial. The planned mesh-prefix captures raise prepare-resources CPU time to
+4.312–4.496 ms from 3.873–3.965 ms in defaults; transparent-pass CPU samples also show no repeatable
+reduction. These overlapping timings and different sampled frames do not establish causal costs,
+but the whole-frame measurements give no reason to promote or expand this prototype.
 
 A 99 Hz CPU sample attributes 16.74% of sampled cycles to the largest animation-target evaluation
 symbol, 7.34% to descendant propagation, 3.52% to skinned bounds, 3.14% to wgpu render-pass encoding
@@ -168,10 +189,11 @@ material-layer copies and actual vertex invocations; they predict neither GPU sa
 ## Next measured work
 
 1. Reduce faithful transparent submission/resource tracking cost, prioritizing compact material
-   bindings and compatible particle/model layout prefixes given the base-color-only roster audit
-   and near-per-draw pipeline changes. The current 32-item overlap
-   prototype has limited value; measure whether larger safely bounded opportunities exist before
-   expanding it. Keep potentially overlapping precedence and unknown-draw barriers.
+   bindings given the base-color-only roster audit and near-per-draw pipeline changes. The measured
+   compatible particle/model layout-prefix prototype has no repeatable whole-frame gain; keep it
+   opt-in and avoid expanding it without new driver/submission evidence. The 32-item overlap
+   prototype also has limited value; measure larger safely bounded opportunities before expanding
+   it. Keep potentially overlapping precedence and unknown-draw barriers.
 2. Validate partial particle binding arrays across unsupported-feature/device paths and exact image
    parity when visual verification is requested; promote only after that evidence exists.
 3. Compile immutable WC3 node/material/event metadata once per source. Cache selected sequence
