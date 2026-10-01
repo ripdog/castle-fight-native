@@ -12,7 +12,10 @@ use std::{collections::HashMap, mem::size_of, num::NonZeroU32};
 
 use bevy::{
     asset::AssetId,
-    camera::primitives::{Frustum, Sphere},
+    camera::{
+        primitives::{Aabb, Frustum, Sphere},
+        visibility::NoFrustumCulling,
+    },
     core_pipeline::core_3d::{CORE_3D_DEPTH_FORMAT, Transparent3d, TransparentSortingInfo3d},
     ecs::{
         query::ROQueryItem,
@@ -22,24 +25,28 @@ use bevy::{
         },
     },
     mesh::VertexBufferLayout,
-    pbr::{MeshPipelineViewLayoutKey, MeshPipelineViewLayouts, MeshViewBindGroup, ViewKeyCache},
+    pbr::{
+        DrawMaterial, MeshPipelineViewLayoutKey, MeshPipelineViewLayouts, MeshViewBindGroup,
+        ViewKeyCache,
+    },
     prelude::*,
     render::{
         Extract, ExtractSchedule, Render, RenderApp, RenderStartup, RenderSystems,
         render_asset::RenderAssets,
         render_phase::{
             AddRenderCommand, DrawFunctions, PhaseItem, PhaseItemExtraIndex, RenderCommand,
-            RenderCommandResult, SetItemPipeline, TrackedRenderPass, ViewSortedRenderPhases,
+            RenderCommandResult, SetItemPipeline, SortedRenderPhase, TrackedRenderPass,
+            ViewSortedRenderPhases,
         },
         render_resource::{
             BindGroup, BindGroupEntries, BindGroupLayoutDescriptor, BindGroupLayoutEntries,
             BlendComponent, BlendFactor, BlendOperation, BlendState, BufferUsages,
             ColorTargetState, ColorWrites, CompareFunction, DepthBiasState, DepthStencilState,
             FragmentState, MultisampleState, PipelineCache, PrimitiveState, PrimitiveTopology,
-            RawBufferVec, RenderPipelineDescriptor, SamplerBindingType, ShaderStages,
+            RawBufferVec, RenderPipelineDescriptor, SamplerBindingType, SamplerId, ShaderStages,
             SpecializedRenderPipeline, SpecializedRenderPipelines, StencilFaceState, StencilState,
-            TextureFormat, TextureSampleType, VertexAttribute, VertexFormat, VertexState,
-            VertexStepMode, WgpuFeatures,
+            TextureFormat, TextureSampleType, TextureViewId, VertexAttribute, VertexFormat,
+            VertexState, VertexStepMode, WgpuFeatures,
             binding_types::{sampler, texture_2d, uniform_buffer},
         },
         renderer::{RenderDevice, RenderQueue},
@@ -53,7 +60,10 @@ use bytemuck::{Pod, Zeroable};
 
 use crate::{
     render_audit::RenderExperiment,
-    wc3_effects::{Wc3BillboardParticleRenderData, Wc3BillboardParticles, Wc3ParticleBlendMode},
+    wc3_effects::{
+        Wc3AnimatedAlphaMaterial, Wc3BillboardParticleRenderData, Wc3BillboardParticles,
+        Wc3ParticleBlendMode, Wc3RibbonTrail, Wc3TeamColorMaterial,
+    },
 };
 
 const WC3_PARTICLE_SHADER_PATH: &str = "shaders/wc3_particles.wgsl";
@@ -72,6 +82,7 @@ impl Plugin for Wc3ParticleRenderPlugin {
         };
         render_app
             .init_resource::<ExtractedWc3Particles>()
+            .init_resource::<Wc3TransparentCoverage>()
             .init_resource::<Wc3ParticleGpuBuffer>()
             .init_resource::<Wc3ParticleTextureBindGroups>()
             .init_resource::<Wc3ParticleQueueStats>()
@@ -82,7 +93,10 @@ impl Plugin for Wc3ParticleRenderPlugin {
             )
             .init_resource::<SpecializedRenderPipelines<Wc3ParticlePipeline>>()
             .add_render_command::<Transparent3d, DrawWc3BillboardParticles>()
-            .add_systems(ExtractSchedule, extract_wc3_particles)
+            .add_systems(
+                ExtractSchedule,
+                (extract_wc3_particles, extract_transparent_coverage),
+            )
             .add_systems(Render, queue_wc3_particles.in_set(RenderSystems::Queue))
             .add_systems(
                 Render,
@@ -202,7 +216,40 @@ impl Default for Wc3ParticleGpuBuffer {
 }
 
 #[derive(Resource, Default)]
-struct Wc3ParticleTextureBindGroups(HashMap<Entity, BindGroup>);
+struct Wc3ParticleTextureBindGroups(HashMap<Entity, CachedParticleTextureBindGroup>);
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct ParticleTextureBinding {
+    view: TextureViewId,
+    sampler: SamplerId,
+}
+
+impl From<&GpuImage> for ParticleTextureBinding {
+    fn from(image: &GpuImage) -> Self {
+        Self {
+            view: image.texture_view.id(),
+            sampler: image.sampler.id(),
+        }
+    }
+}
+
+struct CachedParticleTextureBindGroup {
+    resources: Vec<ParticleTextureBinding>,
+    bound_count: usize,
+    fallback: ParticleTextureBinding,
+    bind_group: BindGroup,
+}
+
+fn particle_bindings_match(
+    cached: &[ParticleTextureBinding],
+    cached_bound_count: usize,
+    resources: impl ExactSizeIterator<Item = ParticleTextureBinding>,
+    bound_count: usize,
+) -> bool {
+    cached_bound_count == bound_count
+        && cached.len() == resources.len()
+        && cached.iter().copied().eq(resources)
+}
 
 #[derive(Resource, Clone, Copy, Default)]
 pub(crate) struct Wc3ParticleQueueStats {
@@ -212,6 +259,11 @@ pub(crate) struct Wc3ParticleQueueStats {
     pub(crate) outside: usize,
     pub(crate) populated_slots: usize,
     pub(crate) bound_slots: usize,
+    pub(crate) texture_groups_created: usize,
+    pub(crate) texture_groups_reused: usize,
+    pub(crate) reorder_moves: usize,
+    pub(crate) reorder_overlap_rejects: usize,
+    pub(crate) reorder_barriers: usize,
 }
 
 #[derive(Component)]
@@ -558,18 +610,233 @@ fn queue_wc3_particles(
     }
 }
 
+#[derive(Resource, Default)]
+struct Wc3TransparentCoverage(HashMap<MainEntity, [Vec3; 8]>);
+
+type TransparentCoverageMeshes<'w, 's> = Query<
+    'w,
+    's,
+    (Entity, &'static Aabb, &'static GlobalTransform),
+    (
+        With<Mesh3d>,
+        Without<NoFrustumCulling>,
+        Without<Wc3RibbonTrail>,
+        Without<bevy::mesh::morph::MeshMorphWeights>,
+        Or<(
+            With<MeshMaterial3d<StandardMaterial>>,
+            With<MeshMaterial3d<Wc3AnimatedAlphaMaterial>>,
+            With<MeshMaterial3d<Wc3TeamColorMaterial>>,
+        )>,
+    ),
+>;
+
+fn extract_transparent_coverage(
+    meshes: Extract<TransparentCoverageMeshes>,
+    experiment: Extract<Res<RenderExperiment>>,
+    mut coverage: ResMut<Wc3TransparentCoverage>,
+) {
+    coverage.0.clear();
+    if !matches!(
+        **experiment,
+        RenderExperiment::ParticleOverlapAudit | RenderExperiment::ParticleOverlapBatching
+    ) {
+        return;
+    }
+    for (entity, bounds, transform) in &meshes {
+        let center: Vec3 = bounds.center.into();
+        let half: Vec3 = bounds.half_extents.into();
+        let corners = std::array::from_fn(|index| {
+            let signs = Vec3::new(
+                if index & 1 == 0 { -1.0 } else { 1.0 },
+                if index & 2 == 0 { -1.0 } else { 1.0 },
+                if index & 4 == 0 { -1.0 } else { 1.0 },
+            );
+            transform.transform_point(center + signs * half)
+        });
+        coverage.0.insert(MainEntity::from(entity), corners);
+    }
+}
+
+#[derive(Clone, Copy)]
+struct ScreenCoverage {
+    min: Vec2,
+    max: Vec2,
+}
+
+impl ScreenCoverage {
+    fn from_points(
+        points: impl IntoIterator<Item = Vec3>,
+        clip_from_world: Mat4,
+        guard: Vec2,
+    ) -> Option<Self> {
+        let mut min = Vec2::splat(f32::INFINITY);
+        let mut max = Vec2::splat(f32::NEG_INFINITY);
+        for point in points {
+            let clip = clip_from_world * point.extend(1.0);
+            // Near-plane/eye crossings and unknown bounds are ordering barriers.
+            if !clip.is_finite() || clip.w <= 1e-5 {
+                return None;
+            }
+            let position = clip.xy() / clip.w;
+            min = min.min(position);
+            max = max.max(position);
+        }
+        (min.is_finite() && max.is_finite()).then_some(Self {
+            min: min - guard,
+            max: max + guard,
+        })
+    }
+
+    fn disjoint(self, other: Self) -> bool {
+        self.max.x < other.min.x
+            || other.max.x < self.min.x
+            || self.max.y < other.min.y
+            || other.max.y < self.min.y
+    }
+
+    fn union(self, other: Self) -> Self {
+        Self {
+            min: self.min.min(other.min),
+            max: self.max.max(other.max),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct ParticleOrderItem {
+    key: Option<(
+        bevy::render::render_resource::CachedRenderPipelineId,
+        Entity,
+    )>,
+    coverage: Option<ScreenCoverage>,
+}
+
+fn audit_or_reorder_particles(
+    phase: &mut SortedRenderPhase<Transparent3d>,
+    mut ordering: Vec<ParticleOrderItem>,
+    apply: bool,
+    stats: &mut Wc3ParticleQueueStats,
+) {
+    const LOOKAHEAD: usize = 32;
+    let mut start = 0;
+    while start < ordering.len() {
+        let Some(key) = ordering[start].key else {
+            start += 1;
+            continue;
+        };
+        let mut end = start + 1;
+        while end < ordering.len() && ordering[end].key == Some(key) {
+            end += 1;
+        }
+        let limit = (end + LOOKAHEAD).min(ordering.len());
+        let mut blocked: Option<ScreenCoverage> = None;
+        let scan_start = end;
+        for cursor in scan_start..limit {
+            let Some(coverage) = ordering[cursor].coverage else {
+                stats.reorder_barriers += 1;
+                break;
+            };
+            if ordering[cursor].key == Some(key)
+                && blocked.is_none_or(|blocked| blocked.disjoint(coverage))
+            {
+                if apply {
+                    phase.items.move_index(cursor, end);
+                }
+                ordering[end..=cursor].rotate_right(1);
+                end += 1;
+                stats.reorder_moves += 1;
+            } else {
+                if ordering[cursor].key == Some(key) {
+                    stats.reorder_overlap_rejects += 1;
+                }
+                blocked = Some(blocked.map_or(coverage, |blocked| blocked.union(coverage)));
+            }
+        }
+        start = end;
+    }
+}
+
 fn batch_and_upload_wc3_particles(
     draw_functions: Res<DrawFunctions<Transparent3d>>,
-    extracted: Res<ExtractedWc3Particles>,
+    sources: (
+        Res<ExtractedWc3Particles>,
+        Res<Wc3TransparentCoverage>,
+        Query<&ExtractedView>,
+    ),
     mut phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
     mut gpu: ResMut<Wc3ParticleGpuBuffer>,
+    mut stats: ResMut<Wc3ParticleQueueStats>,
     render_device: Res<RenderDevice>,
     render_queue: Res<RenderQueue>,
 ) {
     let draw_function = draw_functions.read().id::<DrawWc3BillboardParticles>();
+    let (extracted, coverage, views) = sources;
     gpu.instances.clear();
 
-    for phase in phases.values_mut() {
+    for view in &views {
+        let Some(phase) = phases.get_mut(&view.retained_view_entity) else {
+            continue;
+        };
+        if matches!(
+            extracted.experiment,
+            RenderExperiment::ParticleOverlapAudit | RenderExperiment::ParticleOverlapBatching
+        ) {
+            let model_draw = draw_functions.read().id::<DrawMaterial>();
+            let world_from_view = view.world_from_view.to_matrix();
+            let clip_from_world = view
+                .clip_from_world
+                .unwrap_or_else(|| view.clip_from_view * world_from_view.inverse());
+            // Two pixels on each side conservatively contain MSAA coverage and
+            // helper invocations near triangle edges.
+            let guard = Vec2::new(
+                4.0 / view.viewport.z.max(1) as f32,
+                4.0 / view.viewport.w.max(1) as f32,
+            );
+            let right = world_from_view.x_axis.xyz();
+            let up = world_from_view.y_axis.xyz();
+            let ordering = phase
+                .items
+                .values()
+                .map(|item| {
+                    if item.draw_function == draw_function
+                        && let PhaseItemExtraIndex::DynamicOffset(index) = item.extra_index
+                        && let Some(particle) = extracted.particles.get(index as usize)
+                    {
+                        let [x, y, z, size] = particle.instance.position_scale;
+                        let center = Vec3::new(x, y, z);
+                        let half = size.abs() * 0.5;
+                        let points = [
+                            center - right * half - up * half,
+                            center - right * half + up * half,
+                            center + right * half - up * half,
+                            center + right * half + up * half,
+                        ];
+                        return ParticleOrderItem {
+                            key: Some((item.pipeline, item.entity.0)),
+                            coverage: ScreenCoverage::from_points(points, clip_from_world, guard),
+                        };
+                    }
+                    let bounds = if item.draw_function == model_draw && item.batch_range.len() <= 1
+                    {
+                        coverage.0.get(&item.entity.1).and_then(|points| {
+                            ScreenCoverage::from_points(*points, clip_from_world, guard)
+                        })
+                    } else {
+                        None
+                    };
+                    ParticleOrderItem {
+                        key: None,
+                        coverage: bounds,
+                    }
+                })
+                .collect();
+            audit_or_reorder_particles(
+                phase,
+                ordering,
+                extracted.experiment == RenderExperiment::ParticleOverlapBatching,
+                &mut stats,
+            );
+        }
         let mut item_index = 0usize;
         while item_index < phase.items.len() {
             let item = &phase.items[item_index];
@@ -642,41 +909,65 @@ fn prepare_wc3_particle_view_bind_groups(
 }
 
 fn prepare_wc3_particle_texture_bind_groups(
-    render_device: Res<RenderDevice>,
-    pipeline_cache: Res<PipelineCache>,
-    pipeline: Res<Wc3ParticlePipeline>,
+    renderer: (
+        Res<RenderDevice>,
+        Res<PipelineCache>,
+        Res<Wc3ParticlePipeline>,
+    ),
     extracted: Res<ExtractedWc3Particles>,
     images: Res<RenderAssets<GpuImage>>,
     fallback_image: Res<FallbackImage>,
     mut bind_groups: ResMut<Wc3ParticleTextureBindGroups>,
+    mut stats: ResMut<Wc3ParticleQueueStats>,
 ) {
-    bind_groups.0.clear();
+    let (render_device, pipeline_cache, pipeline) = renderer;
+    // Keep only active slabs. GPU resource identity, rather than just Image IDs,
+    // invalidates a cached group when an image reloads or its sampler changes.
+    bind_groups.0.retain(|entity, _| {
+        extracted.slab_entities[..extracted.slab_textures.len()].contains(entity)
+    });
     let layout = pipeline_cache.get_bind_group_layout(pipeline.texture_layout());
     for (slab_index, textures) in extracted.slab_textures.iter().enumerate() {
-        let Some(&entity) = extracted.slab_entities.get(slab_index) else {
+        let entity = extracted.slab_entities[slab_index];
+        let fallback = &fallback_image.d2;
+        let resolved = textures
+            .iter()
+            .map(|texture| match texture {
+                Some(texture) => images.get(*texture),
+                None => Some(fallback),
+            })
+            .collect::<Option<Vec<_>>>();
+        let Some(resolved) = resolved else {
+            // Never keep drawing a stale texture while its replacement is pending.
+            bind_groups.0.remove(&entity);
             continue;
         };
+        let bound_count = pipeline.bound_texture_count(extracted.experiment, textures.len());
+        if extracted.experiment != RenderExperiment::ParticleUncachedBindings
+            && bind_groups.0.get(&entity).is_some_and(|cached| {
+                cached.fallback == ParticleTextureBinding::from(fallback)
+                    && particle_bindings_match(
+                        &cached.resources,
+                        cached.bound_count,
+                        resolved
+                            .iter()
+                            .map(|image| ParticleTextureBinding::from(*image)),
+                        bound_count,
+                    )
+            })
+        {
+            stats.texture_groups_reused += 1;
+            continue;
+        }
+        stats.texture_groups_created += 1;
         let bind_group = if pipeline.uses_binding_arrays() {
-            let fallback = &fallback_image.d2;
             // All instance slots address this populated prefix. Unsupported devices
             // retain full arrays; an empty slab is never emitted by extraction.
-            let bound_count = pipeline.bound_texture_count(extracted.experiment, textures.len());
             let mut texture_views = vec![&*fallback.texture_view; bound_count];
             let mut samplers = vec![&*fallback.sampler; bound_count];
-            let mut ready = true;
-            for (slot, texture) in textures.iter().copied().enumerate() {
-                let Some(texture) = texture else {
-                    continue;
-                };
-                let Some(image) = images.get(texture) else {
-                    ready = false;
-                    break;
-                };
+            for (slot, image) in resolved.iter().enumerate() {
                 texture_views[slot] = &*image.texture_view;
                 samplers[slot] = &*image.sampler;
-            }
-            if !ready {
-                continue;
             }
             render_device.create_bind_group(
                 "wc3 particle texture array bind group",
@@ -684,23 +975,25 @@ fn prepare_wc3_particle_texture_bind_groups(
                 &BindGroupEntries::sequential((&texture_views[..], &samplers[..])),
             )
         } else {
-            let fallback = &fallback_image.d2;
-            let image = match textures.first().copied().flatten() {
-                Some(texture) => {
-                    let Some(image) = images.get(texture) else {
-                        continue;
-                    };
-                    image
-                }
-                None => fallback,
-            };
+            let image = resolved[0];
             render_device.create_bind_group(
                 "wc3 particle texture bind group",
                 &layout,
                 &BindGroupEntries::sequential((&image.texture_view, &image.sampler)),
             )
         };
-        bind_groups.0.insert(entity, bind_group);
+        bind_groups.0.insert(
+            entity,
+            CachedParticleTextureBindGroup {
+                resources: resolved
+                    .into_iter()
+                    .map(ParticleTextureBinding::from)
+                    .collect(),
+                bound_count,
+                fallback: ParticleTextureBinding::from(fallback),
+                bind_group,
+            },
+        );
     }
 }
 
@@ -741,10 +1034,10 @@ impl<P: PhaseItem> RenderCommand<P> for DrawWc3BillboardParticleCommand {
             };
             pass.set_bind_group(0, &mesh_view.main, &mesh_view.main_offsets);
             pass.set_bind_group(1, &mesh_view.binding_array, &[]);
-            pass.set_bind_group(2, texture_bind_group, &[]);
+            pass.set_bind_group(2, &texture_bind_group.bind_group, &[]);
         } else {
             pass.set_bind_group(0, &view_bind_group.0, &[view_uniform.offset]);
-            pass.set_bind_group(1, texture_bind_group, &[]);
+            pass.set_bind_group(1, &texture_bind_group.bind_group, &[]);
         }
         pass.set_vertex_buffer(0, instance_buffer.slice(..));
         pass.draw(0..6, item.batch_range().clone());
@@ -753,3 +1046,66 @@ impl<P: PhaseItem> RenderCommand<P> for DrawWc3BillboardParticleCommand {
 }
 
 type DrawWc3BillboardParticles = (SetItemPipeline, DrawWc3BillboardParticleCommand);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn particle_binding_cache_invalidates_replaced_resources_and_reordered_slots() {
+        let first = ParticleTextureBinding {
+            view: TextureViewId::new(),
+            sampler: SamplerId::new(),
+        };
+        let second = ParticleTextureBinding {
+            view: TextureViewId::new(),
+            sampler: SamplerId::new(),
+        };
+        let resources = [first, second];
+        assert!(particle_bindings_match(
+            &resources,
+            64,
+            resources.into_iter(),
+            64
+        ));
+        assert!(!particle_bindings_match(
+            &resources,
+            64,
+            [second, first].into_iter(),
+            64
+        ));
+        assert!(!particle_bindings_match(
+            &resources,
+            64,
+            [first].into_iter(),
+            64
+        ));
+        assert!(!particle_bindings_match(
+            &resources,
+            64,
+            resources.into_iter(),
+            2
+        ));
+        let replaced_view = ParticleTextureBinding {
+            view: TextureViewId::new(),
+            ..first
+        };
+        let replaced_sampler = ParticleTextureBinding {
+            sampler: SamplerId::new(),
+            ..first
+        };
+        assert!(!particle_bindings_match(
+            &resources,
+            64,
+            [replaced_view, second].into_iter(),
+            64
+        ));
+        assert!(!particle_bindings_match(
+            &resources,
+            64,
+            [replaced_sampler, second].into_iter(),
+            64
+        ));
+        assert!(particle_bindings_match(&[first], 1, [first].into_iter(), 1));
+    }
+}

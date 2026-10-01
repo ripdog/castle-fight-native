@@ -580,6 +580,8 @@ fn main() {
             capture_started: None,
             paused: options.profile_paused,
             experiment: options.render_experiment,
+            screenshot: options.profile_screenshot.clone(),
+            finished: None,
         })
         .add_systems(
             Update,
@@ -599,6 +601,8 @@ struct AutomatedProfileRun {
     capture_started: Option<Instant>,
     paused: bool,
     experiment: RenderExperiment,
+    screenshot: Option<PathBuf>,
+    finished: Option<Instant>,
 }
 
 fn finish_automated_profile(
@@ -608,9 +612,21 @@ fn finish_automated_profile(
     trace_display: Res<SystemTraceDisplay>,
     mut playback: ResMut<SimulationPlayback>,
     mut exit: MessageWriter<AppExit>,
-    audit: (Res<RenderAudit>, Res<DiagnosticsStore>, SceneCensus),
+    mut audit: (
+        Res<RenderAudit>,
+        Res<DiagnosticsStore>,
+        SceneCensus,
+        Commands,
+    ),
 ) {
     let now = Instant::now();
+    if let Some(finished) = run.finished {
+        if now.duration_since(finished) > Duration::from_secs(10) {
+            eprintln!("profile screenshot capture timed out");
+            exit.write(AppExit::error());
+        }
+        return;
+    }
     let warmup_started = *run.warmup_started.get_or_insert(now);
     if run.capture_started.is_none() {
         if now.duration_since(warmup_started) < run.warmup {
@@ -650,7 +666,21 @@ fn finish_automated_profile(
     print!("{}", audit.2.format());
     print!("{}", format_render_passes(&audit.1));
     print!("{}", trace_display.format());
-    exit.write(AppExit::Success);
+    run.finished = Some(now);
+    if let Some(path) = run.screenshot.take() {
+        use bevy::render::view::screenshot::{Screenshot, ScreenshotCaptured, save_to_disk};
+        audit
+            .3
+            .spawn(Screenshot::primary_window())
+            .observe(save_to_disk(path))
+            .observe(
+                |_: On<ScreenshotCaptured>, mut exit: MessageWriter<AppExit>| {
+                    exit.write(AppExit::Success);
+                },
+            );
+    } else {
+        exit.write(AppExit::Success);
+    }
 }
 
 #[derive(Resource)]
@@ -694,6 +724,7 @@ struct ClientOptions {
     profile_duration: Duration,
     profile_paused: bool,
     profile: bool,
+    profile_screenshot: Option<PathBuf>,
     render_experiment: RenderExperiment,
     map_version: MapVersion,
     release_revision: String,
@@ -719,6 +750,7 @@ impl ClientOptions {
             profile_duration: Duration::from_secs(10),
             profile_paused: false,
             profile: false,
+            profile_screenshot: None,
             render_experiment: RenderExperiment::Baseline,
             map_version: MapVersion::CASTLE_FIGHT_9_27,
             release_revision: "r1".to_owned(),
@@ -759,6 +791,12 @@ impl ClientOptions {
                 "--perf-log" => options.perf_log = true,
                 "--profile-paused" => options.profile_paused = true,
                 "--profile" => options.profile = true,
+                "--profile-screenshot" => {
+                    options.profile_screenshot = Some(PathBuf::from(
+                        args.next()
+                            .expect("--profile-screenshot requires an output path"),
+                    ));
+                }
                 "--render-experiment" => {
                     let value = args.next().expect("--render-experiment requires a name");
                     options.render_experiment =
@@ -827,7 +865,7 @@ impl ClientOptions {
                 "--list-map-versions" => options.list_map_versions = true,
                 "-h" | "--help" => {
                     println!(
-                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--list-map-versions] [--stress-units N] [--stress-visual RAWCODE N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS] [--profile-paused] [--profile] [--render-experiment baseline|freeze-bounds|hide-skinned|hide-particles|hide-transparent|legacy-team-color|legacy-geoset-visibility|legacy-attachment-search|legacy-attachment-index|legacy-effect-pooling|legacy-splat-updates|legacy-splat-material-state|legacy-animated-alpha-state|legacy-animated-texture-state|freeze-materials|freeze-poses|bindless-auto|bindless-64|bindless-128|bindless-256|no-bindless]"
+                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--list-map-versions] [--stress-units N] [--stress-visual RAWCODE N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS] [--profile-paused] [--profile] [--profile-screenshot PATH] [--render-experiment baseline|freeze-bounds|hide-skinned|hide-particles|hide-transparent|legacy-team-color|legacy-geoset-visibility|legacy-attachment-search|legacy-attachment-index|legacy-effect-pooling|legacy-splat-updates|legacy-splat-material-state|legacy-animated-alpha-state|legacy-animated-texture-state|freeze-materials|freeze-poses|bindless-auto|bindless-64|bindless-128|bindless-256|no-bindless]"
                     );
                     std::process::exit(0);
                 }
@@ -845,6 +883,7 @@ impl ClientOptions {
             options.is_profiling()
                 || (!options.profile_paused
                     && options.render_experiment == RenderExperiment::Baseline
+                    && options.profile_screenshot.is_none()
                     && options.stress_visual.is_none()),
             "render experiments, --profile-paused, and --stress-visual require --profile or --profile-quicksave",
         );

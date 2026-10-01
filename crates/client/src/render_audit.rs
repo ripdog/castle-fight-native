@@ -49,13 +49,18 @@ pub(crate) enum RenderExperiment {
     FreezePoses,
     BindlessAuto,
     Bindless64,
+    Bindless16,
+    Bindless32,
     Bindless128,
     Bindless256,
     NoBindless,
     ParticleSharedView,
     ParticleCull,
     ParticlePartialBindings,
+    ParticleUncachedBindings,
     ColdEffectPools,
+    ParticleOverlapAudit,
+    ParticleOverlapBatching,
 }
 
 impl RenderExperiment {
@@ -79,15 +84,20 @@ impl RenderExperiment {
             "freeze-poses" => Ok(Self::FreezePoses),
             "bindless-auto" => Ok(Self::BindlessAuto),
             "bindless-64" => Ok(Self::Bindless64),
+            "bindless-16" => Ok(Self::Bindless16),
+            "bindless-32" => Ok(Self::Bindless32),
             "bindless-128" => Ok(Self::Bindless128),
             "bindless-256" => Ok(Self::Bindless256),
             "no-bindless" => Ok(Self::NoBindless),
             "particle-shared-view" => Ok(Self::ParticleSharedView),
             "particle-cull" => Ok(Self::ParticleCull),
             "particle-partial-bindings" => Ok(Self::ParticlePartialBindings),
+            "particle-uncached-bindings" => Ok(Self::ParticleUncachedBindings),
             "cold-effect-pools" => Ok(Self::ColdEffectPools),
+            "particle-overlap-audit" => Ok(Self::ParticleOverlapAudit),
+            "particle-overlap-batching" => Ok(Self::ParticleOverlapBatching),
             _ => Err(format!(
-                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, bindless-auto, bindless-64, bindless-128, bindless-256, no-bindless, particle-shared-view, particle-cull, particle-partial-bindings, or cold-effect-pools"
+                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, bindless-auto, bindless-16, bindless-32, bindless-64, bindless-128, bindless-256, no-bindless, particle-shared-view, particle-cull, particle-partial-bindings, particle-uncached-bindings, cold-effect-pools, particle-overlap-audit, or particle-overlap-batching"
             )),
         }
     }
@@ -95,6 +105,8 @@ impl RenderExperiment {
     pub(crate) fn standard_material_bindless_slots(self) -> Option<u32> {
         match self {
             Self::BindlessAuto => None,
+            Self::Bindless16 => Some(16),
+            Self::Bindless32 => Some(32),
             Self::Bindless128 => Some(128),
             Self::Bindless256 => Some(256),
             _ => Some(crate::render_tuning::DEFAULT_STANDARD_MATERIAL_BINDLESS_SLOTS),
@@ -204,6 +216,13 @@ impl RenderAudit {
                 particles.candidates, particles.queued, particles.zero_alpha,
                 particles.outside, particles.populated_slots, particles.bound_slots,
             ).unwrap();
+            writeln!(
+                output,
+                "  particle texture groups: {} created, {} reused (latest frame)",
+                particles.texture_groups_created, particles.texture_groups_reused
+            )
+            .unwrap();
+            writeln!(output, "  particle overlap audit: {} safe moves, {} overlap rejects, {} unknown barriers (latest frame)", particles.reorder_moves, particles.reorder_overlap_rejects, particles.reorder_barriers).unwrap();
         }
         output.push_str("\nCOLD SCENE REQUESTS  new roots, not completed spawns; template entity counts are estimates\n");
         let mut scenes = measurements.scene_requests.iter().collect::<Vec<_>>();
@@ -444,11 +463,19 @@ fn apply_render_experiment(
             | RenderExperiment::FreezeMaterials
             | RenderExperiment::FreezePoses
             | RenderExperiment::BindlessAuto
+            | RenderExperiment::Bindless16
+            | RenderExperiment::Bindless32
             | RenderExperiment::Bindless64
             | RenderExperiment::Bindless128
             | RenderExperiment::Bindless256
             | RenderExperiment::NoBindless
+            | RenderExperiment::ParticleSharedView
+            | RenderExperiment::ParticleCull
+            | RenderExperiment::ParticlePartialBindings
+            | RenderExperiment::ParticleUncachedBindings
             | RenderExperiment::ColdEffectPools
+            | RenderExperiment::ParticleOverlapAudit
+            | RenderExperiment::ParticleOverlapBatching
     ) {
         return;
     }
@@ -478,6 +505,8 @@ fn apply_render_experiment(
             | RenderExperiment::FreezeMaterials
             | RenderExperiment::FreezePoses
             | RenderExperiment::BindlessAuto
+            | RenderExperiment::Bindless16
+            | RenderExperiment::Bindless32
             | RenderExperiment::Bindless64
             | RenderExperiment::Bindless128
             | RenderExperiment::Bindless256
@@ -485,7 +514,10 @@ fn apply_render_experiment(
             | RenderExperiment::ParticleSharedView
             | RenderExperiment::ParticleCull
             | RenderExperiment::ParticlePartialBindings
-            | RenderExperiment::ColdEffectPools => false,
+            | RenderExperiment::ParticleUncachedBindings
+            | RenderExperiment::ColdEffectPools
+            | RenderExperiment::ParticleOverlapAudit
+            | RenderExperiment::ParticleOverlapBatching => false,
             RenderExperiment::FreezeBounds => {
                 if dynamic && has_bounds {
                     commands.entity(entity).remove::<DynamicSkinnedMeshBounds>();

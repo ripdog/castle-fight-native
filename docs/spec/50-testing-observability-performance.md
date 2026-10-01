@@ -292,6 +292,10 @@ Rendering investigations can keep the simulation paused for the entire capture w
 ordinary simulation pause. Stress profiling also pauses during warm-up to preserve the requested
 initial unit population.
 
+`--profile-screenshot PATH` saves the primary game window after completing the capture, then exits.
+Screenshot readback/encoding occurs after the measured interval. This is available only in profiling
+modes and can be used for visual checks without compositor screenshots or changing the renderer.
+
 The opt-in `--render-experiment` defaults to `baseline`. The experiments below require a profiling
 mode and MUST NOT affect the authoritative simulation. They deliberately change presentation for cost attribution:
 
@@ -323,6 +327,9 @@ mode and MUST NOT affect the authoritative simulation. They deliberately change 
   Bevy's ordinary material-binding fallback. It keeps geometry, skin components, simulation and
   authored visual parameters intact. Profiling logs report whether StandardMaterial actually uses
   bindless resources. This comparison changes batching as well as resource tracking costs.
+- `bindless-16` and `bindless-32` use smaller StandardMaterial resource slabs than the default 64.
+  These preserve material parameters and compare resource-tracking cost against additional slab
+  changes; the renderer's non-bindless fallback remains available.
 - `cold-effect-pools` retains completed effects but disables preparation of hidden reserves.
   Ordinary rendering prepares at most 8 roots/frame, 128/template and 1,024 total reserved roots,
   using observed unit-population high-water marks and versioned attack/cast intervals and estimated
@@ -337,6 +344,15 @@ mode and MUST NOT affect the authoritative simulation. They deliberately change 
   ordinary cleanup. Free instances wait for scene/WC3/animation setup; node bindings survive acquisition.
   Ribbon scenes receive prepared instances for one use. Source replacement clears free/pending
   reserves and reissues their requests. Reserve counters include warm-up preparation.
+- `particle-overlap-audit` estimates particle regrouping opportunities after transparent sorting
+  without changing the submitted order. It looks ahead at most 32 items from a compatible run.
+- `particle-overlap-batching` applies that prototype: a particle may cross intervening items only
+  when its conservative screen rectangle is disjoint from their combined coverage. Billboards use
+  their actual four corners; supported ordinary/animated-alpha/team-colour meshes use transformed
+  current AABB corners. Two-pixel guards cover edge/MSAA samples. Missing/non-finite bounds,
+  eye-plane crossings, morph meshes, ribbons, unknown draws and prebatched model items are ordering
+  barriers. Potentially overlapping items retain their sorted precedence. Counters report proposed
+  safe moves, overlap rejections and barrier stops; these are search events, not unique draw counts.
 - `particle-shared-view` reuses the exact PBR view layouts and bind groups for compact particles,
   moving their texture group to slot 2. It retains particle sorting and blend operations.
 - `particle-cull` skips compact particles with exactly zero alpha or whose conservative billboard
@@ -346,7 +362,15 @@ mode and MUST NOT affect the authoritative simulation. They deliberately change 
   the device enables `PARTIALLY_BOUND_BINDING_ARRAY`. Instance texture indices MUST stay inside
   that prefix. Unsupported devices retain fully padded arrays. No texture or particle is omitted.
 
-These particle experiments remain opt-in; none changes the default rendering policy. Particle queue
+- `particle-uncached-bindings` recreates the compact particle texture bind groups every frame.
+  Ordinary rendering retains groups while their ordered GPU texture-view/sampler identities and
+  binding counts remain unchanged. Changed, missing, or replaced GPU resources invalidate the
+  corresponding group; unused slabs release their cached groups. Both the single-texture fallback
+  and padded/partial array paths use the same cache policy. Counters report groups created/reused.
+
+The shared-view, culling, partial-binding and overlap particle experiments remain opt-in; none
+changes the default particle ordering/blending policy. The overlap prototype still requires image
+parity and broader bounds validation before production adoption. Particle queue
 counters report candidate/queued counts, culling rejections and populated/bound texture slots.
 
 Experiments apply throughout warm-up and capture. Their differences are not additive cost budgets:
