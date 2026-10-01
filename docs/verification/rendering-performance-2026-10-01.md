@@ -197,6 +197,89 @@ sorting, simulation and gameplay policy remain unchanged. Validation: release bu
 captures, warning-free client-binary Clippy, formatting and diff checks. Tests were deliberately
 skipped. No Bevy patch or unsafe palette override was added.
 
+## Follow-up: preparation and pool coverage
+
+The timed-effect pool is only one instantiation path. Moving projectiles, persistent status visuals,
+stun visuals, and the special Defend transition currently create fresh `WorldAssetRoot` hierarchies.
+Consequently warming only `TimedWc3EffectPool` cannot remove every initial or repeated combat burst.
+The profiling census now counts newly added scene roots by asset during capture, with peak requests
+per frame, first-request time and template entity counts. It runs before world-instance spawning.
+Requests can wait for assets, so the table deliberately does not call them completed spawns or
+attribute individual durations to them. Paused warm-up roots and reactivated pooled roots are
+excluded. This lets a subsequent implementation target the expensive paths instead of allocating
+an arbitrary reserve of every loaded effect.
+Prewarming must let hidden instances finish world spawning and WC3 setup before disabling and
+reserving them; disabling a root immediately can exclude it from the systems meant to prepare it.
+Reserve sizing must consider concurrent lifetimes, not only one-frame request peaks.
+
+A final live census on `440a68d` (the intervening hosted-lobby commit) plus this instrumentation
+uses the same centred 700-unit workload and partial particle bindings. It ends at tick 300 with
+121 units and 529 corpses. The worst frame takes 90.199 ms, including 63.712 ms in SpawnScene;
+the following frame spends 41.006 ms in Update. The later 2.06 s spike includes 19.093 ms in
+SpawnScene. This is an attribution capture, not a new controlled FPS comparison against the
+earlier baseline. Its raw report is appended to the results file.
+
+| Requested model | New roots in 10 s | Peak roots/frame | Entities/template | First observed |
+| --- | ---: | ---: | ---: | ---: |
+| Gryphon rider missile | 242 | 50 | 27 | 0.093 s |
+| Resurrect caster | 50 | 36 | 78 | 0.093 s |
+| Resurrect target | 50 | 36 | 49 | 0.093 s |
+| Mortar missile | 53 | 50 | 36 | 0.093 s |
+| Inner Fire target | 53 | 50 | 28 | 0.093 s |
+| Rifleman unit | 18 | 15 | 80 | 2.085 s |
+| Defend caster | 50 | 50 | 23 | 0.720 s |
+
+Counts cover newly added roots, including instances that might wait for asset readiness. Template
+counts sum occupied non-resource archetype entities, matching the world spawner's entity-copy
+scope; they are not the allocator's capacity. Do not sum independent per-model peak counts as
+though every peak necessarily occurs in the same frame. Start prewarming with resurrection and
+missile templates; expand the pool to the relevant persistent/moving visual lifecycles, and
+measure concurrent occupancy before deciding reserve sizes.
+
+Two additional setup inefficiencies are visible directly in source:
+
+- `setup_wc3_model_composed_features` and `setup_wc3_model_lights` each deserialize the complete
+  `Wc3NodeExtras` for every new node. `resolve_wc3_emitter_nodes` also reads node extras. Even nodes
+  without a light take the parsing path in the light setup system. Material setup separately
+  deserializes its tracks/windows for each instance. Prepare typed immutable model/node/material
+  metadata once per source asset, including negative results, then attach or reference it from
+  instances. Keep mutable clocks, event cursors, GPU slots, emitter counters and child ownership
+  per instance. Asset reload must invalidate the prepared template. Version/asset identity must
+  remain part of the cache key. Do not accidentally share mutable playback state between models.
+- `fix_wc3_scene_materials` takes a mutable source `StandardMaterial` and writes alpha mode and
+  depth bias on every newly prepared mesh, including instances whose shared source already has
+  those values. That generates redundant asset-change work during bursts. Normalize immutable
+  source/material variants once, or compare through an immutable borrow and write only when
+  values actually differ. Cache identity must still distinguish authored layer state, team tint
+  and the existing building/unit underlay policy; team-specific state must not leak into another
+  instance.
+
+A further activation cost is redundant rest-bounds calculation. The glTF loader inserts authored
+primitive AABBs, but Bevy's `calculate_bounds` still rescans mesh vertices for each newly added
+`Mesh3d` because additions satisfy `Changed<Mesh3d>`. Many instances share the same immutable mesh.
+The short initial CPU sample includes 10.29% in that bounds-update loop; this is a coarse sample,
+not a measured saving. Cache rest bounds once per mesh asset, or retain loader bounds with a scoped
+`NoAutoAabb` policy for converted immutable geometry. Asset/handle changes must refresh the cache;
+dynamic skinned-pose bounds must continue normally. Applying `NoFrustumCulling` or freezing pose
+bounds would not be a faithful substitute. This can complement pooling without changing skin IDs.
+
+Bevy's world-asset spawner copies component data through its reflection-based serialization path
+before these setup systems run. Pooling prepared instances avoids both this hierarchy copy and
+the repeated setup. Typed template instantiation is another possible long-term route, but requires
+correct entity remapping for skins, animation targets and nested relationships; the established
+spawner is the reference for fidelity. These source findings do not by themselves quantify savings.
+
+The later unit-model burst also suggests retaining prepared unit instances through resurrection.
+The simulation currently removes a corpse and creates a unit with a fresh ID; presentation removes
+the old corpse hierarchy and instantiates a new unit hierarchy. The snapshot does not expose a
+corpse-to-new-unit mapping. A safe reuse design needs an explicit authoritative presentation hint
+or a prepared unit-instance pool; matching disappeared corpses to new units by position is ambiguous.
+Reset every template-local transform and authored material/visibility state before starting the
+live sequence, since a death clip can animate channels that Stand never resets. Preserve complete
+skin joint lists, reset owner/attachment bindings and controller IDs, and retain ordinary bounds.
+This is a lifecycle optimization, not another late skin-index alias. The timing of the measured
+rifleman burst is consistent with resurrection, but the census alone is not an event correlation.
+
 ## Source anchors
 
 - Client: `particle_renderer.rs` (slabs, queuing, binding), `wc3_effects.rs` (event crossings and

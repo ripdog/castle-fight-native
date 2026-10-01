@@ -2,17 +2,18 @@
 //! for attribution; all remain separate from ordinary gameplay configuration.
 
 use std::{
-    collections::HashSet,
+    collections::{BTreeMap, HashMap, HashSet},
     fmt::Write as _,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
 use bevy::{
+    app::{SceneSpawnerSystems, SpawnScene},
     camera::{primitives::Aabb, visibility::DynamicSkinnedMeshBounds},
     core_pipeline::core_3d::Transparent3d,
     diagnostic::DiagnosticsStore,
-    ecs::system::SystemParam,
+    ecs::{resource::IS_RESOURCE, system::SystemParam},
     mesh::skinning::SkinnedMesh,
     pbr::SkinUniforms,
     prelude::*,
@@ -137,6 +138,15 @@ struct Measurements {
     stages: [StageTiming; STAGES.len()],
     transparent: Option<(usize, usize, usize)>,
     particles: Option<crate::particle_renderer::Wc3ParticleQueueStats>,
+    scene_requests: BTreeMap<String, SceneRequestCounts>,
+}
+
+#[derive(Default)]
+struct SceneRequestCounts {
+    total: usize,
+    peak_frame: usize,
+    template_entities: u32,
+    first: Duration,
 }
 
 #[derive(Resource, Clone, Default)]
@@ -193,6 +203,27 @@ impl RenderAudit {
                 particles.outside, particles.populated_slots, particles.bound_slots,
             ).unwrap();
         }
+        output.push_str("\nCOLD SCENE REQUESTS  new roots, not completed spawns; template entity counts are estimates\n");
+        let mut scenes = measurements.scene_requests.iter().collect::<Vec<_>>();
+        scenes.sort_by(|(left_name, left), (right_name, right)| {
+            let work = |counts: &SceneRequestCounts| {
+                counts.total as u64 * u64::from(counts.template_entities)
+            };
+            work(right)
+                .cmp(&work(left))
+                .then_with(|| left_name.cmp(right_name))
+        });
+        for (path, counts) in scenes.into_iter().take(15) {
+            writeln!(
+                output,
+                "  {:>5} roots  peak/frame {:>4}  template {:>4} entities  first {:>6.3}s  {path}",
+                counts.total,
+                counts.peak_frame,
+                counts.template_entities,
+                counts.first.as_secs_f64(),
+            )
+            .unwrap();
+        }
         output
     }
 }
@@ -212,6 +243,10 @@ impl Plugin for RenderAuditPlugin {
             freeze_animation_poses
                 .after(crate::wc3_effects::skip_unchanged_paused_animation_poses)
                 .before(bevy::animation::animate_targets),
+        );
+        app.add_systems(
+            SpawnScene,
+            sample_cold_scene_requests.before(SceneSpawnerSystems::WorldInstanceSpawn),
         );
     }
 
@@ -277,6 +312,44 @@ impl Plugin for RenderAuditPlugin {
             }
             render_app.add_systems(Render, (begin, end));
         }
+    }
+}
+
+fn sample_cold_scene_requests(
+    roots: Query<&WorldAssetRoot, Added<WorldAssetRoot>>,
+    assets: Res<Assets<WorldAsset>>,
+    asset_server: Res<AssetServer>,
+    audit: Res<RenderAudit>,
+) {
+    let mut measurements = audit.0.lock().expect("render audit mutex poisoned");
+    let Some(started) = measurements.started else {
+        return;
+    };
+    let first = started.elapsed();
+    let mut counts = HashMap::<AssetId<WorldAsset>, usize>::new();
+    for root in &roots {
+        *counts.entry(root.0.id()).or_default() += 1;
+    }
+    for (asset, total) in counts {
+        let path = asset_server
+            .get_path(asset)
+            .map_or_else(|| format!("{asset:?}"), |path| path.to_string());
+        let template_entities = assets.get(asset).map_or(0, |asset| {
+            asset
+                .world
+                .archetypes()
+                .iter()
+                .filter(|archetype| !archetype.contains(IS_RESOURCE))
+                .map(|archetype| archetype.entities().len() as u32)
+                .sum()
+        });
+        let entry = measurements
+            .scene_requests
+            .entry(path)
+            .or_insert_with(|| SceneRequestCounts { first, ..default() });
+        entry.total += total;
+        entry.peak_frame = entry.peak_frame.max(total);
+        entry.template_entities = template_entities;
     }
 }
 

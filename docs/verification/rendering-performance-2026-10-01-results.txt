@@ -1393,3 +1393,140 @@ RENDER PASSES  recent diagnostic average (not whole capture)
   render/upscaling/elapsed_cpu 0.002ms
   render/upscaling/elapsed_gpu 0.071ms
 SYSTEM CPU  no samples
+
+===== cold-scene census follow-up, base 440a68d =====
+700 units, partial particle bindings, 10s paused warm-up + 10s combat.
+Loaded 2360 generated WC3 UI icon binding(s) and 4 cursor atlas binding(s) for Castle Fight 9.27
+client-profile standard_material_bindless=true
+2026-10-01T00:34:45.559789Z  WARN bevy_winit::winit_windows: Can't select current monitor on window creation or cannot find current monitor!
+spawned 1184 Warcraft III doodad/destructable scene instances
+Loaded 29 generated WC3 unit model(s)
+Loaded 24 generated WC3 building model(s)
+Loaded 158 WC3 projectile visual(s), 240 ability visual(s), 15 status visual id(s), and 5 chain-lightning id(s)
+client-profile source=stress-units=700 final_tick=300 builders=2 units=121 buildings=2 corpses=529 projectiles=2
+client-profile paused=false experiment=ParticlePartialBindings
+PROFILE RESULTS
+  elapsed                10.006s
+
+FRAME  samples     479  avg FPS   47.94  1% low   16.99
+  wall               avg   20.858ms  p95   34.025ms  p99   39.561ms  max   90.199ms
+  frame windows (seconds since first captured frame; unsmoothed)
+     0.00.. 1.02s   32 frames  31.38 FPS p95  73.736ms max  90.199ms over 16.67ms  90.6%
+     1.02.. 2.01s   31 frames  31.39 FPS p95  37.851ms max  39.730ms over 16.67ms 100.0%
+     2.01.. 3.01s   34 frames  34.03 FPS p95  39.561ms max  51.064ms over 16.67ms 100.0%
+     3.01.. 4.01s   43 frames  42.92 FPS p95  28.385ms max  28.961ms over 16.67ms  97.7%
+     4.01.. 5.01s   47 frames  46.78 FPS p95  25.095ms max  28.564ms over 16.67ms  97.9%
+     5.01.. 6.02s   54 frames  53.73 FPS p95  21.158ms max  21.691ms over 16.67ms  92.6%
+     6.02.. 7.01s   53 frames  53.32 FPS p95  21.444ms max  25.911ms over 16.67ms  96.2%
+     7.01.. 8.01s   57 frames  56.88 FPS p95  21.010ms max  25.874ms over 16.67ms  70.2%
+     8.01.. 9.00s   62 frames  62.77 FPS p95  18.304ms max  21.091ms over 16.67ms  22.6%
+     9.00.. 9.99s   66 frames  66.71 FPS p95  17.809ms max  19.243ms over 16.67ms  13.6%
+  slowest frames (start seconds; wall/main/fixed/Update/SpawnScene/PostUpdate ms)
+     0.074s   90.199 /   85.933 /   3.770 /   6.060 /  63.712 /  12.051
+     0.164s   73.736 /   70.687 /   6.101 /  41.006 /  12.701 /   8.121
+     2.060s   51.064 /   46.790 /   2.306 /  13.310 /  19.093 /  11.694
+     1.094s   39.730 /   24.308 /   2.436 /   5.537 /   0.104 /  14.346
+     2.111s   39.561 /   35.541 /   3.062 /  16.971 /   1.452 /  13.247
+  main CPU            15.245ms
+  outside main         5.614ms
+  fixed loop           1.149ms
+  sim step/frame       0.981ms
+  main schedules (avg/frame)
+      First            0.061ms
+      PreUpdate        0.368ms
+      fixed loop       1.225ms
+      Update           4.884ms
+      SpawnScene       0.383ms
+      PostUpdate       8.265ms
+      Last             0.060ms
+
+SIM  ticks       300  range            0..=299  observed  29.98Hz
+  tick total         avg    1.571ms  p95    2.140ms  p99    4.072ms  max   20.107ms
+  topology             0.000ms
+  timers/build         0.085ms
+  production           0.004ms
+  snapshot/spatial     0.182ms
+  abilities            0.126ms
+  targeting            0.081ms
+  combat               0.053ms
+  move intent          0.126ms
+  crowd/collision      0.189ms
+  crowd separate       0.086ms
+  hard collision       0.103ms
+  fallback search      0.000ms
+  ballistic            0.002ms
+  commit               0.064ms
+  checksum             0.647ms
+  fallback calls           0.10/tick
+  fallback checks          0.98/tick
+  fallback max ring           3
+
+3D CPU  samples     480  average/frame
+  total                4.787ms
+  camera               0.009ms
+  model prep           0.012ms
+  entity sync          0.170ms
+  scene setup          0.943ms
+  animations           2.355ms
+  transforms           0.134ms
+  effects              1.000ms
+  overlays/gizmos      0.164ms
+
+RENDER CPU  avg/call, max, calls (overlapping scopes; do not sum)
+  handoff incl wait/extract    5.535ms   17.986ms 480
+  world sync/extract           2.184ms    5.541ms 480
+  extract commands             0.086ms    0.473ms 480
+  prepare assets               0.217ms    1.426ms 480
+  prepare meshes               0.808ms    3.610ms 480
+  create views                 0.080ms    0.886ms 480
+  specialize                   0.090ms    2.886ms 480
+  prepare views                0.116ms    1.152ms 480
+  queue                        0.511ms    3.029ms 480
+  phase sort                   0.841ms    3.087ms 480
+  prepare resources            3.657ms   13.635ms 480
+  render/submit/present       11.593ms   22.066ms 479
+  cleanup                      0.012ms    0.203ms 480
+  post cleanup                 0.029ms    0.931ms 480
+  transparent phase: 6344 items, 2569 draw-function calls (latest sampled frame, all views)
+  skin palette staging: 15757632 bytes uploaded/frame (latest sample)
+  particle queue: 3330 candidates, 3330 queued, 0 zero-alpha rejects, 0 frustum rejects; texture slots 8/8 populated/bound (latest sample, all views)
+
+COLD SCENE REQUESTS  new roots, not completed spawns; template entity counts are estimates
+    242 roots  peak/frame   50  template   27 entities  first  0.093s  wc3/effects/models/abilities__weapons__gryphonridermissile__gryphonridermissile.gltf#Scene0
+     50 roots  peak/frame   36  template   78 entities  first  0.093s  wc3/effects/models/abilities__spells__human__resurrect__resurrectcaster.gltf#Scene0
+     50 roots  peak/frame   36  template   49 entities  first  0.093s  wc3/effects/models/abilities__spells__human__resurrect__resurrecttarget.gltf#Scene0
+     53 roots  peak/frame   50  template   36 entities  first  0.093s  wc3/effects/models/abilities__weapons__mortar__mortarmissile.gltf#Scene0
+     50 roots  peak/frame   36  template   31 entities  first  0.093s  wc3/effects/models/abilities__spells__human__revivehuman__revivehuman.gltf#Scene0
+     53 roots  peak/frame   50  template   28 entities  first  0.093s  wc3/effects/models/abilities__spells__human__innerfire__innerfiretarget.gltf#Scene0
+     18 roots  peak/frame   15  template   80 entities  first  2.085s  wc3/units/models/units__human__rifleman__rifleman.gltf#Scene0
+     50 roots  peak/frame   50  template   23 entities  first  0.720s  wc3/effects/models/abilities__spells__human__defend__defendcaster.gltf#Scene0
+     51 roots  peak/frame   49  template   20 entities  first  0.093s  wc3/effects/models/abilities__weapons__demolishermissile__demolishermissile.gltf#Scene0
+    120 roots  peak/frame   39  template    7 entities  first  0.056s  wc3/effects/models/abilities__spells__human__thunderclap__thunderclaptarget.gltf#Scene0
+    149 roots  peak/frame  100  template    5 entities  first  0.093s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodrifleman.gltf#Scene0
+    100 roots  peak/frame   41  template    5 entities  first  0.093s  wc3/units/models/objects__spawnmodels__human__humanblood__humanbloodknight.gltf#Scene0
+     33 roots  peak/frame    9  template   14 entities  first  2.085s  wc3/effects/models/abilities__weapons__cannontowermissile__cannontowermissile.gltf#Scene0
+     48 roots  peak/frame   29  template    9 entities  first  0.056s  wc3/effects/models/units__nightelf__wisp__wispexplode.gltf#Scene0
+     44 roots  peak/frame   36  template    8 entities  first  0.093s  wc3/effects/models/abilities__spells__items__ailm__ailmtarget.gltf#Scene0
+
+SCENE  entities=90745 meshes=8552 visible=4879 skinned=5785 dynamic_bounds=5785 particles=3231 transparent_visible=6253 no_auto_batch=0
+  mesh_assets=3056 material_assets=241 visible_mesh_material_pairs=368 animation_players=1121 animated_texture_tracks=0 joint_references=257462 unique_joints=35054
+  window=3840x2160 present=AutoNoVsync visible=true
+  camera_position=Vec3(0.0, 3394.0002, 3060.0) camera_forward=Dir3(Vec3(-0.0, -0.7270132, -0.6866236))
+  collapsed_visible=0 (zero determinant; candidates for geoset visibility)
+
+RENDER PASSES  recent diagnostic average (not whole capture)
+  render/bin_unpacking/elapsed_cpu 0.006ms
+  render/bin_unpacking/elapsed_gpu 0.080ms
+  render/clustering/elapsed_cpu 0.015ms
+  render/clustering/elapsed_gpu 0.057ms
+  render/early_mesh_preprocessing/elapsed_cpu 0.002ms
+  render/early_mesh_preprocessing/elapsed_gpu 0.015ms
+  render/main_opaque_pass_3d/elapsed_cpu 0.076ms
+  render/main_opaque_pass_3d/elapsed_gpu 3.527ms
+  render/main_transparent_pass_3d/elapsed_cpu 1.765ms
+  render/main_transparent_pass_3d/elapsed_gpu 2.640ms
+  render/ui/elapsed_cpu 0.010ms
+  render/ui/elapsed_gpu 0.065ms
+  render/upscaling/elapsed_cpu 0.002ms
+  render/upscaling/elapsed_gpu 0.071ms
+SYSTEM CPU  no samples

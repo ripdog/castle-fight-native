@@ -365,6 +365,10 @@ is never split across windows. A long frame can cross multiple nominal second bo
 For 700-unit acceptance, distinguish the initial living population, active battle and settled-corpse
 periods. A battle average after mass casualties MUST NOT be presented as sustained 700-living-unit
 performance. Include the combat activation hitch, not only the later steady state.
+Profiling also records newly added `WorldAssetRoot` requests by asset, including peak requests in a
+frame, first observation time and source-template entity counts. These are requests, not confirmed
+completed instantiations; unavailable templates report zero entities. Reusing an existing pooled
+root does not count as a new request. The census is scoped to capture and excludes paused warm-up.
 
 ## 16. Tick budget
 
