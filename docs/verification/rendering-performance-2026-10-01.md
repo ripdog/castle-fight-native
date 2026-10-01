@@ -12,6 +12,7 @@ work. Detailed profiler output remains in the raw capture files:
 - [2026-09-29 raw captures](rendering-performance-2026-09-29-results.txt)
 - [2026-10-01 raw captures](rendering-performance-2026-10-01-results.txt)
 - [2026-10-02 binding-prefix captures](rendering-performance-2026-10-02-results.txt)
+- [2026-10-02 compact-material captures](rendering-performance-2026-10-02-compact-material-results.txt)
 
 Do not append long investigation diaries here. When a new optimization is measured, add one row to
 the benchmark ledger, update the current conclusions/next work if the result changes them, and keep
@@ -78,6 +79,7 @@ captures were recorded. The raw files above retain every individual run and ever
 | — | Retained alpha-slot ownership and submission census | shipped, a5010e4 / 4f91fd1 | 700 combat | 44.90 / 22.274 | — | correctness/attribution; no gain claimed | 2026-10-01 discovery raw |
 | — | Compatible particle/model mesh-layout prefix, A/B mean | implemented, opt-in; no repeatable gain | 700 combat | 44.56 / 22.441 | 44.59 / 22.427 default A/B/C mean | +0.06% | 2026-10-02 raw |
 | — | Mesh-layout prefix + partial particle arrays, A/B mean | opt-in; initial gain did not repeat | 700 combat | 42.68 / 23.431 | 45.34 / 22.058 partial-only A/B mean | +6.2% | 2026-10-02 raw |
+| — | Compact WC3 alpha/team material bindings, A/B/C mean | implemented, opt-in; no repeatable gain | 700 combat | 47.21 / 21.180 | 47.20 / 21.188 default A/B/C/D mean | -0.04% | 2026-10-02 compact raw |
 
 The progression rows are not one continuous synthetic benchmark: fixture changes are explicit above,
 and each percentage is relative only to its recorded control. In particular, the h02W texture test
@@ -88,16 +90,24 @@ The 2026-10-02 means cover the planned control series: three default and two of 
 Their FPS values are reciprocals of mean frame time. An additional initial mesh-prefix validation
 capture reached only 36.24 FPS / 27.593 ms; it is retained in the raw file separately from the planned
 series and supplies no evidence of a gain. Every capture, including slow repeats, is retained.
+The separate compact-material series alternates four defaults with three candidate captures, plus
+one accepted validation capture (47.93 FPS / 20.863 ms) outside those means. Its initial shader-import
+failure is explicitly rejected: missing draws invalidate the reported 50.85 FPS. The full failed
+report remains in its raw file; all eight corrected captures finish without shader/GPU errors.
 
 ## Current conclusions
 
-The target is not met. The latest same-binary default captures reach 43.05–45.76 FPS /
-21.853–23.230 ms, averaging 22.427 ms. Their p95 is 31.571–38.365 ms, p99 35.907–54.935 ms,
-and worst frame 45.633–71.590 ms. Compatible particle/model mesh-layout prefixes average 22.441 ms
-in the planned A/B captures, effectively unchanged (+0.06%). Shared-view controls vary from 21.780
-to 24.586 ms, so the first mesh-prefix regression versus shared-view and later gain are inconclusive.
-The combined mesh-prefix/partial-array path varies from 21.676 to 25.185 ms and averages 6.2% slower
-than partial arrays alone. Keep both new controls opt-in; no default improvement is established.
+The target is not met. The latest alternating same-binary default captures reach 46.84–47.41 FPS /
+21.095–21.349 ms, averaging 21.188 ms. Compact WC3 alpha/team material bindings average 21.180 ms,
+effectively unchanged (-0.04%). Their p95 ranges from 31.685 to 33.104 ms versus 32.216–32.822 ms
+in defaults; p99 is 36.513–37.639 ms versus 36.463–37.452 ms. Keep the compact path opt-in and
+prioritize immutable event/node metadata next. These newer default timings do not establish a gain
+against earlier series; only compare controls from the same contemporary binary and sequence.
+
+In the preceding binding-prefix series, default captures average 22.427 ms and mesh-prefix A/B
+captures average 22.441 ms (+0.06%). Shared-view controls vary from 21.780 to 24.586 ms, so gains
+against a slow control are inconclusive. Combined mesh-prefix/partial arrays average 6.2% slower
+than partial arrays alone. Both binding-prefix controls also remain opt-in.
 
 The earlier prepared-reserve comparison averages 43.69 FPS / 22.887 ms versus 43.24 FPS /
 23.126 ms with reserve preparation disabled. Its partial-array capture reaches 45.94 FPS /
@@ -164,6 +174,20 @@ for StandardMaterial. The planned mesh-prefix captures raise prepare-resources C
 reduction. These overlapping timings and different sampled frames do not establish causal costs,
 but the whole-frame measurements give no reason to promote or expand this prototype.
 
+`compact-material` now targets the non-bindless WC3 animated-alpha and team-colour extensions.
+Render-only proxies bind the complete StandardMaterial uniform, base-colour texture/sampler and
+original WC3 extension data in four bindings. Main-world handles, alpha-buffer ownership, full skin
+identity and ordinary StandardMaterial's bindless path stay unchanged. Eligibility rejects every
+additional image input, including feature-gated fields. Source material events replace/invalidate
+cached proxies; unprepared proxies retain original materials, and substitutions explicitly refresh
+mesh material bindings and pipeline specialization. The loaded Bevy PBR helper is reused with only
+known-false texture branches specialized away; lighting, scalar properties, UV transforms, culling,
+alpha modes and extension calculations are retained. The final sampled frames select 707–709
+extension meshes with zero pending/unsupported fallbacks. All eight corrected captures validate
+without shader/GPU errors, but neither whole-frame nor tail timing improves repeatably. Keep this
+shader/proxy path opt-in; broader pass/device, replacement and visual parity verification remains
+unfinished. Do not spend further effort expanding either binding experiment without new evidence.
+
 A 99 Hz CPU sample attributes 16.74% of sampled cycles to the largest animation-target evaluation
 symbol, 7.34% to descendant propagation, 3.52% to skinned bounds, 3.14% to wgpu render-pass encoding
 and 1.92% to event crossings. These are exclusive CPU-cycle shares across threads, not frame-time
@@ -188,25 +212,23 @@ material-layer copies and actual vertex invocations; they predict neither GPU sa
 
 ## Next measured work
 
-1. Reduce faithful transparent submission/resource tracking cost, prioritizing compact material
-   bindings given the base-color-only roster audit and near-per-draw pipeline changes. The measured
-   compatible particle/model layout-prefix prototype has no repeatable whole-frame gain; keep it
-   opt-in and avoid expanding it without new driver/submission evidence. The 32-item overlap
-   prototype also has limited value; measure larger safely bounded opportunities before expanding
-   it. Keep potentially overlapping precedence and unknown-draw barriers.
-2. Validate partial particle binding arrays across unsupported-feature/device paths and exact image
-   parity when visual verification is requested; promote only after that evidence exists.
-3. Compile immutable WC3 node/material/event metadata once per source. Cache selected sequence
+1. Compile immutable WC3 node/material/event metadata once per source. Cache selected sequence
    windows and clock owners, and skip empty event windows while preserving initial/time-zero,
    global-sequence, skipped-frame, looping and reuse behavior. Existing extras are still deserialized
    per new instance. Keep clocks, cursors, GPU slots, emitter counters and child ownership per instance;
    invalidate caches on asset replacement and owner bindings on reparenting/reinstancing.
-4. Prototype per-primitive skin-influence specialization behind a profiling control, preserving
+2. Prototype per-primitive skin-influence specialization behind a profiling control, preserving
    full skin identity. Compare GPU pass timing and whole-battle frame tails, not asset counts alone.
-5. Address remaining cold sources identified by the final census, especially resurrected Rifleman
+3. Address remaining cold sources identified by the final census, especially resurrected Rifleman
    unit hierarchies and event-spawned children. Unit reserves need owner/team/material/animation
    setup and full skin identity, not timed-effect reuse assumptions. Re-measure whole-battle tail
    latency and reserve growth during ordinary live production as well as paused warm-up fixtures.
+4. Validate partial particle binding arrays across unsupported-feature/device paths and exact image
+   parity when visual verification is requested; promote only after that evidence exists.
+5. Revisit transparent submission/resource tracking only with new driver/submission evidence.
+   Compatible mesh-layout prefixes and compact WC3 extension bindings both lack a repeatable
+   whole-frame gain. The 32-item overlap prototype also has limited value; measure larger safely
+   bounded opportunities before expanding it. Keep overlapping precedence and unknown-draw barriers.
 
 No further tests were run after the user's instruction to skip them. Follow-up validation used
 formatting, Clippy with warnings denied, release builds and native frame/census captures. Early
@@ -241,7 +263,8 @@ pipeline warm-up can be tested separately.
 
 ## Relevant code
 
-Primary client areas are particle_renderer.rs (particle records, phase queuing and bindings),
+Primary client areas are compact_material.rs (material-binding experiment), particle_renderer.rs
+(particle records, phase queuing and bindings),
 wc3_effects.rs (effect events, animation clocks and WC3 scene setup), and
 presentation.rs::spawn_or_reuse_timed_wc3_visual (timed-effect pooling). The shared-palette design,
 if revisited, needs changes around Bevy 0.19.1 PBR skin allocation/extraction rather than another
