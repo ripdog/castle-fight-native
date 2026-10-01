@@ -355,6 +355,17 @@ mode and MUST NOT affect the authoritative simulation. They deliberately change 
   safe moves, overlap rejections and barrier stops; these are search events, not unique draw counts.
 - `particle-shared-view` reuses the exact PBR view layouts and bind groups for compact particles,
   moving their texture group to slot 2. It retains particle sorting and blend operations.
+- `particle-shared-mesh` additionally preserves the preceding supported PBR mesh layout in slot 2,
+  moving particle textures to slot 3. Prefix selection MUST use final prepared draw representatives
+  and associate metadata with the view and particle item identity. The client MUST match the exact
+  view/mesh layout and resolve the current mesh bind group through Bevy's normal mesh command; it
+  MUST NOT rewrite skin indices or retain GPU skin buffers. Model, lightmapped, skin/motion and morph
+  layout variants are supported
+  on storage-buffer devices with four bind-group slots. Uniform-offset paths, unknown draws/layouts,
+  absent preceding meshes and asynchronously compiling variants MUST use the shared-view fallback.
+  Draw order, batch membership, shaders' particle math and blend operations remain unchanged.
+- `particle-shared-mesh-partial-bindings` combines that layout prefix with the populated-prefix
+  texture arrays of `particle-partial-bindings`, retaining fully padded arrays on unsupported devices.
 - `particle-cull` skips compact particles with exactly zero alpha or whose conservative billboard
   sphere is outside the view frustum. It retains emission, simulation and lifetime work. Missing
   frustum data keeps the particle; far-plane rejection is disabled conservatively.

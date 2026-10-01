@@ -57,6 +57,8 @@ pub(crate) enum RenderExperiment {
     Bindless256,
     NoBindless,
     ParticleSharedView,
+    ParticleSharedMesh,
+    ParticleSharedMeshPartialBindings,
     ParticleCull,
     ParticlePartialBindings,
     ParticleUncachedBindings,
@@ -92,6 +94,8 @@ impl RenderExperiment {
             "bindless-256" => Ok(Self::Bindless256),
             "no-bindless" => Ok(Self::NoBindless),
             "particle-shared-view" => Ok(Self::ParticleSharedView),
+            "particle-shared-mesh" => Ok(Self::ParticleSharedMesh),
+            "particle-shared-mesh-partial-bindings" => Ok(Self::ParticleSharedMeshPartialBindings),
             "particle-cull" => Ok(Self::ParticleCull),
             "particle-partial-bindings" => Ok(Self::ParticlePartialBindings),
             "particle-uncached-bindings" => Ok(Self::ParticleUncachedBindings),
@@ -99,7 +103,7 @@ impl RenderExperiment {
             "particle-overlap-audit" => Ok(Self::ParticleOverlapAudit),
             "particle-overlap-batching" => Ok(Self::ParticleOverlapBatching),
             _ => Err(format!(
-                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, bindless-auto, bindless-16, bindless-32, bindless-64, bindless-128, bindless-256, no-bindless, particle-shared-view, particle-cull, particle-partial-bindings, particle-uncached-bindings, cold-effect-pools, particle-overlap-audit, or particle-overlap-batching"
+                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, bindless-auto, bindless-16, bindless-32, bindless-64, bindless-128, bindless-256, no-bindless, particle-shared-view, particle-shared-mesh, particle-shared-mesh-partial-bindings, particle-cull, particle-partial-bindings, particle-uncached-bindings, cold-effect-pools, particle-overlap-audit, or particle-overlap-batching"
             )),
         }
     }
@@ -242,6 +246,12 @@ impl RenderAudit {
             )
             .unwrap();
             writeln!(output, "  particle overlap audit: {} safe moves, {} overlap rejects, {} unknown barriers (latest frame)", particles.reorder_moves, particles.reorder_overlap_rejects, particles.reorder_barriers).unwrap();
+            writeln!(
+                output,
+                "  particle mesh prefix: {} compatible batches, {} fallback batches (latest frame)",
+                particles.mesh_prefix_batches, particles.mesh_prefix_fallback_batches
+            )
+            .unwrap();
         }
         output.push_str("\nCOLD SCENE REQUESTS  new roots, not completed spawns; template entity counts are estimates\n");
         let mut scenes = measurements.scene_requests.iter().collect::<Vec<_>>();
@@ -506,6 +516,8 @@ fn apply_render_experiment(
             | RenderExperiment::Bindless256
             | RenderExperiment::NoBindless
             | RenderExperiment::ParticleSharedView
+            | RenderExperiment::ParticleSharedMesh
+            | RenderExperiment::ParticleSharedMeshPartialBindings
             | RenderExperiment::ParticleCull
             | RenderExperiment::ParticlePartialBindings
             | RenderExperiment::ParticleUncachedBindings
@@ -548,6 +560,8 @@ fn apply_render_experiment(
             | RenderExperiment::Bindless256
             | RenderExperiment::NoBindless
             | RenderExperiment::ParticleSharedView
+            | RenderExperiment::ParticleSharedMesh
+            | RenderExperiment::ParticleSharedMeshPartialBindings
             | RenderExperiment::ParticleCull
             | RenderExperiment::ParticlePartialBindings
             | RenderExperiment::ParticleUncachedBindings

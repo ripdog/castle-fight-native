@@ -17,6 +17,7 @@ use bevy::{
         visibility::NoFrustumCulling,
     },
     core_pipeline::core_3d::{CORE_3D_DEPTH_FORMAT, Transparent3d, TransparentSortingInfo3d},
+    core_pipeline::prepass::MotionVectorPrepass,
     ecs::{
         query::ROQueryItem,
         system::{
@@ -26,7 +27,8 @@ use bevy::{
     },
     mesh::VertexBufferLayout,
     pbr::{
-        DrawMaterial, MeshPipelineViewLayoutKey, MeshPipelineViewLayouts, MeshViewBindGroup,
+        DrawMaterial, MeshLayouts, MeshPipeline, MeshPipelineViewLayoutKey,
+        MeshPipelineViewLayouts, MeshViewBindGroup, RenderMeshInstances, SetMeshBindGroup,
         ViewKeyCache,
     },
     prelude::*,
@@ -89,7 +91,7 @@ impl Plugin for Wc3ParticleRenderPlugin {
             .add_systems(
                 RenderStartup,
                 (|mut commands: Commands| commands.init_resource::<Wc3ParticlePipeline>())
-                    .after(bevy::pbr::init_mesh_pipeline_view_layouts),
+                    .after(bevy::pbr::MeshPipelineSystems),
             )
             .init_resource::<SpecializedRenderPipelines<Wc3ParticlePipeline>>()
             .add_render_command::<Transparent3d, DrawWc3BillboardParticles>()
@@ -109,6 +111,7 @@ impl Plugin for Wc3ParticleRenderPlugin {
                 (
                     prepare_wc3_particle_view_bind_groups,
                     prepare_wc3_particle_texture_bind_groups,
+                    prepare_wc3_particle_mesh_prefixes,
                 )
                     .in_set(RenderSystems::PrepareBindGroups),
             );
@@ -205,13 +208,17 @@ fn extract_wc3_particles(
 #[derive(Resource)]
 struct Wc3ParticleGpuBuffer {
     instances: RawBufferVec<Wc3ParticleInstance>,
+    mesh_bindings: HashMap<(Entity, (Entity, MainEntity)), Wc3ParticleMeshBinding>,
 }
 
 impl Default for Wc3ParticleGpuBuffer {
     fn default() -> Self {
         let mut instances = RawBufferVec::new(BufferUsages::VERTEX);
         instances.set_label(Some("wc3 particle instances"));
-        Self { instances }
+        Self {
+            instances,
+            mesh_bindings: HashMap::new(),
+        }
     }
 }
 
@@ -264,6 +271,58 @@ pub(crate) struct Wc3ParticleQueueStats {
     pub(crate) reorder_moves: usize,
     pub(crate) reorder_overlap_rejects: usize,
     pub(crate) reorder_barriers: usize,
+    pub(crate) mesh_prefix_batches: usize,
+    pub(crate) mesh_prefix_fallback_batches: usize,
+}
+
+#[derive(Clone, Copy)]
+struct Wc3ParticleMeshBinding {
+    entity: (Entity, MainEntity),
+}
+
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+enum Wc3ParticleMeshLayout {
+    Model,
+    Lightmapped,
+    Skinned,
+    SkinnedMotion,
+    Morphed,
+    MorphedMotion,
+    MorphedSkinned,
+    MorphedSkinnedMotion,
+}
+
+impl Wc3ParticleMeshLayout {
+    const ALL: [Self; 8] = [
+        Self::Model,
+        Self::Lightmapped,
+        Self::Skinned,
+        Self::SkinnedMotion,
+        Self::Morphed,
+        Self::MorphedMotion,
+        Self::MorphedSkinned,
+        Self::MorphedSkinnedMotion,
+    ];
+
+    fn descriptor(self, layouts: &MeshLayouts) -> &BindGroupLayoutDescriptor {
+        match self {
+            Self::Model => &layouts.model_only,
+            Self::Lightmapped => &layouts.lightmapped,
+            Self::Skinned => &layouts.skinned,
+            Self::SkinnedMotion => &layouts.skinned_motion,
+            Self::Morphed => &layouts.morphed,
+            Self::MorphedMotion => &layouts.morphed_motion,
+            Self::MorphedSkinned => &layouts.morphed_skinned,
+            Self::MorphedSkinnedMotion => &layouts.morphed_skinned_motion,
+        }
+    }
+}
+
+fn uses_shared_mesh(experiment: RenderExperiment) -> bool {
+    matches!(
+        experiment,
+        RenderExperiment::ParticleSharedMesh | RenderExperiment::ParticleSharedMeshPartialBindings
+    )
 }
 
 #[derive(Component)]
@@ -273,6 +332,8 @@ struct Wc3ParticleViewBindGroup(BindGroup);
 struct Wc3ParticlePipeline {
     view_layout: BindGroupLayoutDescriptor,
     mesh_view_layouts: MeshPipelineViewLayouts,
+    mesh_layouts: MeshLayouts,
+    shared_mesh_supported: bool,
     single_texture_layout: BindGroupLayoutDescriptor,
     texture_array_layout: BindGroupLayoutDescriptor,
     texture_slab_size: usize,
@@ -282,7 +343,12 @@ struct Wc3ParticlePipeline {
 
 impl Wc3ParticlePipeline {
     fn bound_texture_count(&self, experiment: RenderExperiment, populated: usize) -> usize {
-        if experiment == RenderExperiment::ParticlePartialBindings && self.partial_binding_arrays {
+        if matches!(
+            experiment,
+            RenderExperiment::ParticlePartialBindings
+                | RenderExperiment::ParticleSharedMeshPartialBindings
+        ) && self.partial_binding_arrays
+        {
             populated
         } else {
             self.texture_slab_size
@@ -359,9 +425,15 @@ impl FromWorld for Wc3ParticlePipeline {
         let shader = world
             .resource::<AssetServer>()
             .load(WC3_PARTICLE_SHADER_PATH);
+        let mesh_pipeline = world.resource::<MeshPipeline>();
         Self {
             view_layout,
             mesh_view_layouts: world.resource::<MeshPipelineViewLayouts>().clone(),
+            mesh_layouts: mesh_pipeline.mesh_layouts.clone(),
+            // Uniform-offset paths keep the existing shared-view renderer.
+            shared_mesh_supported: !mesh_pipeline.skins_use_uniform_buffers
+                && mesh_pipeline.per_object_buffer_batch_size.is_none()
+                && limits.max_bind_groups >= 4,
             single_texture_layout,
             texture_array_layout,
             texture_slab_size,
@@ -378,6 +450,7 @@ struct Wc3ParticlePipelineKey {
     texture_slab_size: u32,
     blend_mode: Wc3ParticleBlendMode,
     shared_view: Option<MeshPipelineViewLayoutKey>,
+    shared_mesh: Option<Wc3ParticleMeshLayout>,
 }
 
 impl SpecializedRenderPipeline for Wc3ParticlePipeline {
@@ -408,8 +481,16 @@ impl SpecializedRenderPipeline for Wc3ParticlePipeline {
         };
         let layout = if let Some(view_key) = key.shared_view {
             let view = self.mesh_view_layouts.get_view_layout(view_key);
-            shader_defs.push(ShaderDefVal::UInt("PARTICLE_TEXTURE_GROUP".into(), 2));
-            vec![view.main_layout, view.binding_array_layout, texture_layout]
+            let mut layouts = vec![view.main_layout, view.binding_array_layout];
+            if let Some(mesh) = key.shared_mesh {
+                layouts.push(mesh.descriptor(&self.mesh_layouts).clone());
+            }
+            shader_defs.push(ShaderDefVal::UInt(
+                "PARTICLE_TEXTURE_GROUP".into(),
+                layouts.len() as u32,
+            ));
+            layouts.push(texture_layout);
+            layouts
         } else {
             shader_defs.push(ShaderDefVal::UInt("PARTICLE_TEXTURE_GROUP".into(), 1));
             vec![self.view_layout.clone(), texture_layout]
@@ -530,7 +611,9 @@ fn queue_wc3_particles(
         let Some(phase) = phases.get_mut(&view.retained_view_entity) else {
             continue;
         };
-        let shared_view = if extracted.experiment == RenderExperiment::ParticleSharedView {
+        let shared_view = if extracted.experiment == RenderExperiment::ParticleSharedView
+            || uses_shared_mesh(extracted.experiment)
+        {
             let Some(view_key) = view_keys.get(&view.retained_view_entity) else {
                 continue;
             };
@@ -548,6 +631,7 @@ fn queue_wc3_particles(
                     texture_slab_size: pipeline.texture_slab_size as u32,
                     blend_mode,
                     shared_view,
+                    shared_mesh: None,
                 },
             )
         };
@@ -756,19 +840,21 @@ fn audit_or_reorder_particles(
     }
 }
 
+type Wc3ParticleBatchSources<'w, 's> = (
+    Res<'w, ExtractedWc3Particles>,
+    Res<'w, Wc3TransparentCoverage>,
+    Query<'w, 's, &'static ExtractedView>,
+);
+
 fn batch_and_upload_wc3_particles(
     draw_functions: Res<DrawFunctions<Transparent3d>>,
-    sources: (
-        Res<ExtractedWc3Particles>,
-        Res<Wc3TransparentCoverage>,
-        Query<&ExtractedView>,
-    ),
+    sources: Wc3ParticleBatchSources,
     mut phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
     mut gpu: ResMut<Wc3ParticleGpuBuffer>,
     mut stats: ResMut<Wc3ParticleQueueStats>,
-    render_device: Res<RenderDevice>,
-    render_queue: Res<RenderQueue>,
+    renderer: (Res<RenderDevice>, Res<RenderQueue>),
 ) {
+    let (render_device, render_queue) = renderer;
     let draw_function = draw_functions.read().id::<DrawWc3BillboardParticles>();
     let (extracted, coverage, views) = sources;
     gpu.instances.clear();
@@ -847,7 +933,7 @@ fn batch_and_upload_wc3_particles(
             }
 
             let texture_entity = item.entity.0;
-            let pipeline = item.pipeline;
+            let run_pipeline = item.pipeline;
             let run_start = item_index;
             let gpu_start = gpu.instances.len() as u32;
             let mut run_end = run_start;
@@ -856,7 +942,7 @@ fn batch_and_upload_wc3_particles(
                 let candidate = &phase.items[run_end];
                 if candidate.draw_function != draw_function
                     || candidate.entity.0 != texture_entity
-                    || candidate.pipeline != pipeline
+                    || candidate.pipeline != run_pipeline
                 {
                     break;
                 }
@@ -882,6 +968,128 @@ fn batch_and_upload_wc3_particles(
     }
 
     gpu.instances.write_buffer(&render_device, &render_queue);
+}
+
+type Wc3ParticleMeshPrefixSources<'w, 's> = (
+    Res<'w, ExtractedWc3Particles>,
+    Query<'w, 's, (Entity, &'static ExtractedView, &'static Msaa)>,
+    Res<'w, ViewKeyCache>,
+    Res<'w, RenderMeshInstances>,
+);
+
+fn prepare_wc3_particle_mesh_prefixes(
+    draw_functions: Res<DrawFunctions<Transparent3d>>,
+    sources: Wc3ParticleMeshPrefixSources,
+    pipeline_state: Wc3ParticleQueuePipelines,
+    mut phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
+    mut gpu: ResMut<Wc3ParticleGpuBuffer>,
+    mut stats: ResMut<Wc3ParticleQueueStats>,
+) {
+    gpu.mesh_bindings.clear();
+    let (extracted, views, view_keys, mesh_instances) = sources;
+    let (pipeline_cache, pipeline, mut pipelines) = pipeline_state;
+    if !uses_shared_mesh(extracted.experiment) {
+        return;
+    }
+    let functions = draw_functions.read();
+    let particle_draw = functions.id::<DrawWc3BillboardParticles>();
+    let model_draw = functions.id::<DrawMaterial>();
+    for (view_entity, view, msaa) in &views {
+        let Some(phase) = phases.get_mut(&view.retained_view_entity) else {
+            continue;
+        };
+        let shared_view = pipeline
+            .shared_mesh_supported
+            .then(|| view_keys.get(&view.retained_view_entity).copied())
+            .flatten()
+            .map(MeshPipelineViewLayoutKey::from);
+        let view_layout = shared_view.map(|key| pipeline.mesh_view_layouts.get_view_layout(key));
+        let mut preceding_mesh = None;
+        let mut index = 0;
+        while index < phase.items.len() {
+            let item = &phase.items[index];
+            let count = item.batch_range.len();
+            if count == 0 {
+                index += 1;
+                continue;
+            }
+            if item.draw_function != particle_draw {
+                // This runs after Bevy batches meshes. Only the representative
+                // that actually draws can establish the next binding prefix.
+                preceding_mesh = view_layout.as_ref().and_then(|view_layout| {
+                    if item.draw_function != model_draw
+                        || mesh_instances.mesh_asset_id(item.entity.1).is_none()
+                    {
+                        return None;
+                    }
+                    pipeline_cache.get_render_pipeline(item.pipeline)?;
+                    let descriptor = pipeline_cache.get_render_pipeline_descriptor(item.pipeline);
+                    if descriptor.layout.first() != Some(&view_layout.main_layout)
+                        || descriptor.layout.get(1) != Some(&view_layout.binding_array_layout)
+                    {
+                        return None;
+                    }
+                    let layout = descriptor.layout.get(2)?;
+                    Wc3ParticleMeshLayout::ALL
+                        .into_iter()
+                        .find(|kind| kind.descriptor(&pipeline.mesh_layouts) == layout)
+                        .map(|kind| {
+                            (
+                                kind,
+                                Wc3ParticleMeshBinding {
+                                    entity: item.entity,
+                                },
+                            )
+                        })
+                });
+            } else {
+                let compatible = preceding_mesh.and_then(|(layout, binding)| {
+                    let shared_view = shared_view?;
+                    pipeline_cache.get_render_pipeline(item.pipeline)?;
+                    let descriptor = pipeline_cache.get_render_pipeline_descriptor(item.pipeline);
+                    let blend_mode = descriptor
+                        .fragment
+                        .as_ref()?
+                        .shader_defs
+                        .iter()
+                        .find_map(|def| match def {
+                            ShaderDefVal::Bool(name, true) if name == "PARTICLE_BLEND_ADD" => {
+                                Some(Wc3ParticleBlendMode::Add)
+                            }
+                            ShaderDefVal::Bool(name, true) if name == "PARTICLE_BLEND_MULTIPLY" => {
+                                Some(Wc3ParticleBlendMode::Multiply)
+                            }
+                            _ => None,
+                        })
+                        .unwrap_or(Wc3ParticleBlendMode::Alpha);
+                    let mesh_pipeline = pipelines.specialize(
+                        &pipeline_cache,
+                        &pipeline,
+                        Wc3ParticlePipelineKey {
+                            target_format: view.target_format,
+                            sample_count: msaa.samples(),
+                            texture_slab_size: pipeline.texture_slab_size as u32,
+                            blend_mode,
+                            shared_view: Some(shared_view),
+                            shared_mesh: Some(layout),
+                        },
+                    );
+                    // Keep the original draw while the variant compiles.
+                    pipeline_cache.get_render_pipeline(mesh_pipeline)?;
+                    Some((mesh_pipeline, binding))
+                });
+                if let Some((mesh_pipeline, binding)) = compatible {
+                    gpu.mesh_bindings
+                        .insert((view_entity, item.entity), binding);
+                    phase.items[index].pipeline = mesh_pipeline;
+                    stats.mesh_prefix_batches += 1;
+                } else {
+                    stats.mesh_prefix_fallback_batches += 1;
+                }
+            }
+            index += count;
+        }
+    }
 }
 
 fn prepare_wc3_particle_view_bind_groups(
@@ -1004,19 +1212,26 @@ impl<P: PhaseItem> RenderCommand<P> for DrawWc3BillboardParticleCommand {
         SRes<Wc3ParticleGpuBuffer>,
         SRes<Wc3ParticleTextureBindGroups>,
         SRes<ExtractedWc3Particles>,
+        <SetMeshBindGroup<2> as RenderCommand<Transparent3d>>::Param,
     );
     type ViewQuery = (
+        Entity,
         Read<ViewUniformOffset>,
         Read<Wc3ParticleViewBindGroup>,
         Option<Read<MeshViewBindGroup>>,
+        Has<MotionVectorPrepass>,
     );
     type ItemQuery = ();
 
     fn render<'w>(
         item: &P,
-        (view_uniform, view_bind_group, mesh_view): ROQueryItem<'w, '_, Self::ViewQuery>,
+        (view_entity, view_uniform, view_bind_group, mesh_view, motion_vectors): ROQueryItem<
+            'w,
+            '_,
+            Self::ViewQuery,
+        >,
         _item_query: Option<ROQueryItem<'w, '_, Self::ItemQuery>>,
-        (gpu, texture_bind_groups, extracted): SystemParamItem<'w, '_, Self::Param>,
+        (gpu, texture_bind_groups, extracted, mesh_params): SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
         let gpu = gpu.into_inner();
@@ -1028,13 +1243,47 @@ impl<P: PhaseItem> RenderCommand<P> for DrawWc3BillboardParticleCommand {
             return RenderCommandResult::Skip;
         };
 
-        if extracted.into_inner().experiment == RenderExperiment::ParticleSharedView {
+        let experiment = extracted.into_inner().experiment;
+        if experiment == RenderExperiment::ParticleSharedView || uses_shared_mesh(experiment) {
             let Some(mesh_view) = mesh_view else {
                 return RenderCommandResult::Skip;
             };
             pass.set_bind_group(0, &mesh_view.main, &mesh_view.main_offsets);
             pass.set_bind_group(1, &mesh_view.binding_array, &[]);
-            pass.set_bind_group(2, &texture_bind_group.bind_group, &[]);
+            if let Some(binding) = gpu
+                .mesh_bindings
+                .get(&(view_entity, (item.entity(), item.main_entity())))
+            {
+                // Storage-buffer variants need no dynamic mesh/skin offsets.
+                // Resolve the preceding mesh's current bind group through the
+                // engine; never cache GPU buffers or rewrite skin indices.
+                let mesh_item = Transparent3d {
+                    sorting_info: TransparentSortingInfo3d::Sorted {
+                        mesh_center: Vec3::ZERO,
+                        depth_bias: 0.0,
+                    },
+                    distance: 0.0,
+                    pipeline: bevy::render::render_resource::CachedRenderPipelineId::INVALID,
+                    entity: binding.entity,
+                    draw_function: item.draw_function(),
+                    batch_range: 0..1,
+                    extra_index: PhaseItemExtraIndex::None,
+                    indexed: false,
+                };
+                let result = <SetMeshBindGroup<2> as RenderCommand<Transparent3d>>::render(
+                    &mesh_item,
+                    motion_vectors,
+                    Some(()),
+                    mesh_params,
+                    pass,
+                );
+                if !matches!(result, RenderCommandResult::Success) {
+                    return result;
+                }
+                pass.set_bind_group(3, &texture_bind_group.bind_group, &[]);
+            } else {
+                pass.set_bind_group(2, &texture_bind_group.bind_group, &[]);
+            }
         } else {
             pass.set_bind_group(0, &view_bind_group.0, &[view_uniform.offset]);
             pass.set_bind_group(1, &texture_bind_group.bind_group, &[]);
