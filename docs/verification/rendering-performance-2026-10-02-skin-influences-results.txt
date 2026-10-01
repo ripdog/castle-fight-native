@@ -1,0 +1,32 @@
+Rendering performance — 2026-10-02 per-primitive skin-influence specialization
+
+Implementation based on 47de25c; implementation/fix commit f4a5cc9.
+Planned fixture: visible native window (resolution to be confirmed per report), AutoNoVsync, locked centre camera; release build; 700 initial units; 10 s paused warm-up + 10 s live combat. Living population declines during combat.
+No tests or image inspection. Baseline and skin-influences will use the same binary; event metadata and other opt-in controls will be off. No accepted performance captures exist for this candidate yet.
+
+Implementation scope: classify highest nonzero weight slot from extracted Mesh snapshots; metadata-only layout markers; delegate complete StandardMaterial/WC3 alpha/team specialization; derive main/prepass vertex and current/previous skinning functions from loaded engine sources. Eligible 1/2/3-slot variants omit exactly-zero trailing matrix terms and use corresponding prefix weight-input formats at the original stride/offset. This input-layout difference is required to distinguish variants in Bevy's second-level pipeline cache. Driver-filled missing components are ignored. Vertex bytes, full skin/joint/palette ownership, bounds, normals/tangents, fragments, material handles and bindings remain unchanged. Custom vertex shaders, unknown materials and shared material properties keep the ordinary four-slot path.
+
+Initial validation attempt: REJECTED, startup panic before warm-up/capture completed; no FPS/performance results. Native process reported exit code 0 despite the task-pool panic. This attempt began before the user requested that benchmarking wait while another game is running. No client launches or benchmark captures were made after that request.
+
+Crash cause: sample_skin_pipelines read a descriptor for pipeline ID 18 while PipelineCache.pipelines was still empty. IDs can already exist in the material specialization cache while queued in new_pipelines. Bevy explicitly documents get_render_pipeline_descriptor as panicking for IDs not processed by process_queue. The counter now first uses get_render_pipeline, whose bounds-checked lookup returns None for queued, compiling and failed pipelines. Only ready pipelines reach descriptor lookup; the counter label explicitly says ready cached main-view instances. The renderer itself and authoritative simulation are unchanged by this sampling fix.
+
+Post-fix validation: cargo fmt --all; git diff --check; tools/cargo-interactive clippy -p castle-fight-client -- -D warnings passed. No tests run.
+Initial release build passed in 4m 31s. Post-fix tools/cargo-interactive build --release -p castle-fight-client passed in 4m 45s.
+Corrected runtime validation, compiled-variant census, full-palette comparison, GPU pass timings and the alternating same-binary timing series are DEFERRED at the user's request. Shader/device/pass/replacement fidelity remains unverified; this candidate stays opt-in and no speedup is claimed.
+
+Full rejected startup log follows:
+
+Loaded 2360 generated WC3 UI icon binding(s) and 4 cursor atlas binding(s) for Castle Fight 9.27
+client-profile standard_material_bindless=true
+2026-10-01T22:34:50.745698Z  WARN bevy_winit::winit_windows: Can't select current monitor on window creation or cannot find current monitor!
+spawned 1184 Warcraft III doodad/destructable scene instances
+Loaded 29 generated WC3 unit model(s)
+Loaded 24 generated WC3 building model(s)
+Loaded 158 WC3 projectile visual(s), 240 ability visual(s), 15 status visual id(s), and 5 chain-lightning id(s)
+
+thread 'Compute Task Pool (3)' (1233834) panicked at /home/ripdog/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/bevy_render-0.19.1/src/render_resource/pipeline_cache.rs:305:30:
+index out of bounds: the len is 0 but the index is 18
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+Encountered a panic in system `<Enable the debug feature to see the name>`!
+Encountered a panic in system `<Enable the debug feature to see the name>`!
+2026-10-01T22:34:51.950249Z  WARN bevy_render::diagnostic::internal: Failed to download render statistics buffer: Error occurred when trying to async map a buffer

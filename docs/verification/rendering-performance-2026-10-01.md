@@ -14,6 +14,7 @@ work. Detailed profiler output remains in the raw capture files:
 - [2026-10-02 binding-prefix captures](rendering-performance-2026-10-02-results.txt)
 - [2026-10-02 compact-material captures](rendering-performance-2026-10-02-compact-material-results.txt)
 - [2026-10-02 compiled-event captures](rendering-performance-2026-10-02-event-metadata-results.txt)
+- [2026-10-02 skin-influence implementation/crash record](rendering-performance-2026-10-02-skin-influences-results.txt)
 
 Do not append long investigation diaries here. When a new optimization is measured, add one row to
 the benchmark ledger, update the current conclusions/next work if the result changes them, and keep
@@ -242,11 +243,21 @@ specialization is a new candidate; retain full palettes, all nonzero weights, no
 previous-frame skinning and every material/pass path. These authored counts exclude visibility,
 material-layer copies and actual vertex invocations; they predict neither GPU savings nor FPS.
 
+The opt-in `skin-influences` prototype now classifies extracted upload snapshots and wraps ordinary
+StandardMaterial/WC3 alpha/team specialization for one/two/three-slot main/prepass shader variants.
+Full skin/palette ownership and vertex bytes stay unchanged; narrowed weight-input formats keep
+Bevy's pipeline cache from aliasing variants. Its first native launch crashed in the new census
+counter before capture: a queued pipeline descriptor was read before Bevy processed it. The sampler
+now guards descriptor access with the safe ready-pipeline lookup. No accepted timing or runtime
+variant-validation results exist yet. Further launches and benchmarks are deferred while the user's
+other game is running; this prototype remains opt-in with no performance gain claimed.
+
 ## Next measured work
 
-1. Prototype per-primitive skin-influence specialization behind a profiling control, preserving
-   full skin identity, all nonzero weights, normals, previous-frame skinning and every material/pass
-   path. Compare GPU pass timing and whole-battle frame tails, not asset counts alone.
+1. When benchmarking resumes, validate the implemented per-primitive skin-influence control's
+   compiled variants and full palette census, then compare GPU pass timing and whole-battle frame
+   tails against alternating same-binary controls. Preserve all nonzero weights, normals,
+   previous-frame skinning and every material/pass path; asset counts alone do not establish a gain.
 2. Address remaining cold sources identified by the final census, especially resurrected Rifleman
    unit hierarchies and event-spawned children. Unit reserves need owner/team/material/animation
    setup and full skin identity, not timed-effect reuse assumptions. Re-measure whole-battle tail
