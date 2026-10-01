@@ -12,7 +12,7 @@ use bevy::{
         visibility::NoFrustumCulling,
     },
     ecs::{entity_disabling::Disabled, system::SystemParam},
-    gltf::Gltf,
+    gltf::{Gltf, GltfMaterialExtras},
     input::mouse::MouseWheel,
     light::AmbientLight,
     mesh::{Indices, MeshVertexBufferLayoutRef, PrimitiveTopology},
@@ -58,8 +58,8 @@ use crate::{
     wc3_effects::{
         Wc3AbilityVisualAnchor, Wc3AnimatedAlphaMaterial, Wc3AttachToNode, Wc3AttachmentOwner,
         Wc3ConvertedModelRegistry, Wc3EffectReusePending, Wc3EffectWarmup, Wc3EmitterSource,
-        Wc3ModelSequenceSelection, Wc3ParticleAssets, Wc3RibbonSource, Wc3SplatMaterial,
-        Wc3StatusVisualKind, Wc3TeamColorMaterial, Wc3TeamTint, Wc3VertexTint,
+        Wc3MaterialProcessed, Wc3ModelSequenceSelection, Wc3ParticleAssets, Wc3RibbonSource,
+        Wc3SplatMaterial, Wc3StatusVisualKind, Wc3TeamColorMaterial, Wc3TeamTint, Wc3VertexTint,
         Wc3VisualAnimationGraphs, Wc3VisualAnimationSource, Wc3VisualModel, Wc3VisualSet,
         advance_wc3_model_sequence_clocks, apply_wc3_non_inheritance, emit_wc3_model_particles,
         emit_wc3_particles, emit_wc3_sound_events, emit_wc3_spawn_events, emit_wc3_splat_events,
@@ -3206,6 +3206,18 @@ fn prewarm_timed_wc3_effects(
     }
 }
 
+type PendingWc3EffectMaterials<'w, 's> = Query<
+    'w,
+    's,
+    (),
+    (
+        With<Mesh3d>,
+        With<MeshMaterial3d<StandardMaterial>>,
+        With<GltfMaterialExtras>,
+        Without<Wc3MaterialProcessed>,
+    ),
+>;
+
 fn retain_prewarmed_wc3_effects(
     mut commands: Commands,
     spawner: Res<WorldInstanceSpawner>,
@@ -3213,15 +3225,23 @@ fn retain_prewarmed_wc3_effects(
         Entity,
         &WorldInstance,
         &PrewarmingWc3Effect,
+        &Wc3EmitterSource,
         Has<Wc3ModelSequenceSelection>,
     )>,
+    pending_materials: PendingWc3EffectMaterials<'_, '_>,
     mut pool: ResMut<TimedWc3EffectPool>,
     mut plan: ResMut<Wc3EffectPrewarmPlan>,
 ) {
     // This runs after all WC3 node/material/animation setup and its deferred
     // commands. A root request alone is insufficient to enter the reserve.
-    for (entity, instance, warmup, animation_ready) in &roots {
-        if !spawner.instance_is_ready(**instance) || (warmup.needs_animation && !animation_ready) {
+    for (entity, instance, warmup, emitters, animation_ready) in &roots {
+        if !spawner.instance_is_ready(**instance)
+            || (warmup.needs_animation && !animation_ready)
+            || !emitters.node_bindings_ready()
+            || spawner
+                .iter_instance_entities(**instance)
+                .any(|entity| pending_materials.contains(entity))
+        {
             continue;
         }
         commands

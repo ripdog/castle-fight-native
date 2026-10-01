@@ -2792,6 +2792,10 @@ impl Wc3VisualSet {
 }
 
 impl Wc3EmitterSource {
+    pub(crate) fn node_bindings_ready(&self) -> bool {
+        self.node_binding_complete
+    }
+
     #[must_use]
     pub fn new(emitters: &[Wc3ParticleEmitter]) -> Self {
         Self::with_asset_prefix(emitters, EFFECT_ASSET_PREFIX)
