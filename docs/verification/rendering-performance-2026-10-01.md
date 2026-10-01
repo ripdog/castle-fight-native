@@ -13,6 +13,7 @@ work. Detailed profiler output remains in the raw capture files:
 - [2026-10-01 raw captures](rendering-performance-2026-10-01-results.txt)
 - [2026-10-02 binding-prefix captures](rendering-performance-2026-10-02-results.txt)
 - [2026-10-02 compact-material captures](rendering-performance-2026-10-02-compact-material-results.txt)
+- [2026-10-02 compiled-event captures](rendering-performance-2026-10-02-event-metadata-results.txt)
 
 Do not append long investigation diaries here. When a new optimization is measured, add one row to
 the benchmark ledger, update the current conclusions/next work if the result changes them, and keep
@@ -80,6 +81,7 @@ captures were recorded. The raw files above retain every individual run and ever
 | — | Compatible particle/model mesh-layout prefix, A/B mean | implemented, opt-in; no repeatable gain | 700 combat | 44.56 / 22.441 | 44.59 / 22.427 default A/B/C mean | +0.06% | 2026-10-02 raw |
 | — | Mesh-layout prefix + partial particle arrays, A/B mean | opt-in; initial gain did not repeat | 700 combat | 42.68 / 23.431 | 45.34 / 22.058 partial-only A/B mean | +6.2% | 2026-10-02 raw |
 | — | Compact WC3 alpha/team material bindings, A/B/C mean | implemented, opt-in; no repeatable gain | 700 combat | 47.21 / 21.180 | 47.20 / 21.188 default A/B/C/D mean | -0.04% | 2026-10-02 compact raw |
+| — | Shared compiled event metadata, A/B/C mean | implemented, opt-in; CPU reduction, no throughput gain | 700 combat | 45.92 / 21.777 | 46.20 / 21.644 default A/B/C/D mean | +0.61% | 2026-10-02 event raw |
 
 The progression rows are not one continuous synthetic benchmark: fixture changes are explicit above,
 and each percentage is relative only to its recorded control. In particular, the h02W texture test
@@ -94,15 +96,26 @@ The separate compact-material series alternates four defaults with three candida
 one accepted validation capture (47.93 FPS / 20.863 ms) outside those means. Its initial shader-import
 failure is explicitly rejected: missing draws invalidate the reported 50.85 FPS. The full failed
 report remains in its raw file; all eight corrected captures finish without shader/GPU errors.
+The event-metadata series also alternates four defaults with three candidate captures, with one
+validation capture outside the means (45.62 FPS / 21.922 ms). Four separate CPU-sampled captures
+are excluded from timing means; stack recording dropped data in both paths, so attribution uses
+replacement 99 Hz self-cycle samples with zero lost samples. All twelve native event-series captures
+complete without shader/GPU errors, and every report remains in the event raw file.
 
 ## Current conclusions
 
-The target is not met. The latest alternating same-binary default captures reach 46.84–47.41 FPS /
-21.095–21.349 ms, averaging 21.188 ms. Compact WC3 alpha/team material bindings average 21.180 ms,
-effectively unchanged (-0.04%). Their p95 ranges from 31.685 to 33.104 ms versus 32.216–32.822 ms
-in defaults; p99 is 36.513–37.639 ms versus 36.463–37.452 ms. Keep the compact path opt-in and
-prioritize immutable event/node metadata next. These newer default timings do not establish a gain
-against earlier series; only compare controls from the same contemporary binary and sequence.
+The target is not met. The latest alternating same-binary default captures reach 45.54–46.61 FPS /
+21.455–21.960 ms, averaging 21.644 ms. Shared compiled event metadata averages 21.777 ms (+0.61%):
+no throughput gain. Candidate p95 is 33.710–34.014 ms versus 32.839–34.017 ms in defaults; p99 is
+36.885–39.051 ms versus 37.958–39.328 ms. The lower candidate p99 range does not establish a
+consistent tail win, with overlapping worst frames and a 40.561 ms p99 in its extra validation.
+Update scope falls from 4.954 to 4.051 ms (-18.2%, about 0.903 ms), supported by lower sampled event
+CPU work. That is useful CPU headroom, but cannot be treated as a frame-time saving. Keep the cache
+opt-in and move to per-primitive skin-influence specialization. These newer default timings do not
+establish a gain against earlier series; compare controls from the same binary and sequence.
+
+The preceding compact-material series averages 21.180 ms against 21.188 ms in its defaults (-0.04%).
+It likewise remains opt-in; neither material-bindings prototype establishes repeatable throughput.
 
 In the preceding binding-prefix series, default captures average 22.427 ms and mesh-prefix A/B
 captures average 22.441 ms (+0.06%). Shared-view controls vary from 21.780 to 24.586 ms, so gains
@@ -188,14 +201,33 @@ without shader/GPU errors, but neither whole-frame nor tail timing improves repe
 shader/proxy path opt-in; broader pass/device, replacement and visual parity verification remains
 unfinished. Do not spend further effort expanding either binding experiment without new evidence.
 
-A 99 Hz CPU sample attributes 16.74% of sampled cycles to the largest animation-target evaluation
+A prior 99 Hz CPU stack sample attributes 16.74% of sampled cycles to the largest animation-target
 symbol, 7.34% to descendant propagation, 3.52% to skinned bounds, 3.14% to wgpu render-pass encoding
 and 1.92% to event crossings. These are exclusive CPU-cycle shares across threads, not frame-time
-budgets. The preceding 199 Hz sample lost 5.58% of events; use the 99 Hz sample for attribution.
+budgets. Its preceding 199 Hz sample lost 5.58% of events and is less useful for attribution.
 Authored roster metadata contains 5,300 event objects across the initial 700 copies; 57,550 of
-63,050 event/sequence windows (91.3%) contain no timestamps. The current crossing code still
-searches sequence names and filters timestamps each frame. Compile shared per-sequence event phases
-and cache selected windows/clock owners, keeping crossing cursors and reset semantics per instance.
+63,050 event/sequence windows (91.3%) contain no timestamps.
+
+`compiled-event-tracks` now shares parsed composed-node extras and immutable event specifications
+by exact content, compiles relative sequence/global event phases, and caches the selected window in
+an instance-local cursor. Empty windows still advance that cursor. Original key ordering, duplicates,
+endpoints, crossing arithmetic, global fallback and reset-on-reuse behavior are retained. Changed or
+removed extras replace/remove event runtimes; changed content selects fresh metadata, while asset
+paths/handles remain resolved per instance. Clocks, sound counters and child ownership remain local;
+clock lookup still follows the current hierarchy each frame. Other metadata readers are unchanged.
+The final census finds 757 unique node-content sources, 108,517–108,567 cumulative cache hits,
+119 tracks and 1,176/1,304 empty compiled windows; these cover prepared effects and doodads as well
+as units, so they are not the weighted roster counts above. Metadata entries are retained for the
+process; repeated hot reloads can accumulate obsolete content. Broader replacement/reuse behavior
+has not been exercised. Keep this focused prototype opt-in; do not expand it on source counts alone.
+
+The new 99 Hz CPU self-cycle samples record 8,735 baseline / 8,445 candidate samples with no losses.
+Event crossings fall from 3.39% to 0.10% of sampled cycles; inherited clock lookup remains
+1.36% / 1.82%. One sample per path supports lower event CPU work, not a precise speedup or
+frame-time prediction. The independent timing series' Update reduction agrees with that finding,
+while whole-frame measurements remain flat. Its two earlier stack-recording samples dropped data
+and are explicitly rejected for attribution. Do not compare the percentages across sampling methods
+and binaries as a progression.
 
 Animation was expensive in prior CPU samples (target evaluation 14.1% of sampled cycles, descendant
 propagation 9.25%), yet freezing poses changed 700-unit throughput essentially not at all. Reassess
@@ -212,17 +244,18 @@ material-layer copies and actual vertex invocations; they predict neither GPU sa
 
 ## Next measured work
 
-1. Compile immutable WC3 node/material/event metadata once per source. Cache selected sequence
-   windows and clock owners, and skip empty event windows while preserving initial/time-zero,
-   global-sequence, skipped-frame, looping and reuse behavior. Existing extras are still deserialized
-   per new instance. Keep clocks, cursors, GPU slots, emitter counters and child ownership per instance;
-   invalidate caches on asset replacement and owner bindings on reparenting/reinstancing.
-2. Prototype per-primitive skin-influence specialization behind a profiling control, preserving
-   full skin identity. Compare GPU pass timing and whole-battle frame tails, not asset counts alone.
-3. Address remaining cold sources identified by the final census, especially resurrected Rifleman
+1. Prototype per-primitive skin-influence specialization behind a profiling control, preserving
+   full skin identity, all nonzero weights, normals, previous-frame skinning and every material/pass
+   path. Compare GPU pass timing and whole-battle frame tails, not asset counts alone.
+2. Address remaining cold sources identified by the final census, especially resurrected Rifleman
    unit hierarchies and event-spawned children. Unit reserves need owner/team/material/animation
    setup and full skin identity, not timed-effect reuse assumptions. Re-measure whole-battle tail
    latency and reserve growth during ordinary live production as well as paused warm-up fixtures.
+3. Revisit remaining immutable WC3 material/node metadata and clock-owner caching when CPU work
+   limits throughput. The event prototype reduces CPU work without an FPS gain. Preserve initial,
+   time-zero, global, skipped-frame, looping and reuse behavior; keep clocks/cursors/GPU slots,
+   emitter counters and child ownership per instance. Invalidate metadata on asset replacement and
+   cached owners on reparenting/reinstancing; bound obsolete-source retention before promotion.
 4. Validate partial particle binding arrays across unsupported-feature/device paths and exact image
    parity when visual verification is requested; promote only after that evidence exists.
 5. Revisit transparent submission/resource tracking only with new driver/submission evidence.
