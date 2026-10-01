@@ -17,6 +17,7 @@ mod presentation;
 mod render_audit;
 mod render_tuning;
 mod resource_ui;
+mod skin_influences;
 mod terrain;
 mod ui_icons;
 mod unit_models;
@@ -485,6 +486,7 @@ fn main() {
             options.render_experiment.standard_material_bindless_slots(),
         ))
         .add_plugins(compact_material::CompactMaterialPlugin)
+        .add_plugins(skin_influences::SkinInfluencePlugin)
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins((
             CastlePresentationPlugin::new(options.health_bars),

@@ -61,6 +61,7 @@ pub(crate) enum RenderExperiment {
     ParticleSharedMeshPartialBindings,
     CompactMaterial,
     CompiledEventTracks,
+    SkinInfluences,
     ParticleCull,
     ParticlePartialBindings,
     ParticleUncachedBindings,
@@ -97,6 +98,7 @@ impl RenderExperiment {
             "no-bindless" => Ok(Self::NoBindless),
             "compact-material" => Ok(Self::CompactMaterial),
             "compiled-event-tracks" => Ok(Self::CompiledEventTracks),
+            "skin-influences" => Ok(Self::SkinInfluences),
             "particle-shared-view" => Ok(Self::ParticleSharedView),
             "particle-shared-mesh" => Ok(Self::ParticleSharedMesh),
             "particle-shared-mesh-partial-bindings" => Ok(Self::ParticleSharedMeshPartialBindings),
@@ -107,7 +109,7 @@ impl RenderExperiment {
             "particle-overlap-audit" => Ok(Self::ParticleOverlapAudit),
             "particle-overlap-batching" => Ok(Self::ParticleOverlapBatching),
             _ => Err(format!(
-                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, bindless-auto, bindless-16, bindless-32, bindless-64, bindless-128, bindless-256, no-bindless, compact-material, compiled-event-tracks, particle-shared-view, particle-shared-mesh, particle-shared-mesh-partial-bindings, particle-cull, particle-partial-bindings, particle-uncached-bindings, cold-effect-pools, particle-overlap-audit, or particle-overlap-batching"
+                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, bindless-auto, bindless-16, bindless-32, bindless-64, bindless-128, bindless-256, no-bindless, compact-material, compiled-event-tracks, skin-influences, particle-shared-view, particle-shared-mesh, particle-shared-mesh-partial-bindings, particle-cull, particle-partial-bindings, particle-uncached-bindings, cold-effect-pools, particle-overlap-audit, or particle-overlap-batching"
             )),
         }
     }
@@ -177,6 +179,7 @@ struct Measurements {
     transparent: Option<TransparentSample>,
     particles: Option<crate::particle_renderer::Wc3ParticleQueueStats>,
     compact: Option<crate::compact_material::CompactMaterialStats>,
+    skin_influences: Option<crate::skin_influences::SkinInfluenceStats>,
     scene_requests: BTreeMap<String, SceneRequestCounts>,
 }
 
@@ -260,6 +263,11 @@ impl RenderAudit {
         }
         if let Some(compact) = measurements.compact {
             writeln!(output, "  compact materials: {} selected, {} pending, {} unsupported (latest sampled frame)", compact.selected, compact.pending, compact.unsupported).unwrap();
+        }
+        if let Some(skin) = measurements.skin_influences {
+            writeln!(output, "  skin influence variants: {:?} prepared mesh assets / {:?} vertices for 1/2/3 slots; {} pending (latest sample)", skin.meshes, skin.vertices, skin.pending_meshes).unwrap();
+            writeln!(output, "  skin influence pipelines: {:?} ready cached main-view instances / {:?} compiled pipelines for 1/2/3 slots (latest sample)", skin.cached_instances, skin.compiled_pipelines).unwrap();
+            writeln!(output, "  skin influence materials: {:?} wrapped standard/alpha/team properties; {} shared-property fallbacks (latest sample)", skin.materials, skin.shared_material_fallbacks).unwrap();
         }
         output.push_str("\nCOLD SCENE REQUESTS  new roots, not completed spawns; template entity counts are estimates\n");
         let mut scenes = measurements.scene_requests.iter().collect::<Vec<_>>();
@@ -433,7 +441,10 @@ fn sample_transparent_batches(
     skins: Res<SkinUniforms>,
     particles: Res<crate::particle_renderer::Wc3ParticleQueueStats>,
     audit: Res<RenderAudit>,
-    compact: Res<crate::compact_material::CompactMaterialStats>,
+    controls: (
+        Res<crate::compact_material::CompactMaterialStats>,
+        Res<crate::skin_influences::SkinInfluenceStats>,
+    ),
     mut last_sample: Local<Option<Instant>>,
 ) {
     let now = Instant::now();
@@ -477,7 +488,8 @@ fn sample_transparent_batches(
     let mut measurements = audit.0.lock().expect("render audit mutex poisoned");
     measurements.transparent = Some(sample);
     measurements.particles = Some(*particles);
-    measurements.compact = Some(*compact);
+    measurements.compact = Some(*controls.0);
+    measurements.skin_influences = Some(*controls.1);
 }
 
 type ExperimentMeshes<'w, 's> = Query<
@@ -530,6 +542,7 @@ fn apply_render_experiment(
             | RenderExperiment::ParticleSharedMeshPartialBindings
             | RenderExperiment::CompactMaterial
             | RenderExperiment::CompiledEventTracks
+            | RenderExperiment::SkinInfluences
             | RenderExperiment::ParticleCull
             | RenderExperiment::ParticlePartialBindings
             | RenderExperiment::ParticleUncachedBindings
@@ -576,6 +589,7 @@ fn apply_render_experiment(
             | RenderExperiment::ParticleSharedMeshPartialBindings
             | RenderExperiment::CompactMaterial
             | RenderExperiment::CompiledEventTracks
+            | RenderExperiment::SkinInfluences
             | RenderExperiment::ParticleCull
             | RenderExperiment::ParticlePartialBindings
             | RenderExperiment::ParticleUncachedBindings

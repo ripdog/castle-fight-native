@@ -353,6 +353,26 @@ mode and MUST NOT affect the authoritative simulation. They deliberately change 
   eye-plane crossings, morph meshes, ribbons, unknown draws and prebatched model items are ordering
   barriers. Potentially overlapping items retain their sorted precedence. Counters report proposed
   safe moves, overlap rejections and barrier stops; these are search events, not unique draw counts.
+- `skin-influences` classifies each extracted mesh upload by its highest exactly nonzero weight
+  slot. Only finite, nonnegative four-component weights with matching joint-index data and one,
+  two or three required slots are eligible. All-zero, four-slot and unsupported inputs retain the
+  original path. Classification MUST belong to the extracted upload snapshot and be replaced on
+  mesh replacement/removal, including deferred uploads. Virtual layout attributes encode the count
+  without changing vertex bytes, stride, palettes, bounds or skin identity. Supported StandardMaterial,
+  WC3 animated-alpha and team-colour callbacks MUST delegate their complete original specialization.
+  Their default main/prepass/shadow/deferred vertex shaders reuse the loaded engine sources, with
+  only the known trailing-zero skin-matrix terms omitted, including previous-frame skinning.
+  Normal/tangent transformations and fragment/material behavior MUST remain unchanged. Narrower
+  weight-input formats MUST read the original prefix at the original offset/stride and distinguish
+  variants in Bevy's vertex-layout pipeline cache; specialized functions MUST ignore driver-filled
+  components. Custom/unsupported vertex shaders and shared material properties MUST retain the
+  original four-weight input/shader. Changed layouts/callbacks MUST invalidate affected instances'
+  specializations. Unfamiliar engine source MUST keep the original path. Generated shader sources
+  are startup snapshots; shader hot reload and broader device/pass coverage remain unverified.
+  Counters distinguish prepared mesh/vertex counts, wrapped material properties and ready cached/
+  compiled main-view variants. Pipeline sampling MUST check readiness through a non-panicking lookup
+  before reading descriptors; pending, compiling and failed pipelines are excluded. This control
+  is opt-in.
 - `compiled-event-tracks` shares parsed composed-node extras and immutable event tracks for
   byte-identical metadata. It precomputes each sequence window's relative event phases and caches
   the selected window per instance until the sequence changes. Empty windows MUST still advance
