@@ -2,6 +2,8 @@
 
 This directory records reproducible evidence for the early architecture before full gameplay/content is built.
 
+Current content/ability scalability work is tracked in [content-scalability.md](content-scalability.md). That audit records landed infrastructure and remaining limitations without duplicating map tuning. Entity promotion checklists remain separate from engine specifications.
+
 ## Current slice
 
 Implemented:

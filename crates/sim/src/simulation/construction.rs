@@ -440,6 +440,7 @@ impl Simulation {
         entity.remove::<SpellcastingProfile>();
         entity.remove::<ManaState>();
         entity.remove::<AutomaticAbilityState>();
+        entity.remove::<AdditionalAutomaticAbilities>();
         entity.remove::<StatusState>();
     }
 
@@ -491,6 +492,14 @@ impl Simulation {
             }
             None => {
                 entity.remove::<AutomaticAbilityState>();
+            }
+        }
+        match runtime.additional_abilities {
+            Some(abilities) => {
+                entity.insert(abilities);
+            }
+            None => {
+                entity.remove::<AdditionalAutomaticAbilities>();
             }
         }
         match runtime.status {
@@ -567,6 +576,7 @@ impl Simulation {
                         spawn_tick: entity.get::<SpawnTick>().copied(),
                         mana: entity.get::<ManaState>().copied(),
                         ability_state: entity.get::<AutomaticAbilityState>().copied(),
+                        additional_abilities: entity.get::<AdditionalAutomaticAbilities>().copied(),
                         status: entity.get::<StatusState>().copied(),
                     },
                 ))

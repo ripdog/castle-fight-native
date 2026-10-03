@@ -5,7 +5,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 8;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 9;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -77,6 +77,12 @@ impl SimulationSnapshot {
             match entity {
                 CanonicalEntity::Unit(unit) => {
                     rehydrate_optional_content(&mut unit.content, content)?;
+                    if let Some(super::canonical::ResurrectionDefinitionSource::Original(
+                        definition,
+                    )) = &mut unit.resurrection
+                    {
+                        rehydrate_optional_content(&mut definition.properties.content, content)?;
+                    }
                 }
                 CanonicalEntity::Building(building) => {
                     rehydrate_optional_content(&mut building.content, content)?;
@@ -97,11 +103,15 @@ impl SimulationSnapshot {
                         rehydrate_building_properties(&mut build_order.properties, content)?;
                     }
                 }
+                CanonicalEntity::Corpse(corpse) => {
+                    if let Some(definition) = &mut corpse.corpse.resurrection {
+                        rehydrate_optional_content(&mut definition.properties.content, content)?;
+                    }
+                }
                 CanonicalEntity::Projectile(_)
                 | CanonicalEntity::ReflectedProjectile(_)
                 | CanonicalEntity::BallisticProjectile(_)
                 | CanonicalEntity::BounceProjectile(_)
-                | CanonicalEntity::Corpse(_)
                 | CanonicalEntity::BurningOil(_)
                 | CanonicalEntity::ChainLightning(_) => {}
             }
@@ -369,7 +379,7 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
             let team = *entity.get::<Team>()?;
             let health = *entity.get::<Health>()?;
             if let Some(position) = entity.get::<Position>() {
-                Some(CanonicalEntity::Unit(CanonicalUnit {
+                let mut unit = CanonicalUnit {
                     id,
                     content: entity.get::<ContentIdentity>().copied(),
                     owner: entity.get::<Owner>()?.0,
@@ -400,7 +410,13 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
                     spellcasting: entity.get::<SpellcastingProfile>().copied(),
                     mana: entity.get::<ManaState>().copied(),
                     ability_state: entity.get::<AutomaticAbilityState>().copied(),
-                }))
+                    additional_abilities: entity.get::<AdditionalAutomaticAbilities>().copied(),
+                    resurrection: None,
+                };
+                unit.set_resurrection_definition(
+                    entity.get::<ResurrectionProfile>().map(|profile| profile.0),
+                );
+                Some(CanonicalEntity::Unit(unit))
             } else {
                 Some(CanonicalEntity::Building(CanonicalBuilding {
                     id,
@@ -458,6 +474,7 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
                     spellcasting: entity.get::<SpellcastingProfile>().copied(),
                     mana: entity.get::<ManaState>().copied(),
                     ability_state: entity.get::<AutomaticAbilityState>().copied(),
+                    additional_abilities: entity.get::<AdditionalAutomaticAbilities>().copied(),
                     status: entity.get::<StatusState>().copied(),
                 }))
             }
@@ -527,31 +544,9 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                 if let Some(corpse) = unit.corpse {
                     entity.insert(CorpseProducer(corpse));
                 }
-                entity.insert(ResurrectionProfile(ResolvedUnitDefinition {
-                    template: crate::components::UnitTemplate {
-                        health: unit.health.max,
-                        attack: unit.attack,
-                        movement: unit.movement,
-                    },
-                    properties: UnitGameplayProperties {
-                        content: unit.content,
-                        health_regen_per_second_per_10k: unit
-                            .health_regeneration
-                            .per_second_per_10k,
-                        corpse: unit.corpse,
-                        collision_radius: unit.collision_radius,
-                        movement_class: unit.movement_class,
-                        mechanical: unit.mechanical,
-                        build_time_ticks: unit.build_time_ticks,
-                        repair_time_ticks: unit.repair_time_ticks,
-                        attack_targets: unit.attack_targets,
-                        secondary_attack: unit.secondary_attack,
-                        damage_type: unit.damage_type,
-                        armor: unit.armor,
-                        passive_effects: unit.passive_effects,
-                    },
-                    spellcasting: unit.spellcasting,
-                }));
+                if let Some(definition) = unit.resurrection_definition() {
+                    entity.insert(ResurrectionProfile(definition));
+                }
                 if let Some(radius) = unit.collision_radius {
                     entity.insert(radius);
                 }
@@ -563,6 +558,9 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                 }
                 if let Some(state) = unit.ability_state {
                     entity.insert(state);
+                }
+                if let Some(abilities) = unit.additional_abilities {
+                    entity.insert(abilities);
                 }
             }
             CanonicalEntity::Building(building) => {
@@ -654,6 +652,9 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                 }
                 if let Some(state) = building.ability_state {
                     entity.insert(state);
+                }
+                if let Some(abilities) = building.additional_abilities {
+                    entity.insert(abilities);
                 }
                 if let Some(status) = building.status {
                     entity.insert(status);

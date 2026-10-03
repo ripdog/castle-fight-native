@@ -976,6 +976,7 @@ impl CastleFightUnitDefinition {
             template: self.template(),
             properties: self.gameplay_properties(),
             spellcasting: self.spellcasting,
+            additional_abilities: None,
         }
     }
 

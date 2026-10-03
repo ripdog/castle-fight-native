@@ -168,10 +168,10 @@ impl Simulation {
         if unit_health[index] <= 0 || movement_speed == 0 {
             return MovementDecision::stationary(current);
         }
-        if self.next_tick >= unit.status.warlock_retreat_start_tick
-            && self.next_tick < unit.status.warlock_retreat_end_tick
+        if self.next_tick >= unit.status.ability_retreat_start_tick
+            && self.next_tick < unit.status.ability_retreat_end_tick
         {
-            return self.desired_warlock_retreat_position(unit, movement_speed);
+            return self.desired_ability_retreat_position(unit, movement_speed);
         }
         if self.next_tick < unit.status.stunned_until_tick {
             return MovementDecision::stationary(current);
@@ -587,7 +587,7 @@ impl Simulation {
         Some(SimPoint::new(i32::try_from(goal_x).ok()?, goal_y))
     }
 
-    fn desired_warlock_retreat_position(
+    fn desired_ability_retreat_position(
         &self,
         unit: &UnitSnapshot,
         movement_speed: i32,

@@ -311,6 +311,15 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 } else {
                     hash.write_u8(0);
                 }
+                hash_additional_abilities(&mut hash, unit.additional_abilities);
+                match &unit.resurrection {
+                    None => hash.write_u8(0),
+                    Some(ResurrectionDefinitionSource::CurrentUnit) => hash.write_u8(1),
+                    Some(ResurrectionDefinitionSource::Original(definition)) => {
+                        hash.write_u8(2);
+                        hash_resolved_unit_definition(&mut hash, Some(**definition));
+                    }
+                }
             }
             CanonicalEntity::Building(building) => {
                 hash.write_u8(1);
@@ -524,6 +533,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 } else {
                     hash.write_u8(0);
                 }
+                hash_additional_abilities(&mut hash, building.additional_abilities);
             }
             CanonicalEntity::Projectile(projectile) => {
                 hash.write_u8(2);
@@ -622,48 +632,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u64(corpse.corpse.created_tick);
                 hash.write_u64(corpse.corpse.decay_start_tick);
                 hash_optional_u64(&mut hash, corpse.corpse.expires_tick);
-                match corpse.corpse.resurrection {
-                    Some(definition) => {
-                        hash.write_u8(1);
-                        hash.write_i32(definition.template.health);
-                        hash_attack_delivery(&mut hash, definition.template.attack.delivery);
-                        hash.write_i32(definition.template.attack.damage);
-                        hash.write_i32(definition.template.attack.range);
-                        hash.write_i32(definition.template.attack.acquisition_range);
-                        hash.write_u16(definition.template.attack.cooldown_ticks);
-                        hash.write_i32(definition.template.movement.speed_per_tick);
-                        let properties = definition.properties;
-                        hash_content_identity(&mut hash, properties.content);
-                        hash.write_u32(properties.health_regen_per_second_per_10k);
-                        hash.write_u8(properties.corpse.is_some() as u8);
-                        if let Some(profile) = properties.corpse {
-                            hash.write_u32(profile.definition.0);
-                            hash.write_u32(profile.decay_start_ticks);
-                            hash_optional_u32(&mut hash, profile.lifetime_ticks);
-                        }
-                        hash.write_i32(properties.collision_radius.map_or(-1, |radius| radius.0));
-                        hash.write_u8(match properties.movement_class {
-                            MovementClass::Ground => 0,
-                            MovementClass::Air => 1,
-                        });
-                        hash.write_u8(u8::from(properties.mechanical));
-                        hash_optional_u32(&mut hash, properties.build_time_ticks);
-                        hash_optional_u32(&mut hash, properties.repair_time_ticks);
-                        hash.write_u8(properties.attack_targets.bits());
-                        hash_secondary_attack(&mut hash, properties.secondary_attack);
-                        hash.write_u8(properties.damage_type.stable_tag());
-                        hash.write_u8(properties.armor.armor_type.stable_tag());
-                        hash.write_i32(i32::from(properties.armor.armor_points));
-                        hash_passive_unit_effects(&mut hash, properties.passive_effects);
-                        if let Some(spellcasting) = definition.spellcasting {
-                            hash.write_u8(1);
-                            hash_spellcasting_profile(&mut hash, spellcasting);
-                        } else {
-                            hash.write_u8(0);
-                        }
-                    }
-                    None => hash.write_u8(0),
-                }
+                hash_resolved_unit_definition(&mut hash, corpse.corpse.resurrection);
             }
             CanonicalEntity::BurningOil(zone) => {
                 hash.write_u8(7);
@@ -811,7 +780,7 @@ pub(super) struct CanonicalBuilder {
     pub(super) build_order: Option<BuilderBuildOrder>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct CanonicalUnit {
     pub(super) id: SimId,
     pub(super) content: Option<ContentIdentity>,
@@ -843,6 +812,75 @@ pub(super) struct CanonicalUnit {
     pub(super) spellcasting: Option<SpellcastingProfile>,
     pub(super) mana: Option<ManaState>,
     pub(super) ability_state: Option<AutomaticAbilityState>,
+    pub(super) additional_abilities: Option<AdditionalAutomaticAbilities>,
+    pub(super) resurrection: Option<ResurrectionDefinitionSource>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(super) enum ResurrectionDefinitionSource {
+    CurrentUnit,
+    Original(Box<ResolvedUnitDefinition>),
+}
+
+impl CanonicalUnit {
+    fn current_definition(&self) -> ResolvedUnitDefinition {
+        ResolvedUnitDefinition {
+            template: crate::components::UnitTemplate {
+                health: self.health.max,
+                attack: self.attack,
+                movement: self.movement,
+            },
+            properties: UnitGameplayProperties {
+                content: self.content,
+                health_regen_per_second_per_10k: self.health_regeneration.per_second_per_10k,
+                corpse: self.corpse,
+                collision_radius: self.collision_radius,
+                movement_class: self.movement_class,
+                mechanical: self.mechanical,
+                build_time_ticks: self.build_time_ticks,
+                repair_time_ticks: self.repair_time_ticks,
+                attack_targets: self.attack_targets,
+                secondary_attack: self.secondary_attack,
+                damage_type: self.damage_type,
+                armor: self.armor,
+                passive_effects: self.passive_effects,
+            },
+            spellcasting: self.spellcasting,
+            additional_abilities: self
+                .additional_abilities
+                .map(AdditionalAutomaticAbilityDefinitions::from_runtime),
+        }
+    }
+
+    pub(super) fn set_resurrection_definition(
+        &mut self,
+        definition: Option<ResolvedUnitDefinition>,
+    ) {
+        self.resurrection = definition.map(|definition| {
+            let mut authored = definition;
+            let mut current = self.current_definition();
+            // Presentation labels must not choose a different authoritative encoding.
+            for definition in [&mut authored, &mut current] {
+                if let Some(content) = &mut definition.properties.content {
+                    content.name = "";
+                }
+            }
+            if authored == current {
+                ResurrectionDefinitionSource::CurrentUnit
+            } else {
+                ResurrectionDefinitionSource::Original(Box::new(definition))
+            }
+        });
+    }
+
+    pub(super) fn resurrection_definition(&self) -> Option<ResolvedUnitDefinition> {
+        self.resurrection
+            .as_ref()
+            .map(|definition| match definition {
+                ResurrectionDefinitionSource::CurrentUnit => self.current_definition(),
+                ResurrectionDefinitionSource::Original(definition) => **definition,
+            })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -880,6 +918,7 @@ pub(super) struct CanonicalBuilding {
     pub(super) spellcasting: Option<SpellcastingProfile>,
     pub(super) mana: Option<ManaState>,
     pub(super) ability_state: Option<AutomaticAbilityState>,
+    pub(super) additional_abilities: Option<AdditionalAutomaticAbilities>,
     pub(super) status: Option<StatusState>,
 }
 
@@ -1016,6 +1055,7 @@ fn hash_building_runtime_state(hash: &mut Fnv64, runtime: BuildingRuntimeState) 
         }
         None => hash.write_u8(0),
     }
+    hash_additional_abilities(hash, runtime.additional_abilities);
     match runtime.status {
         Some(status) => {
             hash.write_u8(1);
@@ -1025,12 +1065,90 @@ fn hash_building_runtime_state(hash: &mut Fnv64, runtime: BuildingRuntimeState) 
     }
 }
 
+fn hash_resolved_unit_definition(hash: &mut Fnv64, definition: Option<ResolvedUnitDefinition>) {
+    let Some(definition) = definition else {
+        hash.write_u8(0);
+        return;
+    };
+    hash.write_u8(1);
+    hash.write_i32(definition.template.health);
+    hash_attack_delivery(hash, definition.template.attack.delivery);
+    hash.write_i32(definition.template.attack.damage);
+    hash.write_i32(definition.template.attack.range);
+    hash.write_i32(definition.template.attack.acquisition_range);
+    hash.write_u16(definition.template.attack.cooldown_ticks);
+    hash.write_i32(definition.template.movement.speed_per_tick);
+    let properties = definition.properties;
+    hash_content_identity(hash, properties.content);
+    hash.write_u32(properties.health_regen_per_second_per_10k);
+    hash.write_u8(u8::from(properties.corpse.is_some()));
+    if let Some(profile) = properties.corpse {
+        hash.write_u32(profile.definition.0);
+        hash.write_u32(profile.decay_start_ticks);
+        hash_optional_u32(hash, profile.lifetime_ticks);
+    }
+    hash.write_i32(properties.collision_radius.map_or(-1, |radius| radius.0));
+    hash.write_u8(match properties.movement_class {
+        MovementClass::Ground => 0,
+        MovementClass::Air => 1,
+    });
+    hash.write_u8(u8::from(properties.mechanical));
+    hash_optional_u32(hash, properties.build_time_ticks);
+    hash_optional_u32(hash, properties.repair_time_ticks);
+    hash.write_u8(properties.attack_targets.bits());
+    hash_secondary_attack(hash, properties.secondary_attack);
+    hash.write_u8(properties.damage_type.stable_tag());
+    hash.write_u8(properties.armor.armor_type.stable_tag());
+    hash.write_i32(i32::from(properties.armor.armor_points));
+    hash_passive_unit_effects(hash, properties.passive_effects);
+    if let Some(spellcasting) = definition.spellcasting {
+        hash.write_u8(1);
+        hash_spellcasting_profile(hash, spellcasting);
+    } else {
+        hash.write_u8(0);
+    }
+    if let Some(definitions) = definition.additional_abilities {
+        hash.write_u8(1);
+        hash.write_u64(definitions.iter().count() as u64);
+        for ability in definitions.iter() {
+            hash_automatic_ability(hash, ability);
+        }
+    } else {
+        hash.write_u8(0);
+    }
+}
+
+fn hash_additional_abilities(hash: &mut Fnv64, abilities: Option<AdditionalAutomaticAbilities>) {
+    let Some(abilities) = abilities else {
+        hash.write_u8(0);
+        return;
+    };
+    hash.write_u8(1);
+    hash.write_u64(abilities.iter().count() as u64);
+    for entry in abilities.iter() {
+        hash_automatic_ability(hash, entry.profile);
+        hash.write_u64(entry.state.ready_tick);
+        hash.write_u64(entry.state.cast_sequence);
+        hash.write_u8(u8::from(entry.state.autocast_enabled));
+        hash.write_u8(u8::from(entry.state.manual_cast_requested));
+        hash.write_u64(entry.secondary_resurrection.due_tick);
+        hash.write_u64(entry.secondary_resurrection.ready_tick);
+    }
+}
+
 fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     hash.write_u64(status.stunned_until_tick);
-    hash.write_u64(status.warlock_retreat_start_tick);
-    hash.write_u64(status.warlock_retreat_end_tick);
-    hash.write_u64(status.paladin_resurrection_due_tick);
-    hash.write_u64(status.paladin_resurrection_ready_tick);
+    hash.write_u64(status.ability_retreat_start_tick);
+    hash.write_u64(status.ability_retreat_end_tick);
+    hash.write_u64(status.secondary_resurrection_due_tick);
+    hash.write_u64(status.secondary_resurrection_ready_tick);
+    match status.secondary_resurrection_ability {
+        Some(id) => {
+            hash.write_u8(1);
+            hash.write_u32(id.0);
+        }
+        None => hash.write_u8(0),
+    }
     hash.write_u8(u8::from(status.permanent_holy_health_bonus));
     hash.write_u8(status.movement_modifier_count);
     let count = usize::from(status.movement_modifier_count);

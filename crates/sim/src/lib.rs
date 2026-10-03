@@ -18,17 +18,19 @@ pub use commands::{
     CommandRejectReason, PlayerCommand, admit_player_command,
 };
 pub use components::{
-    AbilityEffect, AbilityId, AbilityTargetPolicy, AreaDamageOrigin, AttackDelivery, AttackProfile,
-    AttackTargetMask, AutomaticAbilityProfile, BashEffectProfile, BuilderConfiguration,
-    BuilderLocomotion, BuilderProfile, BuilderSpawn, BuildingFootprint, BuildingGameplayProperties,
-    BuildingSpawn, BurningOilEffectProfile, ChainLightningEffectProfile, CollisionRadius,
-    ContentIdentity, CorpseDefinitionId, CorpseProfile, CriticalStrikeEffectProfile,
-    DefendEffectProfile, EntanglingRootsEffectProfile, EvasionEffectProfile,
-    GameplayBundleIdentity, ManaProfile, ModifierId, MovementClass, MovementProfile, Owner,
+    AbilityConfigurationError, AbilityEffect, AbilityId, AbilityTargetPolicy,
+    AdditionalAutomaticAbilities, AdditionalAutomaticAbilityDefinitions, AreaDamageOrigin,
+    AttackDelivery, AttackProfile, AttackTargetMask, AutomaticAbilityInstance,
+    AutomaticAbilityProfile, BashEffectProfile, BuilderConfiguration, BuilderLocomotion,
+    BuilderProfile, BuilderSpawn, BuildingFootprint, BuildingGameplayProperties, BuildingSpawn,
+    BurningOilEffectProfile, ChainLightningEffectProfile, CollisionRadius, ContentIdentity,
+    CorpseDefinitionId, CorpseProfile, CriticalStrikeEffectProfile, DefendEffectProfile,
+    EntanglingRootsEffectProfile, EvasionEffectProfile, GameplayBundleIdentity,
+    MAX_AUTOMATIC_ABILITIES, ManaProfile, ModifierId, MovementClass, MovementProfile, Owner,
     PassiveUnitEffect, PassiveUnitEffects, PlayerId, ProductionProfile, ResolvedUnitDefinition,
-    SecondaryAttackProfile, SimId, SpellcastingProfile, SplashFalloffProfile, StatusState, Team,
-    TriggeredAttackEffect, TriggeredSpellProcProfile, UnitGameplayProperties, UnitSpawn,
-    UnitTemplate,
+    SecondaryAttackProfile, SecondaryResurrectionState, SimId, SpellcastingProfile,
+    SplashFalloffProfile, StatusState, Team, TriggeredAttackEffect, TriggeredSpellProcProfile,
+    UnitGameplayProperties, UnitSpawn, UnitTemplate,
 };
 pub use content::{
     CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION, CASTLE_FIGHT_CONTENT_REVISION_927,
@@ -1487,8 +1489,8 @@ mod tests {
             AbilityId(u32::from_be_bytes(*b"A00K"))
         );
         let after_cast = sim.unit(caster).unwrap();
-        assert_eq!(after_cast.status.warlock_retreat_start_tick, 9);
-        assert_eq!(after_cast.status.warlock_retreat_end_tick, 159);
+        assert_eq!(after_cast.status.ability_retreat_start_tick, 9);
+        assert_eq!(after_cast.status.ability_retreat_end_tick, 159);
         assert_eq!(after_cast.stunned_until_tick, 357);
         assert_eq!(after_cast.ability_ready_tick, Some(360));
         assert_eq!(after_cast.target, None);
@@ -1732,7 +1734,7 @@ mod tests {
             .unit(caster)
             .unwrap()
             .status
-            .paladin_resurrection_due_tick;
+            .secondary_resurrection_due_tick;
         assert_eq!(due_tick, cast_tick + CASTLE_FIGHT_SIMULATION_HZ as u64);
         while sim.tick() < due_tick {
             sim.step();
@@ -1746,7 +1748,7 @@ mod tests {
 
         let state = sim.unit(caster).unwrap();
         assert_eq!(
-            state.status.paladin_resurrection_ready_tick,
+            state.status.secondary_resurrection_ready_tick,
             due_tick + 40 * CASTLE_FIGHT_SIMULATION_HZ as u64
         );
         assert!(

@@ -78,11 +78,13 @@ The complete current unit state is:
 - `AttackCooldown` and `AttackSequence`;
 - `TargetState` including both lock flags;
 - `RetaliationState` including optional attacker and attacked tick;
-- complete `StatusState`: stun expiry, active movement/attack-speed/armor modifiers, reactive slow parameters, damage-over-time pulse state, and active counts;
+- complete `StatusState`: stun expiry, ability-retreat deadlines, primary secondary-resurrection ability identity/deadline/readiness, active movement/attack-speed/armor modifiers, reactive slow parameters, damage-over-time pulse state, and active counts;
 - `NavigationState`: goal kind/reference, bypass side, and clear-tick continuity. This is stored movement continuity, not a disposable route cache;
 - `SpawnTick`;
 - optional `CorpseProducer` definition and optional lifetime;
-- optional `SpellcastingProfile`, plus `ManaState` current/remainder and `AutomaticAbilityState` ready tick/cast sequence when spellcasting is present.
+- optional `SpellcastingProfile`, plus shared `ManaState` current/remainder and primary `AutomaticAbilityState` ready tick/cast sequence/control flags when spellcasting is present;
+- optional `AdditionalAutomaticAbilities`: ability-ID-ordered profiles, independent ready ticks/cast sequences/control flags, and each slot's delayed secondary-resurrection due/ready ticks. Its bounded representation is carried only by multi-ability entities, not the ordinary per-tick unit snapshot;
+- original resolved resurrection definition, including additional ability definitions, before the unit dies. The common case references the already captured current unit definition; an explicit original definition is retained when live mutations differ from the resurrection baseline. Presentation names MUST NOT choose a different authoritative representation.
 
 Optional component presence is canonical. `None` must not alias a present zero-valued component.
 
@@ -98,7 +100,8 @@ The complete current building state is:
 - production content rawcode, corpse profile, collision radius, movement class, mechanical/build/repair metadata, target mask, damage type, armor, passive effects, and spellcasting profile;
 - optional attack profile plus target mask, cooldown, target-lock state, and spawn tick;
 - optional `StatusState`;
-- optional building spellcasting profile plus mana remainder/current value and automatic-ability ready/cast sequence.
+- optional building spellcasting profile plus shared mana remainder/current value and primary automatic-ability ready/cast sequence/control flags;
+- optional `AdditionalAutomaticAbilities`, with the same profile/state coverage as units. In-progress upgrade cancellation preserves the complete precursor ability set and state; a successful definition replacement discards obsolete slots.
 
 Production metadata is authoritative because it defines future spawned units. It must remain complete even when no produced unit is currently alive.
 
@@ -130,7 +133,7 @@ All of these survive tick boundaries and therefore must be restored exactly.
 
 ### 5.5 Corpses
 
-A corpse stores `SimId`, `Position`, source unit/player/team, corpse definition, creation tick, decay-start/eligibility tick, and optional expiry tick. Source ownership is retained after the live unit disappears so presentation/statistical provenance does not fall back to team identity. The decay-start tick is authoritative because corpse selection, resurrection, and consumption must reject a fresh death until its imported Warcraft `death_time` has elapsed. Optional expiry presence is authoritative; an immortal corpse must not alias an expiry sentinel.
+A corpse stores `SimId`, `Position`, source unit/player/team, corpse definition, creation tick, decay-start/eligibility tick, and optional expiry tick. Source ownership is retained after the live unit disappears so presentation/statistical provenance does not fall back to team identity. The decay-start tick is authoritative because corpse selection, resurrection, and consumption must reject a fresh death until its imported Warcraft `death_time` has elapsed. Optional expiry presence is authoritative; an immortal corpse must not alias an expiry sentinel. A resurrection-capable corpse also retains the complete resolved unit definition, including additional automatic-ability definitions. Dead-source cooldowns, sequences, control flags, and delayed actions are not carried into the revived body; runtime state is initialized as for a fresh spawn.
 
 ## 6. State reconstructed inside a tick
 
@@ -138,9 +141,9 @@ Per-tick unit/building snapshots, spatial partitions/reservation grids, movement
 
 A snapshot is taken only at a defined completed boundary. Step 7 must not attempt to capture the simulation halfway through `step()` unless a separate mid-tick schema and phase-resume contract is deliberately introduced.
 
-## 7. Checksum coverage revision 5
+## 7. Checksum coverage
 
-`CANONICAL_CHECKSUM_SCHEMA_VERSION = 5` is the current compatibility boundary. Revision 2 added immutable configuration/combat identity, allocator state, audited optional presence, content rawcodes, canonical entity-shape validation, and duplicate-`SimId` rejection. Revision 3 retains that coverage and adds the authoritative state introduced by the Defender/production-upgrade slice:
+`CANONICAL_CHECKSUM_SCHEMA_VERSION` in `crates/sim/src/simulation.rs` is the current compatibility boundary. The multi-ability design revision includes optional additional ability profiles/state, independent delayed secondary actions, and the originating ability identity for primary delayed resurrection. All such state is also covered inside saved upgrade-precursor runtime. The historical additions below remain included. Revision 2 added immutable configuration/combat identity, allocator state, audited optional presence, content rawcodes, canonical entity-shape validation, and duplicate-`SimId` rejection. Revision 3 retains that coverage and adds the authoritative state introduced by the Defender/production-upgrade slice:
 
 - fixed-point unit health-regeneration rate/remainder state;
 - persistent reflected-projectile state;
@@ -151,7 +154,7 @@ Revision 4 additionally incorporates the immutable resolved gameplay-bundle sche
 
 Revision 5 adds the Step 5 player/lifecycle model: stable entity ownership, canonical per-player resource and connection records, team-objective `SimId`s, running/paused/finished lifecycle state and terminal outcome/tick, plus corpse source ownership. All previously covered resources, entities, timers/effect state, navigation continuity, ordinary projectiles, build orders, and defense alerts remain included. `ContentIdentity.name`, worker count, derived caches, presentation events, and diagnostic timings remain deliberately excluded.
 
-Changing the canonical encoding or the semantics of a field requires a deliberate checksum/simulation compatibility revision. Checksums from revisions 1 through 5 are mutually incompatible.
+Changing the canonical encoding or the semantics of a field requires a deliberate checksum/simulation compatibility revision. Checksums from distinct schema revisions are not comparable.
 
 ## 8. Step 6 command-stream state outside `Simulation`
 
@@ -170,7 +173,7 @@ The driver's most recent execution-outcome list is UI/protocol feedback and does
 
 ## 9. Step 7 logical simulation snapshot coverage
 
-`SimulationSnapshot` schema revision 1 captures all mutable authoritative `Simulation` state named in sections 3 and 5: `next_tick`, allocator `next_id`, canonical players/resources/connections, lifecycle, objective identities, defense alerts, and the complete canonical entity projection. In-progress construction stores its full authored target definition and optional precursor runtime rather than only the definition hash used by the gameplay checksum, so cancellation/completion semantics survive restoration exactly. The snapshot also stores the immutable `configuration_identity` as a compatibility requirement and the resulting gameplay checksum as an integrity check.
+`SimulationSnapshot` at `AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION` captures all mutable authoritative `Simulation` state named in sections 3 and 5: `next_tick`, allocator `next_id`, canonical players/resources/connections, lifecycle, objective identities, defense alerts, and the complete canonical entity projection. In-progress construction stores its full authored target definition and optional precursor runtime rather than only the definition hash used by the gameplay checksum, so cancellation/completion semantics survive restoration exactly. The snapshot also stores the immutable `configuration_identity` as a compatibility requirement and the resulting gameplay checksum as an integrity check.
 
 Checksum traversal and snapshot capture share one canonical entity projection. Restoration deliberately omits and rebuilds topology/pathing caches, clears presentation events, retains the destination simulation's worker pool, and may recreate entities in a different insertion order.
 

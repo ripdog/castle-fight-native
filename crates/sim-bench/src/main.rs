@@ -26,6 +26,7 @@ enum Scenario {
     Bounce,
     Tower,
     Ability,
+    MultiAbility,
     Stun,
     Slow,
     Radius,
@@ -49,6 +50,7 @@ impl Scenario {
             Self::Bounce => "bounce",
             Self::Tower => "tower",
             Self::Ability => "ability",
+            Self::MultiAbility => "multi-ability",
             Self::Stun => "stun",
             Self::Slow => "slow",
             Self::Radius => "radius",
@@ -526,7 +528,7 @@ fn scenario_config(scenario: Scenario) -> SimulationConfig {
     if scenario == Scenario::Bounce {
         config.match_seed = 0x5eed_b0ce_2026_0912;
     }
-    if scenario == Scenario::Ability {
+    if matches!(scenario, Scenario::Ability | Scenario::MultiAbility) {
         config.match_seed = 0x5eed_ab11_17e5_2026;
     }
     if scenario == Scenario::Mixed {
@@ -719,7 +721,8 @@ fn populate_scenario(
         Scenario::Ballistic => populate_ballistic_density_battle(simulation, units),
         Scenario::Bounce => populate_bounce_density_battle(simulation, units),
         Scenario::Tower => populate_attack_building_density(simulation, units),
-        Scenario::Ability => populate_automatic_ability_density(simulation, units),
+        Scenario::Ability => populate_automatic_ability_density(simulation, units, false),
+        Scenario::MultiAbility => populate_automatic_ability_density(simulation, units, true),
         Scenario::Stun => populate_global_stun_density(simulation, units),
         Scenario::Slow => populate_timed_movement_modifier_density(simulation, units),
         Scenario::Radius => populate_mixed_radius_battle(simulation, units),
@@ -1083,7 +1086,11 @@ fn populate_attack_building_density(simulation: &mut Simulation, total_units: us
     }
 }
 
-fn populate_automatic_ability_density(simulation: &mut Simulation, total_units: usize) {
+fn populate_automatic_ability_density(
+    simulation: &mut Simulation,
+    total_units: usize,
+    multi: bool,
+) {
     let caster_count = (total_units / 4).clamp(2, 500);
     let per_team_casters = caster_count.div_ceil(2);
     let spellcasting = SpellcastingProfile {
@@ -1114,7 +1121,7 @@ fn populate_automatic_ability_density(simulation: &mut Simulation, total_units: 
                 115 - column * 2
             };
             let y = -50 + row * 2;
-            simulation.spawn_building(BuildingSpawn {
+            let source = simulation.spawn_building(BuildingSpawn {
                 team: Team(team),
                 footprint: BuildingFootprint::new(x, y, 1, 1),
                 health: 1_000_000_000,
@@ -1122,6 +1129,27 @@ fn populate_automatic_ability_density(simulation: &mut Simulation, total_units: 
                 attack: None,
                 spellcasting: Some(spellcasting),
             });
+            if multi {
+                simulation
+                    .configure_additional_automatic_abilities(
+                        source,
+                        &[
+                            AutomaticAbilityProfile {
+                                id: AbilityId(2),
+                                cooldown_ticks: 3,
+                                effect: AbilityEffect::Damage { amount: 2 },
+                                ..spellcasting.ability
+                            },
+                            AutomaticAbilityProfile {
+                                id: AbilityId(3),
+                                cooldown_ticks: 7,
+                                effect: AbilityEffect::Stun { duration_ticks: 2 },
+                                ..spellcasting.ability
+                            },
+                        ],
+                    )
+                    .expect("synthetic multi-ability benchmark profiles are valid");
+            }
         }
     }
 
@@ -1662,6 +1690,7 @@ fn parse_scenarios(value: &str) -> Vec<Scenario> {
             "bounce" => Scenario::Bounce,
             "tower" => Scenario::Tower,
             "ability" => Scenario::Ability,
+            "multi-ability" => Scenario::MultiAbility,
             "stun" => Scenario::Stun,
             "slow" => Scenario::Slow,
             "radius" => Scenario::Radius,

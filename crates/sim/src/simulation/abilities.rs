@@ -7,7 +7,14 @@ impl Simulation {
         units: &mut [UnitSnapshot],
         grid: &SpatialGrid,
     ) -> AbilityMetrics {
-        let delayed_effects = self.resolve_delayed_human_support_effects(units);
+        let delayed_effects = self.resolve_delayed_secondary_resurrections(units);
+        let additional_sources = self.additional_ability_sources(buildings, units);
+        let additional_evaluations: Vec<_> = self.pool.install(|| {
+            additional_sources
+                .par_iter()
+                .map(|source| self.evaluate_automatic_ability(*source, units, grid))
+                .collect()
+        });
         let building_evaluations: Vec<_> = self.pool.install(|| {
             buildings
                 .par_iter()
@@ -64,10 +71,12 @@ impl Simulation {
                 + units
                     .iter()
                     .filter(|unit| unit.spellcasting.is_some())
-                    .count(),
+                    .count()
+                + additional_sources.len(),
             candidate_checks: building_evaluations
                 .iter()
                 .chain(&unit_evaluations)
+                .chain(&additional_evaluations)
                 .map(|evaluation| evaluation.candidate_checks)
                 .sum(),
             effects: delayed_effects,
@@ -76,6 +85,7 @@ impl Simulation {
         let mut intents: Vec<_> = building_evaluations
             .into_iter()
             .chain(unit_evaluations)
+            .chain(additional_evaluations)
             .filter_map(|evaluation| evaluation.intent)
             .collect();
         intents.sort_unstable_by_key(|intent| {
@@ -122,6 +132,14 @@ impl Simulation {
                     }
                 }
             };
+            let entity = match intent.source {
+                AbilitySourceIndex::Unit(index) => units[index].entity,
+                AbilitySourceIndex::Building(index) => buildings[index].entity,
+            };
+            let Some(source) = self.select_ability_source_slot(source, entity, intent.ability)
+            else {
+                continue;
+            };
             if source.health <= 0
                 || source.id != intent.source_id
                 || self.next_tick < source.stunned_until_tick
@@ -164,7 +182,14 @@ impl Simulation {
             match intent.source {
                 AbilitySourceIndex::Unit(index) => {
                     units[index].mana_current = Some(remaining_mana);
-                    units[index].ability_state = Some(state);
+                    if units[index]
+                        .spellcasting
+                        .is_some_and(|profile| profile.ability.id == intent.ability.id)
+                    {
+                        units[index].ability_state = Some(state);
+                    } else {
+                        self.commit_additional_ability_state(entity, intent.ability.id, state);
+                    }
                     if let AbilityEffect::HolyAid {
                         resurrection_count,
                         resurrection_delay_ticks,
@@ -172,10 +197,28 @@ impl Simulation {
                     } = intent.ability.effect
                         && resurrection_count > 0
                     {
-                        units[index].status.paladin_resurrection_due_tick = self
+                        let due_tick = self
                             .next_tick
                             .checked_add(u64::from(resurrection_delay_ticks))
-                            .expect("Paladin resurrection delay overflow");
+                            .expect("secondary resurrection delay overflow");
+                        if units[index]
+                            .spellcasting
+                            .is_some_and(|profile| profile.ability.id == intent.ability.id)
+                        {
+                            units[index].status.secondary_resurrection_ability =
+                                Some(intent.ability.id);
+                            units[index].status.secondary_resurrection_due_tick = due_tick;
+                        } else {
+                            let mut entity = self.world.entity_mut(entity);
+                            let mut slots = entity
+                                .get_mut::<AdditionalAutomaticAbilities>()
+                                .expect("validated ability source");
+                            slots
+                                .get_mut(intent.ability.id)
+                                .expect("validated ability slot")
+                                .secondary_resurrection
+                                .due_tick = due_tick;
+                        }
                     }
                     if intent.ability.id == AbilityId(u32::from_be_bytes(*b"A00K")) {
                         let retreat_start = self
@@ -197,8 +240,8 @@ impl Simulation {
                                     .expect("simulation Hz must be positive"),
                             )
                             .expect("Warlock recovery end overflow");
-                        units[index].status.warlock_retreat_start_tick = retreat_start;
-                        units[index].status.warlock_retreat_end_tick = retreat_end;
+                        units[index].status.ability_retreat_start_tick = retreat_start;
+                        units[index].status.ability_retreat_end_tick = retreat_end;
                         units[index].status.stunned_until_tick =
                             units[index].status.stunned_until_tick.max(recovery_end);
                         units[index].target = None;
@@ -224,7 +267,14 @@ impl Simulation {
                 }
                 AbilitySourceIndex::Building(index) => {
                     buildings[index].mana_current = Some(remaining_mana);
-                    buildings[index].ability_state = Some(state);
+                    if buildings[index]
+                        .spellcasting
+                        .is_some_and(|profile| profile.ability.id == intent.ability.id)
+                    {
+                        buildings[index].ability_state = Some(state);
+                    } else {
+                        self.commit_additional_ability_state(entity, intent.ability.id, state);
+                    }
                 }
             }
 
@@ -478,65 +528,120 @@ impl Simulation {
         metrics
     }
 
-    fn resolve_delayed_human_support_effects(&mut self, units: &mut [UnitSnapshot]) -> usize {
-        let mut effects = 0usize;
-        for unit in units.iter_mut() {
-            let due_tick = unit.status.paladin_resurrection_due_tick;
-            if due_tick == 0 || due_tick > self.next_tick {
-                continue;
+    fn resolve_delayed_secondary_resurrections(&mut self, units: &mut [UnitSnapshot]) -> usize {
+        let mut pending = Vec::new();
+        for (index, unit) in units.iter_mut().enumerate() {
+            let due_tick = unit.status.secondary_resurrection_due_tick;
+            if due_tick != 0 && due_tick <= self.next_tick {
+                unit.status.secondary_resurrection_due_tick = 0;
+                let ability_id = unit.status.secondary_resurrection_ability.take();
+                if let Some(ability) = unit
+                    .spellcasting
+                    .map(|profile| profile.ability)
+                    .filter(|profile| Some(profile.id) == ability_id)
+                {
+                    pending.push((
+                        unit.id,
+                        ability.id,
+                        index,
+                        ability,
+                        SecondaryResurrectionState {
+                            due_tick,
+                            ready_tick: unit.status.secondary_resurrection_ready_tick,
+                        },
+                        true,
+                    ));
+                }
             }
-            unit.status.paladin_resurrection_due_tick = 0;
-
-            let Some(spellcasting) = unit.spellcasting else {
-                continue;
-            };
-            let AbilityEffect::HolyAid {
-                resurrection_count,
-                resurrection_radius,
-                resurrection_mana_cost,
-                resurrection_cooldown_ticks,
-                ..
-            } = spellcasting.ability.effect
-            else {
-                continue;
-            };
-            if resurrection_count == 0
-                || unit.health <= 0
-                || unit.status.paladin_resurrection_ready_tick > self.next_tick
-                || unit
-                    .mana_current
-                    .is_none_or(|mana| mana < resurrection_mana_cost)
+            if let Some(slots) = self
+                .world
+                .entity(unit.entity)
+                .get::<AdditionalAutomaticAbilities>()
             {
-                continue;
+                for entry in slots.iter().filter(|entry| {
+                    entry.secondary_resurrection.due_tick != 0
+                        && entry.secondary_resurrection.due_tick <= self.next_tick
+                }) {
+                    pending.push((
+                        unit.id,
+                        entry.profile.id,
+                        index,
+                        entry.profile,
+                        entry.secondary_resurrection,
+                        false,
+                    ));
+                }
             }
-
-            let revived = self.resurrect_friendly_corpses(
-                unit.team,
-                AbilitySourceOrigin::Unit(unit.position),
-                resurrection_radius,
-                resurrection_count,
-            );
-            if revived == 0 {
-                continue;
+        }
+        pending.sort_unstable_by_key(|(source, ability, ..)| (*source, *ability));
+        let mut effects = 0;
+        for (_, _, index, ability, mut state, primary) in pending {
+            state.due_tick = 0;
+            effects += self.resolve_secondary_resurrection(&mut units[index], ability, &mut state);
+            if primary {
+                units[index].status.secondary_resurrection_ready_tick = state.ready_tick;
+            } else {
+                let mut entity = self.world.entity_mut(units[index].entity);
+                let mut slots = entity
+                    .get_mut::<AdditionalAutomaticAbilities>()
+                    .expect("pending ability source");
+                slots
+                    .get_mut(ability.id)
+                    .expect("pending ability slot")
+                    .secondary_resurrection = state;
             }
-
-            let mana = unit
-                .mana_current
-                .as_mut()
-                .expect("validated Paladin resurrection mana");
-            *mana = mana
-                .checked_sub(resurrection_mana_cost)
-                .expect("validated Paladin resurrection mana cost");
-            unit.status.paladin_resurrection_ready_tick = self
-                .next_tick
-                .checked_add(u64::from(resurrection_cooldown_ticks))
-                .expect("Paladin resurrection cooldown overflow");
-            effects += revived;
         }
         effects
     }
 
-    fn resurrect_friendly_corpses(
+    fn resolve_secondary_resurrection(
+        &mut self,
+        unit: &mut UnitSnapshot,
+        ability: AutomaticAbilityProfile,
+        state: &mut SecondaryResurrectionState,
+    ) -> usize {
+        let AbilityEffect::HolyAid {
+            resurrection_count,
+            resurrection_radius,
+            resurrection_mana_cost,
+            resurrection_cooldown_ticks,
+            ..
+        } = ability.effect
+        else {
+            return 0;
+        };
+        if resurrection_count == 0
+            || unit.health <= 0
+            || state.ready_tick > self.next_tick
+            || unit
+                .mana_current
+                .is_none_or(|mana| mana < resurrection_mana_cost)
+        {
+            return 0;
+        }
+        let revived = self.resurrect_friendly_corpses(
+            unit.team,
+            AbilitySourceOrigin::Unit(unit.position),
+            resurrection_radius,
+            resurrection_count,
+        );
+        if revived != 0 {
+            let mana = unit
+                .mana_current
+                .as_mut()
+                .expect("validated secondary resurrection mana");
+            *mana = mana
+                .checked_sub(resurrection_mana_cost)
+                .expect("validated secondary resurrection cost");
+            state.ready_tick = self
+                .next_tick
+                .checked_add(u64::from(resurrection_cooldown_ticks))
+                .expect("secondary resurrection cooldown overflow");
+        }
+        revived
+    }
+
+    pub(super) fn resurrect_friendly_corpses(
         &mut self,
         team: Team,
         origin: AbilitySourceOrigin,
@@ -573,11 +678,10 @@ impl Simulation {
                 .resurrection
                 .expect("eligible corpse retains template");
             self.world.despawn(entity);
-            self.spawn_unit_unchecked(
+            self.spawn_resolved_unit_unchecked(
                 Some(corpse.source_owner),
                 UnitSpawn::from_template(team, position, definition.template),
-                definition.properties,
-                definition.spellcasting,
+                definition,
             );
             revived += 1;
         }
@@ -1033,6 +1137,7 @@ mod tests {
             },
             properties: UnitGameplayProperties::default(),
             spellcasting: None,
+            additional_abilities: None,
         };
         let id = sim.allocate_id();
         sim.world.spawn((
@@ -1104,6 +1209,7 @@ mod tests {
                 ..UnitGameplayProperties::default()
             },
             spellcasting: None,
+            additional_abilities: None,
         };
         let position = SimPoint::new(100 * SUBUNITS_PER_WORLD_UNIT, 100 * SUBUNITS_PER_WORLD_UNIT);
         for team in [Team(0), Team(1)] {

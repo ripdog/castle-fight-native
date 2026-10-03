@@ -1,4 +1,10 @@
 use bevy_ecs::prelude::Component;
+
+mod automatic_abilities;
+pub use automatic_abilities::{
+    AbilityConfigurationError, AdditionalAutomaticAbilities, AdditionalAutomaticAbilityDefinitions,
+    AutomaticAbilityInstance, MAX_AUTOMATIC_ABILITIES, SecondaryResurrectionState,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -662,6 +668,7 @@ pub(crate) struct BuildingRuntimeState {
     pub spawn_tick: Option<SpawnTick>,
     pub mana: Option<ManaState>,
     pub ability_state: Option<AutomaticAbilityState>,
+    pub additional_abilities: Option<AdditionalAutomaticAbilities>,
     pub status: Option<StatusState>,
 }
 
@@ -706,6 +713,7 @@ pub struct ResolvedUnitDefinition {
     pub template: UnitTemplate,
     pub properties: UnitGameplayProperties,
     pub spellcasting: Option<SpellcastingProfile>,
+    pub additional_abilities: Option<AdditionalAutomaticAbilityDefinitions>,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -1013,10 +1021,11 @@ pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusState {
     pub stunned_until_tick: u64,
-    pub warlock_retreat_start_tick: u64,
-    pub warlock_retreat_end_tick: u64,
-    pub paladin_resurrection_due_tick: u64,
-    pub paladin_resurrection_ready_tick: u64,
+    pub ability_retreat_start_tick: u64,
+    pub ability_retreat_end_tick: u64,
+    pub secondary_resurrection_due_tick: u64,
+    pub secondary_resurrection_ready_tick: u64,
+    pub secondary_resurrection_ability: Option<AbilityId>,
     pub permanent_holy_health_bonus: bool,
     pub movement_modifiers: [TimedMovementModifier; MAX_TIMED_MOVEMENT_MODIFIERS],
     pub movement_modifier_count: u8,

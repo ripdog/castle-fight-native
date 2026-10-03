@@ -17,12 +17,13 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 11;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 12;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
 
 mod abilities;
+mod automatic_abilities;
 mod builder;
 mod canonical;
 mod combat;
@@ -51,25 +52,27 @@ use status::{
 
 use crate::{
     components::{
-        AbilityEffect, AbilityId, AbilityTargetPolicy, AreaDamageOrigin, AttackCooldown,
-        AttackDelivery, AttackProfile, AttackSequence, AttackTargetMask, AutomaticAbilityProfile,
-        AutomaticAbilityState, BallisticProjectile, BounceProjectile, BuildTimeTicks, Builder,
-        BuilderBuildOrder, BuilderConfiguration, BuilderLocomotion, BuilderProfile, BuilderSpawn,
-        BuilderState, BuildingConstruction, BuildingFootprint, BuildingGameplayProperties,
-        BuildingRuntimeState, BuildingSpawn, BuildingUpgradeSource, BurningOilZone,
-        ChainLightningState, CollisionRadius, ContentIdentity, Corpse, CorpseDefinitionId,
-        CorpseProducer, CorpseProfile, DefendEffectProfile, GameplayBundleIdentity,
-        GuaranteedHitProjectile, Health, HealthRegeneration, MAX_BOUNCE_HITS,
-        MAX_TIMED_ARMOR_MODIFIERS, MAX_TIMED_ATTACK_SPEED_MODIFIERS, MAX_TIMED_DAMAGE_OVER_TIME,
-        MAX_TIMED_MOVEMENT_MODIFIERS, ManaState, MechanicalUnit, ModifierId, MovementClass,
-        MovementProfile, NavigationGoal, NavigationState, Owner, PassiveUnitEffect,
-        PassiveUnitEffects, PendingAttackEffects, PlayerId, Position, ProductionArmorProfile,
-        ProductionAttackTargets, ProductionCollisionRadius, ProductionContentIdentity,
-        ProductionCorpseProfile, ProductionDamageType, ProductionHealthRegeneration,
-        ProductionMovementClass, ProductionPassiveEffects, ProductionProfile,
-        ProductionSecondaryAttack, ProductionSpellcastingProfile, ProductionState,
-        ProductionUnitRepairMetadata, ReflectedProjectile, RepairTimeTicks, ResolvedUnitDefinition,
-        ResurrectionProfile, RetaliationState, SecondaryAttackProfile, SimId, SpawnTick,
+        AbilityConfigurationError, AbilityEffect, AbilityId, AbilityTargetPolicy,
+        AdditionalAutomaticAbilities, AdditionalAutomaticAbilityDefinitions, AreaDamageOrigin,
+        AttackCooldown, AttackDelivery, AttackProfile, AttackSequence, AttackTargetMask,
+        AutomaticAbilityInstance, AutomaticAbilityProfile, AutomaticAbilityState,
+        BallisticProjectile, BounceProjectile, BuildTimeTicks, Builder, BuilderBuildOrder,
+        BuilderConfiguration, BuilderLocomotion, BuilderProfile, BuilderSpawn, BuilderState,
+        BuildingConstruction, BuildingFootprint, BuildingGameplayProperties, BuildingRuntimeState,
+        BuildingSpawn, BuildingUpgradeSource, BurningOilZone, ChainLightningState, CollisionRadius,
+        ContentIdentity, Corpse, CorpseDefinitionId, CorpseProducer, CorpseProfile,
+        DefendEffectProfile, GameplayBundleIdentity, GuaranteedHitProjectile, Health,
+        HealthRegeneration, MAX_BOUNCE_HITS, MAX_TIMED_ARMOR_MODIFIERS,
+        MAX_TIMED_ATTACK_SPEED_MODIFIERS, MAX_TIMED_DAMAGE_OVER_TIME, MAX_TIMED_MOVEMENT_MODIFIERS,
+        ManaState, MechanicalUnit, ModifierId, MovementClass, MovementProfile, NavigationGoal,
+        NavigationState, Owner, PassiveUnitEffect, PassiveUnitEffects, PendingAttackEffects,
+        PlayerId, Position, ProductionArmorProfile, ProductionAttackTargets,
+        ProductionCollisionRadius, ProductionContentIdentity, ProductionCorpseProfile,
+        ProductionDamageType, ProductionHealthRegeneration, ProductionMovementClass,
+        ProductionPassiveEffects, ProductionProfile, ProductionSecondaryAttack,
+        ProductionSpellcastingProfile, ProductionState, ProductionUnitRepairMetadata,
+        ReflectedProjectile, RepairTimeTicks, ResolvedUnitDefinition, ResurrectionProfile,
+        RetaliationState, SecondaryAttackProfile, SecondaryResurrectionState, SimId, SpawnTick,
         SpellcastingProfile, StatusState, TargetState, Team, TimedArmorModifier,
         TimedAttackSpeedModifier, TimedDamageOverTime, TriggeredAttackEffect,
         UnitGameplayProperties, UnitSpawn,
@@ -1130,12 +1133,23 @@ impl Simulation {
         if let Some(spellcasting) = definition.spellcasting {
             validate_spellcasting_profile(spellcasting);
         }
-        self.spawn_unit_unchecked(
-            Some(owner),
-            unit,
-            definition.properties,
-            definition.spellcasting,
-        )
+        self.spawn_resolved_unit_unchecked(Some(owner), unit, definition)
+    }
+
+    fn spawn_resolved_unit_unchecked(
+        &mut self,
+        owner: Option<PlayerId>,
+        unit: UnitSpawn,
+        definition: ResolvedUnitDefinition,
+    ) -> SimId {
+        let id =
+            self.spawn_unit_unchecked(owner, unit, definition.properties, definition.spellcasting);
+        if let Some(additional) = definition.additional_abilities {
+            let profiles = additional.iter().collect::<Vec<_>>();
+            self.configure_additional_automatic_abilities(id, &profiles)
+                .expect("validated resolved automatic ability definitions");
+        }
+        id
     }
 
     pub fn spawn_unit_with_spellcasting(
@@ -2147,6 +2161,7 @@ impl Simulation {
             },
             properties,
             spellcasting,
+            additional_abilities: None,
         }));
         if let Some(owner) = owner {
             entity.insert(Owner(owner));
@@ -2234,11 +2249,11 @@ impl Simulation {
                         return None;
                     };
                     if profile.suspend_during_spell_cooldown
-                        && unit.status.warlock_retreat_end_tick > 0
+                        && unit.status.ability_retreat_end_tick > 0
                         && self.next_tick
                             < unit
                                 .status
-                                .warlock_retreat_end_tick
+                                .ability_retreat_end_tick
                                 .checked_add(
                                     u64::try_from(66 * CASTLE_FIGHT_SIMULATION_HZ / 10)
                                         .expect("simulation Hz must be positive"),
