@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "effects": [
+    {"source_kind": "unit-ability", "source_key": "A08I", "unit_rawcode": "n022", "kind": "bash"},
+    {"source_kind": "unit-ability", "source_key": "A08J", "unit_rawcode": "n023", "kind": "bash"},
+    {"source_kind": "unit-ability", "source_key": "A03P", "unit_rawcode": "n023", "kind": "evasion"},
+    {"source_kind": "unit-ability", "source_key": "A00V", "unit_rawcode": "n006", "kind": "critical-strike"},
+    {"source_kind": "unit-ability", "source_key": "A0AL", "unit_rawcode": "n006", "kind": "spell-resistance"},
+    {"source_kind": "unit-ability", "source_key": "A02L", "unit_rawcode": "hrif", "kind": "critical-strike"},
+    {"source_kind": "unit-ability", "source_key": "A06F", "unit_rawcode": "h05C", "kind": "critical-strike"},
+    {"source_kind": "unit-ability", "source_key": "A06L", "unit_rawcode": "h0A2", "kind": "critical-strike"},
+    {"source_kind": "unit-ability", "source_key": "A00U", "unit_rawcode": "e003", "kind": "evasion"},
+    {"source_kind": "unit-ability", "source_key": "A03G", "unit_rawcode": "h03A", "kind": "defend"},
+    {"source_kind": "unit-ability", "source_key": "A05K", "unit_rawcode": "h016", "kind": "bash"},
+    {"source_kind": "unit-ability", "source_key": "A01B", "unit_rawcode": "h016", "kind": "orb-spell-proc"},
+    {"source_kind": "ability-effect", "source_key": "A05X", "kind": "chain-lightning"},
+    {"source_kind": "unit-ability", "source_key": "A049", "unit_rawcode": "n015", "kind": "orb-spell-proc"},
+    {"source_kind": "ability-effect", "source_key": "A03W", "kind": "entangling-roots"},
+    {"source_kind": "unit-ability", "source_key": "A02J", "unit_rawcode": "o001", "kind": "burning-oil"},
+    {"source_kind": "unit-ability", "source_key": "A03Z", "unit_rawcode": "n015", "kind": "frost-armor"},
+    {"source_kind": "unit-ability", "source_key": "A01A", "unit_rawcode": "h03B", "kind": "bash"},
+    {"source_kind": "unit-ability", "source_key": "A090", "unit_rawcode": "h074", "kind": "bash"}
+  ]
+}

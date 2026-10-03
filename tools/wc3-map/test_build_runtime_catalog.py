@@ -70,19 +70,7 @@ class RuntimeCatalogTest(unittest.TestCase):
             ).read_text(encoding="utf-8")
         )
 
-        self.assertEqual(committed["schema_version"], generated["schema_version"])
-        self.assertEqual(committed["map_version"], generated["map_version"])
-        self.assertEqual(committed["release_revision"], generated["release_revision"])
-        self.assertEqual(committed["extraction_git_tree"], generated["extraction_git_tree"])
-        self.assertEqual(
-            committed["source_object_fields_sha256"],
-            generated["source_object_fields_sha256"],
-        )
-
-        generated_by_rawcode = {row["rawcode"]: row for row in generated["objects"]}
-        self.assertGreater(len(generated_by_rawcode), 500)
-        for row in committed["objects"]:
-            self.assertEqual(row, generated_by_rawcode[row["rawcode"]])
+        self.assertEqual(committed, generated)
 
     def test_committed_927_source_manifest_is_generated_from_retained_tree(self) -> None:
         release = MODULE._load_release(

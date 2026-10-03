@@ -5,7 +5,8 @@
 - Work directly and autonomously; avoid unnecessary clarification when the intent is clear.
 - Always commit completed work automatically in logical, reviewable chunks with clear commit messages.
 - Keep commits narrowly scoped; do not mix unrelated refactors, formatting, and behavior changes unless they are inseparable.
-- Preserve and update the specifications under `docs/spec` when implementation decisions change normative behavior.
+- Change `docs/spec` only for design changes or changes to normative engine behavior, not to record newly implemented entities. Keep implementation checklists, source audits, and progress tracking separately under `docs/verification`.
+- Extracted map data is authoritative. Consumers must reference that evidence or reproducibly generated projections; do not maintain independent copies of map values in specifications, tests, UI labels, or hand-authored runtime tables. Generated projections must retain source identity and be reproducible.
 - When implementing or auditing a Warcraft III-derived unit/building, use `docs/verification/unit-implementation-checklist.md` as the per-entity fidelity checklist. Reconcile resolved object data with map-script control flow, including hidden/proxy abilities, trigger vs effect target semantics, timing, AI behavior, authoritative delayed state, and negative-case tests; do not implement from tooltips alone.
 - When using Devspace worktrees, remove a completed worktree after merging its changes instead of leaving it on disk.
 
@@ -30,7 +31,7 @@
 
 ## Verification
 
-- Add or update focused tests for behavior changes, especially determinism-sensitive code.
+- Add or update focused mechanic-level tests for behavior changes, especially determinism-sensitive code. Prefer synthetic fixtures that exercise the engine contract, and catalog-wide validation against extracted evidence. Avoid per-entity tests by default; add one only for a demonstrated entity-specific integration bug or interaction that cannot reasonably be covered by a reusable mechanic test. Do not write tests that merely duplicate extracted numeric values.
 - Run relevant formatting, linting, tests, and build checks before committing.
 - Run compile-heavy Cargo commands through `tools/cargo-interactive` (for example `tools/cargo-interactive check --workspace` or `tools/cargo-interactive test -p castle-fight-sim`). The wrapper reserves half of the machine's physical CPU cores for interactive use, constrains the long-lived sccache compiler server, gives sccache a larger shared cache budget, and serializes compile-heavy CF Native builds across worktrees so parallel agents do not oversubscribe the same CPUs. Codex should launch these commands with its native command/task tools and inspect their output there. ChatGPT, which does not have those native tools, should launch them through Devspace as asynchronous tasks (`async=true`) and inspect their output with the task APIs. Do not bypass the wrapper with raw `cargo build`, `cargo check`, `cargo test`, `cargo clippy`, benchmarks, or similar compile-heavy commands.
 - Respect the repository's six-job Cargo build cap; do not override it with `-j`/`--jobs` or `CARGO_BUILD_JOBS` unless the user explicitly asks.

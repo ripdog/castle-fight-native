@@ -28,9 +28,12 @@ use crate::{
     version::MapVersion,
 };
 
+mod roster;
+pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUnitKind};
+
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r9";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r10";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -304,47 +307,28 @@ impl CastleFightContentBundle {
             .collect()
     }
 
+    /// Promoted direct placements intersected with the builder's extracted command list.
+    /// Coverage of this menu alone does not establish full race playability.
     #[must_use]
-    pub fn playable_human_direct_building_kinds(&self) -> Vec<CastleFightBuildingKind> {
-        let builder = self
-            .builder(CastleFightBuilderRace::Human)
-            .expect("Human builder must belong to playable content bundle");
-        let available = match self.map_version {
-            MapVersion::CASTLE_FIGHT_9_27 => [
-                CastleFightProductionKind::Barracks,
-                CastleFightProductionKind::SniperNest,
-                CastleFightProductionKind::WeaponLab,
-                CastleFightProductionKind::GryphonRock,
-                CastleFightProductionKind::Chapel,
-                CastleFightProductionKind::Hjordhejmen,
-            ],
-            _ => unreachable!("unsupported Castle Fight content bundle version"),
+    pub fn direct_building_kinds_for_race(
+        &self,
+        race: CastleFightBuilderRace,
+    ) -> Vec<CastleFightBuildingKind> {
+        let Some(builder) = self.builder(race) else {
+            return Vec::new();
         };
-        available
+        self.direct_building_kinds()
             .into_iter()
             .filter(|kind| {
-                self.production_building(*kind)
-                    .is_some_and(|definition| builder.build_catalog.contains(&definition.rawcode))
+                kind.rawcode(self)
+                    .is_some_and(|rawcode| builder.build_catalog.contains(&rawcode))
             })
-            .map(CastleFightBuildingKind::Production)
-            .chain(
-                [
-                    CastleFightTowerKind::Gjallarhorn,
-                    CastleFightTowerKind::Artillery,
-                    CastleFightTowerKind::VesselOfPurity,
-                    CastleFightTowerKind::WatchTower,
-                    CastleFightTowerKind::TreasureBox,
-                    CastleFightTowerKind::HeroicShrine,
-                ]
-                .into_iter()
-                .filter(|kind| {
-                    self.tower(*kind).is_some_and(|definition| {
-                        builder.build_catalog.contains(&definition.rawcode)
-                    })
-                })
-                .map(CastleFightBuildingKind::Tower),
-            )
             .collect()
+    }
+
+    #[must_use]
+    pub fn playable_human_direct_building_kinds(&self) -> Vec<CastleFightBuildingKind> {
+        self.direct_building_kinds_for_race(CastleFightBuilderRace::Human)
     }
 }
 
@@ -756,71 +740,7 @@ impl CastleFightBuilderDefinition {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum CastleFightUnitKind {
-    Footman,
-    Defender,
-    Sniper,
-    Mortar,
-    HeavyGunner,
-    Marksman,
-    Ranger,
-    Catapult,
-    IceTrollShadowPriest,
-    GryphonRider,
-    Crusader,
-    Paladin,
-    HolyWarrior,
-    Warlock,
-    Archer,
-    MasterArcher,
-    Blademaster,
-}
-
 impl CastleFightUnitKind {
-    #[must_use]
-    pub const fn stable_id(self) -> CastleFightUnitId {
-        CastleFightUnitId(match self {
-            Self::Footman => 0x1000_0001,
-            Self::Defender => 0x1000_0002,
-            Self::Sniper => 0x1000_0007,
-            Self::Mortar => 0x1000_0008,
-            Self::HeavyGunner => 0x1000_0009,
-            Self::Marksman => 0x1000_000a,
-            Self::Ranger => 0x1000_0003,
-            Self::Catapult => 0x1000_0004,
-            Self::IceTrollShadowPriest => 0x1000_0005,
-            Self::GryphonRider => 0x1000_0006,
-            Self::Crusader => 0x1000_000b,
-            Self::Paladin => 0x1000_000c,
-            Self::HolyWarrior => 0x1000_000d,
-            Self::Warlock => 0x1000_000e,
-            Self::Archer => 0x1000_000f,
-            Self::MasterArcher => 0x1000_0010,
-            Self::Blademaster => 0x1000_0011,
-        })
-    }
-
-    pub const ALL: [Self; 17] = [
-        Self::Footman,
-        Self::Defender,
-        Self::Sniper,
-        Self::Mortar,
-        Self::HeavyGunner,
-        Self::Marksman,
-        Self::Ranger,
-        Self::Catapult,
-        Self::IceTrollShadowPriest,
-        Self::GryphonRider,
-        Self::Crusader,
-        Self::Paladin,
-        Self::HolyWarrior,
-        Self::Warlock,
-        Self::Archer,
-        Self::MasterArcher,
-        Self::Blademaster,
-    ];
-
     #[must_use]
     pub fn definition(self) -> CastleFightUnitDefinition {
         self.definition_for_version(CASTLE_FIGHT_DEFAULT_MAP_VERSION)
@@ -1019,30 +939,11 @@ impl CastleFightUnitKind {
     }
 
     fn definition_9_27(self) -> CastleFightUnitDefinition {
-        let (rawcode, name, expose_corpse) = match self {
-            Self::Footman => (u32::from_be_bytes(*b"hfoo"), "Footman", true),
-            Self::Defender => (u32::from_be_bytes(*b"h03A"), "Defender", true),
-            Self::Sniper => (u32::from_be_bytes(*b"hrif"), "Sniper", true),
-            Self::Mortar => (u32::from_be_bytes(*b"hmtm"), "Mortar", true),
-            Self::HeavyGunner => (u32::from_be_bytes(*b"h0A2"), "Heavy Gunner", true),
-            Self::Marksman => (u32::from_be_bytes(*b"h05C"), "Marksman", true),
-            Self::Ranger => (u32::from_be_bytes(*b"e003"), "Ranger", true),
-            Self::Catapult => (u32::from_be_bytes(*b"o001"), "Catapult", false),
-            Self::IceTrollShadowPriest => (
-                u32::from_be_bytes(*b"n015"),
-                "Ice Troll Shadow Priest",
-                true,
-            ),
-            Self::GryphonRider => (u32::from_be_bytes(*b"h016"), "Gryphon Rider", false),
-            Self::Crusader => (u32::from_be_bytes(*b"h03B"), "Crusader", true),
-            Self::Paladin => (u32::from_be_bytes(*b"h03C"), "Paladin", true),
-            Self::HolyWarrior => (u32::from_be_bytes(*b"h074"), "Holy Warrior", true),
-            Self::Warlock => (u32::from_be_bytes(*b"n005"), "Warlock", true),
-            Self::Archer => (u32::from_be_bytes(*b"n022"), "Archer", true),
-            Self::MasterArcher => (u32::from_be_bytes(*b"n023"), "Master Archer", true),
-            Self::Blademaster => (u32::from_be_bytes(*b"n006"), "Blademaster", true),
-        };
-        extracted_unit_definition_927(rawcode, name, expose_corpse)
+        let rawcode = self.rawcode_9_27();
+        let content = extracted_content_927();
+        let unit = &content.units[&rawcode];
+        let expose_corpse = !unit.mechanical && content.corpses[&rawcode].does_decay;
+        extracted_unit_definition_927(rawcode, unit.name, expose_corpse)
     }
 }
 
@@ -1114,71 +1015,7 @@ impl CastleFightUnitDefinition {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum CastleFightProductionKind {
-    Barracks,
-    Stronghold,
-    SniperNest,
-    WeaponLab,
-    GunnersHall,
-    MarksmensEncampment,
-    RangersHall,
-    OrcishSiegeFactory,
-    IceTrollHut,
-    GryphonRock,
-    Chapel,
-    Church,
-    HolyAltar,
-    Hjordhejmen,
-    ArcheryRange,
-    ArcheryTower,
-    HallOfHonor,
-}
-
 impl CastleFightProductionKind {
-    #[must_use]
-    pub const fn stable_id(self) -> CastleFightBuildingId {
-        CastleFightBuildingId(match self {
-            Self::Barracks => 0x2000_0001,
-            Self::Stronghold => 0x2000_0002,
-            Self::SniperNest => 0x2000_0007,
-            Self::WeaponLab => 0x2000_0008,
-            Self::GunnersHall => 0x2000_0009,
-            Self::MarksmensEncampment => 0x2000_000a,
-            Self::RangersHall => 0x2000_0003,
-            Self::OrcishSiegeFactory => 0x2000_0004,
-            Self::IceTrollHut => 0x2000_0005,
-            Self::GryphonRock => 0x2000_0006,
-            Self::Chapel => 0x2000_000b,
-            Self::Church => 0x2000_000c,
-            Self::HolyAltar => 0x2000_000d,
-            Self::Hjordhejmen => 0x2000_000e,
-            Self::ArcheryRange => 0x2000_000f,
-            Self::ArcheryTower => 0x2000_0010,
-            Self::HallOfHonor => 0x2000_0011,
-        })
-    }
-
-    pub const ALL: [Self; 17] = [
-        Self::Barracks,
-        Self::Stronghold,
-        Self::SniperNest,
-        Self::WeaponLab,
-        Self::GunnersHall,
-        Self::MarksmensEncampment,
-        Self::RangersHall,
-        Self::OrcishSiegeFactory,
-        Self::IceTrollHut,
-        Self::GryphonRock,
-        Self::Chapel,
-        Self::Church,
-        Self::HolyAltar,
-        Self::Hjordhejmen,
-        Self::ArcheryRange,
-        Self::ArcheryTower,
-        Self::HallOfHonor,
-    ];
-
     #[must_use]
     pub fn from_rawcode(rawcode: u32) -> Option<Self> {
         Self::from_rawcode_for_version(rawcode, CASTLE_FIGHT_DEFAULT_MAP_VERSION)
@@ -1192,26 +1029,7 @@ impl CastleFightProductionKind {
         if version != MapVersion::CASTLE_FIGHT_9_27 {
             return Err(UnsupportedCastleFightMapVersion(version));
         }
-        Ok(match rawcode {
-            value if value == u32::from_be_bytes(*b"h000") => Some(Self::Barracks),
-            value if value == u32::from_be_bytes(*b"h039") => Some(Self::Stronghold),
-            value if value == u32::from_be_bytes(*b"h003") => Some(Self::SniperNest),
-            value if value == u32::from_be_bytes(*b"h004") => Some(Self::WeaponLab),
-            value if value == u32::from_be_bytes(*b"h05D") => Some(Self::GunnersHall),
-            value if value == u32::from_be_bytes(*b"h0A1") => Some(Self::MarksmensEncampment),
-            value if value == u32::from_be_bytes(*b"h03D") => Some(Self::RangersHall),
-            value if value == u32::from_be_bytes(*b"h02I") => Some(Self::OrcishSiegeFactory),
-            value if value == u32::from_be_bytes(*b"h03K") => Some(Self::IceTrollHut),
-            value if value == u32::from_be_bytes(*b"h015") => Some(Self::GryphonRock),
-            value if value == u32::from_be_bytes(*b"h037") => Some(Self::Chapel),
-            value if value == u32::from_be_bytes(*b"h038") => Some(Self::Church),
-            value if value == u32::from_be_bytes(*b"h072") => Some(Self::HolyAltar),
-            value if value == u32::from_be_bytes(*b"h00K") => Some(Self::Hjordhejmen),
-            value if value == u32::from_be_bytes(*b"h08X") => Some(Self::ArcheryRange),
-            value if value == u32::from_be_bytes(*b"h08Y") => Some(Self::ArcheryTower),
-            value if value == u32::from_be_bytes(*b"h00T") => Some(Self::HallOfHonor),
-            _ => None,
-        })
+        Ok(Self::from_retained_rawcode_9_27(rawcode))
     }
 
     #[must_use]
@@ -1272,47 +1090,10 @@ impl CastleFightProductionKind {
     }
 
     fn definition_9_27(self) -> CastleFightProductionDefinition {
-        let (rawcode, unit) = match self {
-            Self::ArcheryRange => (u32::from_be_bytes(*b"h08X"), CastleFightUnitKind::Archer),
-            Self::ArcheryTower => (
-                u32::from_be_bytes(*b"h08Y"),
-                CastleFightUnitKind::MasterArcher,
-            ),
-            Self::HallOfHonor => (
-                u32::from_be_bytes(*b"h00T"),
-                CastleFightUnitKind::Blademaster,
-            ),
-            Self::Barracks => (u32::from_be_bytes(*b"h000"), CastleFightUnitKind::Footman),
-            Self::Stronghold => (u32::from_be_bytes(*b"h039"), CastleFightUnitKind::Defender),
-            Self::SniperNest => (u32::from_be_bytes(*b"h003"), CastleFightUnitKind::Sniper),
-            Self::WeaponLab => (u32::from_be_bytes(*b"h004"), CastleFightUnitKind::Mortar),
-            Self::GunnersHall => (
-                u32::from_be_bytes(*b"h05D"),
-                CastleFightUnitKind::HeavyGunner,
-            ),
-            Self::MarksmensEncampment => {
-                (u32::from_be_bytes(*b"h0A1"), CastleFightUnitKind::Marksman)
-            }
-            Self::RangersHall => (u32::from_be_bytes(*b"h03D"), CastleFightUnitKind::Ranger),
-            Self::OrcishSiegeFactory => {
-                (u32::from_be_bytes(*b"h02I"), CastleFightUnitKind::Catapult)
-            }
-            Self::IceTrollHut => (
-                u32::from_be_bytes(*b"h03K"),
-                CastleFightUnitKind::IceTrollShadowPriest,
-            ),
-            Self::GryphonRock => (
-                u32::from_be_bytes(*b"h015"),
-                CastleFightUnitKind::GryphonRider,
-            ),
-            Self::Chapel => (u32::from_be_bytes(*b"h037"), CastleFightUnitKind::Crusader),
-            Self::Church => (u32::from_be_bytes(*b"h038"), CastleFightUnitKind::Paladin),
-            Self::HolyAltar => (
-                u32::from_be_bytes(*b"h072"),
-                CastleFightUnitKind::HolyWarrior,
-            ),
-            Self::Hjordhejmen => (u32::from_be_bytes(*b"h00K"), CastleFightUnitKind::Warlock),
-        };
+        let rawcode = self.rawcode_9_27();
+        let produced_rawcode = extracted_content_927().production[&rawcode].unit_rawcode;
+        let unit = CastleFightUnitKind::from_retained_rawcode_9_27(produced_rawcode)
+            .expect("promoted production must reference a promoted unit");
         production_definition(rawcode, unit)
     }
 }
@@ -1382,47 +1163,7 @@ impl CastleFightProductionDefinition {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum CastleFightTowerKind {
-    WatchTower,
-    PoofTower,
-    Artillery,
-    Gjallarhorn,
-    VesselOfPurity,
-    HeroicShrine,
-    TreasureBox,
-    TinyWatchTower,
-    TinyMultishotTower,
-}
-
 impl CastleFightTowerKind {
-    #[must_use]
-    pub const fn stable_id(self) -> CastleFightBuildingId {
-        CastleFightBuildingId(match self {
-            Self::WatchTower => 0x2100_0001,
-            Self::PoofTower => 0x2100_0002,
-            Self::Artillery => 0x2100_0003,
-            Self::Gjallarhorn => 0x2100_0004,
-            Self::VesselOfPurity => 0x2100_0005,
-            Self::HeroicShrine => 0x2100_0006,
-            Self::TinyWatchTower => 0x2100_0007,
-            Self::TinyMultishotTower => 0x2100_0008,
-            Self::TreasureBox => 0x2100_0009,
-        })
-    }
-
-    pub const ALL: [Self; 9] = [
-        Self::WatchTower,
-        Self::PoofTower,
-        Self::Artillery,
-        Self::Gjallarhorn,
-        Self::VesselOfPurity,
-        Self::HeroicShrine,
-        Self::TreasureBox,
-        Self::TinyWatchTower,
-        Self::TinyMultishotTower,
-    ];
-
     #[must_use]
     pub fn from_rawcode(rawcode: u32) -> Option<Self> {
         Self::from_rawcode_for_version(rawcode, CASTLE_FIGHT_DEFAULT_MAP_VERSION)
@@ -1436,18 +1177,7 @@ impl CastleFightTowerKind {
         if version != MapVersion::CASTLE_FIGHT_9_27 {
             return Err(UnsupportedCastleFightMapVersion(version));
         }
-        Ok(match rawcode {
-            value if value == u32::from_be_bytes(*b"h006") => Some(Self::WatchTower),
-            value if value == u32::from_be_bytes(*b"h07P") => Some(Self::PoofTower),
-            value if value == u32::from_be_bytes(*b"h001") => Some(Self::Artillery),
-            value if value == u32::from_be_bytes(*b"h010") => Some(Self::Gjallarhorn),
-            value if value == u32::from_be_bytes(*b"h07U") => Some(Self::VesselOfPurity),
-            value if value == u32::from_be_bytes(*b"h05G") => Some(Self::HeroicShrine),
-            value if value == u32::from_be_bytes(*b"h008") => Some(Self::TreasureBox),
-            value if value == u32::from_be_bytes(*b"h081") => Some(Self::TinyWatchTower),
-            value if value == u32::from_be_bytes(*b"h082") => Some(Self::TinyMultishotTower),
-            _ => None,
-        })
+        Ok(Self::from_retained_rawcode_9_27(rawcode))
     }
 
     pub fn upgrade_targets_for_version(
@@ -1484,17 +1214,8 @@ impl CastleFightTowerKind {
     }
 
     fn definition_9_27(self) -> CastleFightTowerDefinition {
-        let (rawcode, expected_name) = match self {
-            Self::WatchTower => (u32::from_be_bytes(*b"h006"), "Watch Tower"),
-            Self::PoofTower => (u32::from_be_bytes(*b"h07P"), "Poof Tower"),
-            Self::Artillery => (u32::from_be_bytes(*b"h001"), "Artillery"),
-            Self::Gjallarhorn => (u32::from_be_bytes(*b"h010"), "Gjallarhorn"),
-            Self::VesselOfPurity => (u32::from_be_bytes(*b"h07U"), "Vessel of Purity"),
-            Self::HeroicShrine => (u32::from_be_bytes(*b"h05G"), "Heroic Shrine"),
-            Self::TreasureBox => (u32::from_be_bytes(*b"h008"), "Treasure Box"),
-            Self::TinyWatchTower => (u32::from_be_bytes(*b"h081"), "Tiny Watch Tower"),
-            Self::TinyMultishotTower => (u32::from_be_bytes(*b"h082"), "Tiny Multishot Tower"),
-        };
+        let rawcode = self.rawcode_9_27();
+        let expected_name = extracted_content_927().buildings[&rawcode].name;
         let mut definition = extracted_tower_definition_927(rawcode, expected_name);
         definition.spellcasting = match self {
             Self::Artillery => {
@@ -2667,10 +2388,11 @@ struct CatalogSupplement927 {
 #[derive(Debug, Deserialize)]
 struct CatalogSupplementObject927 {
     rawcode: String,
-    repair_time_seconds: u32,
+    repair_time_seconds: Option<u32>,
     button_x: Option<u8>,
     button_y: Option<u8>,
     hotkey: Option<char>,
+    build_catalog: Option<Vec<String>>,
 }
 
 #[derive(Debug)]
@@ -2691,6 +2413,7 @@ struct ExtractedContent927 {
     income_semantics: BTreeMap<u32, ExtractedIncomeSemantics927>,
     income_per_10k: BTreeMap<u32, u64>,
     builder_catalogs: BTreeMap<(u8, u32), ExtractedBuilderCatalog927>,
+    authored_builder_catalogs: BTreeMap<u32, Vec<u32>>,
     damage_rules: DamageRules,
 }
 
@@ -2749,16 +2472,24 @@ impl ExtractedContent927 {
         let mut repair_time_ticks = BTreeMap::<u32, u32>::new();
         let mut command_card_positions = BTreeMap::new();
         let mut building_hotkeys = BTreeMap::new();
+        let mut authored_builder_catalogs = BTreeMap::new();
         for object in supplement.objects {
             let rawcode = parse_rawcode(&object.rawcode);
-            let repair_ticks = object
-                .repair_time_seconds
-                .checked_mul(CASTLE_FIGHT_SIMULATION_HZ as u32)
-                .ok_or_else(|| format!("unit {rawcode:#010x} repair time overflowed"))?;
-            if repair_time_ticks.insert(rawcode, repair_ticks).is_some() {
-                return Err(format!(
-                    "catalog supplement repeats repair time for {rawcode:#010x}"
-                ));
+            if let Some(catalog) = object.build_catalog {
+                authored_builder_catalogs.insert(
+                    rawcode,
+                    catalog.iter().map(|code| parse_rawcode(code)).collect(),
+                );
+            }
+            if let Some(seconds) = object.repair_time_seconds {
+                let repair_ticks = seconds
+                    .checked_mul(CASTLE_FIGHT_SIMULATION_HZ as u32)
+                    .ok_or_else(|| format!("unit {rawcode:#010x} repair time overflowed"))?;
+                if repair_time_ticks.insert(rawcode, repair_ticks).is_some() {
+                    return Err(format!(
+                        "catalog supplement repeats repair time for {rawcode:#010x}"
+                    ));
+                }
             }
             // Some archived unit rows expose only one button coordinate. Preserve the evidence
             // in the generated supplement, but only promote a complete pair into the native
@@ -3270,6 +3001,7 @@ impl ExtractedContent927 {
             income_semantics,
             income_per_10k,
             builder_catalogs,
+            authored_builder_catalogs,
             damage_rules,
         })
     }
@@ -3583,20 +3315,13 @@ fn extracted_builder_definition_927(race: CastleFightBuilderRace) -> CastleFight
         // Critter Builder still has Repair in its ability list but leaves `udaa` blank.
         repair_autocast_enabled_by_default: !matches!(race, CastleFightBuilderRace::Critter),
         profile: builder_profile(speed_per_tick),
-        build_catalog: if race == CastleFightBuilderRace::Human {
-            // The race-registration table also contains the Towerless perk's h081 -> h082 line.
-            // The actual 9.27 Human builder command list (`X00C.ubui`) instead contains the
-            // shared Treasure Box and excludes the perk-only tiny tower.
-            [
-                b"h07U", b"h05G", b"h037", b"h015", b"h010", b"h00K", b"h008", b"h006", b"h004",
-                b"h003", b"h000", b"h001",
-            ]
-            .into_iter()
-            .map(|rawcode| u32::from_be_bytes(*rawcode))
-            .collect()
-        } else {
-            catalog.direct_buildings.clone()
-        },
+        // Object-authored build lists take precedence over race registration, which also
+        // contains upgrades and perk-only verification entries. Neither list is hand-maintained.
+        build_catalog: content
+            .authored_builder_catalogs
+            .get(builder_rawcode)
+            .unwrap_or(&catalog.direct_buildings)
+            .clone(),
         map_version: MapVersion::CASTLE_FIGHT_9_27,
     }
 }
@@ -4339,7 +4064,7 @@ mod tests {
     }
 
     #[test]
-    fn current_content_bundle_freezes_the_development_slice() {
+    fn current_content_bundle_binds_the_requested_version_and_revision() {
         let bundle = castle_fight_content_bundle(MapVersion::CASTLE_FIGHT_9_27).unwrap();
         assert_eq!(bundle.revision, CASTLE_FIGHT_CONTENT_REVISION_927);
         assert_eq!(
@@ -4350,8 +4075,7 @@ mod tests {
             bundle.identity.schema_version,
             CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION
         );
-        assert_eq!(bundle.identity.gameplay_hash, 7514333017220854365);
-        assert_eq!(bundle.behaviors().len(), 46);
+        assert_ne!(bundle.identity.gameplay_hash, 0);
         assert!(
             bundle
                 .behaviors()
@@ -4656,12 +4380,7 @@ mod tests {
         let unit_rows = unit_lines
             .map(|line| line.split('\t').collect::<Vec<_>>())
             .collect::<Vec<_>>();
-        let expected_catalog_sizes = [10, 10, 6, 10, 11, 10, 12, 10, 10, 10, 10, 11, 10, 10, 10];
-
-        for (race, expected_catalog_size) in CastleFightBuilderRace::ALL
-            .into_iter()
-            .zip(expected_catalog_sizes)
-        {
+        for race in CastleFightBuilderRace::ALL {
             let definition = race.definition();
             let source = unit_rows
                 .iter()
@@ -4680,7 +4399,14 @@ mod tests {
                 definition.profile.speed_per_tick,
                 source_speed * SUBUNITS_PER_WORLD_UNIT / CASTLE_FIGHT_SIMULATION_HZ
             );
-            assert_eq!(definition.build_catalog.len(), expected_catalog_size);
+            let content = extracted_content_927();
+            let expected = content
+                .authored_builder_catalogs
+                .get(&definition.rawcode)
+                .unwrap_or(
+                    &content.builder_catalogs[&(race as u8, definition.rawcode)].direct_buildings,
+                );
+            assert_eq!(&definition.build_catalog, expected);
         }
         assert!(!CastleFightBuilderRace::STANDARD.contains(&CastleFightBuilderRace::Critter));
         assert!(CastleFightBuilderRace::Critter.definition().campaign_only);

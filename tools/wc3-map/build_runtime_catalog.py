@@ -148,11 +148,11 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
         repo_root, git_tree, "resolved/object-fields.tsv"
     )
 
-    objects: dict[str, dict[str, int | str | None]] = {}
+    objects: dict[str, dict[str, Any]] = {}
     with io.StringIO(object_fields_bytes.decode("utf-8"), newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
         for row in reader:
-            if row["category"] != "units" or row["field_id"] not in {"urtm", "ubpx", "ubpy", "uhot"}:
+            if row["category"] != "units" or row["field_id"] not in {"urtm", "ubpx", "ubpy", "uhot", "ubui"}:
                 continue
             rawcode = row["rawcode"]
             output = objects.setdefault(
@@ -163,9 +163,15 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
                     "button_x": None,
                     "button_y": None,
                     "hotkey": None,
+                    "build_catalog": None,
                 },
             )
-            if row["field_id"] == "uhot":
+            if row["field_id"] == "ubui":
+                text = row["recovered_value_json"].strip('"')
+                value = [] if text in {"", "_", "-"} else text.split(",")
+                if any(len(code) != 4 for code in value):
+                    raise SystemExit(f"{rawcode} ubui contains an invalid rawcode")
+            elif row["field_id"] == "uhot":
                 value = _hotkey_recovered_value(row["recovered_value_json"], rawcode=rawcode)
             else:
                 value = _integer_recovered_value(
@@ -176,6 +182,7 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
                 "ubpx": "button_x",
                 "ubpy": "button_y",
                 "uhot": "hotkey",
+                "ubui": "build_catalog",
             }[row["field_id"]]
             previous = output[key]
             if previous is not None and previous != value:
@@ -284,6 +291,10 @@ def main() -> None:
         help="runtime catalog artifact to print",
     )
     parser.add_argument(
+        "--check", type=Path,
+        help="verify an existing generated artifact instead of printing it",
+    )
+    parser.add_argument(
         "--content-revision",
         help="required with --kind source-manifest (for example cf-native-dev-slice-r4)",
     )
@@ -298,7 +309,12 @@ def main() -> None:
         if not args.content_revision:
             parser.error("--content-revision is required with --kind source-manifest")
         output = build_source_manifest(release, repo_root, args.content_revision)
-    print(json.dumps(output, indent=2, separators=(",", ": "), sort_keys=False))
+    if args.check is not None:
+        committed = json.loads(args.check.read_text(encoding="utf-8"))
+        if committed != output:
+            raise SystemExit(f"generated runtime catalog is stale: {args.check}")
+    else:
+        print(json.dumps(output, indent=2, separators=(",", ": "), sort_keys=False))
 
 
 if __name__ == "__main__":

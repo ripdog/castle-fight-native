@@ -5,277 +5,5543 @@
   "extraction_git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
   "source_object_fields_sha256": "01040f03e4a625ac1d960a0a2d43d0732d64b797e9357f4f40e8c2c0d6d9710d",
   "objects": [
-    { "rawcode": "n022", "repair_time_seconds": 20, "button_x": 0, "button_y": 0, "hotkey": "Q" },
-    { "rawcode": "n023", "repair_time_seconds": 20, "button_x": 0, "button_y": 0, "hotkey": "Q" },
-    { "rawcode": "n006", "repair_time_seconds": 28, "button_x": 0, "button_y": 0, "hotkey": "Q" },
-    { "rawcode": "h08X", "repair_time_seconds": 70, "button_x": 0, "button_y": 0, "hotkey": "Q" },
-    { "rawcode": "h08Y", "repair_time_seconds": 70, "button_x": 3, "button_y": 0, "hotkey": "R" },
-    { "rawcode": "h00T", "repair_time_seconds": 70, "button_x": 1, "button_y": 0, "hotkey": "W" },
+    {
+      "rawcode": "X006",
+      "repair_time_seconds": 15,
+      "button_x": 3,
+      "button_y": 1,
+      "hotkey": null,
+      "build_catalog": [
+        "n01J",
+        "h04V",
+        "h04U",
+        "h008",
+        "h04T",
+        "h04S",
+        "h04R",
+        "h04Q",
+        "h04O",
+        "h04L",
+        "h04K"
+      ]
+    },
+    {
+      "rawcode": "X00C",
+      "repair_time_seconds": 15,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": [
+        "h07U",
+        "h05G",
+        "h037",
+        "h015",
+        "h010",
+        "h00K",
+        "h008",
+        "h006",
+        "h004",
+        "h003",
+        "h000",
+        "h001"
+      ]
+    },
+    {
+      "rawcode": "X00E",
+      "repair_time_seconds": 15,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": [
+        "h01Z",
+        "h00N",
+        "h00M",
+        "h00J",
+        "h01B",
+        "h00I",
+        "h00G",
+        "h020",
+        "h008",
+        "h01Y",
+        "h00F"
+      ]
+    },
+    {
+      "rawcode": "X00O",
+      "repair_time_seconds": 15,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": [
+        "h05I",
+        "h025",
+        "h01M",
+        "h01I",
+        "h01F",
+        "h01E",
+        "h01C",
+        "h01D",
+        "h009",
+        "h008",
+        "h007"
+      ]
+    },
+    {
+      "rawcode": "X00P",
+      "repair_time_seconds": 15,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": [
+        "h059",
+        "h00Z",
+        "h014",
+        "h09X",
+        "h00V",
+        "h00T",
+        "h008",
+        "h08X",
+        "h070",
+        "h06Y",
+        "h005"
+      ]
+    },
+    {
+      "rawcode": "X017",
+      "repair_time_seconds": 15,
+      "button_x": 2,
+      "button_y": 1,
+      "hotkey": "P",
+      "build_catalog": [
+        "h07W",
+        "h047",
+        "h048",
+        "h03O",
+        "h049",
+        "h03T",
+        "h03S",
+        "h03K",
+        "h03Q",
+        "h008",
+        "h03U",
+        "h03I"
+      ]
+    },
+    {
+      "rawcode": "X018",
+      "repair_time_seconds": 15,
+      "button_x": 0,
+      "button_y": 1,
+      "hotkey": "P",
+      "build_catalog": [
+        "h01K",
+        "h01O",
+        "h01Q",
+        "h01T",
+        "h01P",
+        "h01N",
+        "h01L",
+        "h01S",
+        "h008",
+        "h00A",
+        "h01R"
+      ]
+    },
+    {
+      "rawcode": "X019",
+      "repair_time_seconds": 15,
+      "button_x": 1,
+      "button_y": 1,
+      "hotkey": "P",
+      "build_catalog": [
+        "h02R",
+        "h02P",
+        "h02K",
+        "h02O",
+        "h02N",
+        "h029",
+        "h02B",
+        "h02I",
+        "o000",
+        "h008",
+        "h02H",
+        "h02O"
+      ]
+    },
+    {
+      "rawcode": "X01A",
+      "repair_time_seconds": 15,
+      "button_x": 1,
+      "button_y": 2,
+      "hotkey": "P",
+      "build_catalog": [
+        "h002",
+        "h00Y",
+        "h013",
+        "h023",
+        "h027",
+        "h028",
+        "n02D",
+        "h02A",
+        "h02C",
+        "h02D",
+        "h008"
+      ]
+    },
+    {
+      "rawcode": "X051",
+      "repair_time_seconds": 15,
+      "button_x": 1,
+      "button_y": 2,
+      "hotkey": "P",
+      "build_catalog": [
+        "h061",
+        "h040",
+        "h04A",
+        "h045",
+        "h05Z",
+        "h063",
+        "h060",
+        "h062",
+        "h042",
+        "h03X",
+        "h008"
+      ]
+    },
+    {
+      "rawcode": "X06P",
+      "repair_time_seconds": 15,
+      "button_x": 1,
+      "button_y": 2,
+      "hotkey": "P",
+      "build_catalog": [
+        "h09T",
+        "h069",
+        "h06J",
+        "h05T",
+        "h05U",
+        "h05M",
+        "h05J",
+        "h05V",
+        "h05X",
+        "h008",
+        "h05L"
+      ]
+    },
+    {
+      "rawcode": "X075",
+      "repair_time_seconds": 15,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": [
+        "h07V",
+        "h07W",
+        "h07U",
+        "h07R",
+        "h07T",
+        "h07P",
+        "n03D",
+        "n03F",
+        "n03H",
+        "n03N",
+        "n03Q",
+        "n03L",
+        "n033",
+        "h079",
+        "h07A",
+        "h07E",
+        "n02P",
+        "n02Q",
+        "n039",
+        "n036",
+        "n038",
+        "n03A",
+        "h04V",
+        "h000",
+        "h029",
+        "h020",
+        "h049",
+        "h01I",
+        "h01R",
+        "h08X",
+        "h00S",
+        "h05J",
+        "h002",
+        "h04A",
+        "h04L",
+        "h04O",
+        "h04S",
+        "h04Q",
+        "h04U",
+        "h04K",
+        "h04R",
+        "n01J",
+        "h04T",
+        "h008",
+        "h003",
+        "h004",
+        "h015",
+        "h037",
+        "h00K",
+        "h010",
+        "h001",
+        "h006",
+        "h05G",
+        "h008",
+        "h02B",
+        "h02H",
+        "h02P",
+        "h02K",
+        "h02I",
+        "h02N",
+        "h02R",
+        "o000",
+        "h02O",
+        "h008",
+        "h00J",
+        "h01Y",
+        "h00F",
+        "h01B",
+        "h01Z",
+        "h00I",
+        "h00M",
+        "h00G",
+        "h00N",
+        "h008",
+        "h03U",
+        "h03K",
+        "h03T",
+        "h03I",
+        "h03S",
+        "h048",
+        "h047",
+        "h03Q",
+        "h03O",
+        "h008",
+        "h01D",
+        "h01C",
+        "h025",
+        "h009",
+        "h007",
+        "h01M",
+        "h01F",
+        "h05I",
+        "h01E",
+        "h008",
+        "h01K",
+        "h01N",
+        "h01L",
+        "h01T",
+        "h01S",
+        "h00A",
+        "h01P",
+        "h01O",
+        "h01Q",
+        "h008",
+        "h00T",
+        "h00V",
+        "h06Y",
+        "h070",
+        "h09X",
+        "h00Z",
+        "h005",
+        "h014",
+        "h059",
+        "h008",
+        "h088",
+        "h07M",
+        "h07O",
+        "h00B",
+        "h011",
+        "h08P",
+        "h07H",
+        "h073",
+        "h07I",
+        "h008",
+        "h05X",
+        "h05M",
+        "h05T",
+        "h05V",
+        "h05U",
+        "h09T",
+        "h069",
+        "h05L",
+        "h06J",
+        "h008",
+        "h00Y",
+        "h013",
+        "h023",
+        "h027",
+        "h028",
+        "h02C",
+        "h02A",
+        "n02D",
+        "h02D",
+        "h03X",
+        "h045",
+        "h042",
+        "h040",
+        "h062",
+        "h060",
+        "h05Z",
+        "h061",
+        "h063",
+        "h008",
+        "h076"
+      ]
+    },
+    {
+      "rawcode": "X078",
+      "repair_time_seconds": 15,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": [
+        "n036",
+        "n02P",
+        "n02Q",
+        "n033",
+        "n038",
+        "n039",
+        "h07E",
+        "h008",
+        "h079",
+        "h07A",
+        "n03A"
+      ]
+    },
+    {
+      "rawcode": "X07P",
+      "repair_time_seconds": 15,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": [
+        "h07T",
+        "n03Q",
+        "n03D",
+        "n03F",
+        "n03H",
+        "n03N",
+        "n03L",
+        "h07R",
+        "h07P",
+        "h07V",
+        "h008"
+      ]
+    },
+    {
+      "rawcode": "X089",
+      "repair_time_seconds": 15,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "P",
+      "build_catalog": [
+        "h07H",
+        "h08P",
+        "h073",
+        "h07I",
+        "h088",
+        "h07M",
+        "h07O",
+        "h011",
+        "h00S",
+        "h008",
+        "h00B"
+      ]
+    },
+    {
+      "rawcode": "X0Z0",
+      "repair_time_seconds": 15,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": [
+        "h0Z1",
+        "h0Z3",
+        "h0Z4",
+        "h0Z5",
+        "h0Z6",
+        "h0Z7"
+      ]
+    },
+    {
+      "rawcode": "e000",
+      "repair_time_seconds": 25,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "e001",
+      "repair_time_seconds": 20,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "e002",
+      "repair_time_seconds": 48,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
     {
       "rawcode": "e003",
       "repair_time_seconds": 20,
       "button_x": 0,
       "button_y": 0,
-      "hotkey": "Q"
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "e004",
+      "repair_time_seconds": 20,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "e005",
+      "repair_time_seconds": 48,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "e006",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "e007",
+      "repair_time_seconds": 22,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "e008",
+      "repair_time_seconds": 14,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "W",
+      "build_catalog": []
+    },
+    {
+      "rawcode": "e009",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "e00A",
+      "repair_time_seconds": 20,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "e00B",
+      "repair_time_seconds": 20,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "e00C",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "e00D",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "e00E",
+      "repair_time_seconds": 14,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": []
+    },
+    {
+      "rawcode": "e00F",
+      "repair_time_seconds": 50,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "e00G",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "e00I",
+      "repair_time_seconds": 14,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "W",
+      "build_catalog": []
+    },
+    {
+      "rawcode": "e00J",
+      "repair_time_seconds": 22,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "e00M",
+      "repair_time_seconds": 14,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": []
     },
     {
       "rawcode": "h000",
       "repair_time_seconds": 70,
       "button_x": 0,
       "button_y": 0,
-      "hotkey": "Q"
+      "hotkey": "Q",
+      "build_catalog": null
     },
     {
       "rawcode": "h001",
       "repair_time_seconds": 70,
       "button_x": 3,
       "button_y": 1,
-      "hotkey": "F"
+      "hotkey": "F",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h002",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
     },
     {
       "rawcode": "h003",
       "repair_time_seconds": 70,
       "button_x": 1,
       "button_y": 0,
-      "hotkey": "W"
+      "hotkey": "W",
+      "build_catalog": null
     },
     {
       "rawcode": "h004",
       "repair_time_seconds": 70,
       "button_x": 2,
       "button_y": 0,
-      "hotkey": "E"
+      "hotkey": "E",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h005",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 1,
+      "hotkey": "F",
+      "build_catalog": null
     },
     {
       "rawcode": "h006",
       "repair_time_seconds": 110,
       "button_x": 0,
       "button_y": 2,
-      "hotkey": "Y"
+      "hotkey": "Y",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h007",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 1,
+      "hotkey": "S",
+      "build_catalog": null
     },
     {
       "rawcode": "h008",
       "repair_time_seconds": 70,
       "button_x": 2,
       "button_y": 2,
-      "hotkey": "V"
+      "hotkey": "V",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h009",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 1,
+      "hotkey": "A",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h00A",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 1,
+      "hotkey": "D",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h00B",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 1,
+      "hotkey": "A",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h00C",
+      "repair_time_seconds": 15,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": [
+        "h05G",
+        "h037",
+        "h015",
+        "h010",
+        "h00K",
+        "h008",
+        "h006",
+        "h004",
+        "h003",
+        "h000",
+        "h001"
+      ]
+    },
+    {
+      "rawcode": "h00D",
+      "repair_time_seconds": 28,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h00E",
+      "repair_time_seconds": 15,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": [
+        "h01Z",
+        "h00N",
+        "h00M",
+        "h00J",
+        "h01B",
+        "h00I",
+        "h00G",
+        "h020",
+        "h008",
+        "h01Y",
+        "h00F"
+      ]
+    },
+    {
+      "rawcode": "h00F",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h00G",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "Y",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h00I",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 1,
+      "hotkey": "D",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h00J",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "W",
+      "build_catalog": null
     },
     {
       "rawcode": "h00K",
       "repair_time_seconds": 70,
       "button_x": 1,
       "button_y": 1,
-      "hotkey": "S"
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h00L",
+      "repair_time_seconds": 35,
+      "button_x": 0,
+      "button_y": 1,
+      "hotkey": "F",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h00M",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 1,
+      "hotkey": "F",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h00N",
+      "repair_time_seconds": 100,
+      "button_x": 1,
+      "button_y": 2,
+      "hotkey": "X",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h00O",
+      "repair_time_seconds": 15,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": [
+        "h05I",
+        "h025",
+        "h01M",
+        "h01I",
+        "h01F",
+        "h01E",
+        "h01C",
+        "h01D",
+        "h009",
+        "h008",
+        "h007"
+      ]
+    },
+    {
+      "rawcode": "h00P",
+      "repair_time_seconds": 15,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": [
+        "h059",
+        "h00Z",
+        "h014",
+        "h09X",
+        "h00V",
+        "h00T",
+        "h008",
+        "h08X",
+        "h070",
+        "h06Y",
+        "h005"
+      ]
+    },
+    {
+      "rawcode": "h00Q",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h00R",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h00S",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h00T",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "W",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h00U",
+      "repair_time_seconds": 28,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h00V",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "E",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h00W",
+      "repair_time_seconds": 28,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h00X",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h00Y",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "W",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h00Z",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 1,
+      "hotkey": "D",
+      "build_catalog": null
     },
     {
       "rawcode": "h010",
       "repair_time_seconds": 70,
       "button_x": 2,
       "button_y": 1,
-      "hotkey": "D"
+      "hotkey": "D",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h011",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 1,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h012",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h013",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "E",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h014",
+      "repair_time_seconds": 110,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "Y",
+      "build_catalog": null
     },
     {
       "rawcode": "h015",
       "repair_time_seconds": 70,
       "button_x": 3,
       "button_y": 0,
-      "hotkey": "R"
+      "hotkey": "R",
+      "build_catalog": null
     },
     {
       "rawcode": "h016",
       "repair_time_seconds": 45,
       "button_x": 1,
       "button_y": 0,
-      "hotkey": "Q"
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h017",
+      "repair_time_seconds": 15,
+      "button_x": 2,
+      "button_y": 1,
+      "hotkey": "P",
+      "build_catalog": [
+        "h047",
+        "h048",
+        "h03O",
+        "h049",
+        "h03T",
+        "h03S",
+        "h03K",
+        "h03Q",
+        "h008",
+        "h03U",
+        "h03I"
+      ]
+    },
+    {
+      "rawcode": "h018",
+      "repair_time_seconds": 15,
+      "button_x": 0,
+      "button_y": 1,
+      "hotkey": "P",
+      "build_catalog": [
+        "h01K",
+        "h01O",
+        "h01Q",
+        "h01T",
+        "h01P",
+        "h01N",
+        "h01L",
+        "h01S",
+        "h008",
+        "h00A",
+        "h01R"
+      ]
+    },
+    {
+      "rawcode": "h019",
+      "repair_time_seconds": 15,
+      "button_x": 1,
+      "button_y": 1,
+      "hotkey": "P",
+      "build_catalog": [
+        "h02R",
+        "h02P",
+        "h02K",
+        "h02O",
+        "h02N",
+        "h029",
+        "h02B",
+        "h02I",
+        "o000",
+        "h008",
+        "h02H",
+        "h02O"
+      ]
+    },
+    {
+      "rawcode": "h01A",
+      "repair_time_seconds": 15,
+      "button_x": 1,
+      "button_y": 2,
+      "hotkey": "P",
+      "build_catalog": [
+        "h002",
+        "h00Y",
+        "h013",
+        "h023",
+        "h027",
+        "h028",
+        "n02D",
+        "h02A",
+        "h02C",
+        "h02D",
+        "h071"
+      ]
+    },
+    {
+      "rawcode": "h01B",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 1,
+      "hotkey": "A",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01C",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "E",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01D",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "W",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01E",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 1,
+      "hotkey": "D",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01F",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 1,
+      "hotkey": "F",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01G",
+      "repair_time_seconds": 28,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01H",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01I",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01J",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01K",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "W",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01L",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01M",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 2,
+      "hotkey": "X",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01N",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "E",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01O",
+      "repair_time_seconds": 110,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "Y",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01P",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 1,
+      "hotkey": "F",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01Q",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 2,
+      "hotkey": "X",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01R",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01S",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 1,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01T",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 1,
+      "hotkey": "A",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01U",
+      "repair_time_seconds": 20,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01V",
+      "repair_time_seconds": 20,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "F",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01W",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01X",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01Y",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "E",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h01Z",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 1,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h020",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h021",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h022",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h023",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h024",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h025",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h026",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h027",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 1,
+      "hotkey": "A",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h028",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 1,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h029",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02A",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 1,
+      "hotkey": "F",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02B",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "W",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02C",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 1,
+      "hotkey": "D",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02D",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 2,
+      "hotkey": "X",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02E",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02F",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02G",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02H",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "E",
+      "build_catalog": null
     },
     {
       "rawcode": "h02I",
       "repair_time_seconds": 70,
       "button_x": 1,
       "button_y": 1,
-      "hotkey": "S"
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02J",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02K",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 1,
+      "hotkey": "A",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02L",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02M",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02N",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 1,
+      "hotkey": "D",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02O",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 2,
+      "hotkey": "X",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02P",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02Q",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02R",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 1,
+      "hotkey": "F",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02S",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02T",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02U",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02V",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02W",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02X",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02Y",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h02Z",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h030",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h031",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h032",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h033",
+      "repair_time_seconds": 45,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "K",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h034",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h035",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "W",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h036",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "E",
+      "build_catalog": null
     },
     {
       "rawcode": "h037",
       "repair_time_seconds": 70,
       "button_x": 0,
       "button_y": 1,
-      "hotkey": "A"
+      "hotkey": "A",
+      "build_catalog": null
     },
     {
       "rawcode": "h038",
       "repair_time_seconds": 70,
       "button_x": 3,
       "button_y": 0,
-      "hotkey": "R"
+      "hotkey": "R",
+      "build_catalog": null
     },
     {
       "rawcode": "h039",
       "repair_time_seconds": 70,
       "button_x": 3,
       "button_y": 0,
-      "hotkey": "R"
+      "hotkey": "R",
+      "build_catalog": null
     },
     {
       "rawcode": "h03A",
       "repair_time_seconds": 20,
       "button_x": 0,
       "button_y": 0,
-      "hotkey": "Q"
+      "hotkey": "Q",
+      "build_catalog": null
     },
     {
       "rawcode": "h03B",
       "repair_time_seconds": 45,
       "button_x": 0,
       "button_y": 0,
-      "hotkey": "Q"
+      "hotkey": "Q",
+      "build_catalog": null
     },
     {
       "rawcode": "h03C",
       "repair_time_seconds": 45,
       "button_x": 0,
       "button_y": 0,
-      "hotkey": "Q"
+      "hotkey": "Q",
+      "build_catalog": null
     },
     {
       "rawcode": "h03D",
       "repair_time_seconds": 70,
       "button_x": 3,
       "button_y": 0,
-      "hotkey": "R"
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h03E",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h03F",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h03G",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h03H",
+      "repair_time_seconds": 20,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "F",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h03I",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 1,
+      "hotkey": "A",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h03J",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
     },
     {
       "rawcode": "h03K",
       "repair_time_seconds": 70,
       "button_x": 2,
       "button_y": 0,
-      "hotkey": "E"
+      "hotkey": "E",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h03L",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h03M",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h03N",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h03O",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 2,
+      "hotkey": "X",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h03P",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h03Q",
+      "repair_time_seconds": 110,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "Y",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h03R",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h03S",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 1,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h03T",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h03U",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "W",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h03V",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h03W",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h03X",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "W",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h03Y",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h03Z",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h040",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 1,
+      "hotkey": "A",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h041",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h042",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h043",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h044",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h045",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "E",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h046",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h047",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 1,
+      "hotkey": "F",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h048",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 1,
+      "hotkey": "D",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h049",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04A",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04B",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04C",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04D",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04E",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04F",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04G",
+      "repair_time_seconds": 28,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04H",
+      "repair_time_seconds": 28,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04I",
+      "repair_time_seconds": 20,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04J",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04K",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 1,
+      "hotkey": "D",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04L",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "W",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04M",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04N",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04O",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "E",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04P",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04Q",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 1,
+      "hotkey": "A",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04R",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 1,
+      "hotkey": "F",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04S",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04T",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 2,
+      "hotkey": "X",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04U",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 1,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04V",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04W",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04X",
+      "repair_time_seconds": 28,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04Y",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h04Z",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h050",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h051",
+      "repair_time_seconds": 15,
+      "button_x": 1,
+      "button_y": 2,
+      "hotkey": "P",
+      "build_catalog": [
+        "h061",
+        "h040",
+        "h04A",
+        "h045",
+        "h05Z",
+        "h063",
+        "h060",
+        "h062",
+        "h042",
+        "h03X",
+        "h008"
+      ]
+    },
+    {
+      "rawcode": "h052",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h053",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h054",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h055",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h056",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h057",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h058",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h059",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 2,
+      "hotkey": "X",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05A",
+      "repair_time_seconds": 28,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05B",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
     },
     {
       "rawcode": "h05C",
       "repair_time_seconds": 26,
       "button_x": 0,
       "button_y": 0,
-      "hotkey": "Q"
+      "hotkey": "Q",
+      "build_catalog": null
     },
     {
       "rawcode": "h05D",
       "repair_time_seconds": 70,
       "button_x": 2,
       "button_y": 0,
-      "hotkey": "E"
+      "hotkey": "E",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05E",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05F",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
     },
     {
       "rawcode": "h05G",
       "repair_time_seconds": 70,
       "button_x": 1,
       "button_y": 2,
-      "hotkey": "X"
+      "hotkey": "X",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05H",
+      "repair_time_seconds": 20,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05I",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "Y",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05J",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05K",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05L",
+      "repair_time_seconds": 110,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "Y",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05M",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "E",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05N",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05O",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05P",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05Q",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05R",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05S",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05T",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05U",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 1,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05V",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 1,
+      "hotkey": "A",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05W",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05X",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "W",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05Y",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h05Z",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 1,
+      "hotkey": "F",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h060",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 1,
+      "hotkey": "D",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h061",
+      "repair_time_seconds": 110,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "Z",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h062",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 1,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h063",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 2,
+      "hotkey": "X",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h064",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h065",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h066",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h067",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h068",
+      "repair_time_seconds": 20,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "F",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h069",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 1,
+      "hotkey": "F",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06A",
+      "repair_time_seconds": 20,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "F",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06B",
+      "repair_time_seconds": 20,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "F",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06C",
+      "repair_time_seconds": 28,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06D",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06E",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "W",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06F",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06G",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06H",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06I",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06J",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 1,
+      "hotkey": "D",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06L",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06M",
+      "repair_time_seconds": 700,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "U",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06N",
+      "repair_time_seconds": 28,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06O",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06P",
+      "repair_time_seconds": 15,
+      "button_x": 1,
+      "button_y": 2,
+      "hotkey": "P",
+      "build_catalog": [
+        "h09T",
+        "h069",
+        "h06J",
+        "h05T",
+        "h05U",
+        "h05M",
+        "h05J",
+        "h05V",
+        "h05X",
+        "h008",
+        "h05L"
+      ]
+    },
+    {
+      "rawcode": "h06Q",
+      "repair_time_seconds": 60,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06R",
+      "repair_time_seconds": 75,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06S",
+      "repair_time_seconds": 200,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06T",
+      "repair_time_seconds": 110,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06U",
+      "repair_time_seconds": 140,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06V",
+      "repair_time_seconds": 28,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06W",
+      "repair_time_seconds": 28,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06X",
+      "repair_time_seconds": 28,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06Y",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h06Z",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h070",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 1,
+      "hotkey": "A",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h071",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "E",
+      "build_catalog": null
     },
     {
       "rawcode": "h072",
       "repair_time_seconds": 70,
       "button_x": 3,
       "button_y": 0,
-      "hotkey": "R"
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h073",
+      "repair_time_seconds": 110,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "Y",
+      "build_catalog": null
     },
     {
       "rawcode": "h074",
       "repair_time_seconds": 45,
       "button_x": 0,
       "button_y": 0,
-      "hotkey": "Q"
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h075",
+      "repair_time_seconds": 15,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": [
+        "n033",
+        "h079",
+        "h07A",
+        "h07E",
+        "n02P",
+        "n02Q",
+        "n039",
+        "n036",
+        "n038",
+        "n03A",
+        "h04V",
+        "h000",
+        "h029",
+        "h020",
+        "h049",
+        "h01I",
+        "h01R",
+        "h08X",
+        "h00S",
+        "h05J",
+        "h002",
+        "h04A",
+        "h04L",
+        "h04O",
+        "h04S",
+        "h04Q",
+        "h04U",
+        "h04K",
+        "h04R",
+        "n01J",
+        "h04T",
+        "h008",
+        "h003",
+        "h004",
+        "h015",
+        "h037",
+        "h00K",
+        "h010",
+        "h001",
+        "h006",
+        "h05G",
+        "h008",
+        "h02B",
+        "h02H",
+        "h02P",
+        "h02K",
+        "h02I",
+        "h02N",
+        "h02R",
+        "o000",
+        "h02O",
+        "h008",
+        "h00J",
+        "h01Y",
+        "h00F",
+        "h01B",
+        "h01Z",
+        "h00I",
+        "h00M",
+        "h00G",
+        "h00N",
+        "h008",
+        "h03U",
+        "h03K",
+        "h03T",
+        "h03I",
+        "h03S",
+        "h048",
+        "h047",
+        "h03Q",
+        "h03O",
+        "h008",
+        "h01D",
+        "h01C",
+        "h025",
+        "h009",
+        "h007",
+        "h01M",
+        "h01F",
+        "h05I",
+        "h01E",
+        "h008",
+        "h01K",
+        "h01N",
+        "h01L",
+        "h01T",
+        "h01S",
+        "h00A",
+        "h01P",
+        "h01O",
+        "h01Q",
+        "h008",
+        "h00T",
+        "h00V",
+        "h06Y",
+        "h070",
+        "h09X",
+        "h00Z",
+        "h005",
+        "h014",
+        "h059",
+        "h008",
+        "h088",
+        "h07M",
+        "h07O",
+        "h00B",
+        "h011",
+        "h08P",
+        "h07H",
+        "h073",
+        "h07I",
+        "h008",
+        "h05X",
+        "h05M",
+        "h05T",
+        "h05V",
+        "h05U",
+        "h09T",
+        "h069",
+        "h05L",
+        "h06J",
+        "h008",
+        "h00Y",
+        "h013",
+        "h023",
+        "h027",
+        "h028",
+        "h02C",
+        "h02A",
+        "n02D",
+        "h02D",
+        "h071",
+        "h03X",
+        "h045",
+        "h042",
+        "h040",
+        "h062",
+        "h060",
+        "h05Z",
+        "h061",
+        "h063",
+        "h008",
+        "h076"
+      ]
+    },
+    {
+      "rawcode": "h076",
+      "repair_time_seconds": 110,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "Z",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h077",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h078",
+      "repair_time_seconds": 15,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": [
+        "n036",
+        "n02P",
+        "n02Q",
+        "n033",
+        "n038",
+        "n039",
+        "h07E",
+        "h008",
+        "h079",
+        "h07A",
+        "n03A"
+      ]
+    },
+    {
+      "rawcode": "h079",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 1,
+      "hotkey": "F",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07A",
+      "repair_time_seconds": 60,
+      "button_x": 2,
+      "button_y": 1,
+      "hotkey": "D",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07B",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07C",
+      "repair_time_seconds": 28,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07D",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07E",
+      "repair_time_seconds": 110,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "Z",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07F",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07G",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07H",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 1,
+      "hotkey": "F",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07I",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 2,
+      "hotkey": "X",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07J",
+      "repair_time_seconds": 700,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "U",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07K",
+      "repair_time_seconds": 700,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "U",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07L",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07M",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "E",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07N",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07O",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
     },
     {
       "rawcode": "h07P",
       "repair_time_seconds": 110,
       "button_x": 0,
       "button_y": 2,
-      "hotkey": "Y"
+      "hotkey": "Y",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07Q",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "E",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07R",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 1,
+      "hotkey": "F",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07S",
+      "repair_time_seconds": 45,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07T",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 1,
+      "hotkey": "D",
+      "build_catalog": null
     },
     {
       "rawcode": "h07U",
       "repair_time_seconds": 70,
       "button_x": 3,
       "button_y": 1,
-      "hotkey": "F"
+      "hotkey": "F",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07V",
+      "repair_time_seconds": 110,
+      "button_x": 1,
+      "button_y": 2,
+      "hotkey": "X",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07W",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 1,
+      "hotkey": "D",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07X",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07Y",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "W",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h07Z",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "E",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h080",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
     },
     {
       "rawcode": "h081",
       "repair_time_seconds": 110,
       "button_x": 0,
       "button_y": 2,
-      "hotkey": "Y"
+      "hotkey": "Y",
+      "build_catalog": null
     },
     {
       "rawcode": "h082",
       "repair_time_seconds": 90,
       "button_x": 0,
       "button_y": 2,
-      "hotkey": "Y"
+      "hotkey": "Y",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h088",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "W",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h089",
+      "repair_time_seconds": 15,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "P",
+      "build_catalog": [
+        "h07H",
+        "h08P",
+        "h073",
+        "h07I",
+        "h088",
+        "h07M",
+        "h07O",
+        "h011",
+        "h00S",
+        "h008",
+        "h00B"
+      ]
+    },
+    {
+      "rawcode": "h08A",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08B",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08C",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08D",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08E",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08F",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08G",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08H",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08I",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08J",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08K",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08L",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08M",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08N",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08O",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08P",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 1,
+      "hotkey": "D",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08Q",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08R",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08S",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08T",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08U",
+      "repair_time_seconds": 28,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08V",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08W",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08X",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08Y",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h08Z",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h090",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h091",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h092",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h093",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h094",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h096",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h097",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h098",
+      "repair_time_seconds": 200,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h099",
+      "repair_time_seconds": 140,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09A",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09B",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "W",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09C",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09D",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09E",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09F",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09G",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09H",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09I",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "E",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09J",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09K",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09L",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09M",
+      "repair_time_seconds": 28,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09N",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09O",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09P",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09Q",
+      "repair_time_seconds": 28,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09R",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09T",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 2,
+      "hotkey": "X",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09U",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09V",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09W",
+      "repair_time_seconds": 45,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "K",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09X",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 1,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09Y",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": 0,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h09Z",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h0A0",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "S",
+      "build_catalog": null
     },
     {
       "rawcode": "h0A1",
       "repair_time_seconds": 70,
       "button_x": 3,
       "button_y": 0,
-      "hotkey": "R"
+      "hotkey": "R",
+      "build_catalog": null
     },
     {
       "rawcode": "h0A2",
       "repair_time_seconds": 26,
       "button_x": 0,
       "button_y": 0,
-      "hotkey": "Q"
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h0Z1",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h0Z2",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h0Z3",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "W",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h0Z4",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": "E",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h0Z5",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 1,
+      "hotkey": "D",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h0Z6",
+      "repair_time_seconds": 50,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "Y",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "h0Z7",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 2,
+      "hotkey": "X",
+      "build_catalog": null
     },
     {
       "rawcode": "hcas",
       "repair_time_seconds": 700,
       "button_x": 0,
       "button_y": 2,
-      "hotkey": "U"
+      "hotkey": "U",
+      "build_catalog": null
     },
     {
       "rawcode": "hfoo",
       "repair_time_seconds": 20,
       "button_x": 0,
       "button_y": 0,
-      "hotkey": "Q"
+      "hotkey": "Q",
+      "build_catalog": null
     },
     {
       "rawcode": "hmtm",
       "repair_time_seconds": 32,
       "button_x": 0,
       "button_y": 0,
-      "hotkey": "Q"
+      "hotkey": "Q",
+      "build_catalog": null
     },
     {
       "rawcode": "hrif",
       "repair_time_seconds": 26,
       "button_x": 0,
       "button_y": 0,
-      "hotkey": "Q"
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n000",
+      "repair_time_seconds": 80,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n001",
+      "repair_time_seconds": 100,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n002",
+      "repair_time_seconds": 45,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n003",
+      "repair_time_seconds": 15,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": []
+    },
+    {
+      "rawcode": "n004",
+      "repair_time_seconds": 45,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
     },
     {
       "rawcode": "n005",
       "repair_time_seconds": 20,
       "button_x": null,
       "button_y": null,
-      "hotkey": "Q"
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n006",
+      "repair_time_seconds": 28,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n007",
+      "repair_time_seconds": 45,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n008",
+      "repair_time_seconds": 28,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n009",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00A",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00B",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00C",
+      "repair_time_seconds": 18,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00D",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00E",
+      "repair_time_seconds": 20,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00F",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00G",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00H",
+      "repair_time_seconds": 35,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00I",
+      "repair_time_seconds": 15,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": []
+    },
+    {
+      "rawcode": "n00J",
+      "repair_time_seconds": 15,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": []
+    },
+    {
+      "rawcode": "n00K",
+      "repair_time_seconds": 15,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": []
+    },
+    {
+      "rawcode": "n00L",
+      "repair_time_seconds": 40,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00M",
+      "repair_time_seconds": 40,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00N",
+      "repair_time_seconds": 40,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00O",
+      "repair_time_seconds": 40,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00P",
+      "repair_time_seconds": 40,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00Q",
+      "repair_time_seconds": 40,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00R",
+      "repair_time_seconds": 40,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00S",
+      "repair_time_seconds": 28,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00T",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00U",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00V",
+      "repair_time_seconds": 40,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00W",
+      "repair_time_seconds": 20,
+      "button_x": 2,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00X",
+      "repair_time_seconds": 45,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00Y",
+      "repair_time_seconds": 28,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n00Z",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n010",
+      "repair_time_seconds": 60,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n011",
+      "repair_time_seconds": 20,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n012",
+      "repair_time_seconds": 40,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n013",
+      "repair_time_seconds": 70,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n014",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
     },
     {
       "rawcode": "n015",
       "repair_time_seconds": 25,
       "button_x": null,
       "button_y": null,
-      "hotkey": "Q"
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n016",
+      "repair_time_seconds": 40,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n017",
+      "repair_time_seconds": 25,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n018",
+      "repair_time_seconds": 40,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n019",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01A",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01B",
+      "repair_time_seconds": 60,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01C",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01D",
+      "repair_time_seconds": 60,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01E",
+      "repair_time_seconds": 36,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01F",
+      "repair_time_seconds": 36,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01G",
+      "repair_time_seconds": 50,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01H",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01I",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01J",
+      "repair_time_seconds": 110,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "Y",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01K",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01L",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01M",
+      "repair_time_seconds": 18,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01N",
+      "repair_time_seconds": 40,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01O",
+      "repair_time_seconds": 40,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01P",
+      "repair_time_seconds": 40,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01Q",
+      "repair_time_seconds": 40,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01R",
+      "repair_time_seconds": 40,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01S",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01T",
+      "repair_time_seconds": 100,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01U",
+      "repair_time_seconds": 40,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01V",
+      "repair_time_seconds": 25,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01W",
+      "repair_time_seconds": 60,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01X",
+      "repair_time_seconds": 150,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01Y",
+      "repair_time_seconds": 45,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n01Z",
+      "repair_time_seconds": 25,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n020",
+      "repair_time_seconds": 30,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n021",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n022",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n023",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n024",
+      "repair_time_seconds": 250,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n025",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n026",
+      "repair_time_seconds": 40,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n027",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n028",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n029",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02A",
+      "repair_time_seconds": 60,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02B",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02D",
+      "repair_time_seconds": 110,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "Z",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02E",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02F",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02G",
+      "repair_time_seconds": 40,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02H",
+      "repair_time_seconds": 3,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02I",
+      "repair_time_seconds": 20,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02J",
+      "repair_time_seconds": 250,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02K",
+      "repair_time_seconds": 15,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": []
+    },
+    {
+      "rawcode": "n02L",
+      "repair_time_seconds": 15,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": []
+    },
+    {
+      "rawcode": "n02M",
+      "repair_time_seconds": 25,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02N",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": null,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02O",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": null,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02P",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": null,
+      "hotkey": "W",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02Q",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": null,
+      "hotkey": "E",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02R",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": null,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02S",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02T",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02U",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02V",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02W",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02X",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02Y",
+      "repair_time_seconds": 70,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n02Z",
+      "repair_time_seconds": 100,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n030",
+      "repair_time_seconds": 40,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n031",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": null,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n032",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n033",
+      "repair_time_seconds": 70,
+      "button_x": null,
+      "button_y": 1,
+      "hotkey": "A",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n034",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n035",
+      "repair_time_seconds": 40,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n036",
+      "repair_time_seconds": 70,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n037",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": null,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n038",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 1,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n039",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": null,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n03A",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 2,
+      "hotkey": "X",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n03B",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": null,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n03C",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n03D",
+      "repair_time_seconds": 70,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n03E",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n03F",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": null,
+      "hotkey": "W",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n03G",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n03H",
+      "repair_time_seconds": 70,
+      "button_x": 2,
+      "button_y": null,
+      "hotkey": "E",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n03I",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n03J",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n03K",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": null,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n03L",
+      "repair_time_seconds": 70,
+      "button_x": 1,
+      "button_y": 1,
+      "hotkey": "S",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n03M",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n03N",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": null,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n03O",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n03P",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": null,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n03Q",
+      "repair_time_seconds": 70,
+      "button_x": null,
+      "button_y": 1,
+      "hotkey": "A",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n03R",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n03S",
+      "repair_time_seconds": 70,
+      "button_x": 3,
+      "button_y": null,
+      "hotkey": "R",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n03T",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n03U",
+      "repair_time_seconds": 35,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n0Z1",
+      "repair_time_seconds": 20,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "C",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n0Z2",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "C",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n0Z3",
+      "repair_time_seconds": 1,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n0Z4",
+      "repair_time_seconds": 1,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "n0Z7",
+      "repair_time_seconds": 50,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "C",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "nalb",
+      "repair_time_seconds": 1,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "ncp2",
+      "repair_time_seconds": 3,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "ncrb",
+      "repair_time_seconds": 1,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "nder",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "ndog",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "ndwm",
+      "repair_time_seconds": 1,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "nech",
+      "repair_time_seconds": 1,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "necr",
+      "repair_time_seconds": 1,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "nfbr",
+      "repair_time_seconds": 1,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "nfro",
+      "repair_time_seconds": 1,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "nhmc",
+      "repair_time_seconds": 1,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "nmrk",
+      "repair_time_seconds": 3,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "npig",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "npng",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "npnw",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "nrac",
+      "repair_time_seconds": 1,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "nrat",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "nsea",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "nshe",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "nshp",
+      "repair_time_seconds": 3,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "nskk",
+      "repair_time_seconds": 1,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "nsno",
+      "repair_time_seconds": 1,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "nvul",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "o000",
+      "repair_time_seconds": 110,
+      "button_x": 0,
+      "button_y": 2,
+      "hotkey": "Y",
+      "build_catalog": null
     },
     {
       "rawcode": "o001",
       "repair_time_seconds": 36,
       "button_x": 0,
       "button_y": 0,
-      "hotkey": "Q"
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "o002",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "o003",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "o004",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "o005",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "o006",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "o007",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "o008",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "o009",
+      "repair_time_seconds": 35,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "o00A",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "o00B",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "o00C",
+      "repair_time_seconds": 40,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "o00D",
+      "repair_time_seconds": 40,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "o00E",
+      "repair_time_seconds": 40,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "o00F",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "o00G",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "o00H",
+      "repair_time_seconds": 36,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "otot",
+      "repair_time_seconds": 1,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "tec1",
+      "repair_time_seconds": 28,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "tec2",
+      "repair_time_seconds": 28,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "tec3",
+      "repair_time_seconds": 28,
+      "button_x": 1,
+      "button_y": 0,
+      "hotkey": "P",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "u000",
+      "repair_time_seconds": 80,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "u001",
+      "repair_time_seconds": 35,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "u002",
+      "repair_time_seconds": 18,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "u003",
+      "repair_time_seconds": 30,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "u004",
+      "repair_time_seconds": 18,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "G",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "u005",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "u006",
+      "repair_time_seconds": 15,
+      "button_x": 3,
+      "button_y": 1,
+      "hotkey": null,
+      "build_catalog": [
+        "n01J",
+        "h04V",
+        "h04U",
+        "h008",
+        "h04T",
+        "h04S",
+        "h04R",
+        "h04Q",
+        "h04O",
+        "h04L",
+        "h04K"
+      ]
+    },
+    {
+      "rawcode": "u007",
+      "repair_time_seconds": 45,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "u008",
+      "repair_time_seconds": 18,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "G",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "u009",
+      "repair_time_seconds": 30,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "u00A",
+      "repair_time_seconds": 30,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "u00B",
+      "repair_time_seconds": 18,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "u00C",
+      "repair_time_seconds": 18,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "G",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "u00D",
+      "repair_time_seconds": 30,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "u00E",
+      "repair_time_seconds": 18,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "G",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "u00F",
+      "repair_time_seconds": 18,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "u00G",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "x001",
+      "repair_time_seconds": 14,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "W",
+      "build_catalog": []
+    },
+    {
+      "rawcode": "x002",
+      "repair_time_seconds": 20,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": null,
+      "build_catalog": null
+    },
+    {
+      "rawcode": "x003",
+      "repair_time_seconds": 14,
+      "button_x": 0,
+      "button_y": 0,
+      "hotkey": "W",
+      "build_catalog": []
+    },
+    {
+      "rawcode": "z000",
+      "repair_time_seconds": 26,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "z001",
+      "repair_time_seconds": 26,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "z002",
+      "repair_time_seconds": 26,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
+    },
+    {
+      "rawcode": "z003",
+      "repair_time_seconds": 26,
+      "button_x": null,
+      "button_y": null,
+      "hotkey": "Q",
+      "build_catalog": null
     }
   ]
 }

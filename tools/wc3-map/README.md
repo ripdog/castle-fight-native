@@ -232,7 +232,7 @@ The absence of a canonical member such as `war3mapUnits.doo`, `war3map.w3q`, or 
 
 The extractor inventory and native engine implementation ledger are intentionally separate. `crates/sim/data/castle-fight/native-effect-bindings.json` binds extracted stable source keys to native implementation IDs and inclusive map-version ranges; per-version numeric tuning lives under `crates/sim/data/castle-fight/<version>/`. This means a balance-only change can reuse the same behavior implementation while a semantic rewrite gets a new implementation ID/range.
 
-Runtime catalog supplements are generated from retained extraction evidence rather than hand-entered numbers. For example, the compact 9.27 repair-time/command-card source can be regenerated from `resolved/object-fields.tsv` with `python tools/wc3-map/build_runtime_catalog.py --map-version 9.27 --revision r1`. The committed supplement records the source object-field digest and extraction Git tree; the Rust catalog additionally pins the other retained source tables with a canonical evidence hash, so changing gameplay-relevant extraction evidence requires a new content revision instead of silently redefining an existing bundle. For derived aggregate TSVs whose reporting schema may grow, that hash projects the named fields the runtime actually consumes (for example production building/unit/spawn time and income factor/precursor/siege semantics) rather than unrelated diagnostic columns. Runtime parsing uses those field names too, so appended or inserted report-only columns cannot silently shift gameplay semantics.
+Runtime catalog supplements are generated from retained extraction evidence rather than hand-entered numbers. Repair-time/command-card metadata and object-authored builder command lists (`ubui`) are projected from `resolved/object-fields.tsv`; absent repair-time fields remain absent rather than becoming guessed durations. The committed supplement records the source object-field digest and extraction Git tree; the Rust catalog additionally pins the other retained source tables with a canonical evidence hash, so changing gameplay-relevant extraction evidence requires a new content revision instead of silently redefining an existing bundle. For derived aggregate TSVs whose reporting schema may grow, that hash projects the named fields the runtime actually consumes (for example production building/unit/spawn time and income factor/precursor/siege semantics) rather than unrelated diagnostic columns. Runtime parsing uses those field names too, so appended or inserted report-only columns cannot silently shift gameplay semantics.
 
 Report the current 9.27 implementation gaps with:
 
@@ -244,6 +244,19 @@ python tools/wc3-map/native_effect_coverage.py --map-version 9.27 --show-unimple
 The report inventories normalized unit abilities, scripted unit spells, scripted building spells, and production-unit special mechanics directly from the resolved extraction. A row is `implemented` only when a binding covers the requested version; otherwise it remains explicitly `unimplemented`. The current playable development slice resolves the production-unit abilities plus the exposed towers' shared `A09A` range-display helper, so the repository currently reports `9/401` distinct inventory keys covered for 9.27. The ledger includes explicit no-runtime bindings for the shared Channel marker (`A0CV`), Ranger's zero-damage Barrage (`A03N`), and `A09A` rather than silently dropping them. Other currently unimplemented entries may likewise prove data-only/marker behavior, but that classification must remain explicit.
 
 Use `--output-tsv <path>` when a reviewable snapshot is useful. For a newer extracted map, point `--resolved-dir` at that version's resolved output and use the matching `--map-version`; this keeps extraction data version-conscious without baking 9.27 paths into the coverage algorithm.
+
+## Reproducible runtime projections
+
+Identity-only native recipes choose the implemented source keys and primitive translations; they MUST NOT carry copied tuning values. `build_native_tuning.py` reads the release-pinned extraction tree, applies protected ability overlays where appropriate, and performs exact decimal-to-integer conversion. It rejects unsupported target profiles and class-specific proc chances rather than silently flattening them. Frost Armor's native Warcraft slow rules are explicitly separate from map Frost-attack tuning.
+
+```bash
+python3 tools/wc3-map/build_runtime_catalog.py --map-version 9.27 --revision r1 --kind supplement --check crates/sim/data/castle-fight/9.27/catalog-supplement-r1.json
+python3 tools/wc3-map/build_runtime_catalog.py --map-version 9.27 --revision r1 --kind source-manifest --content-revision cf-native-dev-slice-r10 --check crates/sim/data/castle-fight/9.27/catalog-source-r1.json
+python3 tools/wc3-map/build_native_tuning.py --map-version 9.27 --revision r1 --check crates/sim/data/castle-fight/9.27/native-effect-tuning.json
+python3 -m unittest discover -s tools/wc3-map -p 'test_build_*.py'
+```
+
+Without `--check`, generators print the new artifact to stdout. Update the content revision and affected release digests when updating a committed projection. Do not hand-edit generated map values or introduce matching constants into entity tests/specifications.
 
 ## Tests
 

@@ -2221,36 +2221,7 @@ fn building_upgrade_button_label(target: BuildKind, content: &CastleFightContent
 }
 
 fn build_button_label(kind: BuildKind, content: &CastleFightContentBundle) -> String {
-    let name = match kind {
-        BuildKind::Production(ProductionKind::Barracks) => "Barracks",
-        BuildKind::Production(ProductionKind::Stronghold) => "Stronghold",
-        BuildKind::Production(ProductionKind::SniperNest) => "Sniper Nest",
-        BuildKind::Production(ProductionKind::WeaponLab) => "Weapon Lab",
-        BuildKind::Production(ProductionKind::GunnersHall) => "Gunner Hall",
-        BuildKind::Production(ProductionKind::MarksmensEncampment) => "Marksmen",
-        BuildKind::Production(ProductionKind::RangersHall) => "Rngrs Hall",
-        BuildKind::Production(ProductionKind::OrcishSiegeFactory) => "Siege Fac.",
-        BuildKind::Production(ProductionKind::IceTrollHut) => "Ice Hut",
-        BuildKind::Production(ProductionKind::GryphonRock) => "Gryph Rock",
-        BuildKind::Production(ProductionKind::Chapel) => "Chapel",
-        BuildKind::Production(ProductionKind::Church) => "Church",
-        BuildKind::Production(ProductionKind::HolyAltar) => "Holy Altar",
-        BuildKind::Production(ProductionKind::Hjordhejmen) => "Hjordhejmen",
-        BuildKind::Production(ProductionKind::ArcheryRange) => "Archery Range",
-        BuildKind::Production(ProductionKind::ArcheryTower) => "Archery Tower",
-        BuildKind::Production(ProductionKind::HallOfHonor) => "Hall of Honor",
-        BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::WatchTower) => "Watch Tower",
-        BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::PoofTower) => "Poof Tower",
-        BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::Artillery) => "Artillery",
-        BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::Gjallarhorn) => "Gjallarhorn",
-        BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::VesselOfPurity) => "Purity",
-        BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::HeroicShrine) => "Heroic Shrine",
-        BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::TreasureBox) => "Treasure Box",
-        BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::TinyWatchTower) => "Tiny Tower",
-        BuildKind::Tower(castle_fight_sim::CastleFightTowerKind::TinyMultishotTower) => {
-            "Tiny Multi"
-        }
-    };
+    let name = kind.label(content);
     let economy = kind.economy(content);
     if economy.lumber_cost == 0 {
         format!("{name}\n{}g", economy.gold_cost)
