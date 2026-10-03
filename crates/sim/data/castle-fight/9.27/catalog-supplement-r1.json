@@ -5,6 +5,12 @@
   "extraction_git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
   "source_object_fields_sha256": "01040f03e4a625ac1d960a0a2d43d0732d64b797e9357f4f40e8c2c0d6d9710d",
   "objects": [
+    { "rawcode": "n022", "repair_time_seconds": 20, "button_x": 0, "button_y": 0, "hotkey": "Q" },
+    { "rawcode": "n023", "repair_time_seconds": 20, "button_x": 0, "button_y": 0, "hotkey": "Q" },
+    { "rawcode": "n006", "repair_time_seconds": 28, "button_x": 0, "button_y": 0, "hotkey": "Q" },
+    { "rawcode": "h08X", "repair_time_seconds": 70, "button_x": 0, "button_y": 0, "hotkey": "Q" },
+    { "rawcode": "h08Y", "repair_time_seconds": 70, "button_x": 3, "button_y": 0, "hotkey": "R" },
+    { "rawcode": "h00T", "repair_time_seconds": 70, "button_x": 1, "button_y": 0, "hotkey": "W" },
     {
       "rawcode": "e003",
       "repair_time_seconds": 20,

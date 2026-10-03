@@ -11,8 +11,8 @@ use crate::{
         AbilityEffect, AbilityId, AbilityTargetPolicy, AttackTargetMask, BashEffectProfile,
         BurningOilEffectProfile, ChainLightningEffectProfile, CriticalStrikeEffectProfile,
         DefendEffectProfile, EntanglingRootsEffectProfile, EvasionEffectProfile, ManaProfile,
-        ModifierId, PassiveUnitEffect, PassiveUnitEffects, SpellcastingProfile,
-        TriggeredAttackEffect, TriggeredSpellProcProfile,
+        ModifierId, PassiveUnitEffect, PassiveUnitEffects, SpellResistanceEffectProfile,
+        SpellcastingProfile, TriggeredAttackEffect, TriggeredSpellProcProfile,
     },
     content::CASTLE_FIGHT_SIMULATION_HZ,
     math::SUBUNITS_PER_WORLD_UNIT,
@@ -39,6 +39,7 @@ pub enum NativeEffectImplementationId {
     WarcraftHumanSupportV1,
     WarcraftHumanPassiveV1,
     WarcraftHumanUtilityV1,
+    WarcraftSpellResistanceV1,
 }
 
 impl NativeEffectImplementationId {
@@ -59,6 +60,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftHumanSupportV1 => 11,
             Self::WarcraftHumanPassiveV1 => 12,
             Self::WarcraftHumanUtilityV1 => 13,
+            Self::WarcraftSpellResistanceV1 => 14,
         }
     }
 
@@ -446,6 +448,14 @@ struct TuningFile {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum TuningEffect {
+    SpellResistance {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        damage_taken_per_10k: u16,
+        #[allow(dead_code)]
+        provenance: serde_json::Value,
+    },
     CriticalStrike {
         source_kind: String,
         source_key: String,
@@ -580,7 +590,8 @@ impl TuningEffect {
 
     fn source_kind(&self) -> &str {
         match self {
-            Self::Evasion { source_kind, .. }
+            Self::SpellResistance { source_kind, .. }
+            | Self::Evasion { source_kind, .. }
             | Self::CriticalStrike { source_kind, .. }
             | Self::Defend { source_kind, .. }
             | Self::Bash { source_kind, .. }
@@ -594,7 +605,8 @@ impl TuningEffect {
 
     fn source_key(&self) -> &str {
         match self {
-            Self::Evasion { source_key, .. }
+            Self::SpellResistance { source_key, .. }
+            | Self::Evasion { source_key, .. }
             | Self::CriticalStrike { source_key, .. }
             | Self::Defend { source_key, .. }
             | Self::Bash { source_key, .. }
@@ -608,7 +620,8 @@ impl TuningEffect {
 
     fn unit_rawcode(&self) -> Option<&str> {
         match self {
-            Self::Evasion { unit_rawcode, .. }
+            Self::SpellResistance { unit_rawcode, .. }
+            | Self::Evasion { unit_rawcode, .. }
             | Self::CriticalStrike { unit_rawcode, .. }
             | Self::Defend { unit_rawcode, .. }
             | Self::Bash { unit_rawcode, .. }
@@ -621,6 +634,7 @@ impl TuningEffect {
 
     const fn expected_implementation(&self) -> NativeEffectImplementationId {
         match self {
+            Self::SpellResistance { .. } => NativeEffectImplementationId::WarcraftSpellResistanceV1,
             Self::Evasion { .. } => NativeEffectImplementationId::WarcraftEvasionV1,
             Self::CriticalStrike { .. } => NativeEffectImplementationId::WarcraftCriticalStrikeV1,
             Self::Defend { .. } => NativeEffectImplementationId::WarcraftDefendV1,
@@ -635,6 +649,7 @@ impl TuningEffect {
 
     const fn kind_name(&self) -> &'static str {
         match self {
+            Self::SpellResistance { .. } => "spell-resistance",
             Self::Evasion { .. } => "evasion",
             Self::CriticalStrike { .. } => "critical-strike",
             Self::Defend { .. } => "defend",
@@ -709,7 +724,8 @@ fn native_unit_mechanics_from_tuning(
                         automatic_spell = Some(candidate);
                     }
                 }
-                TuningEffect::Evasion { .. }
+                TuningEffect::SpellResistance { .. }
+                | TuningEffect::Evasion { .. }
                 | TuningEffect::CriticalStrike { .. }
                 | TuningEffect::Defend { .. }
                 | TuningEffect::Bash { .. }
@@ -763,6 +779,22 @@ pub fn native_effect_implementation_for(
 
 fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUnitEffect {
     match effect {
+        TuningEffect::SpellResistance {
+            source_key,
+            damage_taken_per_10k,
+            ..
+        } => {
+            assert!(
+                *damage_taken_per_10k <= 10_000,
+                "spell damage taken exceeds 100%"
+            );
+            PassiveUnitEffect::SpellResistance(SpellResistanceEffectProfile {
+                ability: AbilityId(
+                    rawcode(source_key).expect("validated spell resistance rawcode"),
+                ),
+                damage_taken_per_10k: *damage_taken_per_10k,
+            })
+        }
         TuningEffect::CriticalStrike {
             source_key,
             chance_per_10k,

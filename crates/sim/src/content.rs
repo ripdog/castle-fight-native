@@ -30,7 +30,7 @@ use crate::{
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r8";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r9";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -772,6 +772,9 @@ pub enum CastleFightUnitKind {
     Paladin,
     HolyWarrior,
     Warlock,
+    Archer,
+    MasterArcher,
+    Blademaster,
 }
 
 impl CastleFightUnitKind {
@@ -792,10 +795,13 @@ impl CastleFightUnitKind {
             Self::Paladin => 0x1000_000c,
             Self::HolyWarrior => 0x1000_000d,
             Self::Warlock => 0x1000_000e,
+            Self::Archer => 0x1000_000f,
+            Self::MasterArcher => 0x1000_0010,
+            Self::Blademaster => 0x1000_0011,
         })
     }
 
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 17] = [
         Self::Footman,
         Self::Defender,
         Self::Sniper,
@@ -810,6 +816,9 @@ impl CastleFightUnitKind {
         Self::Paladin,
         Self::HolyWarrior,
         Self::Warlock,
+        Self::Archer,
+        Self::MasterArcher,
+        Self::Blademaster,
     ];
 
     #[must_use]
@@ -1029,6 +1038,9 @@ impl CastleFightUnitKind {
             Self::Paladin => (u32::from_be_bytes(*b"h03C"), "Paladin", true),
             Self::HolyWarrior => (u32::from_be_bytes(*b"h074"), "Holy Warrior", true),
             Self::Warlock => (u32::from_be_bytes(*b"n005"), "Warlock", true),
+            Self::Archer => (u32::from_be_bytes(*b"n022"), "Archer", true),
+            Self::MasterArcher => (u32::from_be_bytes(*b"n023"), "Master Archer", true),
+            Self::Blademaster => (u32::from_be_bytes(*b"n006"), "Blademaster", true),
         };
         extracted_unit_definition_927(rawcode, name, expose_corpse)
     }
@@ -1118,6 +1130,9 @@ pub enum CastleFightProductionKind {
     Church,
     HolyAltar,
     Hjordhejmen,
+    ArcheryRange,
+    ArcheryTower,
+    HallOfHonor,
 }
 
 impl CastleFightProductionKind {
@@ -1138,10 +1153,13 @@ impl CastleFightProductionKind {
             Self::Church => 0x2000_000c,
             Self::HolyAltar => 0x2000_000d,
             Self::Hjordhejmen => 0x2000_000e,
+            Self::ArcheryRange => 0x2000_000f,
+            Self::ArcheryTower => 0x2000_0010,
+            Self::HallOfHonor => 0x2000_0011,
         })
     }
 
-    pub const ALL: [Self; 14] = [
+    pub const ALL: [Self; 17] = [
         Self::Barracks,
         Self::Stronghold,
         Self::SniperNest,
@@ -1156,6 +1174,9 @@ impl CastleFightProductionKind {
         Self::Church,
         Self::HolyAltar,
         Self::Hjordhejmen,
+        Self::ArcheryRange,
+        Self::ArcheryTower,
+        Self::HallOfHonor,
     ];
 
     #[must_use]
@@ -1186,6 +1207,9 @@ impl CastleFightProductionKind {
             value if value == u32::from_be_bytes(*b"h038") => Some(Self::Church),
             value if value == u32::from_be_bytes(*b"h072") => Some(Self::HolyAltar),
             value if value == u32::from_be_bytes(*b"h00K") => Some(Self::Hjordhejmen),
+            value if value == u32::from_be_bytes(*b"h08X") => Some(Self::ArcheryRange),
+            value if value == u32::from_be_bytes(*b"h08Y") => Some(Self::ArcheryTower),
+            value if value == u32::from_be_bytes(*b"h00T") => Some(Self::HallOfHonor),
             _ => None,
         })
     }
@@ -1249,6 +1273,15 @@ impl CastleFightProductionKind {
 
     fn definition_9_27(self) -> CastleFightProductionDefinition {
         let (rawcode, unit) = match self {
+            Self::ArcheryRange => (u32::from_be_bytes(*b"h08X"), CastleFightUnitKind::Archer),
+            Self::ArcheryTower => (
+                u32::from_be_bytes(*b"h08Y"),
+                CastleFightUnitKind::MasterArcher,
+            ),
+            Self::HallOfHonor => (
+                u32::from_be_bytes(*b"h00T"),
+                CastleFightUnitKind::Blademaster,
+            ),
             Self::Barracks => (u32::from_be_bytes(*b"h000"), CastleFightUnitKind::Footman),
             Self::Stronghold => (u32::from_be_bytes(*b"h039"), CastleFightUnitKind::Defender),
             Self::SniperNest => (u32::from_be_bytes(*b"h003"), CastleFightUnitKind::Sniper),
@@ -1893,6 +1926,21 @@ fn stable_ability_id(
         }
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A06M") => {
             0x4000_0029
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A08I") => {
+            0x4000_002a
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A08J") => {
+            0x4000_002b
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A03P") => {
+            0x4000_002c
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A00V") => {
+            0x4000_002d
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0AL") => {
+            0x4000_002e
         }
         _ => return Err(CastleFightContentError::MissingStableAbilityId(source)),
     };
@@ -4302,8 +4350,8 @@ mod tests {
             bundle.identity.schema_version,
             CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION
         );
-        assert_eq!(bundle.identity.gameplay_hash, 17650247164964876168);
-        assert_eq!(bundle.behaviors().len(), 41);
+        assert_eq!(bundle.identity.gameplay_hash, 7514333017220854365);
+        assert_eq!(bundle.behaviors().len(), 46);
         assert!(
             bundle
                 .behaviors()

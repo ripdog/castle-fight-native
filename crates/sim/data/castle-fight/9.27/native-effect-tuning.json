@@ -4,6 +4,54 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A08I",
+      "unit_rawcode": "n022",
+      "kind": "bash",
+      "chance_per_10k": 1000,
+      "bonus_damage": 50,
+      "stun_duration_millis": 500,
+      "targets": "air-ground-units",
+      "provenance": { "source": "resolved/object-fields.tsv", "fields": ["DataA1=10", "DataC1=50", "Dur1=0.5", "targs1=air,ground"] }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A08J",
+      "unit_rawcode": "n023",
+      "kind": "bash",
+      "chance_per_10k": 2000,
+      "bonus_damage": 125,
+      "stun_duration_millis": 500,
+      "targets": "air-ground-units",
+      "provenance": { "source": "resolved/object-fields.tsv", "fields": ["DataA1=20", "DataC1=125", "Dur1=0.5", "targs1=air,ground"] }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A03P",
+      "unit_rawcode": "n023",
+      "kind": "evasion",
+      "chance_per_10k": 2500,
+      "provenance": { "source": "resolved/production-unit-abilities.tsv", "fields": ["DataA1=0.25"] }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A00V",
+      "unit_rawcode": "n006",
+      "kind": "critical-strike",
+      "chance_per_10k": 2500,
+      "damage_multiplier_per_10k": 25000,
+      "targets": "air-ground-units",
+      "provenance": { "source": "resolved/production-unit-abilities.tsv", "fields": ["DataA1=25", "DataB1=2.5", "targs1=air,ground,enemy,neutral"] }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0AL",
+      "unit_rawcode": "n006",
+      "kind": "spell-resistance",
+      "damage_taken_per_10k": 8500,
+      "provenance": { "source": "resolved/production-unit-abilities.tsv", "fields": ["DataB1=0.15"] }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A02L",
       "unit_rawcode": "hrif",
       "kind": "critical-strike",
