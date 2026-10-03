@@ -1,6 +1,7 @@
 use bevy_ecs::prelude::Component;
 
 mod automatic_abilities;
+pub(crate) use automatic_abilities::compose_spellcasting_profiles;
 pub use automatic_abilities::{
     AbilityConfigurationError, AdditionalAutomaticAbilities, AdditionalAutomaticAbilityDefinitions,
     AutomaticAbilityInstance, MAX_AUTOMATIC_ABILITIES, SecondaryResurrectionState,
@@ -501,6 +502,7 @@ pub struct BuildingGameplayProperties {
     pub economy: Option<BuildingEconomyProfile>,
     pub production_unit: UnitGameplayProperties,
     pub production_spellcasting: Option<SpellcastingProfile>,
+    pub production_additional_abilities: Option<AdditionalAutomaticAbilityDefinitions>,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -539,6 +541,9 @@ pub(crate) struct ProductionHealthRegeneration(pub u32);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProductionSpellcastingProfile(pub SpellcastingProfile);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProductionAdditionalAutomaticAbilities(pub AdditionalAutomaticAbilityDefinitions);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Corpse {

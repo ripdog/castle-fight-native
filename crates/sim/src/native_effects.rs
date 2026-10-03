@@ -8,11 +8,13 @@ use serde::Deserialize;
 
 use crate::{
     components::{
-        AbilityEffect, AbilityId, AbilityTargetPolicy, AttackTargetMask, BashEffectProfile,
+        AbilityConfigurationError, AbilityEffect, AbilityId, AbilityTargetPolicy,
+        AdditionalAutomaticAbilityDefinitions, AttackTargetMask, BashEffectProfile,
         BurningOilEffectProfile, ChainLightningEffectProfile, CriticalStrikeEffectProfile,
         DefendEffectProfile, EntanglingRootsEffectProfile, EvasionEffectProfile, ManaProfile,
         ModifierId, PassiveUnitEffect, PassiveUnitEffects, SpellResistanceEffectProfile,
         SpellcastingProfile, TriggeredAttackEffect, TriggeredSpellProcProfile,
+        compose_spellcasting_profiles,
     },
     content::CASTLE_FIGHT_SIMULATION_HZ,
     math::SUBUNITS_PER_WORLD_UNIT,
@@ -187,6 +189,10 @@ impl std::error::Error for NativeEffectResolveError {}
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeEffectCatalogError {
     UnsupportedMapVersion(MapVersion),
+    InvalidAutomaticAbilities {
+        unit: u32,
+        reason: AbilityConfigurationError,
+    },
 }
 
 impl fmt::Display for NativeEffectCatalogError {
@@ -195,6 +201,11 @@ impl fmt::Display for NativeEffectCatalogError {
             Self::UnsupportedMapVersion(version) => write!(
                 formatter,
                 "no native-effect tuning snapshot is available for Castle Fight {version}"
+            ),
+            Self::InvalidAutomaticAbilities { unit, reason } => write!(
+                formatter,
+                "invalid automatic abilities for unit {}: {reason}",
+                display_rawcode(*unit)
             ),
         }
     }
@@ -206,6 +217,7 @@ impl std::error::Error for NativeEffectCatalogError {}
 pub struct NativeUnitMechanics {
     pub passive_effects: PassiveUnitEffects,
     pub spellcasting: Option<SpellcastingProfile>,
+    pub additional_abilities: Option<AdditionalAutomaticAbilityDefinitions>,
 }
 
 #[derive(Debug)]
@@ -684,21 +696,17 @@ pub fn native_unit_mechanics_for(
     let tuning = catalog
         .tuning(version)
         .ok_or(NativeEffectCatalogError::UnsupportedMapVersion(version))?;
-    Ok(native_unit_mechanics_from_tuning(
-        tuning,
-        unit_rawcode,
-        ability_rawcodes,
-    ))
+    native_unit_mechanics_from_tuning(tuning, unit_rawcode, ability_rawcodes)
 }
 
 fn native_unit_mechanics_from_tuning(
     tuning: &TuningFile,
     unit_rawcode: u32,
     ability_rawcodes: &[u32],
-) -> NativeUnitMechanics {
+) -> Result<NativeUnitMechanics, NativeEffectCatalogError> {
     let abilities = ability_rawcodes.iter().copied().collect::<BTreeSet<_>>();
     let mut passive_effects = Vec::new();
-    let mut spellcasting = None;
+    let mut automatic_profiles = Vec::new();
 
     for ability in abilities {
         let source = NativeEffectSource::new(NativeEffectSourceKind::UnitAbility, ability);
@@ -754,18 +762,22 @@ fn native_unit_mechanics_from_tuning(
             passive_effects.push(effect);
         }
         if let Some(candidate) = automatic_spell {
-            assert!(
-                spellcasting.replace(candidate).is_none(),
-                "unit {} has more than one automatic spell in the current native primitive",
-                display_rawcode(unit_rawcode)
-            );
+            automatic_profiles.push(candidate);
         }
     }
 
-    NativeUnitMechanics {
+    let (spellcasting, additional_abilities) =
+        compose_spellcasting_profiles(None, automatic_profiles).map_err(|reason| {
+            NativeEffectCatalogError::InvalidAutomaticAbilities {
+                unit: unit_rawcode,
+                reason,
+            }
+        })?;
+    Ok(NativeUnitMechanics {
         passive_effects: PassiveUnitEffects::from_slice(&passive_effects),
         spellcasting,
-    }
+        additional_abilities,
+    })
 }
 
 #[must_use]
@@ -1261,6 +1273,62 @@ mod tests {
                 native_unit_mechanics_from_tuning(&reversed, unit_rawcode, &abilities),
             );
         }
+    }
+
+    #[test]
+    fn native_importer_collects_multiple_translated_abilities_and_rejects_mana_conflicts() {
+        let frost = |key: &str, maximum| TuningEffect::FrostArmor {
+            source_kind: "unit-ability".to_owned(),
+            source_key: key.to_owned(),
+            unit_rawcode: "TEST".to_owned(),
+            mana_maximum: maximum,
+            mana_starting: 80,
+            mana_regen_per_second_per_10k: 3000,
+            mana_cost: 4,
+            cooldown_millis: 1000,
+            range_world: 80,
+            armor_bonus_per_100: 100,
+            armor_duration_millis: 1000,
+            slow_duration_millis: 1000,
+            movement_percent_delta: -10,
+            attack_speed_percent_delta: -10,
+            provenance: serde_json::Value::Null,
+        };
+        let unit = u32::from_be_bytes(*b"TEST");
+        let abilities = [u32::from_be_bytes(*b"F002"), u32::from_be_bytes(*b"F001")];
+        let mut tuning = TuningFile {
+            schema_version: 2,
+            map_version: "9.27".to_owned(),
+            effects: vec![frost("F002", 100), frost("F001", 100)],
+        };
+        let expected = native_unit_mechanics_from_tuning(&tuning, unit, &abilities).unwrap();
+        assert_eq!(
+            expected.spellcasting.unwrap().ability.id,
+            AbilityId(abilities[1])
+        );
+        assert_eq!(
+            expected
+                .additional_abilities
+                .unwrap()
+                .iter()
+                .map(|profile| profile.id)
+                .collect::<Vec<_>>(),
+            [AbilityId(abilities[0])]
+        );
+        tuning.effects.reverse();
+        assert_eq!(
+            native_unit_mechanics_from_tuning(&tuning, unit, &[abilities[1], abilities[0]])
+                .unwrap(),
+            expected
+        );
+        tuning.effects = vec![frost("F001", 100), frost("F002", 200)];
+        assert_eq!(
+            native_unit_mechanics_from_tuning(&tuning, unit, &abilities),
+            Err(NativeEffectCatalogError::InvalidAutomaticAbilities {
+                unit,
+                reason: AbilityConfigurationError::IncompatibleManaProfile(AbilityId(abilities[0]))
+            })
+        );
     }
 
     #[test]

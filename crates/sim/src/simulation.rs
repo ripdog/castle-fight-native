@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 12;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 13;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -30,6 +30,8 @@ mod combat;
 mod construction;
 mod economy;
 mod movement;
+#[cfg(test)]
+mod production_abilities;
 mod projectiles;
 mod snapshot;
 mod status;
@@ -66,14 +68,14 @@ use crate::{
         MAX_TIMED_ATTACK_SPEED_MODIFIERS, MAX_TIMED_DAMAGE_OVER_TIME, MAX_TIMED_MOVEMENT_MODIFIERS,
         ManaState, MechanicalUnit, ModifierId, MovementClass, MovementProfile, NavigationGoal,
         NavigationState, Owner, PassiveUnitEffect, PassiveUnitEffects, PendingAttackEffects,
-        PlayerId, Position, ProductionArmorProfile, ProductionAttackTargets,
-        ProductionCollisionRadius, ProductionContentIdentity, ProductionCorpseProfile,
-        ProductionDamageType, ProductionHealthRegeneration, ProductionMovementClass,
-        ProductionPassiveEffects, ProductionProfile, ProductionSecondaryAttack,
-        ProductionSpellcastingProfile, ProductionState, ProductionUnitRepairMetadata,
-        ReflectedProjectile, RepairTimeTicks, ResolvedUnitDefinition, ResurrectionProfile,
-        RetaliationState, SecondaryAttackProfile, SecondaryResurrectionState, SimId, SpawnTick,
-        SpellcastingProfile, StatusState, TargetState, Team, TimedArmorModifier,
+        PlayerId, Position, ProductionAdditionalAutomaticAbilities, ProductionArmorProfile,
+        ProductionAttackTargets, ProductionCollisionRadius, ProductionContentIdentity,
+        ProductionCorpseProfile, ProductionDamageType, ProductionHealthRegeneration,
+        ProductionMovementClass, ProductionPassiveEffects, ProductionProfile,
+        ProductionSecondaryAttack, ProductionSpellcastingProfile, ProductionState,
+        ProductionUnitRepairMetadata, ReflectedProjectile, RepairTimeTicks, ResolvedUnitDefinition,
+        ResurrectionProfile, RetaliationState, SecondaryAttackProfile, SecondaryResurrectionState,
+        SimId, SpawnTick, SpellcastingProfile, StatusState, TargetState, Team, TimedArmorModifier,
         TimedAttackSpeedModifier, TimedDamageOverTime, TriggeredAttackEffect,
         UnitGameplayProperties, UnitSpawn,
     },
@@ -1136,22 +1138,6 @@ impl Simulation {
         self.spawn_resolved_unit_unchecked(Some(owner), unit, definition)
     }
 
-    fn spawn_resolved_unit_unchecked(
-        &mut self,
-        owner: Option<PlayerId>,
-        unit: UnitSpawn,
-        definition: ResolvedUnitDefinition,
-    ) -> SimId {
-        let id =
-            self.spawn_unit_unchecked(owner, unit, definition.properties, definition.spellcasting);
-        if let Some(additional) = definition.additional_abilities {
-            let profiles = additional.iter().collect::<Vec<_>>();
-            self.configure_additional_automatic_abilities(id, &profiles)
-                .expect("validated resolved automatic ability definitions");
-        }
-        id
-    }
-
     pub fn spawn_unit_with_spellcasting(
         &mut self,
         unit: UnitSpawn,
@@ -2132,6 +2118,41 @@ impl Simulation {
         properties: UnitGameplayProperties,
         spellcasting: Option<SpellcastingProfile>,
     ) -> SimId {
+        self.spawn_resolved_unit_unchecked(
+            owner,
+            unit,
+            ResolvedUnitDefinition {
+                template: crate::components::UnitTemplate {
+                    health: unit.health,
+                    attack: unit.attack,
+                    movement: unit.movement,
+                },
+                properties,
+                spellcasting,
+                additional_abilities: None,
+            },
+        )
+    }
+
+    fn spawn_resolved_unit_unchecked(
+        &mut self,
+        owner: Option<PlayerId>,
+        unit: UnitSpawn,
+        definition: ResolvedUnitDefinition,
+    ) -> SimId {
+        let properties = definition.properties;
+        let spellcasting = definition.spellcasting;
+        automatic_abilities::validate_additional_automatic_definitions(
+            spellcasting,
+            definition.additional_abilities,
+        )
+        .expect("validated resolved automatic ability definitions");
+        let additional = definition
+            .additional_abilities
+            .filter(|definitions| definitions.iter().next().is_some())
+            .map(|definitions| {
+                AdditionalAutomaticAbilities::from_definitions(definitions, self.next_tick)
+            });
         let id = self.allocate_id();
         let mut entity = self.world.spawn((
             id,
@@ -2153,16 +2174,10 @@ impl Simulation {
             unit.movement,
             SpawnTick(self.next_tick),
         ));
-        entity.insert(ResurrectionProfile(ResolvedUnitDefinition {
-            template: crate::components::UnitTemplate {
-                health: unit.health,
-                attack: unit.attack,
-                movement: unit.movement,
-            },
-            properties,
-            spellcasting,
-            additional_abilities: None,
-        }));
+        entity.insert(ResurrectionProfile(definition));
+        if let Some(additional) = additional {
+            entity.insert(additional);
+        }
         if let Some(owner) = owner {
             entity.insert(Owner(owner));
         }
@@ -2479,6 +2494,9 @@ impl Simulation {
                         armor: armor.0,
                         passive_effects: passive_effects.0,
                         spellcasting: spellcasting.map(|profile| profile.0),
+                        additional_abilities: entity_ref
+                            .get::<ProductionAdditionalAutomaticAbilities>()
+                            .map(|profiles| profiles.0),
                         next_spawn_tick: state.next_spawn_tick,
                     }
                 },
@@ -2621,11 +2639,16 @@ impl Simulation {
                     armor: attempt.armor,
                     passive_effects: attempt.passive_effects,
                 };
-                self.spawn_unit_unchecked(
+                let definition = ResolvedUnitDefinition {
+                    template: attempt.profile.unit,
+                    properties,
+                    spellcasting: attempt.spellcasting,
+                    additional_abilities: attempt.additional_abilities,
+                };
+                self.spawn_resolved_unit_unchecked(
                     Some(attempt.owner),
                     UnitSpawn::from_template(attempt.team, position, attempt.profile.unit),
-                    properties,
-                    attempt.spellcasting,
+                    definition,
                 );
                 let legendary = attempt.content.is_some_and(|content| {
                     crate::content::unit_has_ability_927(
@@ -2646,11 +2669,10 @@ impl Simulation {
                         shrine_id.0,
                     ) % 100;
                     if roll < 17 {
-                        self.spawn_unit_unchecked(
+                        self.spawn_resolved_unit_unchecked(
                             Some(*shrine_owner),
                             UnitSpawn::from_template(attempt.team, position, attempt.profile.unit),
-                            properties,
-                            attempt.spellcasting,
+                            definition,
                         );
                         spawned += 1;
                     }
@@ -2977,6 +2999,7 @@ struct ProductionAttempt {
     armor: ArmorProfile,
     passive_effects: PassiveUnitEffects,
     spellcasting: Option<SpellcastingProfile>,
+    additional_abilities: Option<AdditionalAutomaticAbilityDefinitions>,
     next_spawn_tick: u64,
 }
 

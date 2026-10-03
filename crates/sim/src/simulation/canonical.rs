@@ -463,6 +463,10 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                             .production_passive_effects
                             .expect("production building missing unit passive effects"),
                     );
+                    hash_additional_ability_definitions(
+                        &mut hash,
+                        building.production_additional_abilities.as_deref().copied(),
+                    );
                     if let Some(spellcasting) = building.production_spellcasting {
                         hash.write_u8(1);
                         hash_spellcasting_profile(&mut hash, spellcasting);
@@ -908,6 +912,8 @@ pub(super) struct CanonicalBuilding {
     pub(super) production_armor: Option<ArmorProfile>,
     pub(super) production_passive_effects: Option<PassiveUnitEffects>,
     pub(super) production_spellcasting: Option<SpellcastingProfile>,
+    // Cold optional definitions must not inflate every canonical entity record.
+    pub(super) production_additional_abilities: Option<Box<AdditionalAutomaticAbilityDefinitions>>,
     pub(super) attack: Option<AttackProfile>,
     pub(super) attack_targets: Option<AttackTargetMask>,
     pub(super) damage_type: DamageType,
@@ -1107,14 +1113,21 @@ fn hash_resolved_unit_definition(hash: &mut Fnv64, definition: Option<ResolvedUn
     } else {
         hash.write_u8(0);
     }
-    if let Some(definitions) = definition.additional_abilities {
-        hash.write_u8(1);
-        hash.write_u64(definitions.iter().count() as u64);
-        for ability in definitions.iter() {
-            hash_automatic_ability(hash, ability);
-        }
-    } else {
+    hash_additional_ability_definitions(hash, definition.additional_abilities);
+}
+
+fn hash_additional_ability_definitions(
+    hash: &mut Fnv64,
+    definitions: Option<AdditionalAutomaticAbilityDefinitions>,
+) {
+    let Some(definitions) = definitions else {
         hash.write_u8(0);
+        return;
+    };
+    hash.write_u8(1);
+    hash.write_u64(definitions.iter().count() as u64);
+    for ability in definitions.iter() {
+        hash_automatic_ability(hash, ability);
     }
 }
 
@@ -1262,6 +1275,7 @@ fn hash_building_definition(
         } else {
             hash.write_u8(0);
         }
+        hash_additional_ability_definitions(hash, properties.production_additional_abilities);
         if let Some(spellcasting) = properties.production_spellcasting {
             hash.write_u8(1);
             hash_spellcasting_profile(hash, spellcasting);

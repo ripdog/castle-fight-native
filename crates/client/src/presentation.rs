@@ -3044,8 +3044,8 @@ fn prewarm_timed_wc3_effects(
                         definition.attack.cooldown_ticks,
                     );
                 }
-                let automatic = definition.spellcasting.map(|spell| {
-                    let status = match spell.ability.effect {
+                let automatic = definition.automatic_abilities().map(|ability| {
+                    let status = match ability.effect {
                         AbilityEffect::ModifyMovementSpeedPercent {
                             modifier,
                             duration_ticks,
@@ -3077,7 +3077,7 @@ fn prewarm_timed_wc3_effects(
                         | AbilityEffect::Purification { .. }
                         | AbilityEffect::ArtilleryBombardment { .. } => None,
                     };
-                    (spell.ability.id.0, spell.ability.cooldown_ticks, status)
+                    (ability.id.0, ability.cooldown_ticks, status)
                 });
                 let passive = definition
                     .passive_effects
@@ -3091,7 +3091,7 @@ fn prewarm_timed_wc3_effects(
                         }
                         _ => None,
                     });
-                for (ability, interval, status) in automatic.into_iter().chain(passive) {
+                for (ability, interval, status) in automatic.chain(passive) {
                     for visual in visuals.ability_for_source(ability, Some(definition.rawcode)) {
                         reserve(
                             &visual.model,

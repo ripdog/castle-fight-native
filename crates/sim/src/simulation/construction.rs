@@ -274,6 +274,16 @@ impl Simulation {
             if let Some(spellcasting) = properties.production_spellcasting {
                 validate_spellcasting_profile(spellcasting);
             }
+            super::automatic_abilities::validate_additional_automatic_definitions(
+                properties.production_spellcasting,
+                properties.production_additional_abilities,
+            )
+            .expect("production ability definitions require a primary and distinct IDs");
+        } else {
+            assert!(
+                properties.production_additional_abilities.is_none(),
+                "additional production ability definitions require a production profile"
+            );
         }
         if let Some(attack) = building.attack {
             validate_attack_profile(attack);
@@ -384,6 +394,9 @@ impl Simulation {
             if let Some(spellcasting) = properties.production_spellcasting {
                 entity.insert(ProductionSpellcastingProfile(spellcasting));
             }
+            if let Some(definitions) = properties.production_additional_abilities {
+                entity.insert(ProductionAdditionalAutomaticAbilities(definitions));
+            }
         }
         if let Some(attack) = building.attack {
             entity.insert((
@@ -432,6 +445,7 @@ impl Simulation {
         entity.remove::<ProductionArmorProfile>();
         entity.remove::<ProductionPassiveEffects>();
         entity.remove::<ProductionSpellcastingProfile>();
+        entity.remove::<ProductionAdditionalAutomaticAbilities>();
         entity.remove::<AttackProfile>();
         entity.remove::<AttackTargetMask>();
         entity.remove::<AttackCooldown>();

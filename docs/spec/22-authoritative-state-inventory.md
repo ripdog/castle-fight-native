@@ -97,13 +97,13 @@ The complete current building state is:
 - optional `BuildingEconomyProfile` and optional `RepairTimeTicks`;
 - `DamageType` and `ArmorProfile`;
 - optional production definition and `ProductionState.next_spawn_tick`;
-- production content rawcode, corpse profile, collision radius, movement class, mechanical/build/repair metadata, target mask, damage type, armor, passive effects, and spellcasting profile;
+- production content rawcode, corpse profile, collision radius, movement class, mechanical/build/repair metadata, target mask, damage type, armor, passive effects, primary spellcasting profile, and optional additional automatic-ability definitions;
 - optional attack profile plus target mask, cooldown, target-lock state, and spawn tick;
 - optional `StatusState`;
 - optional building spellcasting profile plus shared mana remainder/current value and primary automatic-ability ready/cast sequence/control flags;
 - optional `AdditionalAutomaticAbilities`, with the same profile/state coverage as units. In-progress upgrade cancellation preserves the complete precursor ability set and state; a successful definition replacement discards obsolete slots.
 
-Production metadata is authoritative because it defines future spawned units. It must remain complete even when no produced unit is currently alive.
+Production metadata is authoritative because it defines future spawned units. It must remain complete even when no produced unit is currently alive, including inside pending construction and saved upgrade precursors. Every ordinary or companion production spawn receives the complete definition set with fresh per-ability runtime state; producer metadata MUST NOT carry a previous child's cooldowns, sequences, or pending actions.
 
 ### 5.3 Builders and paid build orders
 

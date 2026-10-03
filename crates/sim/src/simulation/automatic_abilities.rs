@@ -223,6 +223,31 @@ impl Simulation {
     }
 }
 
+pub(super) fn validate_additional_automatic_definitions(
+    primary: Option<SpellcastingProfile>,
+    definitions: Option<AdditionalAutomaticAbilityDefinitions>,
+) -> Result<(), AbilityConfigurationError> {
+    let Some(definitions) = definitions else {
+        return Ok(());
+    };
+    for (index, profile) in definitions.iter().enumerate() {
+        let primary = primary.ok_or(AbilityConfigurationError::MissingSpellcaster)?;
+        if profile.id == primary.ability.id
+            || definitions
+                .iter()
+                .take(index)
+                .any(|previous| previous.id == profile.id)
+        {
+            return Err(AbilityConfigurationError::DuplicateAbility(profile.id));
+        }
+        validate_spellcasting_profile(SpellcastingProfile {
+            mana: primary.mana,
+            ability: profile,
+        });
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

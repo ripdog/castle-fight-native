@@ -8,15 +8,16 @@ use serde::Deserialize;
 
 use crate::{
     components::{
-        AbilityEffect, AbilityId, AbilityTargetPolicy, AreaDamageOrigin, AttackDelivery,
-        AttackProfile, AttackTargetMask, AuraEffectProfile, AutomaticAbilityProfile,
-        BuilderConfiguration, BuilderLocomotion, BuilderProfile, BuilderSpawn, BuildingFootprint,
-        BuildingGameplayProperties, BuildingSpawn, BurningOilEffectProfile, CleaveEffectProfile,
-        CollisionRadius, ContentIdentity, CorpseDefinitionId, CorpseProfile,
-        GameplayBundleIdentity, ManaProfile, ModifierId, MovementClass, MovementProfile,
-        PassiveUnitEffect, PassiveUnitEffects, ProductionProfile, ResolvedUnitDefinition,
-        SecondaryAttackProfile, SpellResistanceEffectProfile, SpellcastingProfile,
-        SplashFalloffProfile, Team, TriggeredAttackEffect, UnitGameplayProperties, UnitTemplate,
+        AbilityEffect, AbilityId, AbilityTargetPolicy, AdditionalAutomaticAbilityDefinitions,
+        AreaDamageOrigin, AttackDelivery, AttackProfile, AttackTargetMask, AuraEffectProfile,
+        AutomaticAbilityProfile, BuilderConfiguration, BuilderLocomotion, BuilderProfile,
+        BuilderSpawn, BuildingFootprint, BuildingGameplayProperties, BuildingSpawn,
+        BurningOilEffectProfile, CleaveEffectProfile, CollisionRadius, ContentIdentity,
+        CorpseDefinitionId, CorpseProfile, GameplayBundleIdentity, ManaProfile, ModifierId,
+        MovementClass, MovementProfile, PassiveUnitEffect, PassiveUnitEffects, ProductionProfile,
+        ResolvedUnitDefinition, SecondaryAttackProfile, SpellResistanceEffectProfile,
+        SpellcastingProfile, SplashFalloffProfile, Team, TriggeredAttackEffect,
+        UnitGameplayProperties, UnitTemplate, compose_spellcasting_profiles,
     },
     damage::{ArmorProfile, ArmorType, DamageRules, DamageType},
     economy::{BuildingEconomyProfile, EconomyRules, RESOURCE_FIXED_SCALE},
@@ -33,7 +34,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r10";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r11";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -92,7 +93,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 2;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CastleFightUnitId(pub u32);
@@ -776,9 +777,26 @@ impl CastleFightUnitKind {
         }
         passive_effects.extend(self.human_passive_effects_9_27());
         definition.passive_effects = PassiveUnitEffects::from_slice(&passive_effects);
-        definition.spellcasting = mechanics
-            .spellcasting
-            .or_else(|| self.human_spellcasting_9_27());
+        let native_mana = mechanics.spellcasting.map(|profile| profile.mana);
+        let native_additional = mechanics
+            .additional_abilities
+            .as_ref()
+            .into_iter()
+            .flat_map(|definitions| definitions.iter())
+            .map(|ability| SpellcastingProfile {
+                mana: native_mana
+                    .expect("translated additional abilities have a primary mana profile"),
+                ability,
+            });
+        let (spellcasting, additional_abilities) = compose_spellcasting_profiles(
+            mechanics.spellcasting,
+            self.human_spellcasting_9_27()
+                .into_iter()
+                .chain(native_additional),
+        )
+        .expect("promoted unit abilities must have distinct IDs and one shared mana pool");
+        definition.spellcasting = spellcasting;
+        definition.additional_abilities = additional_abilities;
         Ok(definition)
     }
 
@@ -958,6 +976,7 @@ pub struct CastleFightUnitDefinition {
     pub armor: ArmorProfile,
     pub passive_effects: PassiveUnitEffects,
     pub spellcasting: Option<SpellcastingProfile>,
+    pub additional_abilities: Option<AdditionalAutomaticAbilityDefinitions>,
     pub damage_type: DamageType,
     pub attack_targets: AttackTargetMask,
     pub secondary_attack: Option<SecondaryAttackProfile>,
@@ -970,13 +989,26 @@ pub struct CastleFightUnitDefinition {
 }
 
 impl CastleFightUnitDefinition {
+    /// All declared automatic effects, retaining the primary control identity first.
+    pub fn automatic_abilities(&self) -> impl Iterator<Item = AutomaticAbilityProfile> + '_ {
+        self.spellcasting
+            .map(|profile| profile.ability)
+            .into_iter()
+            .chain(
+                self.additional_abilities
+                    .as_ref()
+                    .into_iter()
+                    .flat_map(|definitions| definitions.iter()),
+            )
+    }
+
     #[must_use]
     pub const fn resolved(self) -> ResolvedUnitDefinition {
         ResolvedUnitDefinition {
             template: self.template(),
             properties: self.gameplay_properties(),
             spellcasting: self.spellcasting,
-            additional_abilities: None,
+            additional_abilities: self.additional_abilities,
         }
     }
 
@@ -1160,6 +1192,7 @@ impl CastleFightProductionDefinition {
             economy: Some(self.economy),
             production_unit: unit.properties,
             production_spellcasting: unit.spellcasting,
+            production_additional_abilities: unit.additional_abilities,
         }
     }
 }
@@ -1384,6 +1417,7 @@ impl CastleFightTowerDefinition {
                 passive_effects: PassiveUnitEffects::EMPTY,
             },
             production_spellcasting: None,
+            production_additional_abilities: None,
         }
     }
 }
@@ -1774,6 +1808,7 @@ fn hash_unit_definition(hash: &mut ContentHash64, definition: CastleFightUnitDef
     hash.write_i32(i32::from(definition.armor.armor_points));
     hash_passive_effects(hash, definition.passive_effects);
     hash_optional_spellcasting(hash, definition.spellcasting);
+    hash_additional_ability_definitions(hash, definition.additional_abilities);
     hash.write_u8(definition.damage_type.stable_tag());
     hash.write_u8(definition.attack_targets.bits());
     if let Some(secondary) = definition.secondary_attack {
@@ -2066,13 +2101,32 @@ fn hash_optional_spellcasting(hash: &mut ContentHash64, spellcasting: Option<Spe
     hash.write_i32(spellcasting.mana.maximum);
     hash.write_i32(spellcasting.mana.starting);
     hash.write_u32(spellcasting.mana.regen_per_tick_per_10k);
-    hash.write_u32(spellcasting.ability.id.0);
-    hash.write_i32(spellcasting.ability.mana_cost);
-    hash.write_u16(spellcasting.ability.cooldown_ticks);
-    hash.write_i32(spellcasting.ability.range);
-    hash.write_u8(spellcasting.ability.target_policy.stable_tag());
-    hash.write_u8(spellcasting.ability.effect.stable_tag());
-    match spellcasting.ability.effect {
+    hash_automatic_ability_profile(hash, spellcasting.ability);
+}
+
+fn hash_additional_ability_definitions(
+    hash: &mut ContentHash64,
+    definitions: Option<AdditionalAutomaticAbilityDefinitions>,
+) {
+    let Some(definitions) = definitions else {
+        hash.write_u8(0);
+        return;
+    };
+    hash.write_u8(1);
+    hash.write_u64(definitions.iter().count() as u64);
+    for ability in definitions.iter() {
+        hash_automatic_ability_profile(hash, ability);
+    }
+}
+
+fn hash_automatic_ability_profile(hash: &mut ContentHash64, ability: AutomaticAbilityProfile) {
+    hash.write_u32(ability.id.0);
+    hash.write_i32(ability.mana_cost);
+    hash.write_u16(ability.cooldown_ticks);
+    hash.write_i32(ability.range);
+    hash.write_u8(ability.target_policy.stable_tag());
+    hash.write_u8(ability.effect.stable_tag());
+    match ability.effect {
         AbilityEffect::Damage { amount } => hash.write_i32(amount),
         AbilityEffect::Stun { duration_ticks } => hash.write_u16(duration_ticks),
         AbilityEffect::ModifyMovementSpeedPercent {
@@ -3851,6 +3905,7 @@ fn extracted_unit_definition_927(
         armor: protected.armor,
         passive_effects: PassiveUnitEffects::EMPTY,
         spellcasting: None,
+        additional_abilities: None,
         damage_type: attack.damage_type,
         attack_targets: attack.targets,
         secondary_attack,
@@ -4336,6 +4391,65 @@ mod tests {
                 .construction_time_ticks,
             20 * CASTLE_FIGHT_SIMULATION_HZ as u32
         );
+    }
+
+    #[test]
+    fn catalog_transfers_additional_definitions_and_hashes_their_parameters() {
+        let extra = AutomaticAbilityProfile {
+            id: AbilityId(1),
+            mana_cost: 0,
+            cooldown_ticks: 1,
+            range: SUBUNITS_PER_WORLD_UNIT,
+            target_policy: AbilityTargetPolicy::RandomEnemyUnit,
+            effect: AbilityEffect::Damage { amount: 1 },
+        };
+        let definitions =
+            AdditionalAutomaticAbilityDefinitions::try_from_profiles([extra]).unwrap();
+        for kind in CastleFightProductionKind::ALL {
+            let mut production = kind.definition();
+            if production.produced_unit.spellcasting.is_none() {
+                production.produced_unit.spellcasting = Some(SpellcastingProfile {
+                    mana: ManaProfile {
+                        maximum: 10,
+                        starting: 10,
+                        regen_per_tick_per_10k: 0,
+                    },
+                    ability: AutomaticAbilityProfile {
+                        id: AbilityId(2),
+                        ..extra
+                    },
+                });
+            }
+            production.produced_unit.additional_abilities = Some(definitions);
+            assert_eq!(
+                production.produced_unit.resolved().additional_abilities,
+                Some(definitions)
+            );
+            assert_eq!(
+                production
+                    .gameplay_properties()
+                    .production_additional_abilities,
+                Some(definitions)
+            );
+            let mut first = ContentHash64::new();
+            hash_unit_definition(&mut first, production.produced_unit);
+            production.produced_unit.additional_abilities = Some(
+                AdditionalAutomaticAbilityDefinitions::try_from_profiles([
+                    AutomaticAbilityProfile {
+                        cooldown_ticks: 2,
+                        ..extra
+                    },
+                ])
+                .unwrap(),
+            );
+            let mut changed = ContentHash64::new();
+            hash_unit_definition(&mut changed, production.produced_unit);
+            assert_ne!(
+                first.finish(),
+                changed.finish(),
+                "{kind:?}: future ability changes must affect content identity"
+            );
+        }
     }
 
     #[test]

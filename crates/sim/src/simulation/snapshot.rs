@@ -5,7 +5,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 9;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 10;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -464,6 +464,9 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
                     production_spellcasting: entity
                         .get::<ProductionSpellcastingProfile>()
                         .map(|profile| profile.0),
+                    production_additional_abilities: entity
+                        .get::<ProductionAdditionalAutomaticAbilities>()
+                        .map(|profiles| Box::new(profiles.0)),
                     attack: entity.get::<AttackProfile>().copied(),
                     attack_targets: entity.get::<AttackTargetMask>().copied(),
                     damage_type: *entity.get::<DamageType>()?,
@@ -628,6 +631,11 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                 }
                 if let Some(spellcasting) = building.production_spellcasting {
                     entity.insert(ProductionSpellcastingProfile(spellcasting));
+                }
+                if let Some(definitions) =
+                    building.production_additional_abilities.as_deref().copied()
+                {
+                    entity.insert(ProductionAdditionalAutomaticAbilities(definitions));
                 }
                 if let Some(attack) = building.attack {
                     entity.insert(attack);

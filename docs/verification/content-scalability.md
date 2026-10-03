@@ -7,6 +7,8 @@ This is implementation status and follow-up work, not a gameplay specification o
 - `crates/sim/src/content/roster.rs` is an identity-only promotion registry. It generates stable enum IDs, retained rawcode mappings, reverse lookup, and iteration without repeating registrations across methods. Names, production relationships, corpse eligibility, and builder command lists come from retained evidence. Client labels consume the content definitions.
 - `tools/wc3-map/build_runtime_catalog.py` generates the complete runtime supplement, including object-authored builder command lists. Missing repair metadata stays optional. Catalog-wide validation checks promoted identity uniqueness and lookup round trips.
 - `tools/wc3-map/build_native_tuning.py` generates native tuning from the release-pinned extraction tree. Versioned recipes select source identities/primitive translations, not values. Protected mana/cooldown overlays and script-derived Defend activation timing are consumed directly. Whole-artifact reproducibility tests replace manually copied tuning expectations.
+- Version-aware unit definitions and production properties carry the complete translated automatic-ability set. The native importer collects multiple supported profiles, rejects mana conflicts, and composes native/scripted definitions without silently selecting one. Explicit primary identity is retained; unordered imports choose the lowest ID. Current promoted entities still have the same actual ability inventories; this is infrastructure, not new content promotion.
+- Production, companion spawning, construction, upgrade cancellation/completion, and wire restoration preserve additional definitions. New bodies initialize fresh slots directly at birth without a global entity-ID scan or temporary profile vectors. Client effect prewarming iterates the complete automatic set.
 - `Simulation::configure_additional_automatic_abilities` configures bounded multiple abilities. Slots share mana but retain independent cooldowns, sequences, control flags, and delayed secondary-resurrection state. Registration order is irrelevant; duplicate IDs, capacity overflow, unsupported delayed source kinds, and in-place definition changes are rejected before source mutation.
 - Additional runtime state is an optional ECS component: single-ability entities and the hot per-tick unit snapshot do not acquire a full ability array. Logical/wire snapshots, checksums, and saved upgrade-precursor runtime include additional profiles and state. Definition replacement discards obsolete slots; cancellation restores the precursor.
 - Resolved unit/corpse resurrection metadata retains additional definitions separately from runtime state. A synthetic live-stat regression also exposed the old snapshot reconstruction losing the original resurrection baseline: it is now preserved, referencing current unit fields in the common case and storing an explicit original only when needed. A revived body restores the complete ability set with fresh cooldown/sequence/delayed state; encoded restoration preserves this metadata. The additional definition payload is cold ECS data, not part of the hot per-tick unit snapshot.
@@ -20,16 +22,22 @@ Reproduce with `tools/cargo-interactive run --release -p castle-fight-sim-bench 
 
 | Scenario | Workers | Total ms/tick | Ability phase ms/tick |
 | --- | ---: | ---: | ---: |
-| Single ability | 1 | 6.040 | 3.172 |
-| Single ability | 4 | 3.509 | 1.168 |
-| Multiple abilities | 1 | 7.664 | 4.714 |
-| Multiple abilities | 4 | 4.089 | 1.729 |
+| Single ability | 1 | 7.819 | 3.659 |
+| Single ability | 4 | 5.354 | 1.741 |
+| Multiple abilities | 1 | 9.568 | 5.352 |
+| Multiple abilities | 4 | 5.743 | 2.297 |
 
-Each scenario produced identical final checksums across worker counts. This is a single exploratory run, not a regression threshold or a before/after optimization claim. Target candidate work remains substantial; this supports profiling target selection next rather than assuming parallelism eliminates its cost.
+These numbers were recorded after the production-definition integration. Each scenario produced identical final checksums across worker counts. This is a single exploratory run, not a regression threshold or a before/after optimization claim. Target candidate work remains substantial; this supports profiling target selection next rather than assuming parallelism eliminates its cost.
+
+## Production-integration verification
+
+Content bundle schema 3 / checksum schema 13 / snapshot schema 10 carry the expanded definitions. Synthetic coverage checks profile composition and rejection, cold definition hashing before the first birth, wire continuation across worker counts, fresh child state, and pending-upgrade cancellation/completion. Catalog-wide tests verify definition transport without re-encoding entity tuning.
+
+Formatting, workspace Clippy, projection tests, artifact checks, and the workspace excluding the server passed. Full workspace runs encountered the already-observed TCP timing failures (`TCP server did not reach expected state` / disconnect control). The duplicate-command case passed in isolation and its readiness failure also reproduced on the previous commit (`2cca441`) in a clean detached worktree. No unrelated server change was folded into this integration.
 
 ## Remaining work before broad roster expansion
 
-- Wire multi-ability definitions through production/content metadata. Existing promoted native profiles still use the legacy primary profile, and the native importer continues to fail loudly on multiple translated automatic profiles rather than silently dropping them. The runtime capability is not a claim that every extracted multi-spell unit is promoted.
+- Translate additional extracted automatic spell primitives and scripted handlers. The definition/production path now transports multiple supported profiles, but it does not make unsupported mechanics executable or establish race playability. Active building content definitions still need a full multi-ability declaration path (their runtime supports explicitly configured additional slots).
 - Migrate remaining scripted Human composite profiles and recovery timing to source-driven projections. They remain version-scoped but some are still hand-authored. Do not treat the native-tuning generator as complete coverage of all scripted map mechanics.
 - Generalize triggered attack payloads: multiple spell-proc/Burning Oil guards still exist. Multiple automatic abilities do not remove these separate impact-delivery limitations.
 - Replace remaining dedicated delayed-action/status paths with typed mechanic state as new semantics require it. The current secondary-resurrection change is deliberately scoped; there is no general-purpose map-script interpreter or universal delayed-effect queue.

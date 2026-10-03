@@ -251,7 +251,7 @@ Identity-only native recipes choose the implemented source keys and primitive tr
 
 ```bash
 python3 tools/wc3-map/build_runtime_catalog.py --map-version 9.27 --revision r1 --kind supplement --check crates/sim/data/castle-fight/9.27/catalog-supplement-r1.json
-python3 tools/wc3-map/build_runtime_catalog.py --map-version 9.27 --revision r1 --kind source-manifest --content-revision cf-native-dev-slice-r10 --check crates/sim/data/castle-fight/9.27/catalog-source-r1.json
+python3 tools/wc3-map/build_runtime_catalog.py --map-version 9.27 --revision r1 --kind source-manifest --content-revision cf-native-dev-slice-r11 --check crates/sim/data/castle-fight/9.27/catalog-source-r1.json
 python3 tools/wc3-map/build_native_tuning.py --map-version 9.27 --revision r1 --check crates/sim/data/castle-fight/9.27/native-effect-tuning.json
 python3 -m unittest discover -s tools/wc3-map -p 'test_build_*.py'
 ```
