@@ -17,7 +17,7 @@ use crate::{
         MovementClass, MovementProfile, PassiveUnitEffect, PassiveUnitEffects, ProductionProfile,
         ResolvedUnitDefinition, SecondaryAttackProfile, SpellResistanceEffectProfile,
         SpellcastingProfile, SplashFalloffProfile, Team, TriggeredAttackEffect,
-        UnitGameplayProperties, UnitTemplate, compose_spellcasting_profiles,
+        UnitClassifications, UnitGameplayProperties, UnitTemplate, compose_spellcasting_profiles,
     },
     damage::{ArmorProfile, ArmorType, DamageRules, DamageType},
     economy::{BuildingEconomyProfile, EconomyRules, RESOURCE_FIXED_SCALE},
@@ -34,7 +34,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r11";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r12";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -93,7 +93,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 3;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CastleFightUnitId(pub u32);
@@ -982,6 +982,7 @@ pub struct CastleFightUnitDefinition {
     pub secondary_attack: Option<SecondaryAttackProfile>,
     pub movement_class: MovementClass,
     pub mechanical: bool,
+    pub classifications: UnitClassifications,
     pub collision_radius: CollisionRadius,
     pub corpse: Option<CorpseProfile>,
     pub attack: AttackProfile,
@@ -1033,6 +1034,7 @@ impl CastleFightUnitDefinition {
             collision_radius: Some(self.collision_radius),
             movement_class: self.movement_class,
             mechanical: self.mechanical,
+            classifications: self.classifications,
             build_time_ticks: Some(self.build_time_ticks),
             repair_time_ticks: Some(self.repair_time_ticks),
             attack_targets: if let Some(secondary) = self.secondary_attack {
@@ -1407,6 +1409,11 @@ impl CastleFightTowerDefinition {
                 collision_radius: None,
                 movement_class: MovementClass::Ground,
                 mechanical: false,
+                classifications: UnitClassifications {
+                    hero: false,
+                    summoned: false,
+                    spell_immune: false,
+                },
                 build_time_ticks: None,
                 repair_time_ticks: None,
                 attack_targets: AttackTargetMask::ALL,
@@ -1698,6 +1705,18 @@ fn stable_ability_id(
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0AL") => {
             0x4000_002e
         }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0AN") => {
+            0x4000_002f
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A05Y") => {
+            0x4000_0030
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A014") => {
+            0x4000_0031
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A00W") => {
+            0x4000_0032
+        }
         _ => return Err(CastleFightContentError::MissingStableAbilityId(source)),
     };
     Ok(CastleFightAbilityId(id))
@@ -1825,6 +1844,9 @@ fn hash_unit_definition(hash: &mut ContentHash64, definition: CastleFightUnitDef
         MovementClass::Air => 1,
     });
     hash.write_u8(u8::from(definition.mechanical));
+    hash.write_u8(u8::from(definition.classifications.hero));
+    hash.write_u8(u8::from(definition.classifications.summoned));
+    hash.write_u8(u8::from(definition.classifications.spell_immune));
     hash.write_i32(definition.collision_radius.0);
     match definition.corpse {
         Some(corpse) => {
@@ -2062,6 +2084,14 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
                 hash.write_u32(profile.mana_regeneration_per_second_per_10k);
                 hash.write_u8(u8::from(profile.suspend_during_spell_cooldown));
             }
+            PassiveUnitEffect::Feedback(profile) => {
+                hash.write_u8(10);
+                hash.write_u32(profile.ability.0);
+                hash.write_i32(profile.maximum_mana_drained);
+                hash.write_u16(profile.damage_per_mana_per_10k);
+                hash.write_i32(profile.summoned_damage);
+                hash.write_u8(profile.targets.bits());
+            }
             PassiveUnitEffect::SpellResistance(profile) => {
                 hash.write_u8(9);
                 hash.write_u32(profile.ability.0);
@@ -2127,6 +2157,17 @@ fn hash_automatic_ability_profile(hash: &mut ContentHash64, ability: AutomaticAb
     hash.write_u8(ability.target_policy.stable_tag());
     hash.write_u8(ability.effect.stable_tag());
     match ability.effect {
+        AbilityEffect::FaerieFire {
+            modifier,
+            armor_reduction_per_100,
+            duration_ticks,
+            hero_duration_ticks,
+        } => {
+            hash.write_u32(modifier.0);
+            hash.write_i32(i32::from(armor_reduction_per_100));
+            hash.write_u16(duration_ticks);
+            hash.write_u16(hero_duration_ticks);
+        }
         AbilityEffect::Damage { amount } => hash.write_i32(amount),
         AbilityEffect::Stun { duration_ticks } => hash.write_u16(duration_ticks),
         AbilityEffect::ModifyMovementSpeedPercent {
@@ -2338,6 +2379,7 @@ struct ExtractedUnit927 {
     builder_locomotion: Option<BuilderLocomotion>,
     move_speed_per_tick: Option<i32>,
     mechanical: bool,
+    target_classifications: UnitClassifications,
     sapper: bool,
     undead: bool,
     collision_radius: CollisionRadius,
@@ -2438,6 +2480,7 @@ struct CatalogSupplement927 {
     extraction_git_tree: String,
     source_object_fields_sha256: String,
     objects: Vec<CatalogSupplementObject927>,
+    bounce_weapons: Vec<CatalogBounceWeapon927>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2448,6 +2491,14 @@ struct CatalogSupplementObject927 {
     button_y: Option<u8>,
     hotkey: Option<char>,
     build_catalog: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CatalogBounceWeapon927 {
+    rawcode: String,
+    maximum_targets: u8,
+    damage_percent_per_bounce: u16,
+    range_world: i32,
 }
 
 #[derive(Debug)]
@@ -2469,6 +2520,7 @@ struct ExtractedContent927 {
     income_per_10k: BTreeMap<u32, u64>,
     builder_catalogs: BTreeMap<(u8, u32), ExtractedBuilderCatalog927>,
     authored_builder_catalogs: BTreeMap<u32, Vec<u32>>,
+    bounce_weapons: BTreeMap<u32, CatalogBounceWeapon927>,
     damage_rules: DamageRules,
 }
 
@@ -2524,6 +2576,11 @@ impl ExtractedContent927 {
         }
 
         let supplement = catalog_supplement_927()?;
+        let bounce_weapons = supplement
+            .bounce_weapons
+            .into_iter()
+            .map(|weapon| (parse_rawcode(&weapon.rawcode), weapon))
+            .collect();
         let mut repair_time_ticks = BTreeMap::<u32, u32>::new();
         let mut command_card_positions = BTreeMap::new();
         let mut building_hotkeys = BTreeMap::new();
@@ -2678,6 +2735,16 @@ impl ExtractedContent927 {
                 builder_locomotion,
                 move_speed_per_tick,
                 mechanical,
+                target_classifications: UnitClassifications {
+                    hero: columns[2]
+                        .as_bytes()
+                        .first()
+                        .is_some_and(u8::is_ascii_uppercase),
+                    summoned: classifications
+                        .iter()
+                        .any(|value| value.eq_ignore_ascii_case("summoned")),
+                    spell_immune: false,
+                },
                 sapper,
                 undead,
                 collision_radius: CollisionRadius(world(collision_world)),
@@ -3057,6 +3124,7 @@ impl ExtractedContent927 {
             income_per_10k,
             builder_catalogs,
             authored_builder_catalogs,
+            bounce_weapons,
             damage_rules,
         })
     }
@@ -3065,7 +3133,7 @@ impl ExtractedContent927 {
 fn catalog_supplement_927() -> Result<CatalogSupplement927, String> {
     let supplement: CatalogSupplement927 = serde_json::from_str(CATALOG_SUPPLEMENT_927_R1_JSON)
         .map_err(|error| format!("invalid 9.27 catalog supplement: {error}"))?;
-    if supplement.schema_version != 1 {
+    if supplement.schema_version != 2 {
         return Err(format!(
             "unsupported 9.27 catalog supplement schema {}",
             supplement.schema_version
@@ -3837,7 +3905,25 @@ fn extracted_unit_definition_927(
                 }),
             }
         }
-        ExtractedWeaponKind927::Bounce | ExtractedWeaponKind927::Line => panic!(
+        ExtractedWeaponKind927::Bounce => {
+            let bounce = content
+                .bounce_weapons
+                .get(&rawcode)
+                .expect("bounce unit needs retained weapon fields");
+            AttackDelivery::Bounce {
+                speed_per_tick: unit
+                    .projectile_speed_per_tick
+                    .expect("bounce missile speed"),
+                bounce_range: world(bounce.range_world),
+                max_bounces: bounce
+                    .maximum_targets
+                    .checked_sub(1)
+                    .expect("bounce target count"),
+                damage_percent_per_bounce: bounce.damage_percent_per_bounce,
+                allow_repeat_targets: false,
+            }
+        }
+        ExtractedWeaponKind927::Line => panic!(
             "unit {rawcode:#010x} uses an extracted weapon primitive that is not implemented in the current native slice"
         ),
     };
@@ -3913,6 +3999,7 @@ fn extracted_unit_definition_927(
             .movement_class
             .unwrap_or_else(|| panic!("unit {rawcode:#010x} is missing retained movement class")),
         mechanical: unit.mechanical,
+        classifications: unit.target_classifications,
         collision_radius: unit.collision_radius,
         corpse,
         attack: AttackProfile {

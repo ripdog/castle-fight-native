@@ -36,6 +36,25 @@ class NativeTuningProjectionTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             native.project_effect(recipe, fields, None, {}, {})
 
+    def test_feedback_projects_native_fields_and_rejects_unequal_class_tuning(self) -> None:
+        recipe = {"kind": "feedback", "source_key": "TEST", "source_kind": "unit-ability"}
+        fields = {"dataa1": "7", "datab1": "0.5", "datac1": "7", "datad1": "0.5", "datae1": "3", "targs1": "air,ground,enemy"}
+        effect = native.project_effect(recipe, fields, None, {}, {})
+        self.assertEqual((effect["maximum_mana_drained"], effect["damage_per_mana_per_10k"], effect["summoned_damage"]), (7, 5000, 3))
+        with self.assertRaises(ValueError):
+            native.project_effect(recipe, {**fields, "dataa1": "8"}, None, {}, {})
+
+    def test_faerie_fire_uses_protected_costs_and_keeps_distinct_hero_duration(self) -> None:
+        recipe = {"kind": "faerie-fire", "source_key": "TEST", "source_kind": "unit-ability"}
+        fields = {"dataa1": "2", "datab1": "1", "cost1": "999", "cool1": "99", "rng1": "123", "dur1": "13", "herodur1": "2.5", "targs1": "air,ground,enemy"}
+        unit = {"mana_max": "50", "mana_start": "30", "mana_regen": "1.2"}
+        effect = native.project_effect(recipe, fields, unit, {"mana_cost": "4", "cooldown": "3"}, {})
+        self.assertEqual((effect["mana_cost"], effect["cooldown_millis"]), (4, 3000))
+        self.assertEqual((effect["duration_millis"], effect["hero_duration_millis"]), (13000, 2500))
+        self.assertEqual(effect["mana_regen_per_second_per_10k"], 12000)
+        with self.assertRaises(ValueError):
+            native.project_effect(recipe, {**fields, "datab1": "0"}, unit, {}, {})
+
     def test_recipes_cannot_become_a_second_tuning_database(self) -> None:
         root = catalog.REPO_ROOT
         release = catalog._load_release(catalog.DEFAULT_RELEASES, "9.27", "r1")

@@ -211,9 +211,13 @@ impl Simulation {
                         impact_radius,
                     } => {
                         assert_eq!(
-                            (on_hit.stun_duration_ticks, on_hit.triggered_spell),
-                            (0, None),
-                            "ballistic stun/triggered-spell passives are unsupported"
+                            (
+                                on_hit.stun_duration_ticks,
+                                on_hit.triggered_spell,
+                                on_hit.feedback
+                            ),
+                            (0, None, None),
+                            "ballistic stun/triggered-spell/Feedback passives are unsupported"
                         );
                         let travel_ticks =
                             projectile_travel_ticks(intent.distance_sq, speed_per_tick);
@@ -475,6 +479,17 @@ impl Simulation {
                             "multiple triggered spell procs on one attack are not yet supported"
                         );
                         on_hit.triggered_spell = Some(profile.effect);
+                    }
+                }
+                PassiveUnitEffect::Feedback(profile) => {
+                    let TargetIndex::Unit(index) = intent.target else {
+                        continue;
+                    };
+                    if profile.targets.can_target_unit(units[index].movement_class) {
+                        assert!(
+                            on_hit.feedback.replace(profile).is_none(),
+                            "multiple Feedback payloads are unsupported"
+                        );
                     }
                 }
                 PassiveUnitEffect::BurningOil(profile) => {

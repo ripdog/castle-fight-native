@@ -67,6 +67,65 @@
     },
     {
       "source_kind": "unit-ability",
+      "source_key": "A0AN",
+      "unit_rawcode": "n00Y",
+      "kind": "spell-resistance",
+      "damage_taken_per_10k": 7500,
+      "provenance": {
+        "ability": "A0AN",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A05Y",
+      "unit_rawcode": "n00Y",
+      "kind": "critical-strike",
+      "chance_per_10k": 3000,
+      "damage_multiplier_per_10k": 30000,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A05Y",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A014",
+      "unit_rawcode": "n00Y",
+      "kind": "feedback",
+      "maximum_mana_drained": 40,
+      "damage_per_mana_per_10k": 10000,
+      "summoned_damage": 10,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A014",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A00W",
+      "unit_rawcode": "h00U",
+      "kind": "faerie-fire",
+      "mana_maximum": 200,
+      "mana_starting": 120,
+      "mana_regen_per_second_per_10k": 15000,
+      "mana_cost": 20,
+      "cooldown_millis": 6000,
+      "range_world": 900,
+      "armor_reduction_per_100": 600,
+      "duration_millis": 30000,
+      "hero_duration_millis": 7500,
+      "provenance": {
+        "ability": "A00W",
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A02L",
       "unit_rawcode": "hrif",
       "kind": "critical-strike",

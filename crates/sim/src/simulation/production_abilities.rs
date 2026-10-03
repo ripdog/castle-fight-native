@@ -116,7 +116,12 @@ fn assert_spawned_definitions(sim: &Simulation, expected: &[AutomaticAbilityProf
 #[test]
 fn unspawned_production_definitions_survive_wire_restore_and_initialize_every_child() {
     let additional = [ability(10), ability(20)];
-    let (spawn, properties) = factory(&additional);
+    let (spawn, mut properties) = factory(&additional);
+    properties.production_unit.classifications = UnitClassifications {
+        hero: true,
+        summoned: true,
+        spell_immune: true,
+    };
     let mut first = simulation(1);
     first.spawn_building_with_properties(spawn, properties);
     for _ in 0..2 {
@@ -135,6 +140,10 @@ fn unspawned_production_definitions_survive_wire_restore_and_initialize_every_ch
                 && entity.get::<MovementProfile>().is_some()
         }) {
             newborns += 1;
+            assert_eq!(
+                entity.get::<UnitClassifications>(),
+                Some(&properties.production_unit.classifications)
+            );
             let slots = entity.get::<AdditionalAutomaticAbilities>().unwrap();
             for slot in slots.iter() {
                 // No hostile targets: each new child must start with its own unspent state.

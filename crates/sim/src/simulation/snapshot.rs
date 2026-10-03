@@ -5,7 +5,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 10;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 11;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -395,6 +395,10 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
                     passive_effects: *entity.get::<PassiveUnitEffects>()?,
                     movement_class: *entity.get::<MovementClass>()?,
                     mechanical: entity.get::<MechanicalUnit>().is_some(),
+                    classifications: entity
+                        .get::<UnitClassifications>()
+                        .copied()
+                        .unwrap_or_default(),
                     build_time_ticks: entity.get::<BuildTimeTicks>().map(|ticks| ticks.0),
                     repair_time_ticks: entity.get::<RepairTimeTicks>().map(|ticks| ticks.0),
                     movement: *entity.get::<MovementProfile>()?,
@@ -464,6 +468,9 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
                     production_spellcasting: entity
                         .get::<ProductionSpellcastingProfile>()
                         .map(|profile| profile.0),
+                    production_classifications: entity
+                        .get::<ProductionUnitClassifications>()
+                        .map_or(UnitClassifications::default(), |flags| flags.0),
                     production_additional_abilities: entity
                         .get::<ProductionAdditionalAutomaticAbilities>()
                         .map(|profiles| Box::new(profiles.0)),
@@ -537,6 +544,9 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                 }
                 if unit.mechanical {
                     entity.insert(MechanicalUnit);
+                }
+                if unit.classifications != UnitClassifications::default() {
+                    entity.insert(unit.classifications);
                 }
                 if let Some(ticks) = unit.build_time_ticks {
                     entity.insert(BuildTimeTicks(ticks));
@@ -628,6 +638,11 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                 }
                 if let Some(effects) = building.production_passive_effects {
                     entity.insert(ProductionPassiveEffects(effects));
+                }
+                if building.production_classifications != UnitClassifications::default() {
+                    entity.insert(ProductionUnitClassifications(
+                        building.production_classifications,
+                    ));
                 }
                 if let Some(spellcasting) = building.production_spellcasting {
                     entity.insert(ProductionSpellcastingProfile(spellcasting));

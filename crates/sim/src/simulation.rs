@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 13;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 14;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -30,6 +30,8 @@ mod combat;
 mod construction;
 mod economy;
 mod movement;
+#[cfg(test)]
+mod native_target_effects;
 #[cfg(test)]
 mod production_abilities;
 mod projectiles;
@@ -73,11 +75,12 @@ use crate::{
         ProductionCorpseProfile, ProductionDamageType, ProductionHealthRegeneration,
         ProductionMovementClass, ProductionPassiveEffects, ProductionProfile,
         ProductionSecondaryAttack, ProductionSpellcastingProfile, ProductionState,
-        ProductionUnitRepairMetadata, ReflectedProjectile, RepairTimeTicks, ResolvedUnitDefinition,
-        ResurrectionProfile, RetaliationState, SecondaryAttackProfile, SecondaryResurrectionState,
-        SimId, SpawnTick, SpellcastingProfile, StatusState, TargetState, Team, TimedArmorModifier,
-        TimedAttackSpeedModifier, TimedDamageOverTime, TriggeredAttackEffect,
-        UnitGameplayProperties, UnitSpawn,
+        ProductionUnitClassifications, ProductionUnitRepairMetadata, ReflectedProjectile,
+        RepairTimeTicks, ResolvedUnitDefinition, ResurrectionProfile, RetaliationState,
+        SecondaryAttackProfile, SecondaryResurrectionState, SimId, SpawnTick, SpellcastingProfile,
+        StatusState, TargetState, Team, TimedArmorModifier, TimedAttackSpeedModifier,
+        TimedDamageOverTime, TriggeredAttackEffect, UnitClassifications, UnitGameplayProperties,
+        UnitSpawn,
     },
     content::CASTLE_FIGHT_SIMULATION_HZ,
     damage::{ArmorProfile, ArmorType, DamageRules, DamageType},
@@ -398,6 +401,7 @@ pub struct UnitView {
     pub collision_radius: i32,
     pub movement_class: MovementClass,
     pub mechanical: bool,
+    pub classifications: UnitClassifications,
     pub health: i32,
     pub health_max: i32,
     pub attack: AttackProfile,
@@ -2197,6 +2201,9 @@ impl Simulation {
         if properties.mechanical {
             entity.insert(MechanicalUnit);
         }
+        if properties.classifications != UnitClassifications::default() {
+            entity.insert(properties.classifications);
+        }
         if let Some(build_time_ticks) = properties.build_time_ticks {
             entity.insert(BuildTimeTicks(build_time_ticks));
         }
@@ -2303,6 +2310,7 @@ impl Simulation {
                         reactive_slow_duration_ticks: 0,
                         reactive_movement_percent_delta: 0,
                         reactive_attack_speed_percent_delta: 0,
+                        revealed_to: None,
                     },
                 );
             }
@@ -2483,6 +2491,9 @@ impl Simulation {
                         collision_radius: collision_radius.map(|radius| radius.0),
                         movement_class: movement_class.0,
                         mechanical: repair_metadata.mechanical,
+                        classifications: entity_ref
+                            .get::<ProductionUnitClassifications>()
+                            .map_or(UnitClassifications::default(), |flags| flags.0),
                         build_time_ticks: repair_metadata.build_time_ticks,
                         repair_time_ticks: repair_metadata.repair_time_ticks,
                         attack_targets: attack_targets.0,
@@ -2631,6 +2642,7 @@ impl Simulation {
                     collision_radius: attempt.collision_radius,
                     movement_class: attempt.movement_class,
                     mechanical: attempt.mechanical,
+                    classifications: attempt.classifications,
                     build_time_ticks: attempt.build_time_ticks,
                     repair_time_ticks: attempt.repair_time_ticks,
                     attack_targets: attempt.attack_targets,
@@ -2791,6 +2803,10 @@ impl Simulation {
                         collision_radius_override: collision_radius.map(|radius| radius.0),
                         movement_class,
                         mechanical,
+                        classifications: entity_ref
+                            .get::<UnitClassifications>()
+                            .copied()
+                            .unwrap_or_default(),
                         attack_targets,
                         secondary_attack,
                         damage_type,
@@ -2908,6 +2924,7 @@ struct UnitSnapshot {
     collision_radius_override: Option<i32>,
     movement_class: MovementClass,
     mechanical: bool,
+    classifications: UnitClassifications,
     attack_targets: AttackTargetMask,
     secondary_attack: Option<SecondaryAttackProfile>,
     damage_type: DamageType,
@@ -2990,6 +3007,7 @@ struct ProductionAttempt {
     collision_radius: Option<CollisionRadius>,
     movement_class: MovementClass,
     mechanical: bool,
+    classifications: UnitClassifications,
     build_time_ticks: Option<u32>,
     repair_time_ticks: Option<u32>,
     attack_targets: AttackTargetMask,
@@ -3513,6 +3531,7 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
     assert!(spellcasting.ability.range >= 0);
     match spellcasting.ability.target_policy {
         AbilityTargetPolicy::RandomEnemyUnit
+        | AbilityTargetPolicy::NearestEnemyInCombat
         | AbilityTargetPolicy::RandomGroundEnemyUnit
         | AbilityTargetPolicy::RecentlyAttackedFriendlyUnit
         | AbilityTargetPolicy::WoundedFriendlyUnit
@@ -3543,6 +3562,18 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                 spellcasting.ability.target_policy,
                 AbilityTargetPolicy::AllEnemyUnits,
                 "area damage requires a selected enemy unit to trigger the cast"
+            );
+        }
+        AbilityEffect::FaerieFire {
+            armor_reduction_per_100,
+            duration_ticks,
+            hero_duration_ticks,
+            ..
+        } => {
+            assert!(armor_reduction_per_100 > 0 && duration_ticks > 0 && hero_duration_ticks > 0);
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::NearestEnemyInCombat
             );
         }
         AbilityEffect::FrostArmor {
@@ -3837,6 +3868,10 @@ fn unit_view_from_entity(
             .map_or(default_collision_radius, |radius| radius.0),
         movement_class: *entity.get::<MovementClass>()?,
         mechanical: entity.get::<MechanicalUnit>().is_some(),
+        classifications: entity
+            .get::<UnitClassifications>()
+            .copied()
+            .unwrap_or_default(),
         health: entity.get::<Health>()?.current,
         health_max: entity.get::<Health>()?.max,
         attack,
@@ -4147,6 +4182,36 @@ fn apply_pending_attack_effects(
     let TargetIndex::Unit(index) = target else {
         return PendingAttackEffectResult::default();
     };
+    if unit_health[index] <= 0 {
+        return PendingAttackEffectResult::default();
+    }
+    if let Some(profile) = effects.feedback
+        && !units[index].classifications.spell_immune
+        && profile.targets.can_target_unit(units[index].movement_class)
+    {
+        let drained = if let Some(mana) = units[index].mana_current.as_mut() {
+            let drained = (*mana).min(profile.maximum_mana_drained).max(0);
+            *mana -= drained;
+            drained
+        } else {
+            0
+        };
+        // Feedback is separate mana combustion, never part of critical weapon damage.
+        let damage = i64::from(drained) * i64::from(profile.damage_per_mana_per_10k) / 10_000
+            + if units[index].classifications.summoned {
+                i64::from(profile.summoned_damage)
+            } else {
+                0
+            };
+        let damage = damage_rules.apply_spell(
+            i32::try_from(damage).expect("Feedback damage overflow"),
+            units[index].armor.armor_type,
+        );
+        let damage = spell_damage_after_defend(units[index], damage, completed_tick);
+        unit_health[index] = unit_health[index]
+            .checked_sub(damage)
+            .expect("Feedback health overflow");
+    }
     if unit_health[index] <= 0 {
         return PendingAttackEffectResult::default();
     }

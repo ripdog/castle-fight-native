@@ -42,6 +42,26 @@
       "notes": "Blademaster native AIsr spell resistance; also identifies Power Armor exclusion."
     },
     {
+      "source_kind": "unit-ability", "source_key": "A0AN", "implementation": "warcraft-spell-resistance-v1",
+      "valid_from": "9.27", "valid_through": "9.27",
+      "notes": "Elder Blademaster AIsr resistance and Power Armor exclusion identity."
+    },
+    {
+      "source_kind": "unit-ability", "source_key": "A05Y", "implementation": "warcraft-critical-strike-v1",
+      "valid_from": "9.27", "valid_through": "9.27",
+      "notes": "Elder Blademaster critical strike; its roll is independent of Feedback."
+    },
+    {
+      "source_kind": "unit-ability", "source_key": "A014", "implementation": "warcraft-feedback-v1",
+      "valid_from": "9.27", "valid_through": "9.27",
+      "notes": "Native Feedback on landed directed hits; live mana combustion and summoned bonus, separate from weapon criticals."
+    },
+    {
+      "source_kind": "unit-ability", "source_key": "A00W", "implementation": "warcraft-faerie-fire-v1",
+      "valid_from": "9.27", "valid_through": "9.27",
+      "notes": "Native combat autocast, armor reduction and target vision; protected mana/cooldown overlays."
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A0CV",
       "implementation": "warcraft-marker-only-v1",

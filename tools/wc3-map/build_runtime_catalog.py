@@ -9,6 +9,7 @@ import hashlib
 import io
 import json
 import subprocess
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Callable
 
@@ -148,10 +149,13 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
         repo_root, git_tree, "resolved/object-fields.tsv"
     )
 
+    bounce_fields: dict[str, dict[str, str]] = {}
     objects: dict[str, dict[str, Any]] = {}
     with io.StringIO(object_fields_bytes.decode("utf-8"), newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
         for row in reader:
+            if row["category"] == "units" and row["field_id"] in {"utc1", "udl1", "ua1f"}:
+                bounce_fields.setdefault(row["rawcode"], {})[row["field_id"]] = row["recovered_value_json"].strip('"')
             if row["category"] != "units" or row["field_id"] not in {"urtm", "ubpx", "ubpy", "uhot", "ubui"}:
                 continue
             rawcode = row["rawcode"]
@@ -191,8 +195,23 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
                 )
             output[key] = value
 
+    bounce_weapons = []
+    unit_rows = csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree, "resolved/units.tsv").decode()), delimiter="\t")
+    for unit in unit_rows:
+        if unit["attack1_weapon_type"] != "mbounce":
+            continue
+        fields = bounce_fields[unit["rawcode"]]
+        retained_percent = (1 - Decimal(fields["udl1"])) * 100
+        if not retained_percent.is_finite() or retained_percent != retained_percent.to_integral_value() or not 1 <= retained_percent <= 100:
+            raise SystemExit("bounce damage retention must be an exact supported percentage")
+        targets = int(fields["utc1"])
+        if not 1 <= targets <= 9:
+            raise SystemExit("bounce target count exceeds native capacity")
+        bounce_weapons.append({"rawcode": unit["rawcode"], "maximum_targets": targets,
+                               "damage_percent_per_bounce": int(retained_percent), "range_world": int(fields["ua1f"])})
     return {
-        "schema_version": 1,
+        "schema_version": 2,
+        "bounce_weapons": sorted(bounce_weapons, key=lambda weapon: weapon["rawcode"]),
         "map_version": release["map_version"],
         "release_revision": release["revision"],
         "extraction_git_tree": git_tree,

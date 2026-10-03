@@ -3071,6 +3071,11 @@ fn prewarm_timed_wc3_effects(
                             armor_duration_ticks,
                             ..
                         } => Some((modifier.0, armor_duration_ticks)),
+                        AbilityEffect::FaerieFire {
+                            modifier,
+                            duration_ticks,
+                            ..
+                        } => Some((modifier.0, duration_ticks)),
                         AbilityEffect::Damage { .. }
                         | AbilityEffect::Stun { .. }
                         | AbilityEffect::AreaDamage { .. }

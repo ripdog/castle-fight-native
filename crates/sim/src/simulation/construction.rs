@@ -394,6 +394,11 @@ impl Simulation {
             if let Some(spellcasting) = properties.production_spellcasting {
                 entity.insert(ProductionSpellcastingProfile(spellcasting));
             }
+            if properties.production_unit.classifications != UnitClassifications::default() {
+                entity.insert(ProductionUnitClassifications(
+                    properties.production_unit.classifications,
+                ));
+            }
             if let Some(definitions) = properties.production_additional_abilities {
                 entity.insert(ProductionAdditionalAutomaticAbilities(definitions));
             }
@@ -446,6 +451,7 @@ impl Simulation {
         entity.remove::<ProductionPassiveEffects>();
         entity.remove::<ProductionSpellcastingProfile>();
         entity.remove::<ProductionAdditionalAutomaticAbilities>();
+        entity.remove::<ProductionUnitClassifications>();
         entity.remove::<AttackProfile>();
         entity.remove::<AttackTargetMask>();
         entity.remove::<AttackCooldown>();

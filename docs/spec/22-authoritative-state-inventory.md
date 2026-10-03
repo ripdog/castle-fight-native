@@ -74,11 +74,12 @@ The complete current unit state is:
 - `AttackProfile` including delivery parameters, `AttackTargetMask`, `DamageType`, and `ArmorProfile`;
 - `PassiveUnitEffects` and every nested ability/effect parameter;
 - `MovementClass`, `MovementProfile`, optional `CollisionRadius`, and `MechanicalUnit` marker presence;
+- intrinsic `UnitClassifications` values (hero, summoned, spell-immune), including in original resurrection definitions. Absent component storage represents the all-false logical value; only non-default flags need an ECS component;
 - optional `BuildTimeTicks` and `RepairTimeTicks` component presence and values;
 - `AttackCooldown` and `AttackSequence`;
 - `TargetState` including both lock flags;
 - `RetaliationState` including optional attacker and attacked tick;
-- complete `StatusState`: stun expiry, ability-retreat deadlines, primary secondary-resurrection ability identity/deadline/readiness, active movement/attack-speed/armor modifiers, reactive slow parameters, damage-over-time pulse state, and active counts;
+- complete `StatusState`: stun expiry, ability-retreat deadlines, primary secondary-resurrection ability identity/deadline/readiness, active movement/attack-speed/armor modifiers, reactive slow parameters, optional revealing team on timed armor effects, damage-over-time pulse state, and active counts;
 - `NavigationState`: goal kind/reference, bypass side, and clear-tick continuity. This is stored movement continuity, not a disposable route cache;
 - `SpawnTick`;
 - optional `CorpseProducer` definition and optional lifetime;
@@ -97,7 +98,7 @@ The complete current building state is:
 - optional `BuildingEconomyProfile` and optional `RepairTimeTicks`;
 - `DamageType` and `ArmorProfile`;
 - optional production definition and `ProductionState.next_spawn_tick`;
-- production content rawcode, corpse profile, collision radius, movement class, mechanical/build/repair metadata, target mask, damage type, armor, passive effects, primary spellcasting profile, and optional additional automatic-ability definitions;
+- production content rawcode, corpse profile, collision radius, movement class, mechanical/build/repair metadata, intrinsic classifications, target mask, damage type, armor, passive effects, primary spellcasting profile, and optional additional automatic-ability definitions;
 - optional attack profile plus target mask, cooldown, target-lock state, and spawn tick;
 - optional `StatusState`;
 - optional building spellcasting profile plus shared mana remainder/current value and primary automatic-ability ready/cast sequence/control flags;
@@ -122,6 +123,8 @@ A paid build order is persistent authoritative state. Restoration must neither r
 **Guaranteed-hit projectile:** `SimId`, source/team, target, damage, pending on-hit effects, damage type, launch position/tick, and impact tick.
 
 **Ballistic projectile:** `SimId`, source/team, target mask, damage, optional Burning Oil profile, damage type, captured launch/destination positions, impact radius, launch tick, and impact tick.
+
+Directed on-hit state also retains any Feedback ability identity, mana-drain limit, damage ratio, summoned bonus, and target mask. It reads the target's live resource/classification state at impact; it MUST NOT capture an already computed mana burn at launch or derive combustion from critical weapon damage.
 
 **Bounce projectile:** `SimId`, source/team, target mask/current target, damage/type, launch position/timing, speed/range, remaining bounces, bounce index, damage falloff, repeat-target rule, hit count, and hit-target history.
 

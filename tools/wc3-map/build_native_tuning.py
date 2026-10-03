@@ -68,6 +68,22 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         effect.update(chance_per_10k=number("DataA1", 100),
                       damage_multiplier_per_10k=number("DataB1", 10_000),
                       targets=unit_targets(fields["targs1"]))
+    elif kind == "feedback":
+        if number("DataA1") != number("DataC1") or number("DataB1", 10_000) != number("DataD1", 10_000):
+            raise ValueError("class-specific Feedback requires a richer native primitive")
+        effect.update(maximum_mana_drained=number("DataC1"), damage_per_mana_per_10k=number("DataD1", 10_000),
+                      summoned_damage=number("DataE1"), targets=unit_targets(fields["targs1"]))
+    elif kind == "faerie-fire":
+        if unit is None or number("DataB1") != 1:
+            raise ValueError("Faerie Fire requires a mana source and Always Autocast")
+        if unit_targets(fields["targs1"]) != "air-ground-units":
+            raise ValueError("Faerie Fire needs native coverage for this target mask")
+        effect.update(mana_maximum=scaled(unit["mana_max"]), mana_starting=scaled(unit["mana_start"]),
+                      mana_regen_per_second_per_10k=scaled(unit["mana_regen"], 10_000),
+                      mana_cost=scaled(protected.get("mana_cost", fields["cost1"])),
+                      cooldown_millis=scaled(protected.get("cooldown", fields["cool1"]), 1000),
+                      range_world=number("Rng1"), armor_reduction_per_100=number("DataA1", 100),
+                      duration_millis=number("Dur1", 1000), hero_duration_millis=number("HeroDur1", 1000))
     elif kind == "bash":
         effect.update(chance_per_10k=number("DataA1", 100),
                       bonus_damage=number("DataC1"),
@@ -120,7 +136,7 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     effect["provenance"] = {"ability": recipe["source_key"], "source": "resolved/object-fields.tsv"}
     if kind == "defend":
         effect["provenance"]["script"] = "resolved/production-unit-special-mechanics.tsv"
-    if kind == "frost-armor":
+    if kind in {"frost-armor", "faerie-fire"}:
         effect["provenance"]["unit"] = "resolved/units.tsv"
         effect["provenance"]["protected"] = "resolved/protected-ability-fields.tsv"
     return effect

@@ -3,6 +3,7 @@ use super::*;
 pub(super) fn apply_ability_effect_to_unit(
     target: &mut UnitSnapshot,
     effect: AbilityEffect,
+    source_team: Team,
     completed_tick: u64,
     damage_rules: DamageRules,
 ) -> bool {
@@ -48,6 +49,33 @@ pub(super) fn apply_ability_effect_to_unit(
                 .checked_sub(adjusted)
                 .expect("area ability damage overflowed validated bounds");
         }
+        AbilityEffect::FaerieFire {
+            modifier,
+            armor_reduction_per_100,
+            duration_ticks,
+            hero_duration_ticks,
+        } => {
+            if target.classifications.spell_immune || target.mechanical {
+                return false;
+            }
+            let duration = if target.classifications.hero {
+                hero_duration_ticks
+            } else {
+                duration_ticks
+            };
+            apply_timed_armor_modifier(
+                &mut target.status,
+                TimedArmorModifier {
+                    id: modifier,
+                    armor_bonus_per_100: -armor_reduction_per_100,
+                    expires_tick: completed_tick
+                        .checked_add(u64::from(duration))
+                        .expect("Faerie Fire expiry overflow"),
+                    revealed_to: Some(source_team),
+                    ..TimedArmorModifier::default()
+                },
+            );
+        }
         AbilityEffect::FrostArmor {
             modifier,
             armor_bonus_per_100,
@@ -71,6 +99,7 @@ pub(super) fn apply_ability_effect_to_unit(
                     reactive_slow_duration_ticks: slow_duration_ticks,
                     reactive_movement_percent_delta: movement_percent_delta,
                     reactive_attack_speed_percent_delta: attack_speed_percent_delta,
+                    revealed_to: None,
                 },
             );
         }
@@ -100,6 +129,7 @@ pub(super) fn apply_ability_effect_to_unit(
                     regeneration_per_second_per_10k,
                     mana_regeneration_per_second_per_10k: 0,
                     damage_bonus_per_10k: 0,
+                    revealed_to: None,
                     expires_tick: completed_tick + u64::from(duration_ticks),
                     reactive_slow_duration_ticks: 0,
                     reactive_movement_percent_delta: 0,
@@ -131,6 +161,7 @@ pub(super) fn apply_ability_effect_to_unit(
                     regeneration_per_second_per_10k: 0,
                     mana_regeneration_per_second_per_10k: 0,
                     damage_bonus_per_10k,
+                    revealed_to: None,
                     expires_tick: completed_tick + u64::from(duration_ticks),
                     reactive_slow_duration_ticks: 0,
                     reactive_movement_percent_delta: 0,

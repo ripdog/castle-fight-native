@@ -50,6 +50,8 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
     Archer = 0x1000_000f => b"n022",
     MasterArcher = 0x1000_0010 => b"n023",
     Blademaster = 0x1000_0011 => b"n006",
+    ElderBlademaster = 0x1000_0012 => b"n00Y",
+    Bloodthirster = 0x1000_0013 => b"h00U",
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
@@ -70,6 +72,8 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
     ArcheryRange = 0x2000_000f => b"h08X",
     ArcheryTower = 0x2000_0010 => b"h08Y",
     HallOfHonor = 0x2000_0011 => b"h00T",
+    HallOfTheEldest = 0x2000_0012 => b"h03F",
+    BloodelfWarAcademy = 0x2000_0013 => b"h00V",
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;

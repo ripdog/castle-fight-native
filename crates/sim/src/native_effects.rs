@@ -11,10 +11,10 @@ use crate::{
         AbilityConfigurationError, AbilityEffect, AbilityId, AbilityTargetPolicy,
         AdditionalAutomaticAbilityDefinitions, AttackTargetMask, BashEffectProfile,
         BurningOilEffectProfile, ChainLightningEffectProfile, CriticalStrikeEffectProfile,
-        DefendEffectProfile, EntanglingRootsEffectProfile, EvasionEffectProfile, ManaProfile,
-        ModifierId, PassiveUnitEffect, PassiveUnitEffects, SpellResistanceEffectProfile,
-        SpellcastingProfile, TriggeredAttackEffect, TriggeredSpellProcProfile,
-        compose_spellcasting_profiles,
+        DefendEffectProfile, EntanglingRootsEffectProfile, EvasionEffectProfile,
+        FeedbackEffectProfile, ManaProfile, ModifierId, PassiveUnitEffect, PassiveUnitEffects,
+        SpellResistanceEffectProfile, SpellcastingProfile, TriggeredAttackEffect,
+        TriggeredSpellProcProfile, compose_spellcasting_profiles,
     },
     content::CASTLE_FIGHT_SIMULATION_HZ,
     math::SUBUNITS_PER_WORLD_UNIT,
@@ -42,6 +42,8 @@ pub enum NativeEffectImplementationId {
     WarcraftHumanPassiveV1,
     WarcraftHumanUtilityV1,
     WarcraftSpellResistanceV1,
+    WarcraftFeedbackV1,
+    WarcraftFaerieFireV1,
 }
 
 impl NativeEffectImplementationId {
@@ -63,6 +65,8 @@ impl NativeEffectImplementationId {
             Self::WarcraftHumanPassiveV1 => 12,
             Self::WarcraftHumanUtilityV1 => 13,
             Self::WarcraftSpellResistanceV1 => 14,
+            Self::WarcraftFeedbackV1 => 15,
+            Self::WarcraftFaerieFireV1 => 16,
         }
     }
 
@@ -460,6 +464,33 @@ struct TuningFile {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum TuningEffect {
+    Feedback {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        maximum_mana_drained: i32,
+        damage_per_mana_per_10k: u16,
+        summoned_damage: i32,
+        targets: String,
+        #[allow(dead_code)]
+        provenance: serde_json::Value,
+    },
+    FaerieFire {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        mana_maximum: i32,
+        mana_starting: i32,
+        mana_regen_per_second_per_10k: u32,
+        mana_cost: i32,
+        cooldown_millis: u32,
+        range_world: i32,
+        armor_reduction_per_100: i16,
+        duration_millis: u32,
+        hero_duration_millis: u32,
+        #[allow(dead_code)]
+        provenance: serde_json::Value,
+    },
     SpellResistance {
         source_kind: String,
         source_key: String,
@@ -602,7 +633,9 @@ impl TuningEffect {
 
     fn source_kind(&self) -> &str {
         match self {
-            Self::SpellResistance { source_kind, .. }
+            Self::Feedback { source_kind, .. }
+            | Self::FaerieFire { source_kind, .. }
+            | Self::SpellResistance { source_kind, .. }
             | Self::Evasion { source_kind, .. }
             | Self::CriticalStrike { source_kind, .. }
             | Self::Defend { source_kind, .. }
@@ -617,7 +650,9 @@ impl TuningEffect {
 
     fn source_key(&self) -> &str {
         match self {
-            Self::SpellResistance { source_key, .. }
+            Self::Feedback { source_key, .. }
+            | Self::FaerieFire { source_key, .. }
+            | Self::SpellResistance { source_key, .. }
             | Self::Evasion { source_key, .. }
             | Self::CriticalStrike { source_key, .. }
             | Self::Defend { source_key, .. }
@@ -632,7 +667,9 @@ impl TuningEffect {
 
     fn unit_rawcode(&self) -> Option<&str> {
         match self {
-            Self::SpellResistance { unit_rawcode, .. }
+            Self::Feedback { unit_rawcode, .. }
+            | Self::FaerieFire { unit_rawcode, .. }
+            | Self::SpellResistance { unit_rawcode, .. }
             | Self::Evasion { unit_rawcode, .. }
             | Self::CriticalStrike { unit_rawcode, .. }
             | Self::Defend { unit_rawcode, .. }
@@ -647,6 +684,8 @@ impl TuningEffect {
     const fn expected_implementation(&self) -> NativeEffectImplementationId {
         match self {
             Self::SpellResistance { .. } => NativeEffectImplementationId::WarcraftSpellResistanceV1,
+            Self::Feedback { .. } => NativeEffectImplementationId::WarcraftFeedbackV1,
+            Self::FaerieFire { .. } => NativeEffectImplementationId::WarcraftFaerieFireV1,
             Self::Evasion { .. } => NativeEffectImplementationId::WarcraftEvasionV1,
             Self::CriticalStrike { .. } => NativeEffectImplementationId::WarcraftCriticalStrikeV1,
             Self::Defend { .. } => NativeEffectImplementationId::WarcraftDefendV1,
@@ -662,6 +701,8 @@ impl TuningEffect {
     const fn kind_name(&self) -> &'static str {
         match self {
             Self::SpellResistance { .. } => "spell-resistance",
+            Self::Feedback { .. } => "feedback",
+            Self::FaerieFire { .. } => "faerie-fire",
             Self::Evasion { .. } => "evasion",
             Self::CriticalStrike { .. } => "critical-strike",
             Self::Defend { .. } => "defend",
@@ -718,7 +759,7 @@ fn native_unit_mechanics_from_tuning(
             .filter(|effect| effect.source().ok() == Some(source))
         {
             match effect {
-                TuningEffect::FrostArmor { .. } => {
+                TuningEffect::FrostArmor { .. } | TuningEffect::FaerieFire { .. } => {
                     let candidate = build_spellcasting(effect);
                     if let Some(existing) = automatic_spell {
                         assert_eq!(
@@ -732,7 +773,8 @@ fn native_unit_mechanics_from_tuning(
                         automatic_spell = Some(candidate);
                     }
                 }
-                TuningEffect::SpellResistance { .. }
+                TuningEffect::Feedback { .. }
+                | TuningEffect::SpellResistance { .. }
                 | TuningEffect::Evasion { .. }
                 | TuningEffect::CriticalStrike { .. }
                 | TuningEffect::Defend { .. }
@@ -791,6 +833,23 @@ pub fn native_effect_implementation_for(
 
 fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUnitEffect {
     match effect {
+        TuningEffect::Feedback {
+            source_key,
+            maximum_mana_drained,
+            damage_per_mana_per_10k,
+            summoned_damage,
+            targets,
+            ..
+        } => {
+            assert!(*maximum_mana_drained >= 0 && *summoned_damage >= 0);
+            PassiveUnitEffect::Feedback(FeedbackEffectProfile {
+                ability: AbilityId(rawcode(source_key).expect("validated Feedback rawcode")),
+                maximum_mana_drained: *maximum_mana_drained,
+                damage_per_mana_per_10k: *damage_per_mana_per_10k,
+                summoned_damage: *summoned_damage,
+                targets: target_mask(targets),
+            })
+        }
         TuningEffect::SpellResistance {
             source_key,
             damage_taken_per_10k,
@@ -941,7 +1000,8 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
         }),
         TuningEffect::ChainLightning { .. }
         | TuningEffect::EntanglingRoots { .. }
-        | TuningEffect::FrostArmor { .. } => {
+        | TuningEffect::FrostArmor { .. }
+        | TuningEffect::FaerieFire { .. } => {
             panic!("effect {} is not a unit passive", effect.kind_name())
         }
     }
@@ -982,6 +1042,47 @@ fn build_triggered_effect(effect: &TuningEffect) -> TriggeredAttackEffect {
 }
 
 fn build_spellcasting(effect: &TuningEffect) -> SpellcastingProfile {
+    if let TuningEffect::FaerieFire {
+        source_key,
+        mana_maximum,
+        mana_starting,
+        mana_regen_per_second_per_10k,
+        mana_cost,
+        cooldown_millis,
+        range_world,
+        armor_reduction_per_100,
+        duration_millis,
+        hero_duration_millis,
+        ..
+    } = effect
+    {
+        let hz = u32::try_from(CASTLE_FIGHT_SIMULATION_HZ).expect("positive simulation Hz");
+        assert_eq!(*mana_regen_per_second_per_10k % hz, 0);
+        let id = rawcode(source_key).expect("validated Faerie Fire rawcode");
+        return SpellcastingProfile {
+            mana: ManaProfile {
+                maximum: *mana_maximum,
+                starting: *mana_starting,
+                regen_per_tick_per_10k: *mana_regen_per_second_per_10k / hz,
+            },
+            ability: crate::components::AutomaticAbilityProfile {
+                id: AbilityId(id),
+                mana_cost: *mana_cost,
+                cooldown_ticks: exact_millis_to_ticks(*cooldown_millis, "Faerie Fire cooldown"),
+                range: world(*range_world),
+                target_policy: AbilityTargetPolicy::NearestEnemyInCombat,
+                effect: AbilityEffect::FaerieFire {
+                    modifier: ModifierId(id),
+                    armor_reduction_per_100: *armor_reduction_per_100,
+                    duration_ticks: exact_millis_to_ticks(*duration_millis, "Faerie Fire duration"),
+                    hero_duration_ticks: exact_millis_to_ticks(
+                        *hero_duration_millis,
+                        "Faerie Fire hero duration",
+                    ),
+                },
+            },
+        };
+    }
     let TuningEffect::FrostArmor {
         source_key,
         mana_maximum,

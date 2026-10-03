@@ -1,5 +1,55 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "bounce_weapons": [
+    {
+      "rawcode": "e002",
+      "maximum_targets": 4,
+      "damage_percent_per_bounce": 70,
+      "range_world": 400
+    },
+    {
+      "rawcode": "h00U",
+      "maximum_targets": 3,
+      "damage_percent_per_bounce": 70,
+      "range_world": 450
+    },
+    {
+      "rawcode": "h05L",
+      "maximum_targets": 3,
+      "damage_percent_per_bounce": 70,
+      "range_world": 600
+    },
+    {
+      "rawcode": "n00H",
+      "maximum_targets": 3,
+      "damage_percent_per_bounce": 70,
+      "range_world": 350
+    },
+    {
+      "rawcode": "n03M",
+      "maximum_targets": 4,
+      "damage_percent_per_bounce": 85,
+      "range_world": 550
+    },
+    {
+      "rawcode": "n03U",
+      "maximum_targets": 4,
+      "damage_percent_per_bounce": 75,
+      "range_world": 350
+    },
+    {
+      "rawcode": "u003",
+      "maximum_targets": 3,
+      "damage_percent_per_bounce": 75,
+      "range_world": 450
+    },
+    {
+      "rawcode": "z000",
+      "maximum_targets": 2,
+      "damage_percent_per_bounce": 60,
+      "range_world": 400
+    }
+  ],
   "map_version": "9.27",
   "release_revision": "r1",
   "extraction_git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",

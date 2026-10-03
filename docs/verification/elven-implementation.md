@@ -26,8 +26,8 @@ identity and `docs/original_map/extracted/` for its working evidence alias:
 | Source identity | Status / remaining work |
 | --- | --- |
 | `n022`, `n023`, `n006`; `h08X`, `h08Y`, `h00T` | Native verification fixtures; not a complete race |
-| `n00Y` / `h03F` | Feedback and complete passive inventory |
-| `h00U` / `h00V` | Native Faerie Fire autocast |
+| `n00Y` / `h03F` | r12 fixture: complete passive inventory, independent Feedback/critical handling; native damage-class probe remains |
+| `h00U` / `h00V` | r12 fixture: source-derived bounce weapon and native Faerie Fire; native AI/bounce-order probes and visibility/dispel integration remain |
 | `n01Y` / `h06Y` | Scripted Solar Strike and proxy effect |
 | `e005` / `h070` | Native line weapon; do not substitute ballistic splash |
 | `h07B` / `h09X` | Healing Wave, orb child effect and scripted recovery |
@@ -36,6 +36,9 @@ identity and `docs/original_map/extracted/` for its working evidence alias:
 | `h005` | Persistent cleanse carrier and removal lifecycle |
 | `h014` | Native multishot semantics; reconcile object/script/tooltip discrepancy |
 | `h059` | Delayed one-time revival, classifications and death-generation checks |
+
+See [melee/autocast fixture audit](elven-melee-autocast.md) for source traces,
+reusable verification and explicit remaining gates on these two fixtures.
 
 Before lobby exposure, finish reachable behavior coverage, consume authored build
 roots in race-aware match setup, and verify presentation bindings/attachments.

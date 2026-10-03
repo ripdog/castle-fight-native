@@ -320,6 +320,7 @@ impl Simulation {
                             if apply_ability_effect_to_unit(
                                 target,
                                 intent.ability.effect,
+                                source.team,
                                 self.next_tick,
                                 self.combat_rules.damage_rules,
                             ) {
@@ -352,6 +353,7 @@ impl Simulation {
                             if apply_ability_effect_to_unit(
                                 target,
                                 intent.ability.effect,
+                                source.team,
                                 self.next_tick,
                                 self.combat_rules.damage_rules,
                             ) {
@@ -361,6 +363,7 @@ impl Simulation {
                     } else if apply_ability_effect_to_unit(
                         &mut units[index],
                         intent.ability.effect,
+                        source.team,
                         self.next_tick,
                         self.combat_rules.damage_rules,
                     ) {
@@ -375,6 +378,7 @@ impl Simulation {
                         if apply_ability_effect_to_unit(
                             target,
                             intent.ability.effect,
+                            source.team,
                             self.next_tick,
                             self.combat_rules.damage_rules,
                         ) {
@@ -729,6 +733,12 @@ impl Simulation {
                     id: units[index].id,
                 })
             }
+            AbilityTargetPolicy::NearestEnemyInCombat => self
+                .nearest_enemy_in_combat(source, spellcasting.ability, units, &mut candidate_checks)
+                .map(|index| AbilityIntentTarget::Unit {
+                    index,
+                    id: units[index].id,
+                }),
             AbilityTargetPolicy::RandomEnemyUnitGlobal => self
                 .random_enemy_ability_target_global(
                     source,
@@ -919,6 +929,71 @@ impl Simulation {
         best.map(|(_, _, unit_index)| unit_index)
     }
 
+    fn enemy_is_in_combat(&self, candidate: &UnitSnapshot, units: &[UnitSnapshot]) -> bool {
+        candidate
+            .target
+            .and_then(|id| find_unit_index(units, id))
+            .is_some_and(|index| {
+                let victim = &units[index];
+                victim.health > 0
+                    && victim.team != candidate.team
+                    && candidate
+                        .attack_for_unit(victim.movement_class)
+                        .is_some_and(|(attack, _, _)| {
+                            candidate.position.distance_sq(victim.position)
+                                <= square_i32(attack.range)
+                        })
+            })
+            || candidate.retaliation.attacked_tick == self.next_tick.checked_sub(1)
+                && candidate.retaliation.attacker.is_some()
+    }
+
+    fn faerie_fire_target_is_valid(
+        &self,
+        source: AbilitySourceSnapshot,
+        ability: AutomaticAbilityProfile,
+        target: &UnitSnapshot,
+        units: &[UnitSnapshot],
+    ) -> bool {
+        let AbilityEffect::FaerieFire { modifier, .. } = ability.effect else {
+            return false;
+        };
+        target.health > 0
+            && target.team != source.team
+            && target.attack.damage > 0
+            && !target.mechanical
+            && !target.classifications.spell_immune
+            && self.ability_source_distance_sq(source.origin, target.position)
+                <= square_i32(ability.range)
+            && self.enemy_is_in_combat(target, units)
+            && !target.status.armor_modifiers[..usize::from(target.status.armor_modifier_count)]
+                .iter()
+                .any(|active| active.id == modifier && self.next_tick < active.expires_tick)
+    }
+
+    fn nearest_enemy_in_combat(
+        &self,
+        source: AbilitySourceSnapshot,
+        ability: AutomaticAbilityProfile,
+        units: &[UnitSnapshot],
+        candidate_checks: &mut usize,
+    ) -> Option<usize> {
+        units
+            .iter()
+            .enumerate()
+            .filter_map(|(index, candidate)| {
+                *candidate_checks += 1;
+                self.faerie_fire_target_is_valid(source, ability, candidate, units)
+                    .then_some((
+                        self.ability_source_distance_sq(source.origin, candidate.position),
+                        candidate.id,
+                        index,
+                    ))
+            })
+            .min()
+            .map(|(_, _, index)| index)
+    }
+
     fn recently_attacked_friendly_ability_target(
         &self,
         source: AbilitySourceSnapshot,
@@ -1049,6 +1124,9 @@ impl Simulation {
                                 && target.movement_class == MovementClass::Ground
                                 && self.ability_source_distance_sq(source.origin, target.position)
                                     <= square_i32(ability.range)
+                        }
+                        AbilityTargetPolicy::NearestEnemyInCombat => {
+                            self.faerie_fire_target_is_valid(source, ability, target, units)
                         }
                         AbilityTargetPolicy::RandomEnemyUnitGlobal => target.team != source.team,
                         AbilityTargetPolicy::AllEnemyUnits => false,

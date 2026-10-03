@@ -246,6 +246,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                     MovementClass::Air => 1,
                 });
                 hash.write_u8(u8::from(unit.mechanical));
+                hash_unit_classifications(&mut hash, unit.classifications);
                 hash_optional_u32(&mut hash, unit.build_time_ticks);
                 hash_optional_u32(&mut hash, unit.repair_time_ticks);
                 hash.write_i32(unit.attack.damage);
@@ -467,6 +468,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         &mut hash,
                         building.production_additional_abilities.as_deref().copied(),
                     );
+                    hash_unit_classifications(&mut hash, building.production_classifications);
                     if let Some(spellcasting) = building.production_spellcasting {
                         hash.write_u8(1);
                         hash_spellcasting_profile(&mut hash, spellcasting);
@@ -801,6 +803,7 @@ pub(super) struct CanonicalUnit {
     pub(super) passive_effects: PassiveUnitEffects,
     pub(super) movement_class: MovementClass,
     pub(super) mechanical: bool,
+    pub(super) classifications: UnitClassifications,
     pub(super) build_time_ticks: Option<u32>,
     pub(super) repair_time_ticks: Option<u32>,
     pub(super) movement: MovementProfile,
@@ -841,6 +844,7 @@ impl CanonicalUnit {
                 collision_radius: self.collision_radius,
                 movement_class: self.movement_class,
                 mechanical: self.mechanical,
+                classifications: self.classifications,
                 build_time_ticks: self.build_time_ticks,
                 repair_time_ticks: self.repair_time_ticks,
                 attack_targets: self.attack_targets,
@@ -914,6 +918,7 @@ pub(super) struct CanonicalBuilding {
     pub(super) production_spellcasting: Option<SpellcastingProfile>,
     // Cold optional definitions must not inflate every canonical entity record.
     pub(super) production_additional_abilities: Option<Box<AdditionalAutomaticAbilityDefinitions>>,
+    pub(super) production_classifications: UnitClassifications,
     pub(super) attack: Option<AttackProfile>,
     pub(super) attack_targets: Option<AttackTargetMask>,
     pub(super) damage_type: DamageType,
@@ -1099,6 +1104,7 @@ fn hash_resolved_unit_definition(hash: &mut Fnv64, definition: Option<ResolvedUn
         MovementClass::Air => 1,
     });
     hash.write_u8(u8::from(properties.mechanical));
+    hash_unit_classifications(hash, properties.classifications);
     hash_optional_u32(hash, properties.build_time_ticks);
     hash_optional_u32(hash, properties.repair_time_ticks);
     hash.write_u8(properties.attack_targets.bits());
@@ -1192,6 +1198,7 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         hash.write_u16(modifier.reactive_slow_duration_ticks);
         hash.write_i32(i32::from(modifier.reactive_movement_percent_delta));
         hash.write_i32(i32::from(modifier.reactive_attack_speed_percent_delta));
+        hash.write_u8(modifier.revealed_to.map_or(u8::MAX, |team| team.0));
     }
     hash.write_u8(status.damage_over_time_count);
     let count = usize::from(status.damage_over_time_count);
@@ -1252,6 +1259,7 @@ fn hash_building_definition(
             MovementClass::Air => 1,
         });
         hash.write_u8(u8::from(unit.mechanical));
+        hash_unit_classifications(hash, unit.classifications);
         hash_optional_u32(hash, unit.build_time_ticks);
         hash_optional_u32(hash, unit.repair_time_ticks);
         hash.write_u8(unit.attack_targets.bits());
@@ -1373,6 +1381,10 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                 hash.write_u64(u64::from(profile.mana_regeneration_per_second_per_10k));
                 hash.write_u8(u8::from(profile.suspend_during_spell_cooldown));
             }
+            PassiveUnitEffect::Feedback(profile) => {
+                hash.write_u8(10);
+                hash_feedback_profile(hash, profile);
+            }
             PassiveUnitEffect::SpellResistance(profile) => {
                 hash.write_u8(9);
                 hash.write_u64(u64::from(profile.ability.0));
@@ -1425,8 +1437,28 @@ fn hash_splash_falloff_profile(hash: &mut Fnv64, profile: crate::components::Spl
     hash.write_u8(profile.targets.bits());
 }
 
+fn hash_unit_classifications(hash: &mut Fnv64, flags: UnitClassifications) {
+    hash.write_u8(u8::from(flags.hero));
+    hash.write_u8(u8::from(flags.summoned));
+    hash.write_u8(u8::from(flags.spell_immune));
+}
+
+fn hash_feedback_profile(hash: &mut Fnv64, profile: crate::components::FeedbackEffectProfile) {
+    hash.write_u32(profile.ability.0);
+    hash.write_i32(profile.maximum_mana_drained);
+    hash.write_u16(profile.damage_per_mana_per_10k);
+    hash.write_i32(profile.summoned_damage);
+    hash.write_u8(profile.targets.bits());
+}
+
 fn hash_pending_attack_effects(hash: &mut Fnv64, effects: PendingAttackEffects) {
     hash.write_u16(effects.stun_duration_ticks);
+    if let Some(profile) = effects.feedback {
+        hash.write_u8(1);
+        hash_feedback_profile(hash, profile);
+    } else {
+        hash.write_u8(0);
+    }
     match effects.triggered_spell {
         Some(effect) => {
             hash.write_u8(1);
@@ -1458,6 +1490,17 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
     hash.write_u8(ability.target_policy.stable_tag());
     hash.write_u8(ability.effect.stable_tag());
     match ability.effect {
+        AbilityEffect::FaerieFire {
+            modifier,
+            armor_reduction_per_100,
+            duration_ticks,
+            hero_duration_ticks,
+        } => {
+            hash.write_u32(modifier.0);
+            hash.write_i32(i32::from(armor_reduction_per_100));
+            hash.write_u16(duration_ticks);
+            hash.write_u16(hero_duration_ticks);
+        }
         AbilityEffect::Damage { amount } => hash.write_i32(amount),
         AbilityEffect::Stun { duration_ticks } => hash.write_u16(duration_ticks),
         AbilityEffect::ModifyMovementSpeedPercent {

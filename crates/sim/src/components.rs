@@ -120,6 +120,7 @@ pub(crate) struct PendingAttackEffects {
     pub triggered_spell: Option<TriggeredAttackEffect>,
     pub burning_oil: Option<BurningOilEffectProfile>,
     pub splash_falloff: Option<SplashFalloffProfile>,
+    pub feedback: Option<FeedbackEffectProfile>,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -406,6 +407,26 @@ pub struct SpellResistanceEffectProfile {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FeedbackEffectProfile {
+    pub ability: AbilityId,
+    pub maximum_mana_drained: i32,
+    pub damage_per_mana_per_10k: u16,
+    pub summoned_damage: i32,
+    pub targets: AttackTargetMask,
+}
+
+/// Intrinsic target classifications, independent of armor type or presentation.
+#[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UnitClassifications {
+    pub hero: bool,
+    pub summoned: bool,
+    pub spell_immune: bool,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProductionUnitClassifications(pub UnitClassifications);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PassiveUnitEffect {
     Bash(BashEffectProfile),
     CriticalStrike(CriticalStrikeEffectProfile),
@@ -417,6 +438,7 @@ pub enum PassiveUnitEffect {
     Cleave(CleaveEffectProfile),
     Aura(AuraEffectProfile),
     SpellResistance(SpellResistanceEffectProfile),
+    Feedback(FeedbackEffectProfile),
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -480,6 +502,7 @@ pub struct UnitGameplayProperties {
     pub collision_radius: Option<CollisionRadius>,
     pub movement_class: MovementClass,
     pub mechanical: bool,
+    pub classifications: UnitClassifications,
     pub build_time_ticks: Option<u32>,
     pub repair_time_ticks: Option<u32>,
     pub attack_targets: AttackTargetMask,
@@ -807,6 +830,7 @@ pub enum AbilityTargetPolicy {
     AllFriendlyUnits,
     RandomCorpse,
     RandomEnemyBasePoint,
+    NearestEnemyInCombat,
 }
 
 impl AbilityTargetPolicy {
@@ -822,6 +846,7 @@ impl AbilityTargetPolicy {
             Self::AllFriendlyUnits => 6,
             Self::RandomCorpse => 7,
             Self::RandomEnemyBasePoint => 8,
+            Self::NearestEnemyInCombat => 9,
         }
     }
 }
@@ -894,6 +919,12 @@ pub enum AbilityEffect {
         reveal_radius: i32,
         reveal_duration_ticks: u16,
     },
+    FaerieFire {
+        modifier: ModifierId,
+        armor_reduction_per_100: i16,
+        duration_ticks: u16,
+        hero_duration_ticks: u16,
+    },
     ArtilleryBombardment {
         min_damage: i32,
         max_damage: i32,
@@ -917,6 +948,7 @@ impl AbilityEffect {
             Self::HolyFervour { .. } => 7,
             Self::Purification { .. } => 8,
             Self::ArtilleryBombardment { .. } => 9,
+            Self::FaerieFire { .. } => 10,
         }
     }
 }
@@ -984,6 +1016,7 @@ pub struct TimedArmorModifier {
     pub reactive_slow_duration_ticks: u16,
     pub reactive_movement_percent_delta: i16,
     pub reactive_attack_speed_percent_delta: i16,
+    pub revealed_to: Option<Team>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -1043,6 +1076,13 @@ pub struct StatusState {
 }
 
 impl StatusState {
+    #[must_use]
+    pub fn is_revealed_to(&self, team: Team, tick: u64) -> bool {
+        self.armor_modifiers[..usize::from(self.armor_modifier_count)]
+            .iter()
+            .any(|modifier| modifier.revealed_to == Some(team) && tick < modifier.expires_tick)
+    }
+
     #[must_use]
     pub const fn is_stunned(self, tick: u64) -> bool {
         tick < self.stunned_until_tick
