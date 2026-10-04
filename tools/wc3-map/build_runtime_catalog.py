@@ -52,6 +52,25 @@ def _integer_recovered_value(value: str, *, rawcode: str, field_id: str) -> int:
         ) from error
 
 
+def _line_world_integer(value: str) -> int:
+    # The current world-unit importer is integral; reject lossy projections.
+    number = Decimal(value)
+    if not number.is_finite() or number != number.to_integral_value() or number < 0:
+        raise SystemExit(f"line distance must be a nonnegative integral world value: {value!r}")
+    return int(number)
+
+
+def _line_damage_retention(value: str) -> int:
+    retention = (1 - Decimal(value)) * 10_000
+    if (
+        not retention.is_finite()
+        or retention != retention.to_integral_value()
+        or not 0 <= retention <= 10_000
+    ):
+        raise SystemExit("line damage retention must be exact in native fixed point")
+    return int(retention)
+
+
 def _hotkey_recovered_value(value: str, *, rawcode: str) -> str | None:
     normalized = value.strip('"')
     if normalized in {"", "null"}:
@@ -150,10 +169,17 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
     )
 
     bounce_fields: dict[str, dict[str, str]] = {}
+    line_fields: dict[str, dict[str, str]] = {}
     objects: dict[str, dict[str, Any]] = {}
     with io.StringIO(object_fields_bytes.decode("utf-8"), newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
         for row in reader:
+            if row["category"] == "units" and row["field_id"] in {
+                "usd1", "usr1", "udl1", "uamn", "ua1p"
+            }:
+                line_fields.setdefault(row["rawcode"], {})[row["field_id"]] = (
+                    row["recovered_value_json"].strip('"')
+                )
             if row["category"] == "units" and row["field_id"] in {"utc1", "udl1", "ua1f"}:
                 bounce_fields.setdefault(row["rawcode"], {})[row["field_id"]] = row["recovered_value_json"].strip('"')
             if row["category"] != "units" or row["field_id"] not in {"urtm", "ubpx", "ubpy", "uhot", "ubui"}:
@@ -196,8 +222,22 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
             output[key] = value
 
     bounce_weapons = []
+    line_weapons = []
     unit_rows = csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree, "resolved/units.tsv").decode()), delimiter="\t")
     for unit in unit_rows:
+        if unit["attack1_weapon_type"] in {"mline", "aline"}:
+            fields = line_fields[unit["rawcode"]]
+            line_weapons.append({
+                "rawcode": unit["rawcode"],
+                "spill_distance_world": _line_world_integer(fields["usd1"]),
+                "spill_radius_world": _line_world_integer(fields["usr1"]),
+                "minimum_range_world": (
+                    _line_world_integer(fields["uamn"])
+                    if fields["uamn"] not in {"-", "_", ""} else 0
+                ),
+                "damage_retention_per_10k": _line_damage_retention(fields["udl1"]),
+                "splash_targets": fields["ua1p"],
+            })
         if unit["attack1_weapon_type"] != "mbounce":
             continue
         fields = bounce_fields[unit["rawcode"]]
@@ -212,6 +252,7 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
     return {
         "schema_version": 2,
         "bounce_weapons": sorted(bounce_weapons, key=lambda weapon: weapon["rawcode"]),
+        "line_weapons": sorted(line_weapons, key=lambda weapon: weapon["rawcode"]),
         "map_version": release["map_version"],
         "release_revision": release["revision"],
         "extraction_git_tree": git_tree,

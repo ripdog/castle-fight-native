@@ -195,7 +195,7 @@ Radius-aware movement MUST also handle the difference between a legal navigation
 
 When a unit has an individually selected target that is not yet in attack position, movement instead pursues the nearest reachable part of that target's **attack envelope**: the region of authoritative positions from which the unit's current attack is legal.
 
-The current executable attacks have no authored minimum range, so their envelope contains every collision-legal position whose distance to the target geometry is `<= max_range`. A unit already anywhere inside that envelope stops pursuing and may attack from its current position; it MUST NOT back away merely to sit at maximum range. If later content authors a positive minimum range, the same model becomes a band/annulus whose inner region is excluded.
+The attack envelope contains every collision-legal position whose distance to the target geometry is `<= max_range`, excluding an authored minimum-range inner region when the typed delivery has one. A unit already anywhere inside that legal band stops pursuing and may attack from its current position; it MUST NOT back away merely to sit at maximum range. Line delivery carries the minimum range without imposing unrelated constructor fields on other delivery primitives.
 
 For a unit target, the current target geometry is its authoritative point position plus the ordinary combat-unit collision exclusion. For a building target, distance is measured to the authoritative building footprint rather than its center. An approaching unit initially aims at the nearest point on the maximum-range boundary, but that point is not a reserved slot or formation assignment: local congestion may bend the unit around the envelope or carry it to any closer legal attack position.
 

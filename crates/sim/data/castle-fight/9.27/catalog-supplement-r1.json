@@ -50,6 +50,48 @@
       "range_world": 400
     }
   ],
+  "line_weapons": [
+    {
+      "rawcode": "e005",
+      "spill_distance_world": 200,
+      "spill_radius_world": 100,
+      "minimum_range_world": 250,
+      "damage_retention_per_10k": 10000,
+      "splash_targets": "debris,enemies,ground,structure,wall"
+    },
+    {
+      "rawcode": "h07E",
+      "spill_distance_world": 250,
+      "spill_radius_world": 120,
+      "minimum_range_world": 0,
+      "damage_retention_per_10k": 10000,
+      "splash_targets": "debris,enemies,ground,structure,wall"
+    },
+    {
+      "rawcode": "z001",
+      "spill_distance_world": 150,
+      "spill_radius_world": 90,
+      "minimum_range_world": 0,
+      "damage_retention_per_10k": 10000,
+      "splash_targets": "debris,enemies,ground,structure,tree,wall"
+    },
+    {
+      "rawcode": "z002",
+      "spill_distance_world": 150,
+      "spill_radius_world": 90,
+      "minimum_range_world": 0,
+      "damage_retention_per_10k": 10000,
+      "splash_targets": "debris,enemies,ground,structure,tree,wall"
+    },
+    {
+      "rawcode": "z003",
+      "spill_distance_world": 150,
+      "spill_radius_world": 90,
+      "minimum_range_world": 0,
+      "damage_retention_per_10k": 10000,
+      "splash_targets": "debris,enemies,ground,structure,tree,wall"
+    }
+  ],
   "map_version": "9.27",
   "release_revision": "r1",
   "extraction_git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",

@@ -120,6 +120,7 @@ impl SimulationSnapshot {
                 | CanonicalEntity::Projectile(_)
                 | CanonicalEntity::ReflectedProjectile(_)
                 | CanonicalEntity::BallisticProjectile(_)
+                | CanonicalEntity::LineProjectile(_)
                 | CanonicalEntity::BounceProjectile(_)
                 | CanonicalEntity::BurningOil(_)
                 | CanonicalEntity::ChainLightning(_) => {}
@@ -352,6 +353,12 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
                         projectile: *projectile,
                     },
                 ));
+            }
+            if let Some(projectile) = entity.get::<LineProjectile>() {
+                return Some(CanonicalEntity::LineProjectile(CanonicalLineProjectile {
+                    id,
+                    projectile: projectile.clone(),
+                }));
             }
             if let Some(projectile) = entity.get::<BallisticProjectile>() {
                 return Some(CanonicalEntity::BallisticProjectile(
@@ -729,6 +736,9 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
             }
             CanonicalEntity::ReflectedProjectile(projectile) => {
                 world.spawn((projectile.id, projectile.projectile));
+            }
+            CanonicalEntity::LineProjectile(projectile) => {
+                world.spawn((projectile.id, projectile.projectile.clone()));
             }
             CanonicalEntity::BallisticProjectile(projectile) => {
                 world.spawn((projectile.id, projectile.projectile));

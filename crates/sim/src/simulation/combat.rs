@@ -17,6 +17,7 @@ pub(super) struct AttackResolutionContext<'a> {
 pub(super) struct AttackResolution {
     pub(super) attacks_resolved: usize,
     pub(super) projectile_launches: Vec<ProjectileLaunch>,
+    pub(super) line_projectile_launches: Vec<LineProjectile>,
     pub(super) ballistic_projectile_launches: Vec<BallisticProjectileLaunch>,
     pub(super) bounce_projectile_launches: Vec<BounceProjectileLaunch>,
     pub(super) chain_lightning_launches: Vec<ChainLightningState>,
@@ -40,6 +41,7 @@ impl Simulation {
             next_defense_alerts,
             completed_tick,
         } = context;
+        let mut line_projectile_launches = Vec::new();
         let mut intents = self.attack_intents(units, buildings);
         intents.sort_unstable_by_key(|intent| (intent.source_id, intent.target_id));
 
@@ -239,6 +241,55 @@ impl Simulation {
                             impact_tick,
                         });
                     }
+                    AttackDelivery::Line {
+                        speed_per_tick,
+                        spill_distance,
+                        ..
+                    } => {
+                        assert_eq!(
+                            on_hit,
+                            PendingAttackEffects::default(),
+                            "line on-hit passives unsupported"
+                        );
+                        let primary_impact_tick = completed_tick
+                            .checked_add(projectile_travel_ticks(
+                                intent.source_position.distance_sq(target_position),
+                                speed_per_tick,
+                            ))
+                            .expect("line primary impact tick overflow");
+                        let spill_ticks = if spill_distance == 0 {
+                            0
+                        } else {
+                            projectile_travel_ticks(square_i32(spill_distance), speed_per_tick)
+                        };
+                        let impact_tick = primary_impact_tick
+                            .checked_add(spill_ticks)
+                            .expect("line final impact tick overflow");
+                        let source_entity = match intent.source {
+                            AttackSourceIndex::Unit(index) => units[index].entity,
+                            AttackSourceIndex::Building(index) => buildings[index].entity,
+                        };
+                        let source_rawcode = self
+                            .world
+                            .get::<ContentIdentity>(source_entity)
+                            .map(|content| content.rawcode);
+                        line_projectile_launches.push(LineProjectile {
+                            source: intent.source_id,
+                            source_rawcode,
+                            source_team: intent.source_team,
+                            target: intent.target_id,
+                            damage,
+                            damage_type: intent.damage_type,
+                            delivery: intent.attack.delivery,
+                            launch_position: intent.source_position,
+                            launch_tick: completed_tick,
+                            primary_impact_tick,
+                            impact_tick,
+                            spill_origin: None,
+                            destination: target_position,
+                            hit_targets: Vec::new(),
+                        });
+                    }
                     AttackDelivery::Bounce {
                         speed_per_tick,
                         bounce_range,
@@ -307,6 +358,7 @@ impl Simulation {
 
         AttackResolution {
             attacks_resolved,
+            line_projectile_launches,
             projectile_launches,
             ballistic_projectile_launches,
             bounce_projectile_launches,
@@ -559,7 +611,7 @@ impl Simulation {
                                 damage_type,
                             )
                         };
-                    if distance_sq > attack.range_sq() {
+                    if !attack.in_range(distance_sq) {
                         return None;
                     }
                     let mut attack = attack;
@@ -637,7 +689,7 @@ impl Simulation {
                                 ),
                             )
                         };
-                    if distance_sq > attack.range_sq() {
+                    if !attack.in_range(distance_sq) {
                         return None;
                     }
                     Some(AttackIntent {
@@ -696,11 +748,10 @@ impl Simulation {
                         source.footprint,
                         self.config.navigation_cell_size,
                     );
-                    (distance_sq <= intent.attack.range_sq()).then_some((
-                        distance_sq,
-                        target.id,
-                        index,
-                    ))
+                    intent
+                        .attack
+                        .in_range(distance_sq)
+                        .then_some((distance_sq, target.id, index))
                 })
                 .collect::<Vec<_>>();
             candidates.sort_unstable_by_key(|(distance, id, _)| (*distance, *id));

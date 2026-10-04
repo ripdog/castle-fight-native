@@ -253,6 +253,16 @@ Guaranteed-hit and bounce projectiles that become due in the same pre-movement s
 
 The exact Castle Fight-compatible bounce range, repeat policy, scaling, building eligibility, maximum chain length, and random-selection distribution remain compatibility-tunable. Any replacement MUST remain explicitly bounded, keyed-deterministic, and independent of candidate enumeration/worker order.
 
+### 9.4a Targeted missile line
+
+`Line` is a distinct delivery (stable tag 5), not ballistic radial splash. It retains positive projectile speed, an inclusive minimum range, spill distance, spill half-width, per-collision damage retention, and an independent spill target mask. Ordinary target acquisition/retention and final attack intents exclude the inner minimum-range region. A target already inside the legal attack band does not cause retreat merely to reach maximum range.
+
+The primary missile retains its selected target. Its integer travel time uses the launch-to-target-center distance (including building centers), rounded upward as for other projectiles. Source death does not cancel it; a missing/dead primary target invalidates the delivery rather than generating a spill at a stale point. The primary resolves against post-movement state after ballistic impacts. On arrival, its current target position fixes the spill origin and the direction from launch position through that origin.
+
+The spill sweeps a directed rectangular strip **behind** that origin at the authored projectile speed. Unit centers and building footprints intersect the per-tick swept strip; victims ahead of the current projectile head, behind its previous head, outside the half-width, or beyond the spill distance are not hit. The primary and previous victims cannot be hit again. Primary attack eligibility and secondary spill eligibility remain separate. Damage is multiplied by the retained per-10,000 factor after each collision, flooring to integer damage. Each tick resolves line projectiles by projectile `SimId`, then collisions by longitudinal entry distance and victim `SimId`. Zero damage ends the projectile.
+
+Selected target, source/team and source-art rawcode, delivery metadata, launch/primary/final ticks, fixed spill origin/destination, current retained damage and collision history are authoritative snapshot/checksum state. Presentation homes to the primary target until arrival, then travels along the fixed spill segment. Imported missile art/arc applies to the primary; spill continuation is straight and must not reuse the ballistic fallback arc.
+
 ### 9.5 Defend interception and reflection
 
 Castle Fight 9.27 Defender (`h03A`) keeps Warcraft Defend (`A03G`) active through map-script state maintenance. The extracted script issues the initial `defend` order after 0.7 seconds, reissues it 5.5 seconds after an `undefend` event, and resumes the unit's attack order after the Defend order. In the native combat slice there is no player command that can put a Defender into the transient undefended state, so the authoritative passive becomes active exactly 21 simulation ticks after spawn and remains active thereafter.

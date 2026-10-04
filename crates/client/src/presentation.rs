@@ -534,6 +534,7 @@ impl PresentationAssets {
             ProjectileViewKind::GuaranteedHit { .. } | ProjectileViewKind::Reflected { .. } => {
                 self.guaranteed_projectile_mesh.clone()
             }
+            ProjectileViewKind::Line { .. } => self.guaranteed_projectile_mesh.clone(),
             ProjectileViewKind::Ballistic { .. } => self.ballistic_projectile_mesh.clone(),
             ProjectileViewKind::Bounce { .. } => self.bounce_projectile_mesh.clone(),
         }
@@ -542,6 +543,7 @@ impl PresentationAssets {
     fn projectile_material(&self, projectile: &ProjectileView) -> Handle<StandardMaterial> {
         let index = match projectile.kind {
             ProjectileViewKind::GuaranteedHit { .. } | ProjectileViewKind::Reflected { .. } => 0,
+            ProjectileViewKind::Line { .. } => 0,
             ProjectileViewKind::Ballistic { .. } => 1,
             ProjectileViewKind::Bounce {
                 bounce_index: 0, ..
@@ -3025,6 +3027,15 @@ fn prewarm_timed_wc3_effects(
                                 / speed_per_tick.max(1) as f32
                                 / CASTLE_FIGHT_SIMULATION_HZ as f32
                         }
+                        AttackDelivery::Line {
+                            speed_per_tick,
+                            spill_distance,
+                            ..
+                        } => {
+                            (definition.attack.range.max(0) as f32 + spill_distance.max(0) as f32)
+                                / speed_per_tick.max(1) as f32
+                                / CASTLE_FIGHT_SIMULATION_HZ as f32
+                        }
                         AttackDelivery::Bounce {
                             speed_per_tick,
                             bounce_range,
@@ -4408,13 +4419,12 @@ fn projectile_pose(
     alpha: f32,
     render_tick: f32,
 ) -> (Vec3, Quat) {
-    let start = sim_point_to_terrain_world(projectile.launch_position, terrain);
+    let (origin, launch_tick, impact_tick, missile_arc) =
+        projectile_segment(projectile, missile_arc);
+    let start = sim_point_to_terrain_world(origin, terrain);
     let target = projectile_target(projectile, samples, metrics, terrain, alpha, start);
-    let travel_ticks = projectile
-        .impact_tick
-        .saturating_sub(projectile.launch_tick)
-        .max(1) as f32;
-    let progress = ((render_tick - projectile.launch_tick as f32) / travel_ticks).clamp(0.0, 1.0);
+    let travel_ticks = impact_tick.saturating_sub(launch_tick).max(1) as f32;
+    let progress = ((render_tick - launch_tick as f32) / travel_ticks).clamp(0.0, 1.0);
     let position =
         projectile_position_at_progress(projectile, start, target, progress, missile_arc);
     let tangent_progress = if progress < 0.98 {
@@ -4426,6 +4436,41 @@ fn projectile_pose(
         projectile_position_at_progress(projectile, start, target, tangent_progress, missile_arc);
     let rotation = projectile_rotation(position, tangent_position, progress < 0.98);
     (position, rotation)
+}
+
+/// Line flight changes segment clocks at primary impact, without stretching primary flight
+/// over the entire lifetime or applying the primary arc to straight spill continuation.
+fn projectile_segment(
+    projectile: &ProjectileView,
+    missile_arc: Option<f32>,
+) -> (SimPoint, u64, u64, Option<f32>) {
+    match projectile.kind {
+        ProjectileViewKind::Line {
+            spill_origin: Some(origin),
+            primary_impact_tick,
+            ..
+        } => (
+            origin,
+            primary_impact_tick,
+            projectile.impact_tick,
+            Some(0.0),
+        ),
+        ProjectileViewKind::Line {
+            primary_impact_tick,
+            ..
+        } => (
+            projectile.launch_position,
+            projectile.launch_tick,
+            primary_impact_tick,
+            missile_arc,
+        ),
+        _ => (
+            projectile.launch_position,
+            projectile.launch_tick,
+            projectile.impact_tick,
+            missile_arc,
+        ),
+    }
 }
 
 fn projectile_rotation(position: Vec3, tangent_position: Vec3, samples_forward: bool) -> Quat {
@@ -4455,7 +4500,14 @@ fn projectile_target(
         | ProjectileViewKind::Bounce { target, .. } => {
             entity_render_position(target, samples, metrics, terrain, alpha).unwrap_or(fallback)
         }
-        ProjectileViewKind::Ballistic { destination, .. } => {
+        ProjectileViewKind::Line {
+            primary_target,
+            spill_origin: None,
+            ..
+        } => entity_render_position(primary_target, samples, metrics, terrain, alpha)
+            .unwrap_or(fallback),
+        ProjectileViewKind::Line { destination, .. }
+        | ProjectileViewKind::Ballistic { destination, .. } => {
             sim_point_to_terrain_world(destination, terrain)
         }
     }
@@ -4661,6 +4713,13 @@ fn projectile_source_rawcode(
     projectile: &ProjectileView,
     samples: &PresentationSamples,
 ) -> Option<u32> {
+    if let ProjectileViewKind::Line {
+        source_rawcode: Some(rawcode),
+        ..
+    } = projectile.kind
+    {
+        return Some(rawcode);
+    }
     samples
         .current
         .units
@@ -6194,6 +6253,7 @@ fn projectile_effect_color(kind: ProjectileViewKind) -> Color {
     match kind {
         ProjectileViewKind::GuaranteedHit { .. } => Color::srgb(0.48, 0.90, 1.0),
         ProjectileViewKind::Reflected { .. } => Color::srgb(0.92, 0.92, 1.0),
+        ProjectileViewKind::Line { .. } => Color::srgb(0.48, 0.90, 1.0),
         ProjectileViewKind::Ballistic { .. } => Color::srgb(1.0, 0.56, 0.12),
         ProjectileViewKind::Bounce { bounce_index, .. } if bounce_index % 2 == 0 => {
             Color::srgb(0.58, 1.0, 0.26)
@@ -6687,6 +6747,48 @@ mod tests {
         assert!(falling_next.y < falling.y);
         assert!((projectile_rotation(rising, rising_next, true) * Vec3::Z).y > 0.0);
         assert!((projectile_rotation(falling, falling_next, true) * Vec3::Z).y < 0.0);
+    }
+
+    #[test]
+    fn line_projectile_switches_clock_and_arc_and_retains_art_without_live_source() {
+        let origin = SimPoint::new(100, 50);
+        let mut projectile = ProjectileView {
+            id: SimId(1),
+            source: SimId(2),
+            launch_position: SimPoint::new(0, 0),
+            launch_tick: 3,
+            impact_tick: 18,
+            kind: ProjectileViewKind::Line {
+                source_rawcode: Some(42),
+                destination: SimPoint::new(200, 100),
+                spill_origin: None,
+                primary_target: SimId(3),
+                primary_impact_tick: 13,
+            },
+        };
+        assert_eq!(
+            projectile_segment(&projectile, Some(0.2)),
+            (projectile.launch_position, 3, 13, Some(0.2))
+        );
+        let ProjectileViewKind::Line { spill_origin, .. } = &mut projectile.kind else {
+            unreachable!()
+        };
+        *spill_origin = Some(origin);
+        assert_eq!(
+            projectile_segment(&projectile, Some(0.2)),
+            (origin, 13, 18, Some(0.0))
+        );
+        let simulation = castle_fight_sim::Simulation::new(SimulationConfig::default(), 1);
+        let samples =
+            PresentationSamples::new(crate::bridge::PresentationSnapshot::capture(&simulation));
+        assert_eq!(projectile_source_rawcode(&projectile, &samples), Some(42));
+        let position =
+            projectile_position_at_progress(&projectile, Vec3::ZERO, Vec3::X * 100.0, 0.5, None);
+        assert_eq!(
+            position,
+            Vec3::new(50.0, PROJECTILE_HEIGHT, 0.0),
+            "line fallback must not inherit a ballistic arc"
+        );
     }
 
     #[test]

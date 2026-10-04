@@ -1470,6 +1470,77 @@ mod tests {
     use super::*;
 
     #[test]
+    fn mechanical_remains_decay_and_restore_but_cannot_be_resurrected() {
+        let config = SimulationConfig {
+            unit_separation_distance: 0,
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config.clone(), 1);
+        let position = SimPoint::new(SUBUNITS_PER_WORLD_UNIT, 0);
+        let unit = UnitSpawn {
+            team: Team(0),
+            position,
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 2 * SUBUNITS_PER_WORLD_UNIT,
+                acquisition_range: 3 * SUBUNITS_PER_WORLD_UNIT,
+                cooldown_ticks: 1000,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        };
+        let victim = sim.spawn_unit_with_properties(
+            unit,
+            UnitGameplayProperties {
+                mechanical: true,
+                build_time_ticks: Some(30),
+                corpse: Some(CorpseProfile {
+                    definition: CorpseDefinitionId(42),
+                    decay_start_ticks: 2,
+                    lifetime_ticks: Some(5),
+                }),
+                ..UnitGameplayProperties::default()
+            },
+        );
+        let mut attacker = unit;
+        attacker.team = Team(1);
+        attacker.position = SimPoint::new(0, 0);
+        attacker.attack.damage = 100;
+        sim.spawn_unit(attacker);
+        sim.step();
+        sim.step();
+        assert!(sim.unit(victim).is_none());
+        assert_eq!(sim.corpse_count(), 1);
+        let bundle =
+            crate::castle_fight_content_bundle(crate::MapVersion::CASTLE_FIGHT_9_27).unwrap();
+        let snapshot =
+            SimulationSnapshot::decode_wire(&sim.capture_snapshot().encode_wire().unwrap(), bundle)
+                .unwrap();
+        let mut restored = Simulation::new(config, 4);
+        restored.restore_snapshot(&snapshot).unwrap();
+        for candidate in [&mut sim, &mut restored] {
+            candidate.step();
+            candidate.step();
+            assert_eq!(
+                candidate.resurrect_friendly_corpses(
+                    Team(0),
+                    AbilitySourceOrigin::Unit(position),
+                    SUBUNITS_PER_WORLD_UNIT,
+                    1
+                ),
+                0
+            );
+            assert_eq!(candidate.corpse_count(), 1);
+            while candidate.next_tick <= 6 {
+                candidate.step();
+            }
+            assert_eq!(candidate.corpse_count(), 0);
+        }
+        assert_eq!(sim.checksum(), restored.checksum());
+    }
+
+    #[test]
     fn resurrection_waits_until_corpse_decay_start_tick() {
         let mut sim = Simulation::new(SimulationConfig::default(), 1);
         let position = SimPoint::new(10 * SUBUNITS_PER_WORLD_UNIT, 0);

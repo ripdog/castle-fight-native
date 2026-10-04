@@ -31,6 +31,7 @@ mod construction;
 #[cfg(test)]
 mod content_lifecycle_tests;
 mod economy;
+mod line_projectiles;
 mod movement;
 mod native_actions;
 #[cfg(test)]
@@ -74,7 +75,7 @@ use crate::{
         BuildingSpawn, BuildingUpgradeSource, BurningOilZone, ChainLightningState, CollisionRadius,
         ContentIdentity, Corpse, CorpseDefinitionId, CorpseProducer, CorpseProfile,
         DefendEffectProfile, GameplayBundleIdentity, GuaranteedHitProjectile, Health,
-        HealthRegeneration, MAX_BOUNCE_HITS, MAX_TIMED_ARMOR_MODIFIERS,
+        HealthRegeneration, LineProjectile, MAX_BOUNCE_HITS, MAX_TIMED_ARMOR_MODIFIERS,
         MAX_TIMED_ATTACK_SPEED_MODIFIERS, MAX_TIMED_DAMAGE_OVER_TIME, MAX_TIMED_MOVEMENT_MODIFIERS,
         ManaState, MechanicalUnit, ModifierId, MovementClass, MovementProfile, NavigationGoal,
         NavigationState, Owner, PassiveUnitEffect, PassiveUnitEffects, PendingAttackEffects,
@@ -360,6 +361,13 @@ impl ChainLightningEvent {
 pub enum ProjectileViewKind {
     GuaranteedHit {
         target: SimId,
+    },
+    Line {
+        source_rawcode: Option<u32>,
+        destination: SimPoint,
+        spill_origin: Option<SimPoint>,
+        primary_target: SimId,
+        primary_impact_tick: u64,
     },
     Ballistic {
         destination: SimPoint,
@@ -1581,7 +1589,7 @@ impl Simulation {
         let bounce_projectile_updates = target_projectiles.bounce_projectile_updates;
         let mut projectile_impacts = target_projectiles.projectile_impacts;
         let mut projectile_effects = target_projectiles.projectile_effects;
-        let projectile_invalidations = target_projectiles.projectile_invalidations;
+        let mut projectile_invalidations = target_projectiles.projectile_invalidations;
         let bounce_jumps = target_projectiles.bounce_jumps;
         let bounce_candidate_checks = target_projectiles.bounce_candidate_checks;
         let mut chain_lightning_launches = target_projectiles.chain_lightning_launches;
@@ -1602,10 +1610,12 @@ impl Simulation {
         });
         let attacks_resolved = attack_resolution.attacks_resolved;
         let projectile_launches = attack_resolution.projectile_launches;
+        let line_projectile_launches = attack_resolution.line_projectile_launches;
         let ballistic_projectile_launches = attack_resolution.ballistic_projectile_launches;
         let bounce_projectile_launches = attack_resolution.bounce_projectile_launches;
         chain_lightning_launches.extend(attack_resolution.chain_lightning_launches);
         let projectiles_launched = projectile_launches.len()
+            + line_projectile_launches.len()
             + reflected_projectile_launches.len()
             + ballistic_projectile_launches.len()
             + bounce_projectile_launches.len();
@@ -1637,6 +1647,21 @@ impl Simulation {
         projectile_effects += ballistic_impacts.projectile_effects;
         let ballistic_candidate_checks = ballistic_impacts.candidate_checks;
         let burning_oil_zone_launches = ballistic_impacts.burning_oil_zone_launches;
+        let (line_impacts, line_effects, line_invalidations) =
+            self.resolve_line_projectiles(TargetProjectileContext {
+                units: &mut units,
+                buildings: &buildings,
+                grid: &grid,
+                positions: &positions,
+                unit_health: &mut unit_health,
+                building_health: &mut building_health,
+                attackers_this_tick: &mut attackers_this_tick,
+                next_defense_alerts: &mut next_defense_alerts,
+                completed_tick,
+            });
+        projectile_impacts += line_impacts;
+        projectile_effects += line_effects;
+        projectile_invalidations += line_invalidations;
         let ballistic_impact = phase_start.elapsed();
 
         let phase_start = Instant::now();
@@ -1648,6 +1673,7 @@ impl Simulation {
             burning_oil_zone_launches,
             chain_lightning_launches,
             projectile_launches,
+            line_projectile_launches,
             reflected_projectile_launches,
             ballistic_projectile_launches,
             bounce_projectile_launches,
@@ -2056,6 +2082,7 @@ impl Simulation {
                 entity.get::<GuaranteedHitProjectile>().is_some()
                     || entity.get::<ReflectedProjectile>().is_some()
                     || entity.get::<BallisticProjectile>().is_some()
+                    || entity.get::<LineProjectile>().is_some()
                     || entity.get::<BounceProjectile>().is_some()
             })
             .count()
@@ -3581,6 +3608,19 @@ fn validate_attack_profile(attack: AttackProfile) {
             assert!(speed_per_tick > 0);
             assert!(impact_radius >= 0);
         }
+        AttackDelivery::Line {
+            speed_per_tick,
+            minimum_range,
+            spill_distance,
+            spill_radius,
+            damage_retention_per_10k,
+            ..
+        } => {
+            assert!(speed_per_tick > 0);
+            assert!(minimum_range >= 0 && minimum_range <= attack.range);
+            assert!(spill_distance >= 0 && spill_radius >= 0);
+            assert!(damage_retention_per_10k <= 10_000);
+        }
         AttackDelivery::Bounce {
             speed_per_tick,
             bounce_range,
@@ -3919,6 +3959,22 @@ fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option
             kind: ProjectileViewKind::Reflected {
                 target: projectile.target,
                 reflector: projectile.reflector,
+            },
+        });
+    }
+    if let Some(projectile) = entity.get::<LineProjectile>() {
+        return Some(ProjectileView {
+            id,
+            source: projectile.source,
+            launch_position: projectile.launch_position,
+            launch_tick: projectile.launch_tick,
+            impact_tick: projectile.impact_tick,
+            kind: ProjectileViewKind::Line {
+                source_rawcode: projectile.source_rawcode,
+                destination: projectile.destination,
+                spill_origin: projectile.spill_origin,
+                primary_target: projectile.target,
+                primary_impact_tick: projectile.primary_impact_tick,
             },
         });
     }

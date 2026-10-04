@@ -128,6 +128,8 @@ Directed on-hit state also retains any Feedback ability identity, mana-drain lim
 
 **Bounce projectile:** `SimId`, source/team, target mask/current target, damage/type, launch position/timing, speed/range, remaining bounces, bounce index, damage falloff, repeat-target rule, hit count, and hit-target history.
 
+**Line projectile:** `SimId`, source/team and retained source-art rawcode, primary target, current damage/type, complete typed delivery (speed, minimum range, spill length/half-width, per-collision retention and spill mask), launch position/tick, primary/final impact ticks, optional fixed spill origin, destination, and ordered hit-target history. The fixed segment and collision history MUST survive restoration during spill; source-art identity MUST survive removal of the source.
+
 **Burning Oil zone:** `SimId`, source/team, center, complete effect profile, creation tick, and pulse index.
 
 **Chain Lightning state:** `SimId`, source/team, complete profile, start tick, next jump index, current target, last position, next damage, hit count, and hit history.

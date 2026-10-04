@@ -64,6 +64,15 @@ pub enum AttackDelivery {
         speed_per_tick: i32,
         impact_radius: i32,
     },
+    /// Targeted missile followed by a directed, travelling damage spill behind its impact.
+    Line {
+        speed_per_tick: i32,
+        minimum_range: i32,
+        spill_distance: i32,
+        spill_radius: i32,
+        damage_retention_per_10k: u16,
+        spill_targets: AttackTargetMask,
+    },
     Bounce {
         speed_per_tick: i32,
         bounce_range: i32,
@@ -82,6 +91,7 @@ impl AttackDelivery {
             Self::RangedGuaranteedHit { .. } => 1,
             Self::RangedBallistic { .. } => 2,
             Self::Bounce { .. } => 3,
+            Self::Line { .. } => 5,
         }
     }
 }
@@ -100,6 +110,16 @@ impl AttackProfile {
     pub fn range_sq(self) -> u64 {
         let range = i64::from(self.range);
         (range * range) as u64
+    }
+
+    #[must_use]
+    pub fn in_range(self, distance_sq: u64) -> bool {
+        let minimum = match self.delivery {
+            AttackDelivery::Line { minimum_range, .. } => minimum_range,
+            _ => 0,
+        };
+        distance_sq >= (i64::from(minimum) * i64::from(minimum)) as u64
+            && distance_sq <= self.range_sq()
     }
 
     #[must_use]
@@ -170,6 +190,26 @@ pub(crate) struct BallisticProjectile {
     pub impact_radius: i32,
     pub launch_tick: u64,
     pub impact_tick: u64,
+}
+
+#[derive(Component, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct LineProjectile {
+    pub source: SimId,
+    /// Retained independently of the source lifetime so rejoin can bind missile art.
+    pub source_rawcode: Option<u32>,
+    pub source_team: Team,
+    pub target: SimId,
+    pub damage: i32,
+    pub damage_type: DamageType,
+    pub delivery: AttackDelivery,
+    pub launch_position: SimPoint,
+    pub launch_tick: u64,
+    pub primary_impact_tick: u64,
+    pub impact_tick: u64,
+    /// None until the primary missile arrives; thereafter the spill ray is fixed.
+    pub spill_origin: Option<SimPoint>,
+    pub destination: SimPoint,
+    pub hit_targets: Vec<SimId>,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

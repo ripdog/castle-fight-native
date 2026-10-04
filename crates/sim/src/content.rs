@@ -964,7 +964,9 @@ impl CastleFightUnitKind {
         let rawcode = self.rawcode_9_27();
         let content = extracted_content_927();
         let unit = &content.units[&rawcode];
-        let expose_corpse = !unit.mechanical && content.corpses[&rawcode].does_decay;
+        // Mechanical does not mean corpse-less: retained siege death types leave decaying
+        // remains. Resurrection eligibility is checked separately against the source definition.
+        let expose_corpse = content.corpses[&rawcode].does_decay;
         extracted_unit_definition_927(rawcode, unit.name, expose_corpse)
     }
 }
@@ -2078,6 +2080,21 @@ fn hash_attack_profile(hash: &mut ContentHash64, attack: AttackProfile) {
             hash.write_i32(speed_per_tick);
             hash.write_i32(impact_radius);
         }
+        AttackDelivery::Line {
+            speed_per_tick,
+            minimum_range,
+            spill_distance,
+            spill_radius,
+            damage_retention_per_10k,
+            spill_targets,
+        } => {
+            hash.write_i32(speed_per_tick);
+            hash.write_i32(minimum_range);
+            hash.write_i32(spill_distance);
+            hash.write_i32(spill_radius);
+            hash.write_u16(damage_retention_per_10k);
+            hash.write_u8(spill_targets.bits());
+        }
         AttackDelivery::Bounce {
             speed_per_tick,
             bounce_range,
@@ -2606,6 +2623,7 @@ struct CatalogSupplement927 {
     source_object_fields_sha256: String,
     objects: Vec<CatalogSupplementObject927>,
     bounce_weapons: Vec<CatalogBounceWeapon927>,
+    line_weapons: Vec<CatalogLineWeapon927>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2624,6 +2642,16 @@ struct CatalogBounceWeapon927 {
     maximum_targets: u8,
     damage_percent_per_bounce: u16,
     range_world: i32,
+}
+
+#[derive(Debug, Deserialize)]
+struct CatalogLineWeapon927 {
+    rawcode: String,
+    minimum_range_world: i32,
+    spill_distance_world: i32,
+    spill_radius_world: i32,
+    damage_retention_per_10k: u16,
+    splash_targets: String,
 }
 
 #[derive(Debug)]
@@ -2646,6 +2674,7 @@ struct ExtractedContent927 {
     builder_catalogs: BTreeMap<(u8, u32), ExtractedBuilderCatalog927>,
     authored_builder_catalogs: BTreeMap<u32, Vec<u32>>,
     bounce_weapons: BTreeMap<u32, CatalogBounceWeapon927>,
+    line_weapons: BTreeMap<u32, CatalogLineWeapon927>,
     damage_rules: DamageRules,
 }
 
@@ -2701,6 +2730,11 @@ impl ExtractedContent927 {
         }
 
         let supplement = catalog_supplement_927()?;
+        let line_weapons = supplement
+            .line_weapons
+            .into_iter()
+            .map(|weapon| (parse_rawcode(&weapon.rawcode), weapon))
+            .collect();
         let bounce_weapons = supplement
             .bounce_weapons
             .into_iter()
@@ -3265,6 +3299,7 @@ impl ExtractedContent927 {
             builder_catalogs,
             authored_builder_catalogs,
             bounce_weapons,
+            line_weapons,
             damage_rules,
         })
     }
@@ -4063,9 +4098,20 @@ fn extracted_unit_definition_927(
                 allow_repeat_targets: false,
             }
         }
-        ExtractedWeaponKind927::Line => panic!(
-            "unit {rawcode:#010x} uses an extracted weapon primitive that is not implemented in the current native slice"
-        ),
+        ExtractedWeaponKind927::Line => {
+            let line = content
+                .line_weapons
+                .get(&rawcode)
+                .expect("line weapon evidence");
+            AttackDelivery::Line {
+                speed_per_tick: unit.projectile_speed_per_tick.expect("line missile speed"),
+                minimum_range: world(line.minimum_range_world),
+                spill_distance: world(line.spill_distance_world),
+                spill_radius: world(line.spill_radius_world),
+                damage_retention_per_10k: line.damage_retention_per_10k,
+                spill_targets: parse_attack_targets_927(&line.splash_targets),
+            }
+        }
     };
     let corpse = if expose_corpse {
         let corpse = content.corpses.get(&rawcode).unwrap_or_else(|| {
@@ -4324,6 +4370,68 @@ mod tests {
         let mut crlf = ContentHash64::new();
         write_canonical_catalog_text(&mut crlf, "a\r\nb\r\n");
         assert_eq!(lf.finish(), crlf.finish());
+    }
+
+    #[test]
+    fn promoted_line_weapons_and_production_consume_retained_projection() {
+        let content = extracted_content_927();
+        let mut promoted_lines = 0;
+        for kind in CastleFightUnitKind::ALL {
+            let definition = kind.definition();
+            if content.primary_attacks[&definition.rawcode].weapon_kind
+                != ExtractedWeaponKind927::Line
+            {
+                continue;
+            }
+            promoted_lines += 1;
+            let evidence = &content.line_weapons[&definition.rawcode];
+            assert_eq!(
+                definition.attack.delivery,
+                AttackDelivery::Line {
+                    speed_per_tick: content.units[&definition.rawcode]
+                        .projectile_speed_per_tick
+                        .unwrap(),
+                    minimum_range: world(evidence.minimum_range_world),
+                    spill_distance: world(evidence.spill_distance_world),
+                    spill_radius: world(evidence.spill_radius_world),
+                    damage_retention_per_10k: evidence.damage_retention_per_10k,
+                    spill_targets: parse_attack_targets_927(&evidence.splash_targets),
+                }
+            );
+        }
+        assert!(promoted_lines > 0);
+        for kind in CastleFightProductionKind::ALL {
+            let building = kind.definition();
+            let spawn = building.spawn(Team(0), BuildingFootprint::new(0, 0, 4, 4));
+            let produced = CastleFightUnitKind::from_retained_rawcode_9_27(
+                content.production[&building.rawcode].unit_rawcode,
+            )
+            .unwrap()
+            .definition()
+            .resolved();
+            let properties = building.gameplay_properties();
+            assert_eq!(spawn.production.unwrap().unit, produced.template);
+            assert_eq!(properties.production_unit, produced.properties);
+            assert_eq!(properties.production_spellcasting, produced.spellcasting);
+        }
+    }
+
+    #[test]
+    fn imported_corpse_creation_is_independent_of_mechanical_classification() {
+        let content = extracted_content_927();
+        let mut mechanical_remains = 0;
+        for kind in CastleFightUnitKind::ALL {
+            let definition = kind.definition();
+            let evidence = content.corpses[&definition.rawcode];
+            assert_eq!(definition.corpse.is_some(), evidence.does_decay);
+            if let Some(profile) = definition.corpse {
+                assert_eq!(profile.definition.0, definition.rawcode);
+                assert_eq!(profile.decay_start_ticks, evidence.decay_start_ticks);
+                assert_eq!(profile.lifetime_ticks, evidence.lifetime_ticks);
+                mechanical_remains += usize::from(definition.mechanical);
+            }
+        }
+        assert!(mechanical_remains > 0);
     }
 
     #[test]

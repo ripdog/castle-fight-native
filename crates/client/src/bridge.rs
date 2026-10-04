@@ -24,15 +24,21 @@ impl UnitVisualKind {
     fn from_delivery(delivery: AttackDelivery, spellcaster: bool) -> Self {
         match (delivery, spellcaster) {
             (AttackDelivery::Melee, false) => Self::Melee,
-            (AttackDelivery::RangedInstant | AttackDelivery::RangedGuaranteedHit { .. }, false) => {
-                Self::Ranged
-            }
+            (
+                AttackDelivery::RangedInstant
+                | AttackDelivery::RangedGuaranteedHit { .. }
+                | AttackDelivery::Line { .. },
+                false,
+            ) => Self::Ranged,
             (AttackDelivery::RangedBallistic { .. }, false) => Self::Ballistic,
             (AttackDelivery::Bounce { .. }, false) => Self::Bounce,
             (AttackDelivery::Melee, true) => Self::MeleeCaster,
-            (AttackDelivery::RangedInstant | AttackDelivery::RangedGuaranteedHit { .. }, true) => {
-                Self::RangedCaster
-            }
+            (
+                AttackDelivery::RangedInstant
+                | AttackDelivery::RangedGuaranteedHit { .. }
+                | AttackDelivery::Line { .. },
+                true,
+            ) => Self::RangedCaster,
             (AttackDelivery::RangedBallistic { .. }, true) => Self::BallisticCaster,
             (AttackDelivery::Bounce { .. }, true) => Self::BounceCaster,
         }
