@@ -52,6 +52,9 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
     Blademaster = 0x1000_0011 => b"n006",
     ElderBlademaster = 0x1000_0012 => b"n00Y",
     Bloodthirster = 0x1000_0013 => b"h00U",
+    DragonhawkRider = 0x1000_0015 => b"n01Y",
+    Sorceress = 0x1000_0016 => b"h07B",
+    Wizard = 0x1000_0017 => b"h00W",
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
@@ -74,6 +77,9 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
     HallOfHonor = 0x2000_0011 => b"h00T",
     HallOfTheEldest = 0x2000_0012 => b"h03F",
     BloodelfWarAcademy = 0x2000_0013 => b"h00V",
+    DragonhawkPortal = 0x2000_0015 => b"h06Y",
+    SchoolOfWizardry = 0x2000_0016 => b"h09X",
+    TowerOfSupremeMagic = 0x2000_0017 => b"h00X",
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;

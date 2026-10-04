@@ -55,6 +55,34 @@ class NativeTuningProjectionTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             native.project_effect(recipe, {**fields, "datab1": "0"}, unit, {}, {})
 
+    def test_automatic_projection_keeps_exact_rate_and_native_delivery_fields(self) -> None:
+        recipe = {"kind": "phoenix-fire", "source_key": "FIRE", "source_kind": "unit-ability", "unit_rawcode": "UNIT"}
+        fields = {"dataa1": "7", "datab1": "3", "dur1": "4", "herodur1": "2",
+                  "missilespeed": "700", "targs1": "ground,air,structure,enemies", "area1": "123", "cool1": "3", "cost1": "0"}
+        for rate in ("1", "3.5", "0.0001"):
+            unit = {"mana_max": "100", "mana_start": "17", "mana_regen": rate}
+            projected = native.project_effect(recipe, fields, unit, {}, {})
+            profile = projected["spellcasting"]
+            self.assertEqual(profile["mana"]["regen_per_tick_per_10k"], (1 << 31) | native.scaled(rate, 10_000))
+            self.assertEqual(profile["ability"]["effect"]["PhoenixFire"]["targets"], 7)
+            self.assertEqual(profile["ability"]["effect"]["PhoenixFire"]["damage_per_second"], 3)
+            self.assertEqual(profile["ability"]["range"], 123 * 1024)
+        for rate in ("-1", "1000.0001", "214748.3648"):
+            with self.subTest(rate=rate), self.assertRaises(ValueError):
+                native.project_effect(recipe, fields, {"mana_max": "100", "mana_start": "17", "mana_regen": rate}, {}, {})
+
+    def test_non_free_proxy_child_cannot_silently_bypass_native_resources(self) -> None:
+        recipe = {"kind": "healing-wave", "source_key": "HEAL", "source_kind": "ability-effect", "unit_rawcode": "UNIT"}
+        fields = {"dataa1": "7", "datab1": "2", "datac1": "0.25", "area1": "123", "cost1": "9999", "cool1": "99"}
+        unit = {"mana_max": "100", "mana_start": "17", "mana_regen": "1"}
+        mechanics = {"mechanics_row": {"scheduled_delays_json": '["0.8"]'}}
+        for protected in ({}, {"mana_cost": "1", "cooldown": "0"}, {"mana_cost": "0", "cooldown": "1"}):
+            with self.assertRaises(ValueError):
+                native.project_effect(recipe, fields, unit, protected, mechanics)
+        projected = native.project_effect(recipe, fields, unit, {"mana_cost": "0", "cooldown": "0"}, mechanics)
+        self.assertEqual(projected["spellcasting"]["ability"]["mana_cost"], 0)
+        self.assertEqual(projected["spellcasting"]["ability"]["effect"]["HealingWave"]["recovery_ticks"], 24)
+
     def test_recipes_cannot_become_a_second_tuning_database(self) -> None:
         root = catalog.REPO_ROOT
         release = catalog._load_release(catalog.DEFAULT_RELEASES, "9.27", "r1")

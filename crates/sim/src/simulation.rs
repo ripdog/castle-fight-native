@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 14;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 15;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -32,6 +32,9 @@ mod construction;
 mod content_lifecycle_tests;
 mod economy;
 mod movement;
+mod native_actions;
+#[cfg(test)]
+mod native_actions_tests;
 #[cfg(test)]
 mod native_target_effects;
 #[cfg(test)]
@@ -372,6 +375,7 @@ pub enum ProjectileViewKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProjectileView {
+    pub ability: Option<AbilityId>,
     pub id: SimId,
     pub source: SimId,
     pub launch_position: SimPoint,
@@ -1411,6 +1415,11 @@ impl Simulation {
         let mut units = self.snapshot_units();
         let mut buildings = self.snapshot_buildings();
         resolve_periodic_unit_statuses(&mut units, completed_tick, self.combat_rules.damage_rules);
+        native_actions::resolve_native_building_damage_over_time(
+            &mut buildings,
+            completed_tick,
+            self.combat_rules.damage_rules,
+        );
         self.resolve_burning_oil_zones(&mut units, &mut buildings, completed_tick);
         let grid = SpatialGrid::build(
             self.config.spatial_cell_size,
@@ -1443,6 +1452,7 @@ impl Simulation {
         let mut snapshot_and_spatial = phase_start.elapsed();
 
         let phase_start = Instant::now();
+        self.resolve_native_actions(&mut units, &mut buildings);
         self.apply_passive_auras(&mut units);
         let ability_metrics = self.resolve_automatic_abilities(&mut buildings, &mut units, &grid);
         let abilities = phase_start.elapsed();
@@ -1765,12 +1775,8 @@ impl Simulation {
                     target_state.direct_retaliation_lock = false;
                     target_state.ally_defense_lock = false;
                 }
-                if building.attack.is_some() || building.spellcasting.is_some() {
-                    *entity
-                        .get_mut::<StatusState>()
-                        .expect("active building status state missing") = building
-                        .status
-                        .expect("active building snapshot status state missing");
+                if let Some(status) = building.status {
+                    entity.insert(status);
                 }
                 if building.spellcasting.is_some() {
                     entity
@@ -2385,7 +2391,10 @@ impl Simulation {
                     .sum::<u32>()
             });
             let accumulated = u64::from(mana.regen_remainder_per_10k)
-                + u64::from(profile.mana.regen_per_tick_per_10k)
+                + u64::from(native_actions::native_mana_increment(
+                    profile.mana.regen_per_tick_per_10k,
+                    self.next_tick,
+                ))
                 + u64::from(aura_per_tick);
             let whole_mana = accumulated / 10_000;
             let remainder = accumulated % 10_000;
@@ -2874,7 +2883,9 @@ impl Simulation {
                     debug_assert_eq!(attack.is_some(), attack_targets.is_some());
                     debug_assert_eq!(spellcasting.is_some(), mana.is_some());
                     debug_assert_eq!(spellcasting.is_some(), ability_state.is_some());
-                    debug_assert_eq!(attack.is_some() || spellcasting.is_some(), status.is_some());
+                    debug_assert!(
+                        !(attack.is_some() || spellcasting.is_some()) || status.is_some()
+                    );
                     BuildingSnapshot {
                         entity,
                         id: *id,
@@ -3079,6 +3090,7 @@ struct AttackIntent {
 #[derive(Debug, Clone, Copy)]
 enum AbilityIntentTarget {
     Unit { index: usize, id: SimId },
+    Building { id: SimId, position: SimPoint },
     AllEnemyUnits,
     AllFriendlyUnits,
     Corpse { id: SimId, position: SimPoint },
@@ -3093,6 +3105,7 @@ impl AbilityIntentTarget {
             Self::AllFriendlyUnits => (2, SimId(0)),
             Self::Corpse { id, .. } => (3, id),
             Self::Point { .. } => (4, SimId(0)),
+            Self::Building { id, .. } => (5, id),
         }
     }
 
@@ -3103,6 +3116,7 @@ impl AbilityIntentTarget {
             Self::AllFriendlyUnits => AbilityCastTarget::AllFriendlyUnits,
             Self::Corpse { position, .. } => AbilityCastTarget::Point(position),
             Self::Point { position } => AbilityCastTarget::Point(position),
+            Self::Building { position, .. } => AbilityCastTarget::Point(position),
         }
     }
 }
@@ -3527,13 +3541,15 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
     assert!(spellcasting.mana.maximum >= 0);
     assert!(spellcasting.mana.starting >= 0);
     assert!(spellcasting.mana.starting <= spellcasting.mana.maximum);
-    assert!(spellcasting.mana.regen_per_tick_per_10k <= 10_000_000);
+    assert!(spellcasting.mana.regen_per_tick_per_10k & !(1 << 31) <= 10_000_000);
     assert!(spellcasting.ability.mana_cost >= 0);
     assert!(spellcasting.ability.mana_cost <= spellcasting.mana.maximum);
     assert!(spellcasting.ability.range >= 0);
     match spellcasting.ability.target_policy {
         AbilityTargetPolicy::RandomEnemyUnit
         | AbilityTargetPolicy::NearestEnemyInCombat
+        | AbilityTargetPolicy::FlyingEnemyUnit
+        | AbilityTargetPolicy::RandomEnemyUnitOrBuilding
         | AbilityTargetPolicy::RandomGroundEnemyUnit
         | AbilityTargetPolicy::RecentlyAttackedFriendlyUnit
         | AbilityTargetPolicy::WoundedFriendlyUnit
@@ -3546,6 +3562,41 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
     }
     match spellcasting.ability.effect {
+        AbilityEffect::SolarStrike {
+            profile,
+            radius,
+            maximum_targets,
+        } => {
+            assert!(profile.speed_per_tick > 0 && profile.damage >= 0 && profile.stun_ticks > 0);
+            assert!(radius > 0 && maximum_targets > 0);
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::FlyingEnemyUnit
+            );
+        }
+        AbilityEffect::PhoenixFire(profile) => {
+            assert!(
+                profile.speed_per_tick > 0 && profile.damage >= 0 && profile.damage_per_second >= 0
+            );
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::RandomEnemyUnitOrBuilding
+            );
+        }
+        AbilityEffect::HealingWave(profile) => {
+            assert!(
+                profile.healing > 0
+                    && profile.trigger_healing >= 0
+                    && profile.jump_radius >= 0
+                    && profile.recovery_ticks > 0
+            );
+            assert!((1..=MAX_BOUNCE_HITS as u8).contains(&profile.maximum_targets));
+            assert!(profile.retention_per_10k <= 10_000);
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::WoundedFriendlyUnit
+            );
+        }
         AbilityEffect::Damage { amount } => assert!(amount >= 0),
         AbilityEffect::Stun { duration_ticks } => assert!(duration_ticks > 0),
         AbilityEffect::ModifyMovementSpeedPercent {
@@ -3770,8 +3821,24 @@ fn corpse_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<Cor
 
 fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<ProjectileView> {
     let id = *entity.get::<SimId>()?;
+    if let Some(crate::components::NativeAction::Bolt(projectile)) =
+        entity.get::<crate::components::NativeAction>()
+    {
+        return Some(ProjectileView {
+            ability: Some(projectile.profile.ability),
+            id,
+            source: projectile.source,
+            launch_position: projectile.position,
+            launch_tick: projectile.position_tick,
+            impact_tick: projectile.impact_tick,
+            kind: ProjectileViewKind::GuaranteedHit {
+                target: projectile.target,
+            },
+        });
+    }
     if let Some(projectile) = entity.get::<GuaranteedHitProjectile>() {
         return Some(ProjectileView {
+            ability: None,
             id,
             source: projectile.source,
             launch_position: projectile.launch_position,
@@ -3784,6 +3851,7 @@ fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option
     }
     if let Some(projectile) = entity.get::<ReflectedProjectile>() {
         return Some(ProjectileView {
+            ability: None,
             id,
             source: projectile.original_source,
             launch_position: projectile.launch_position,
@@ -3797,6 +3865,7 @@ fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option
     }
     if let Some(projectile) = entity.get::<BallisticProjectile>() {
         return Some(ProjectileView {
+            ability: None,
             id,
             source: projectile.source,
             launch_position: projectile.launch_position,
@@ -3810,6 +3879,7 @@ fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option
     }
     let projectile = *entity.get::<BounceProjectile>()?;
     Some(ProjectileView {
+        ability: None,
         id,
         source: projectile.source,
         launch_position: projectile.launch_position,

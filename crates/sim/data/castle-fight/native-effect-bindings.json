@@ -296,7 +296,7 @@
     {
       "source_kind": "unit-ability",
       "source_key": "A0AH",
-      "implementation": "warcraft-human-passive-v1",
+      "implementation": "warcraft-spell-resistance-v1",
       "valid_from": "9.27",
       "valid_through": "9.27",
       "notes": "Version-scoped Castle Fight 9.27 passive profile on the produced Human unit."
@@ -388,6 +388,18 @@
       "valid_from": "9.27",
       "valid_through": "9.27",
       "notes": "Version-scoped 9.27 Human utility building effect."
-    }
+    },
+    {"source_kind":"unit-ability","source_key":"A08V","implementation":"warcraft-elven-automatic-v1","valid_from":"9.27","valid_through":"9.27","notes":"Scripted Solar Strike primary."},
+    {"source_kind":"ability-effect","source_key":"A08U","implementation":"warcraft-elven-automatic-v1","valid_from":"9.27","valid_through":"9.27","notes":"Solar Strike proxy bolt."},
+    {"source_kind":"unit-ability","source_key":"A0A7","implementation":"warcraft-elven-automatic-v1","valid_from":"9.27","valid_through":"9.27","notes":"Sorceress Healing Wave primary."},
+    {"source_kind":"ability-effect","source_key":"A0A8","implementation":"warcraft-elven-automatic-v1","valid_from":"9.27","valid_through":"9.27","notes":"Sorceress Healing Wave proxy."},
+    {"source_kind":"unit-ability","source_key":"A00X","implementation":"warcraft-elven-automatic-v1","valid_from":"9.27","valid_through":"9.27","notes":"Wizard Healing Wave primary."},
+    {"source_kind":"ability-effect","source_key":"A00Y","implementation":"warcraft-elven-automatic-v1","valid_from":"9.27","valid_through":"9.27","notes":"Wizard Healing Wave proxy."},
+    {"source_kind":"unit-ability","source_key":"A010","implementation":"warcraft-elven-automatic-v1","valid_from":"9.27","valid_through":"9.27","notes":"Independent native Phoenix Fire."},
+    {"source_kind":"unit-ability","source_key":"A0A9","implementation":"warcraft-orb-spell-proc-v1","valid_from":"9.27","valid_through":"9.27","notes":"Sorceress on-hit orb."},
+    {"source_kind":"ability-effect","source_key":"A0AA","implementation":"warcraft-chain-lightning-v1","valid_from":"9.27","valid_through":"9.27","notes":"Sorceress orb child."},
+    {"source_kind":"unit-ability","source_key":"A00Z","implementation":"warcraft-orb-spell-proc-v1","valid_from":"9.27","valid_through":"9.27","notes":"Wizard on-hit orb."},
+    {"source_kind":"ability-effect","source_key":"A00L","implementation":"warcraft-chain-lightning-v1","valid_from":"9.27","valid_through":"9.27","notes":"Wizard orb child."},
+    {"source_kind":"unit-ability","source_key":"A013","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27","notes":"Zero-factor Slow Aura marker; no authored runtime slowing."}
   ]
 }

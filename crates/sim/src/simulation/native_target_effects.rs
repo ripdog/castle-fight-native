@@ -161,6 +161,7 @@ fn feedback_has_summoned_bonus_without_mana_but_respects_misses_immunity_and_str
                     summoned,
                     spell_immune: immune,
                     hero: false,
+                    ..UnitClassifications::default()
                 },
                 passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Evasion(
                     EvasionEffectProfile {

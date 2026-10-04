@@ -1,4 +1,5 @@
 use super::*;
+use crate::components::NativeAction;
 use serde::{Deserialize, Serialize};
 
 pub(super) fn canonical_configuration_identity(
@@ -223,6 +224,42 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
     hash.write_u64(entities.len() as u64);
     for entity in entities {
         match entity {
+            CanonicalEntity::NativeAction { id, action } => {
+                hash.write_u8(10);
+                hash.write_u64(id.0);
+                match action {
+                    NativeAction::Bolt(state) => {
+                        hash.write_u8(1);
+                        hash.write_u64(state.source.0);
+                        hash.write_u8(state.team.0);
+                        hash.write_u64(state.target.0);
+                        hash_native_bolt_profile(&mut hash, state.profile);
+                        hash.write_i32(state.launch_position.x);
+                        hash.write_i32(state.launch_position.y);
+                        hash.write_u64(state.launch_tick);
+                        hash.write_i32(state.position.x);
+                        hash.write_i32(state.position.y);
+                        hash.write_u64(state.position_tick);
+                        hash.write_u64(state.impact_tick);
+                    }
+                    NativeAction::HealingWave(state) => {
+                        hash.write_u8(0);
+                        hash.write_u64(state.source.0);
+                        hash.write_u8(state.team.0);
+                        hash_healing_wave_profile(&mut hash, state.profile);
+                        hash.write_u64(state.started_tick);
+                        hash.write_u8(state.jump_index);
+                        hash.write_u64(state.current_target.0);
+                        hash.write_i32(state.last_position.x);
+                        hash.write_i32(state.last_position.y);
+                        hash.write_i32(state.next_healing);
+                        hash.write_u8(state.hit_count);
+                        for hit in &state.hit_targets[..usize::from(state.hit_count)] {
+                            hash.write_u64(hit.0);
+                        }
+                    }
+                }
+            }
             CanonicalEntity::Unit(unit) => {
                 hash.write_u8(0);
                 hash.write_u64(unit.id.0);
@@ -755,6 +792,7 @@ pub(super) enum CanonicalEntity {
     BurningOil(CanonicalBurningOil),
     ChainLightning(CanonicalChainLightning),
     Builder(CanonicalBuilder),
+    NativeAction { id: SimId, action: NativeAction },
 }
 
 impl CanonicalEntity {
@@ -770,6 +808,7 @@ impl CanonicalEntity {
             Self::BurningOil(zone) => zone.id,
             Self::ChainLightning(chain) => chain.id,
             Self::Builder(builder) => builder.id,
+            Self::NativeAction { id, .. } => *id,
         }
     }
 }
@@ -1209,6 +1248,7 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         hash.write_u16(effect.pulse_interval_ticks);
         hash.write_u64(effect.next_pulse_tick);
         hash.write_u64(effect.expires_tick);
+        hash.write_u8(u8::from(effect.final_pulse_at_expiry));
     }
 }
 
@@ -1441,6 +1481,8 @@ fn hash_unit_classifications(hash: &mut Fnv64, flags: UnitClassifications) {
     hash.write_u8(u8::from(flags.hero));
     hash.write_u8(u8::from(flags.summoned));
     hash.write_u8(u8::from(flags.spell_immune));
+    hash.write_u8(u8::from(flags.combat_sapper));
+    hash.write_u8(u8::from(flags.invulnerable));
 }
 
 fn hash_feedback_profile(hash: &mut Fnv64, profile: crate::components::FeedbackEffectProfile) {
@@ -1501,6 +1543,17 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_u16(duration_ticks);
             hash.write_u16(hero_duration_ticks);
         }
+        AbilityEffect::PhoenixFire(profile) => hash_native_bolt_profile(hash, profile),
+        AbilityEffect::SolarStrike {
+            profile,
+            radius,
+            maximum_targets,
+        } => {
+            hash_native_bolt_profile(hash, profile);
+            hash.write_i32(radius);
+            hash.write_u8(maximum_targets);
+        }
+        AbilityEffect::HealingWave(profile) => hash_healing_wave_profile(hash, profile),
         AbilityEffect::Damage { amount } => hash.write_i32(amount),
         AbilityEffect::Stun { duration_ticks } => hash.write_u16(duration_ticks),
         AbilityEffect::ModifyMovementSpeedPercent {
@@ -1630,6 +1683,28 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_u8(u8::from(burning_oil.target_buildings));
         }
     }
+}
+
+fn hash_native_bolt_profile(hash: &mut Fnv64, profile: crate::components::NativeBoltProfile) {
+    hash.write_u64(u64::from(profile.ability.0));
+    hash.write_i32(profile.damage);
+    hash.write_u16(profile.stun_ticks);
+    hash.write_u16(profile.hero_stun_ticks);
+    hash.write_i32(profile.damage_per_second);
+    hash.write_u16(profile.duration_ticks);
+    hash.write_i32(profile.speed_per_tick);
+    hash.write_u8(u8::from(profile.cleanse));
+    hash.write_u8(profile.targets.bits());
+}
+
+fn hash_healing_wave_profile(hash: &mut Fnv64, profile: crate::components::HealingWaveProfile) {
+    hash.write_u64(u64::from(profile.ability.0));
+    hash.write_i32(profile.healing);
+    hash.write_i32(profile.trigger_healing);
+    hash.write_u8(profile.maximum_targets);
+    hash.write_i32(profile.jump_radius);
+    hash.write_u16(profile.retention_per_10k);
+    hash.write_u16(profile.recovery_ticks);
 }
 
 fn hash_secondary_attack(hash: &mut Fnv64, secondary: Option<SecondaryAttackProfile>) {

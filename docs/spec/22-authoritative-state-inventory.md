@@ -132,6 +132,12 @@ Directed on-hit state also retains any Feedback ability identity, mana-drain lim
 
 **Chain Lightning state:** `SimId`, source/team, complete profile, start tick, next jump index, current target, last position, next damage, hit count, and hit history.
 
+**Native Healing Wave action:** `SimId`, source/team, complete profile (including distinct trigger healing), start tick, next jump index, current target, last position, next healing, hit count, and hit history. Hop deadlines derive from the original cast rather than accumulated rounded intervals.
+
+**Native directed bolt action:** `SimId`, source/team, target, complete native effect profile, original launch position/tick, authoritative current homing position/update tick, and projected impact tick. Moving the target can change arrival; a presentation interpolation or an obsolete launch-time arrival estimate MUST NOT determine damage.
+
+Timed damage-over-time state includes whether a final pulse is permitted at exact expiry. That policy MUST survive restoration and participate in checksums; an inclusive final pulse MUST resolve before buff removal/target reacquisition at the same boundary. Passive status can exist on a structure without an attack or active spell.
+
 All of these survive tick boundaries and therefore must be restored exactly.
 
 ### 5.5 Corpses
