@@ -123,6 +123,7 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
     let unit_spell_semantics_path = resolved.join("unit-spell-semantics.tsv");
     let placed_doodads_path = resolved.join("placed-doodads.tsv");
     let map_skin_path = original_map.join("extracted/war3mapSkin.txt");
+    println!("cargo:rerun-if-changed=../sim/data/castle-fight/9.27/shrine-system-r1.json");
     println!("cargo:rerun-if-changed={}", units_path.display());
     println!("cargo:rerun-if-changed={}", buildings_path.display());
     println!("cargo:rerun-if-changed={}", object_fields_path.display());
@@ -741,6 +742,27 @@ fn load_visual_assets(
             missile_arc: None,
         });
     }
+    // Dedicated retained script projection: not a native ability recipe or tooltip art guess.
+    let shrine_projection: serde_json::Value = serde_json::from_str(include_str!(
+        "../sim/data/castle-fight/9.27/shrine-system-r1.json"
+    ))?;
+    let shrine_rawcode = u32::try_from(
+        shrine_projection["parameters"]["golden_shrine_unit_id"]
+            .as_u64()
+            .expect("shrine rawcode"),
+    )?
+    .to_be_bytes();
+    visual_assets.push(VisualAssetSpec {
+        owner_kind: "systems".to_owned(),
+        owner_rawcode: String::from_utf8(shrine_rawcode.to_vec())?,
+        source_unit_rawcode: None,
+        role: "resurrection".to_owned(),
+        model_path: shrine_projection["resurrection_model"]
+            .as_str()
+            .expect("shrine art")
+            .to_owned(),
+        missile_arc: None,
+    });
     Ok(VisualAssetCatalog {
         assets: visual_assets,
         status_visuals,

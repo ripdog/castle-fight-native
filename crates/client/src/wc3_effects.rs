@@ -79,6 +79,7 @@ pub struct Wc3VisualSet {
     status_by_rawcode: BTreeMap<u32, Vec<Wc3StatusVisual>>,
     chain_lightning_abilities: BTreeSet<u32>,
     stun: Option<Wc3VisualModel>,
+    system_models: BTreeMap<String, Wc3VisualModel>,
 }
 
 #[derive(Clone)]
@@ -381,6 +382,8 @@ struct VisualBinding {
     #[serde(default)]
     source_unit_rawcode: Option<String>,
     role: String,
+    #[serde(default)]
+    source_model: String,
     gltf: Option<String>,
     #[serde(default)]
     missile_arc: Option<f32>,
@@ -2930,6 +2933,11 @@ impl Wc3VisualSet {
                 Self::default()
             }
         }
+    }
+
+    #[must_use]
+    pub fn system_model(&self, source_model: &str) -> Option<&Wc3VisualModel> {
+        self.system_models.get(&system_model_identity(source_model))
     }
 
     #[must_use]
@@ -5741,6 +5749,7 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
         .map(|model| (model.gltf.clone(), model))
         .collect();
     let mut projectile_by_rawcode = BTreeMap::new();
+    let mut system_models = BTreeMap::new();
     let mut ability_by_rawcode = BTreeMap::<u32, Vec<Wc3AbilityVisual>>::new();
     for binding in &manifest.assets {
         let Some(gltf) = &binding.gltf else {
@@ -5751,6 +5760,9 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
         };
         let visual = resolve_visual_model(gltf, model, asset_server)?;
         match (binding.owner_kind.as_str(), binding.role.as_str()) {
+            ("systems", "resurrection") => {
+                system_models.insert(system_model_identity(&binding.source_model), visual);
+            }
             ("units", "attack1_projectile") => {
                 let missile_arc = binding.missile_arc.unwrap_or(0.0);
                 if !missile_arc.is_finite() || missile_arc < 0.0 {
@@ -5824,6 +5836,7 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
         status_by_rawcode,
         chain_lightning_abilities,
         stun,
+        system_models,
     })
 }
 
@@ -5936,9 +5949,57 @@ fn validate_relative_asset_path(path: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// The asset exporter normalizes native .mdl references to .mdx and preserves path casing.
+/// Script events keep their retained source spelling; both must address the same visual binding.
+fn system_model_identity(source_model: &str) -> String {
+    let mut key = source_model.trim().replace('/', "\\").to_ascii_lowercase();
+    if key.ends_with(".mdl") {
+        key.truncate(key.len() - 4);
+        key.push_str(".mdx");
+    }
+    key
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shrine_visual_binding_preserves_projection_model_identity_and_native_lifetime() {
+        let shrine = castle_fight_sim::golden_shrine_definition_for_version(
+            castle_fight_sim::CASTLE_FIGHT_DEFAULT_MAP_VERSION,
+        )
+        .unwrap();
+        let binding: VisualBinding = serde_json::from_value(serde_json::json!({
+            "owner_kind": "systems",
+            "owner_rawcode": String::from_utf8(shrine.parameters.golden_shrine_unit_id.to_be_bytes().to_vec()).unwrap(),
+            "role": "resurrection",
+            "source_model": system_model_identity(&shrine.resurrection_model),
+            "gltf": "generated/shrine-resurrection.gltf",
+        })).unwrap();
+        let model = Wc3VisualModel {
+            scene: Handle::default(),
+            gltf: Handle::default(),
+            animation_name: Some("Birth".to_owned()),
+            animation_duration_seconds: Some(3.5), // Synthetic model metadata, not gameplay delay.
+            stand_animation_name: None,
+            poolable_instance: true,
+            emitters: Vec::new(),
+            ribbons: Vec::new(),
+        };
+        let mut visuals = Wc3VisualSet::default();
+        visuals
+            .system_models
+            .insert(system_model_identity(&binding.source_model), model);
+        assert_eq!(
+            visuals
+                .system_model(&shrine.resurrection_model)
+                .unwrap()
+                .effect_lifetime_seconds(0.9),
+            3.5
+        );
+        assert!(visuals.system_model("unrelated model").is_none());
+    }
 
     fn test_particle_emitter(object_id: u32) -> Wc3ParticleEmitter {
         Wc3ParticleEmitter {

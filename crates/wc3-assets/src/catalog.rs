@@ -309,6 +309,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn shrine_system_visual_uses_retained_callback_art_projection() {
+        let projection: serde_json::Value = serde_json::from_str(include_str!(
+            "../../sim/data/castle-fight/9.27/shrine-system-r1.json"
+        ))
+        .unwrap();
+        let catalog = load_embedded_visuals().unwrap();
+        let bindings: Vec<_> = catalog
+            .assets
+            .iter()
+            .filter(|asset| asset.owner_kind == "systems" && asset.role == "resurrection")
+            .collect();
+        assert_eq!(bindings.len(), 1);
+        assert_eq!(
+            bindings[0].model_path,
+            projection["resurrection_model"].as_str().unwrap()
+        );
+        assert_eq!(
+            bindings[0].owner_rawcode.as_bytes(),
+            (projection["parameters"]["golden_shrine_unit_id"]
+                .as_u64()
+                .unwrap() as u32)
+                .to_be_bytes()
+        );
+    }
+
+    #[test]
     fn json_helpers_accept_resolver_values() {
         assert_eq!(
             parse_json_string(r#""units\\human\\Footman\\Footman""#).as_deref(),

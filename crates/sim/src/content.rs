@@ -1413,6 +1413,10 @@ impl CastleFightTowerDefinition {
                     hero: false,
                     summoned: false,
                     spell_immune: false,
+                    combat_sapper: false,
+                    legendary: false,
+                    summoned_marker: false,
+                    illusion: false,
                 },
                 build_time_ticks: None,
                 repair_time_ticks: None,
@@ -1501,6 +1505,9 @@ fn build_content_bundle_927() -> Result<CastleFightContentBundle, CastleFightCon
 
     let extracted = extracted_content_927();
     let mut root_set = BTreeSet::new();
+    let shrine_system =
+        crate::golden_shrine_definition_for_version(version).expect("registered shrine system");
+    let mut dormant_shrine_roots = BTreeSet::new();
     let playable_rawcodes = units
         .values()
         .map(|definition| definition.rawcode)
@@ -1515,12 +1522,24 @@ fn build_content_bundle_927() -> Result<CastleFightContentBundle, CastleFightCon
             .unit_abilities
             .get(&rawcode)
             .ok_or(CastleFightContentError::MissingAbilityInventory(rawcode))?;
-        root_set.extend(
-            abilities
-                .iter()
-                .copied()
-                .map(|key| NativeEffectSource::new(NativeEffectSourceKind::UnitAbility, key)),
-        );
+        for &key in abilities {
+            let source = NativeEffectSource::new(NativeEffectSourceKind::UnitAbility, key);
+            if rawcode == shrine_system.parameters.golden_shrine_unit_id
+                && shrine_system.dormant_attack_abilities.contains(&key)
+            {
+                // Retain the inherited critical-strike inventory without pretending the utility
+                // building has a weapon. Dedicated script projection owns this dormant dependency.
+                debug_assert!(
+                    towers
+                        .values()
+                        .find(|tower| tower.rawcode == rawcode)
+                        .is_some_and(|tower| tower.attack.is_none())
+                );
+                dormant_shrine_roots.insert(source);
+            } else {
+                root_set.insert(source);
+            }
+        }
     }
     let roots = root_set.into_iter().collect::<Vec<_>>();
     let mut behaviors = resolve_native_effect_requirements(version, &roots)?
@@ -1533,6 +1552,15 @@ fn build_content_bundle_927() -> Result<CastleFightContentBundle, CastleFightCon
             })
         })
         .collect::<Result<Vec<_>, CastleFightContentError>>()?;
+    for source in dormant_shrine_roots {
+        if !behaviors.iter().any(|behavior| behavior.source == source) {
+            behaviors.push(ResolvedCastleFightBehavior {
+                id: stable_ability_id(source)?,
+                source,
+                implementation: NativeEffectImplementationId::WarcraftCriticalStrikeV1,
+            });
+        }
+    }
     behaviors.sort_unstable_by_key(|behavior| behavior.id);
 
     let mut bundle = CastleFightContentBundle {
@@ -1717,6 +1745,11 @@ fn stable_ability_id(
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A00W") => {
             0x4000_0032
         }
+        // Dedicated shrine inventory range; no shared native-effect recipe/binding is needed for
+        // a critical-strike ability on a utility building with both weapons disabled.
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A06A") => {
+            0x4300_0001
+        }
         _ => return Err(CastleFightContentError::MissingStableAbilityId(source)),
     };
     Ok(CastleFightAbilityId(id))
@@ -1734,6 +1767,18 @@ fn canonical_content_bundle_hash(bundle: &CastleFightContentBundle) -> u64 {
     hash_economy_rules(&mut hash, bundle.economy);
     hash_damage_rules(&mut hash, bundle.damage_rules);
     hash.write_u32(bundle.main_castle_repair_time_ticks);
+    if let Some(shrine) = crate::golden_shrine_definition_for_version(bundle.map_version) {
+        let p = &shrine.parameters;
+        hash.write_u32(p.golden_shrine_unit_id);
+        hash.write_u32(p.chance_percent_per_shrine);
+        hash.write_u32(p.maximum_effective_chance_percent);
+        hash.write_u32(p.chance_roll_min);
+        hash.write_u32(p.chance_roll_max);
+        hash.write_u64(p.revive_delay_seconds);
+        hash.write_u32(p.exclude_legendary_marker_ability_id);
+        hash.write_u32(p.exclude_summoned_unit_marker_ability_id);
+        hash.write_u32(shrine.building_health_regen_per_second_per_10k);
+    }
 
     hash.write_u64(bundle.units.len() as u64);
     for (id, definition) in &bundle.units {
@@ -1847,6 +1892,10 @@ fn hash_unit_definition(hash: &mut ContentHash64, definition: CastleFightUnitDef
     hash.write_u8(u8::from(definition.classifications.hero));
     hash.write_u8(u8::from(definition.classifications.summoned));
     hash.write_u8(u8::from(definition.classifications.spell_immune));
+    hash.write_u8(u8::from(definition.classifications.combat_sapper));
+    hash.write_u8(u8::from(definition.classifications.legendary));
+    hash.write_u8(u8::from(definition.classifications.summoned_marker));
+    hash.write_u8(u8::from(definition.classifications.illusion));
     hash.write_i32(definition.collision_radius.0);
     match definition.corpse {
         Some(corpse) => {
@@ -2744,6 +2793,20 @@ impl ExtractedContent927 {
                         .iter()
                         .any(|value| value.eq_ignore_ascii_case("summoned")),
                     spell_immune: false,
+                    combat_sapper: sapper,
+                    legendary: abilities.contains(
+                        &crate::golden_shrine_definition_for_version(MapVersion::CASTLE_FIGHT_9_27)
+                            .expect("9.27 shrine")
+                            .parameters
+                            .exclude_legendary_marker_ability_id,
+                    ),
+                    summoned_marker: abilities.contains(
+                        &crate::golden_shrine_definition_for_version(MapVersion::CASTLE_FIGHT_9_27)
+                            .expect("9.27 shrine")
+                            .parameters
+                            .exclude_summoned_unit_marker_ability_id,
+                    ),
+                    illusion: false,
                 },
                 sapper,
                 undead,

@@ -19,6 +19,7 @@ pub struct SimulationSnapshot {
     lifecycle: MatchLifecycle,
     team_objectives: [Option<SimId>; 2],
     gjallarhorn_constructed_count: [u32; 2],
+    shrine_death_generation: u64,
     defense_alerts: Vec<DefenseAlert>,
     entities: Vec<CanonicalEntity>,
     checksum: u64,
@@ -83,6 +84,12 @@ impl SimulationSnapshot {
                     {
                         rehydrate_optional_content(&mut definition.properties.content, content)?;
                     }
+                }
+                CanonicalEntity::DelayedShrineRevival { revival, .. } => {
+                    rehydrate_optional_content(
+                        &mut revival.definition.properties.content,
+                        content,
+                    )?;
                 }
                 CanonicalEntity::Building(building) => {
                     rehydrate_optional_content(&mut building.content, content)?;
@@ -214,6 +221,7 @@ impl Simulation {
             lifecycle: self.lifecycle,
             team_objectives: self.team_objectives,
             gjallarhorn_constructed_count: self.gjallarhorn_constructed_count,
+            shrine_death_generation: self.shrine_death_generation,
             defense_alerts: self.defense_alerts.clone(),
             entities: canonical_entities(&self.world),
             checksum: self.checksum(),
@@ -279,6 +287,7 @@ impl Simulation {
                 lifecycle: snapshot.lifecycle,
                 team_objectives: snapshot.team_objectives,
                 gjallarhorn_constructed_count: snapshot.gjallarhorn_constructed_count,
+                shrine_death_generation: snapshot.shrine_death_generation,
             },
         );
         if restored_checksum != snapshot.checksum {
@@ -293,6 +302,7 @@ impl Simulation {
         self.lifecycle = snapshot.lifecycle;
         self.team_objectives = snapshot.team_objectives;
         self.gjallarhorn_constructed_count = snapshot.gjallarhorn_constructed_count;
+        self.shrine_death_generation = snapshot.shrine_death_generation;
         self.defense_alerts.clone_from(&snapshot.defense_alerts);
         self.next_tick = snapshot.next_tick;
         self.next_id = snapshot.next_id;
@@ -315,6 +325,12 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
         .iter_entities()
         .filter_map(|entity| {
             let id = *entity.get::<SimId>()?;
+            if let Some(revival) = entity.get::<DelayedShrineRevival>() {
+                return Some(CanonicalEntity::DelayedShrineRevival {
+                    id,
+                    revival: *revival,
+                });
+            }
             if let Some(projectile) = entity.get::<GuaranteedHitProjectile>() {
                 return Some(CanonicalEntity::Projectile(CanonicalProjectile {
                     id,
@@ -399,6 +415,10 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
                         .get::<UnitClassifications>()
                         .copied()
                         .unwrap_or_default(),
+                    shrine_state: entity
+                        .get::<ShrineRevivalState>()
+                        .copied()
+                        .unwrap_or_default(),
                     build_time_ticks: entity.get::<BuildTimeTicks>().map(|ticks| ticks.0),
                     repair_time_ticks: entity.get::<RepairTimeTicks>().map(|ticks| ticks.0),
                     movement: *entity.get::<MovementProfile>()?,
@@ -429,6 +449,7 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
                     team,
                     footprint: *entity.get::<BuildingFootprint>()?,
                     health,
+                    health_regeneration: entity.get::<HealthRegeneration>().copied(),
                     construction: entity.get::<BuildingConstruction>().copied().map(Box::new),
                     economy: entity.get::<BuildingEconomyProfile>().copied(),
                     repair_time_ticks: entity.get::<RepairTimeTicks>().map(|ticks| ticks.0),
@@ -536,6 +557,9 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                     unit.navigation,
                     unit.spawn_tick,
                 ));
+                if unit.shrine_state != ShrineRevivalState::default() {
+                    entity.insert(unit.shrine_state);
+                }
                 if let Some(content) = unit.content {
                     entity.insert(content);
                 }
@@ -575,6 +599,9 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                 if let Some(abilities) = unit.additional_abilities {
                     entity.insert(abilities);
                 }
+            }
+            CanonicalEntity::DelayedShrineRevival { id, revival } => {
+                world.spawn((*id, *revival));
             }
             CanonicalEntity::Building(building) => {
                 let mut entity = world.spawn((
@@ -626,6 +653,9 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                 }
                 if let Some(secondary_attack) = building.production_secondary_attack {
                     entity.insert(ProductionSecondaryAttack(secondary_attack));
+                }
+                if let Some(regeneration) = building.health_regeneration {
+                    entity.insert(regeneration);
                 }
                 if let Some(regeneration) = building.production_health_regen_per_second_per_10k {
                     entity.insert(ProductionHealthRegeneration(regeneration));

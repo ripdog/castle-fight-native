@@ -35,7 +35,9 @@ mod native_target_effects;
 #[cfg(test)]
 mod production_abilities;
 mod projectiles;
+mod shrine;
 mod snapshot;
+pub use shrine::ShrineRevivalEvent;
 mod status;
 mod targeting;
 
@@ -54,6 +56,7 @@ use status::{
     purge_expired_status_modifiers, resolve_periodic_unit_statuses,
 };
 
+use crate::components::{DelayedShrineRevival, ShrineRevivalState};
 use crate::{
     components::{
         AbilityConfigurationError, AbilityEffect, AbilityId, AbilityTargetPolicy,
@@ -571,6 +574,8 @@ pub struct Simulation {
     defense_alerts: Vec<DefenseAlert>,
     last_attacks: Vec<AttackEvent>,
     last_ability_casts: Vec<AbilityCastEvent>,
+    last_shrine_revivals: Vec<ShrineRevivalEvent>,
+    shrine_death_generation: u64,
     last_chain_lightnings: Vec<ChainLightningEvent>,
     players: Vec<PlayerState>,
     lifecycle: MatchLifecycle,
@@ -708,6 +713,8 @@ impl Simulation {
             defense_alerts: Vec::new(),
             last_attacks: Vec::new(),
             last_ability_casts: Vec::new(),
+            last_shrine_revivals: Vec::new(),
+            shrine_death_generation: 1,
             last_chain_lightnings: Vec::new(),
             players,
             lifecycle: MatchLifecycle::Running,
@@ -800,6 +807,7 @@ impl Simulation {
         if matches!(self.lifecycle, MatchLifecycle::Finished { .. }) {
             return false;
         }
+        self.invalidate_pending_golden_shrine_revivals();
         self.lifecycle = MatchLifecycle::Finished {
             outcome,
             finished_tick: self.next_tick.saturating_sub(1),
@@ -897,6 +905,11 @@ impl Simulation {
         for (entity, source_unit, source_owner, source_team, position, corpse, resurrection) in
             fatalities
         {
+            let shrine_state = self
+                .world
+                .get::<ShrineRevivalState>(entity)
+                .copied()
+                .unwrap_or_default();
             self.world.despawn(entity);
             let Some(profile) = corpse else {
                 continue;
@@ -923,6 +936,7 @@ impl Simulation {
                     decay_start_tick,
                     expires_tick,
                     resurrection,
+                    shrine_state,
                 },
             ));
         }
@@ -1012,6 +1026,7 @@ impl Simulation {
             (false, true) => MatchOutcome::Victory(Team(1)),
             (true, false) => MatchOutcome::Victory(Team(0)),
         };
+        self.invalidate_pending_golden_shrine_revivals();
         self.lifecycle = MatchLifecycle::Finished {
             outcome,
             finished_tick: completed_tick,
@@ -1390,6 +1405,7 @@ impl Simulation {
 
         let phase_start = Instant::now();
         self.advance_cooldowns();
+        self.resolve_shrine_revivals();
         let corpses_expired = self.expire_corpses();
         self.advance_builders();
         self.advance_building_construction();
@@ -1628,8 +1644,35 @@ impl Simulation {
 
         let mut deaths = 0;
         let mut corpse_spawns = Vec::new();
+        // Team contributions are phase-local derived state, never a stale persistent counter.
+        // Scan buildings twice per resolution phase rather than once per individual fatality.
+        let shrine_chances = [
+            self.golden_shrine_revive_chance(Team(0)),
+            self.golden_shrine_revive_chance(Team(1)),
+        ];
         for (index, unit) in units.iter().enumerate() {
             if unit_health[index] <= 0 {
+                let shrine_state = if self
+                    .world
+                    .get::<Health>(unit.entity)
+                    .is_some_and(|health| health.current > 0)
+                {
+                    // A newly fatal combat phase has a damage source; an already-dead external
+                    // handle has no killer and cannot enter fJ's shrine branch.
+                    self.schedule_shrine_revival(
+                        unit.entity,
+                        unit.owner,
+                        unit.team,
+                        positions[index],
+                        unit_health[index],
+                        shrine_chances[usize::from(unit.team.0)],
+                    )
+                } else {
+                    self.world
+                        .get::<ShrineRevivalState>(unit.entity)
+                        .copied()
+                        .unwrap_or_default()
+                };
                 if let Some(profile) = unit.corpse {
                     let resurrection = self
                         .world
@@ -1642,6 +1685,7 @@ impl Simulation {
                         positions[index],
                         profile,
                         resurrection,
+                        shrine_state,
                     ));
                 }
                 self.world.despawn(unit.entity);
@@ -1709,8 +1753,15 @@ impl Simulation {
         }
 
         let corpses_spawned = corpse_spawns.len();
-        for (source_unit, source_owner, source_team, position, profile, resurrection) in
-            corpse_spawns
+        for (
+            source_unit,
+            source_owner,
+            source_team,
+            position,
+            profile,
+            resurrection,
+            shrine_state,
+        ) in corpse_spawns
         {
             let id = self.allocate_id();
             let decay_start_tick = completed_tick
@@ -1733,6 +1784,7 @@ impl Simulation {
                     decay_start_tick,
                     expires_tick,
                     resurrection,
+                    shrine_state,
                 },
             ));
         }
@@ -1810,6 +1862,7 @@ impl Simulation {
         let checksum = canonical_checksum(
             &self.world,
             CanonicalMatchState {
+                shrine_death_generation: self.shrine_death_generation,
                 next_tick: self.next_tick,
                 next_id: self.next_id,
                 configuration_identity: self.configuration_identity,
@@ -1921,6 +1974,7 @@ impl Simulation {
         canonical_checksum(
             &self.world,
             CanonicalMatchState {
+                shrine_death_generation: self.shrine_death_generation,
                 next_tick: self.next_tick,
                 next_id: self.next_id,
                 configuration_identity: self.configuration_identity,
@@ -1939,6 +1993,7 @@ impl Simulation {
     pub fn clear_presentation_events(&mut self) {
         self.last_attacks.clear();
         self.last_ability_casts.clear();
+        self.last_shrine_revivals.clear();
         self.last_chain_lightnings.clear();
     }
 
@@ -2327,6 +2382,10 @@ impl Simulation {
             self.world
                 .query::<(&mut Health, &mut HealthRegeneration, Option<&StatusState>)>();
         for (mut health, mut regeneration, status) in health_regen_query.iter_mut(&mut self.world) {
+            // Native regeneration never raises a dead handle, including shrine buildings.
+            if health.current <= 0 {
+                continue;
+            }
             let bonus_per_second_per_10k = status.map_or(0, |status| {
                 status.armor_modifiers[..usize::from(status.armor_modifier_count)]
                     .iter()
