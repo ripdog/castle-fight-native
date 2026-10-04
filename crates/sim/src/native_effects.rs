@@ -46,6 +46,8 @@ pub enum NativeEffectImplementationId {
     WarcraftFaerieFireV1,
     WarcraftElvenAutomaticV1,
     WarcraftBuildingHexV1,
+    WarcraftBarrageV1,
+    WarcraftPersistentCarrierV1,
 }
 
 impl NativeEffectImplementationId {
@@ -71,6 +73,8 @@ impl NativeEffectImplementationId {
             Self::WarcraftFaerieFireV1 => 16,
             Self::WarcraftElvenAutomaticV1 => 17,
             Self::WarcraftBuildingHexV1 => 24,
+            Self::WarcraftBarrageV1 => 64,
+            Self::WarcraftPersistentCarrierV1 => 65,
         }
     }
 
@@ -82,6 +86,8 @@ impl NativeEffectImplementationId {
                 | Self::WarcraftHumanSupportV1
                 | Self::WarcraftHumanPassiveV1
                 | Self::WarcraftHumanUtilityV1
+                | Self::WarcraftBarrageV1
+                | Self::WarcraftPersistentCarrierV1
         )
     }
 }

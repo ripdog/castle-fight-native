@@ -469,6 +469,9 @@ pub struct UnitClassifications {
     pub hero: bool,
     pub summoned: bool,
     pub spell_immune: bool,
+    /// Native invisibility; revelation is tracked independently by status buff identity.
+    #[serde(default)]
+    pub invisible: bool,
     /// Script UNIT_TYPE_SAPPER and not a structure.
     pub combat_sapper: bool,
     /// Native Avul marker. Distinct from magic immunity.
@@ -559,15 +562,24 @@ impl PassiveUnitEffects {
     }
 
     pub(crate) fn without_defend(self) -> Self {
-        let mut result = Self::EMPTY;
-        for effect in self
-            .iter()
-            .filter(|e| !matches!(e, PassiveUnitEffect::Defend(_)))
-        {
-            result.effects[usize::from(result.count)] = Some(effect);
-            result.count += 1;
-        }
+        let mut result = self;
+        result.retain(|effect| !matches!(effect, PassiveUnitEffect::Defend(_)));
         result
+    }
+
+    /// Remove identity-scoped permanent abilities without reallocating or reordering survivors.
+    pub fn retain(&mut self, mut keep: impl FnMut(PassiveUnitEffect) -> bool) {
+        let count = usize::from(self.count);
+        let mut write = 0;
+        for read in 0..count {
+            let effect = self.effects[read].expect("active passive effect slot must be populated");
+            if keep(effect) {
+                self.effects[write] = Some(effect);
+                write += 1;
+            }
+        }
+        self.effects[write..count].fill(None);
+        self.count = u8::try_from(write).expect("passive effect count fits u8");
     }
 
     #[must_use]

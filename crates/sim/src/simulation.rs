@@ -43,6 +43,7 @@ mod movement;
 mod native_actions;
 #[cfg(test)]
 mod native_actions_tests;
+mod native_carriers;
 #[cfg(test)]
 mod native_target_effects;
 #[cfg(test)]
@@ -366,6 +367,10 @@ impl ChainLightningEvent {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProjectileViewKind {
+    NativeCarrierBolt {
+        target: SimId,
+        ability: AbilityId,
+    },
     GuaranteedHit {
         target: SimId,
     },
@@ -1432,6 +1437,7 @@ impl Simulation {
         self.advance_cooldowns();
         self.resolve_shrine_revivals();
         self.advance_building_spell_controls();
+        self.advance_native_regeneration();
         let corpses_expired = self.expire_corpses();
         self.advance_builders();
         self.advance_building_construction();
@@ -1585,6 +1591,17 @@ impl Simulation {
         let chain_lightning_entities_to_remove = chain_lightning_hops.removals;
 
         let phase_start = Instant::now();
+        let native_carriers = self.resolve_native_carriers(TargetProjectileContext {
+            units: &mut units,
+            buildings: &buildings,
+            grid: &grid,
+            unit_health: &mut unit_health,
+            building_health: &mut building_health,
+            positions: &positions,
+            attackers_this_tick: &mut attackers_this_tick,
+            next_defense_alerts: &mut next_defense_alerts,
+            completed_tick,
+        });
         let target_projectiles = self.resolve_due_target_projectiles(TargetProjectileContext {
             units: &mut units,
             buildings: &buildings,
@@ -1599,9 +1616,12 @@ impl Simulation {
         let due_ballistic_projectiles = target_projectiles.due_ballistic_projectiles;
         let mut projectile_entities_to_remove = target_projectiles.projectile_entities_to_remove;
         let bounce_projectile_updates = target_projectiles.bounce_projectile_updates;
-        let mut projectile_impacts = target_projectiles.projectile_impacts;
-        let mut projectile_effects = target_projectiles.projectile_effects;
-        let mut projectile_invalidations = target_projectiles.projectile_invalidations;
+        let mut projectile_impacts =
+            target_projectiles.projectile_impacts + native_carriers.impacts;
+        let mut projectile_effects =
+            target_projectiles.projectile_effects + native_carriers.effects;
+        let mut projectile_invalidations =
+            target_projectiles.projectile_invalidations + native_carriers.invalidations;
         let bounce_jumps = target_projectiles.bounce_jumps;
         let bounce_candidate_checks = target_projectiles.bounce_candidate_checks;
         let mut chain_lightning_launches = target_projectiles.chain_lightning_launches;
@@ -1630,7 +1650,9 @@ impl Simulation {
             + line_projectile_launches.len()
             + reflected_projectile_launches.len()
             + ballistic_projectile_launches.len()
-            + bounce_projectile_launches.len();
+            + bounce_projectile_launches.len()
+            + native_carriers.launches
+            + attack_resolution.native_barrage_launches;
         let combat = phase_start.elapsed();
 
         let movement = self.resolve_movement(
@@ -1892,6 +1914,8 @@ impl Simulation {
         }
         if !building_deaths.is_empty() {
             for entity in building_deaths {
+                let id = *self.world.get::<SimId>(entity).expect("dead building id");
+                self.stop_native_carrier(id);
                 self.release_building_legendary_points(entity);
                 self.world.despawn(entity);
             }
@@ -2109,6 +2133,10 @@ impl Simulation {
                     || entity.get::<BallisticProjectile>().is_some()
                     || entity.get::<LineProjectile>().is_some()
                     || entity.get::<BounceProjectile>().is_some()
+                    || matches!(
+                        entity.get::<crate::native_carriers::NativeCarrierState>(),
+                        Some(crate::native_carriers::NativeCarrierState::Bolt(_))
+                    )
             })
             .count()
     }
@@ -3073,6 +3101,12 @@ struct UnitSnapshot {
 }
 
 impl UnitSnapshot {
+    fn visible_to(&self, team: Team, tick: u64) -> bool {
+        self.team == team
+            || !self.classifications.invisible
+            || self.status.is_revealed_to(team, tick)
+    }
+
     fn attack_for_unit(
         self,
         movement_class: MovementClass,
@@ -3974,6 +4008,22 @@ fn corpse_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<Cor
 }
 
 fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<ProjectileView> {
+    if let Some(crate::native_carriers::NativeCarrierState::Bolt(bolt)) =
+        entity.get::<crate::native_carriers::NativeCarrierState>()
+    {
+        return Some(ProjectileView {
+            id: *entity.get::<SimId>()?,
+            source: bolt.visual_source,
+            ability: Some(bolt.ability),
+            launch_position: bolt.position,
+            launch_tick: bolt.position_tick,
+            impact_tick: bolt.impact_tick,
+            kind: ProjectileViewKind::NativeCarrierBolt {
+                target: bolt.target,
+                ability: bolt.ability,
+            },
+        });
+    }
     let id = *entity.get::<SimId>()?;
     if let Some(crate::components::NativeAction::Bolt(projectile)) =
         entity.get::<crate::components::NativeAction>()

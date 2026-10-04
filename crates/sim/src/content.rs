@@ -1460,6 +1460,7 @@ impl CastleFightTowerDefinition {
                     legendary: false,
                     summoned_marker: false,
                     illusion: false,
+                    invisible: false,
                 },
                 build_time_ticks: None,
                 repair_time_ticks: None,
@@ -1583,6 +1584,19 @@ fn build_content_bundle_927() -> Result<CastleFightContentBundle, CastleFightCon
                 root_set.insert(source);
             }
         }
+    }
+    let carrier = crate::native_carriers::carrier_for_version(version)
+        .map_err(|_| CastleFightContentError::UnsupportedRelease(version))?;
+    if towers
+        .values()
+        .any(|definition| definition.rawcode == carrier.building_rawcode)
+    {
+        // A07W's retained script installs A000 on an independent persistent carrier.
+        // Keep that actual effect in dependency closure, not just the building's marker.
+        root_set.insert(NativeEffectSource::new(
+            NativeEffectSourceKind::AbilityEffect,
+            carrier.ability.0,
+        ));
     }
     let roots = root_set.into_iter().collect::<Vec<_>>();
     let mut behaviors = resolve_native_effect_requirements(version, &roots)?
@@ -1835,6 +1849,15 @@ fn stable_ability_id(
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A06A") => {
             0x4300_0001
         }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A015") => {
+            0x4200_000b
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A07W") => {
+            0x4200_000c
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A000") => {
+            0x4200_000d
+        }
         _ => return Err(CastleFightContentError::MissingStableAbilityId(source)),
     };
     Ok(CastleFightAbilityId(id))
@@ -1848,6 +1871,11 @@ fn canonical_content_bundle_hash(bundle: &CastleFightContentBundle) -> u64 {
     hash.write_u16(bundle.map_version.minor);
     hash.write_bytes(bundle.revision.as_bytes());
     hash.write_i32(CASTLE_FIGHT_SIMULATION_HZ);
+    // Includes source identities as well as tuning; no independent hand-authored tower values.
+    hash.write_bytes(
+        &crate::native_carriers::canonical_projection_for_version(bundle.map_version)
+            .expect("registered native tower content version"),
+    );
     hash_command_card(&mut hash, bundle.command_card);
     hash_economy_rules(&mut hash, bundle.economy);
     hash_damage_rules(&mut hash, bundle.damage_rules);
@@ -1982,6 +2010,7 @@ fn hash_unit_definition(hash: &mut ContentHash64, definition: CastleFightUnitDef
     hash.write_u8(u8::from(definition.classifications.legendary));
     hash.write_u8(u8::from(definition.classifications.summoned_marker));
     hash.write_u8(u8::from(definition.classifications.illusion));
+    hash.write_u8(u8::from(definition.classifications.invisible));
     hash.write_i32(definition.collision_radius.0);
     match definition.corpse {
         Some(corpse) => {
@@ -2975,6 +3004,7 @@ impl ExtractedContent927 {
                             .exclude_summoned_unit_marker_ability_id,
                     ),
                     illusion: false,
+                    invisible: false,
                 },
                 sapper,
                 undead,

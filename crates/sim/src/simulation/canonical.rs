@@ -803,6 +803,77 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u64(revival.death_generation);
                 hash_resolved_unit_definition(&mut hash, Some(revival.definition));
             }
+            CanonicalEntity::NativeCarrier { id, state } => {
+                use crate::native_carriers::NativeCarrierState;
+                hash.write_u8(13);
+                hash.write_u64(id.0);
+                match state {
+                    NativeCarrierState::Carrier {
+                        building,
+                        owner,
+                        team,
+                        position,
+                        map_version,
+                        ready_tick,
+                        sequence,
+                    } => {
+                        hash.write_u8(0);
+                        hash.write_u64(building.0);
+                        match owner {
+                            Some(owner) => {
+                                hash.write_u8(1);
+                                hash.write_u8(owner.0);
+                            }
+                            None => hash.write_u8(0),
+                        }
+                        hash.write_u8(team.0);
+                        hash.write_i32(position.x);
+                        hash.write_i32(position.y);
+                        hash.write_u16(map_version.major);
+                        hash.write_u16(map_version.minor);
+                        hash.write_u64(ready_tick);
+                        hash.write_u64(sequence);
+                    }
+                    NativeCarrierState::Bolt(bolt) => {
+                        hash.write_u8(1);
+                        hash.write_u64(bolt.source.0);
+                        hash.write_u64(bolt.visual_source.0);
+                        hash.write_u8(bolt.source_team.0);
+                        hash.write_u64(bolt.target.0);
+                        hash.write_u64(u64::from(bolt.ability.0));
+                        hash.write_u16(bolt.map_version.major);
+                        hash.write_u16(bolt.map_version.minor);
+                        hash.write_i32(bolt.damage);
+                        match bolt.attack_damage_type {
+                            Some(kind) => {
+                                hash.write_u8(1);
+                                hash.write_u8(kind.stable_tag());
+                            }
+                            None => hash.write_u8(0),
+                        }
+                        hash.write_i32(bolt.launch_position.x);
+                        hash.write_i32(bolt.launch_position.y);
+                        hash.write_u64(bolt.launch_tick);
+                        hash.write_i32(bolt.position.x);
+                        hash.write_i32(bolt.position.y);
+                        hash.write_u64(bolt.position_tick);
+                        hash.write_u64(bolt.impact_tick);
+                    }
+                    NativeCarrierState::Regeneration {
+                        building,
+                        map_version,
+                        per_second_per_10k,
+                        remainder,
+                    } => {
+                        hash.write_u8(2);
+                        hash.write_u64(building.0);
+                        hash.write_u16(map_version.major);
+                        hash.write_u16(map_version.minor);
+                        hash.write_u32(per_second_per_10k);
+                        hash.write_u64(u64::from(remainder));
+                    }
+                }
+            }
             CanonicalEntity::Builder(builder) => {
                 hash.write_u8(9);
                 hash.write_u64(builder.id.0);
@@ -898,6 +969,10 @@ pub(super) enum CanonicalEntity {
         id: SimId,
         state: BuildingSpellTargetState,
     },
+    NativeCarrier {
+        id: SimId,
+        state: crate::native_carriers::NativeCarrierState,
+    },
 }
 
 impl CanonicalEntity {
@@ -917,6 +992,7 @@ impl CanonicalEntity {
             Self::DelayedShrineRevival { id, .. } => *id,
             Self::LineProjectile(projectile) => projectile.id,
             Self::BuildingSpellTarget { id, .. } => *id,
+            Self::NativeCarrier { id, .. } => *id,
         }
     }
 }
@@ -1598,6 +1674,7 @@ fn hash_unit_classifications(hash: &mut Fnv64, flags: UnitClassifications) {
     hash.write_u8(u8::from(flags.hero));
     hash.write_u8(u8::from(flags.summoned));
     hash.write_u8(u8::from(flags.spell_immune));
+    hash.write_u8(u8::from(flags.invisible));
     hash.write_u8(u8::from(flags.combat_sapper));
     hash.write_u8(u8::from(flags.invulnerable));
     hash.write_u8(u8::from(flags.legendary));

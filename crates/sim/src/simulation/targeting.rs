@@ -256,6 +256,7 @@ impl Simulation {
             |index| {
                 let candidate = &units[index];
                 if candidate.health <= 0
+                    || !candidate.visible_to(source.team, self.next_tick)
                     || !attack_targets.can_target_unit(candidate.movement_class)
                 {
                     return;
@@ -320,6 +321,7 @@ impl Simulation {
             let target = &units[index];
             return target.team != source.team
                 && target.health > 0
+                && target.visible_to(source.team, self.next_tick)
                 && attack_targets.can_target_unit(target.movement_class)
                 && point_to_footprint_distance_sq(
                     target.position,
@@ -502,6 +504,7 @@ impl Simulation {
             let target = &units[index];
             return source.team != target.team
                 && target.health > 0
+                && target.visible_to(source.team, self.next_tick)
                 && source.attack_targets.can_target_unit(target.movement_class)
                 && source.position.distance_sq(target.position) <= retaliation_range_sq;
         }
@@ -777,6 +780,7 @@ impl Simulation {
     ) -> bool {
         if source.health <= 0
             || target.health <= 0
+            || !target.visible_to(source.team, self.next_tick)
             || distance_sq > pursuit_limit_sq
             || !source.attack_targets.can_target_unit(target.movement_class)
         {

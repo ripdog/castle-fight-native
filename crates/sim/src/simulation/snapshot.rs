@@ -124,7 +124,8 @@ impl SimulationSnapshot {
                 | CanonicalEntity::LineProjectile(_)
                 | CanonicalEntity::BounceProjectile(_)
                 | CanonicalEntity::BurningOil(_)
-                | CanonicalEntity::ChainLightning(_) => {}
+                | CanonicalEntity::ChainLightning(_)
+                | CanonicalEntity::NativeCarrier { .. } => {}
             }
         }
         Ok(())
@@ -350,6 +351,9 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
                     id,
                     state: state.clone(),
                 });
+            }
+            if let Some(state) = entity.get::<crate::native_carriers::NativeCarrierState>() {
+                return Some(CanonicalEntity::NativeCarrier { id, state: *state });
             }
             if let Some(projectile) = entity.get::<GuaranteedHitProjectile>() {
                 return Some(CanonicalEntity::Projectile(CanonicalProjectile {
@@ -744,6 +748,9 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                 if let Some(status) = building.status {
                     entity.insert(status);
                 }
+            }
+            CanonicalEntity::NativeCarrier { id, state } => {
+                world.spawn((*id, *state));
             }
             CanonicalEntity::Projectile(projectile) => {
                 world.spawn((projectile.id, projectile.projectile));

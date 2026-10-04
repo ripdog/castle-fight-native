@@ -525,10 +525,10 @@ impl PresentationAssets {
 
     fn projectile_mesh(&self, projectile: &ProjectileView) -> Handle<Mesh> {
         match projectile.kind {
-            ProjectileViewKind::GuaranteedHit { .. } | ProjectileViewKind::Reflected { .. } => {
-                self.guaranteed_projectile_mesh.clone()
-            }
-            ProjectileViewKind::Line { .. } => self.guaranteed_projectile_mesh.clone(),
+            ProjectileViewKind::NativeCarrierBolt { .. }
+            | ProjectileViewKind::GuaranteedHit { .. }
+            | ProjectileViewKind::Reflected { .. }
+            | ProjectileViewKind::Line { .. } => self.guaranteed_projectile_mesh.clone(),
             ProjectileViewKind::Ballistic { .. } => self.ballistic_projectile_mesh.clone(),
             ProjectileViewKind::Bounce { .. } => self.bounce_projectile_mesh.clone(),
         }
@@ -536,8 +536,10 @@ impl PresentationAssets {
 
     fn projectile_material(&self, projectile: &ProjectileView) -> Handle<StandardMaterial> {
         let index = match projectile.kind {
-            ProjectileViewKind::GuaranteedHit { .. } | ProjectileViewKind::Reflected { .. } => 0,
-            ProjectileViewKind::Line { .. } => 0,
+            ProjectileViewKind::NativeCarrierBolt { .. }
+            | ProjectileViewKind::GuaranteedHit { .. }
+            | ProjectileViewKind::Reflected { .. }
+            | ProjectileViewKind::Line { .. } => 0,
             ProjectileViewKind::Ballistic { .. } => 1,
             ProjectileViewKind::Bounce {
                 bounce_index: 0, ..
@@ -4342,7 +4344,7 @@ fn sync_render_entities(
             + Vec3::Y * PROJECTILE_HEIGHT;
         let imported_projectile = wc3_visuals.projectile_for(
             projectile_source_rawcode(projectile, &samples),
-            None, // Native spell movers supply their child ability here once the view carries it.
+            projectile.ability.map(|ability| ability.0),
         );
         let missile_arc = imported_projectile.map(|visual| visual.missile_arc);
         let mut pooled_visual = None;
@@ -4637,7 +4639,8 @@ fn projectile_target(
     fallback: Vec3,
 ) -> Vec3 {
     match projectile.kind {
-        ProjectileViewKind::GuaranteedHit { target }
+        ProjectileViewKind::NativeCarrierBolt { target, .. }
+        | ProjectileViewKind::GuaranteedHit { target }
         | ProjectileViewKind::Reflected { target, .. }
         | ProjectileViewKind::Bounce { target, .. } => {
             entity_render_position(target, samples, metrics, terrain, alpha).unwrap_or(fallback)
@@ -6393,6 +6396,7 @@ fn building_height(building: &BuildingSample) -> f32 {
 
 fn projectile_effect_color(kind: ProjectileViewKind) -> Color {
     match kind {
+        ProjectileViewKind::NativeCarrierBolt { .. } => Color::srgb(0.92, 0.92, 1.0),
         ProjectileViewKind::GuaranteedHit { .. } => Color::srgb(0.48, 0.90, 1.0),
         ProjectileViewKind::Reflected { .. } => Color::srgb(0.92, 0.92, 1.0),
         ProjectileViewKind::Line { .. } => Color::srgb(0.48, 0.90, 1.0),

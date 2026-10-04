@@ -5912,6 +5912,7 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
                     },
                 );
             }
+
             _ => {}
         }
     }
