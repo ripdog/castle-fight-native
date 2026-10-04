@@ -44,6 +44,7 @@ pub enum NativeEffectImplementationId {
     WarcraftSpellResistanceV1,
     WarcraftFeedbackV1,
     WarcraftFaerieFireV1,
+    WarcraftBuildingHexV1,
 }
 
 impl NativeEffectImplementationId {
@@ -67,6 +68,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftSpellResistanceV1 => 14,
             Self::WarcraftFeedbackV1 => 15,
             Self::WarcraftFaerieFireV1 => 16,
+            Self::WarcraftBuildingHexV1 => 24,
         }
     }
 
@@ -725,7 +727,16 @@ pub fn resolve_native_effect_requirements(
     version: MapVersion,
     roots: &[NativeEffectSource],
 ) -> Result<Vec<ResolvedNativeEffectBinding>, NativeEffectResolveError> {
-    catalog().resolve_requirements(version, roots)
+    let (building_roots, ordinary_roots): (Vec<_>, Vec<_>) = roots
+        .iter()
+        .copied()
+        .partition(|source| crate::building_mechanics::hex_source_for_version(*source, version));
+    let mut resolved = catalog().resolve_requirements(version, &ordinary_roots)?;
+    if !building_roots.is_empty() {
+        resolved.extend(crate::building_mechanics::hex_bindings_for_version(version));
+    }
+    resolved.sort_unstable_by_key(|binding| binding.source);
+    Ok(resolved)
 }
 
 pub fn native_unit_mechanics_for(
@@ -828,6 +839,14 @@ pub fn native_effect_implementation_for(
     source_key: &str,
     version: MapVersion,
 ) -> Option<NativeEffectImplementationId> {
+    let source = NativeEffectSourceKind::parse(source_kind)
+        .zip(rawcode(source_key).ok())
+        .map(|(kind, key)| NativeEffectSource::new(kind, key));
+    if source
+        .is_some_and(|source| crate::building_mechanics::hex_source_for_version(source, version))
+    {
+        return Some(NativeEffectImplementationId::WarcraftBuildingHexV1);
+    }
     catalog().implementation_for(source_kind, source_key, version)
 }
 

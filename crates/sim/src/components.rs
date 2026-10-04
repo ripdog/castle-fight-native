@@ -1,11 +1,14 @@
 use bevy_ecs::prelude::Component;
 
 mod automatic_abilities;
+mod mana;
 pub(crate) use automatic_abilities::compose_spellcasting_profiles;
 pub use automatic_abilities::{
     AbilityConfigurationError, AdditionalAutomaticAbilities, AdditionalAutomaticAbilityDefinitions,
     AutomaticAbilityInstance, MAX_AUTOMATIC_ABILITIES, SecondaryResurrectionState,
 };
+pub use mana::ManaRegeneration;
+pub(crate) use mana::per_second_increment;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -482,6 +485,18 @@ impl PassiveUnitEffects {
             .map(|effect| effect.expect("active passive effect slot must be populated"))
     }
 
+    pub(crate) fn without_defend(self) -> Self {
+        let mut result = Self::EMPTY;
+        for effect in self
+            .iter()
+            .filter(|e| !matches!(e, PassiveUnitEffect::Defend(_)))
+        {
+            result.effects[usize::from(result.count)] = Some(effect);
+            result.count += 1;
+        }
+        result
+    }
+
     #[must_use]
     pub const fn is_empty(self) -> bool {
         self.count == 0
@@ -919,6 +934,9 @@ pub enum AbilityEffect {
         reveal_radius: i32,
         reveal_duration_ticks: u16,
     },
+    Hex {
+        profile: crate::building_mechanics::HexEffectProfile,
+    },
     FaerieFire {
         modifier: ModifierId,
         armor_reduction_per_100: i16,
@@ -949,6 +967,7 @@ impl AbilityEffect {
             Self::Purification { .. } => 8,
             Self::ArtilleryBombardment { .. } => 9,
             Self::FaerieFire { .. } => 10,
+            Self::Hex { .. } => 12,
         }
     }
 }
@@ -957,7 +976,8 @@ impl AbilityEffect {
 pub struct ManaProfile {
     pub maximum: i32,
     pub starting: i32,
-    /// Mana regenerated per simulation tick in 1/10,000 mana units.
+    /// Legacy per-tick rate. Use `ManaProfile::per_second` for exact per-second rates;
+    /// the high bit tags that encoding without changing existing snapshot shapes.
     pub regen_per_tick_per_10k: u32,
 }
 

@@ -1,3 +1,4 @@
+pub mod building_mechanics;
 mod commands;
 mod components;
 mod content;
@@ -26,10 +27,10 @@ pub use components::{
     BurningOilEffectProfile, ChainLightningEffectProfile, CollisionRadius, ContentIdentity,
     CorpseDefinitionId, CorpseProfile, CriticalStrikeEffectProfile, DefendEffectProfile,
     EntanglingRootsEffectProfile, EvasionEffectProfile, FeedbackEffectProfile,
-    GameplayBundleIdentity, MAX_AUTOMATIC_ABILITIES, ManaProfile, ModifierId, MovementClass,
-    MovementProfile, Owner, PassiveUnitEffect, PassiveUnitEffects, PlayerId, ProductionProfile,
-    ResolvedUnitDefinition, SecondaryAttackProfile, SecondaryResurrectionState, SimId,
-    SpellcastingProfile, SplashFalloffProfile, StatusState, Team, TriggeredAttackEffect,
+    GameplayBundleIdentity, MAX_AUTOMATIC_ABILITIES, ManaProfile, ManaRegeneration, ModifierId,
+    MovementClass, MovementProfile, Owner, PassiveUnitEffect, PassiveUnitEffects, PlayerId,
+    ProductionProfile, ResolvedUnitDefinition, SecondaryAttackProfile, SecondaryResurrectionState,
+    SimId, SpellcastingProfile, SplashFalloffProfile, StatusState, Team, TriggeredAttackEffect,
     TriggeredSpellProcProfile, UnitClassifications, UnitGameplayProperties, UnitSpawn,
     UnitTemplate,
 };
@@ -81,11 +82,12 @@ pub use simulation::{
     AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION, AbilityCastEvent, AbilityCastTarget, AttackEvent,
     BuilderBuildError, BuilderCommandError, BuilderSpawnError, BuilderView, BuildingCommandError,
     BuildingConstructionCancelError, BuildingConstructionCancelOutcome, BuildingPlacementError,
-    BuildingUpgradeError, BuildingView, CANONICAL_CHECKSUM_SCHEMA_VERSION, ChainLightningEvent,
-    CombatRules, CorpseView, MatchLifecycle, MatchOutcome, PlayerConfig, PlayerConnectionStatus,
-    PlayerView, ProjectileView, ProjectileViewKind, Simulation, SimulationConfig,
-    SimulationSnapshot, SnapshotRestoreError, SnapshotWireError, TargetlessLane,
-    TeamObjectiveError, TickResult, TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
+    BuildingSpellVisualEvent, BuildingSpellVisualKind, BuildingUpgradeError, BuildingView,
+    CANONICAL_CHECKSUM_SCHEMA_VERSION, ChainLightningEvent, CombatRules, CorpseView, HexState,
+    MatchLifecycle, MatchOutcome, PlayerConfig, PlayerConnectionStatus, PlayerView, ProjectileView,
+    ProjectileViewKind, Simulation, SimulationConfig, SimulationSnapshot, SnapshotRestoreError,
+    SnapshotWireError, TargetlessLane, TeamObjectiveError, TickResult, TickTimings,
+    UPHILL_MISS_CHANCE_SCALE, UnitView,
 };
 pub use terrain::{
     TerrainElevationMap, TerrainElevationSample, TerrainLoadError, WC3_TERRAIN_TILE_WORLD_UNITS,

@@ -1254,6 +1254,9 @@ impl CastleFightTowerKind {
         let expected_name = extracted_content_927().buildings[&rawcode].name;
         let mut definition = extracted_tower_definition_927(rawcode, expected_name);
         definition.spellcasting = match self {
+            Self::CityOfMagic => Some(crate::building_mechanics::city_spellcasting_for_version(
+                MapVersion::CASTLE_FIGHT_9_27,
+            )),
             Self::Artillery => {
                 let speed_per_tick = match definition
                     .attack
@@ -1567,6 +1570,12 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A017") => {
+            0x4000_020a
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A018") => {
+            0x4000_020b
+        }
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0CV") => {
             0x4000_0001
         }
@@ -2157,6 +2166,21 @@ fn hash_automatic_ability_profile(hash: &mut ContentHash64, ability: AutomaticAb
     hash.write_u8(ability.target_policy.stable_tag());
     hash.write_u8(ability.effect.stable_tag());
     match ability.effect {
+        AbilityEffect::Hex { profile } => {
+            hash.write_u16(profile.duration_ticks);
+            hash.write_u16(profile.hero_duration_ticks);
+            hash.write_u16(profile.initial_reengage_ticks);
+            hash.write_u16(profile.defender_restore_ticks);
+            hash.write_u16(profile.defender_resume_ticks);
+            hash.write_u32(profile.defender_rawcode);
+            for form in [profile.ground, profile.air] {
+                hash.write_u32(form.rawcode);
+                hash.write_i32(form.speed_per_tick);
+                hash.write_i32(form.collision_radius);
+                hash.write_i32(i32::from(form.armor.armor_points));
+                hash.write_u8(form.armor.armor_type.stable_tag());
+            }
+        }
         AbilityEffect::FaerieFire {
             modifier,
             armor_reduction_per_100,

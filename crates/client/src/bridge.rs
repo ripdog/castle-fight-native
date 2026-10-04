@@ -109,6 +109,8 @@ pub struct UnitSample {
     pub mana_maximum: Option<i32>,
     pub visual_kind: UnitVisualKind,
     pub active_defend_ability: Option<AbilityId>,
+    pub hex: Option<castle_fight_sim::HexState>,
+    pub negative_building_shield_level: u8,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -169,6 +171,7 @@ pub struct PresentationSnapshot {
     pub attacks: Vec<AttackEvent>,
     pub ability_casts: Vec<AbilityCastEvent>,
     pub chain_lightnings: Vec<ChainLightningEvent>,
+    pub building_spell_visuals: Vec<castle_fight_sim::BuildingSpellVisualEvent>,
 }
 
 impl PresentationSnapshot {
@@ -208,6 +211,8 @@ impl PresentationSnapshot {
                             unit.mana_maximum.is_some(),
                         ),
                         active_defend_ability: unit.active_defend_ability,
+                        hex: unit.hex,
+                        negative_building_shield_level: unit.negative_building_shield_level,
                     },
                 )
             })
@@ -319,6 +324,7 @@ impl PresentationSnapshot {
             attacks: simulation.attacks_last_tick().to_vec(),
             ability_casts: simulation.ability_casts_last_tick().to_vec(),
             chain_lightnings: simulation.chain_lightnings_last_tick().to_vec(),
+            building_spell_visuals: simulation.building_spell_visuals_last_tick().to_vec(),
         }
     }
 }

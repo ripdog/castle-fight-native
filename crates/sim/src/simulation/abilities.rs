@@ -53,7 +53,9 @@ impl Simulation {
                             origin: AbilitySourceOrigin::Unit(source.position),
                             health: source.health,
                             stunned_until_tick: source.status.stunned_until_tick,
-                            spellcasting: source.spellcasting,
+                            spellcasting: (!source.abilities_disabled && !source.orders_suspended)
+                                .then_some(source.spellcasting)
+                                .flatten(),
                             mana_current: source.mana_current,
                             ability_state: source.ability_state,
                         },
@@ -100,6 +102,11 @@ impl Simulation {
         });
 
         for intent in intents {
+            if let AbilitySourceIndex::Unit(index) = intent.source
+                && (units[index].abilities_disabled || units[index].orders_suspended)
+            {
+                continue;
+            }
             let source = match intent.source {
                 AbilitySourceIndex::Unit(index) => {
                     let source = &units[index];
@@ -359,6 +366,15 @@ impl Simulation {
                             ) {
                                 metrics.effects += 1;
                             }
+                        }
+                    } else if let AbilityEffect::Hex { profile } = intent.ability.effect {
+                        if self.resolve_building_hex(
+                            &mut units[index],
+                            profile,
+                            source.id,
+                            source.ability_state.expect("cast state").cast_sequence,
+                        ) {
+                            metrics.effects += 1;
                         }
                     } else if apply_ability_effect_to_unit(
                         &mut units[index],
@@ -1074,7 +1090,11 @@ impl Simulation {
         let mut best: Option<(u64, SimId, usize)> = None;
         for (unit_index, candidate) in units.iter().enumerate() {
             *candidate_checks += 1;
-            if candidate.health <= 0 || candidate.team == source.team {
+            if candidate.health <= 0
+                || candidate.team == source.team
+                || (matches!(ability.effect, AbilityEffect::Hex { .. })
+                    && !self.hex_trigger_eligible(candidate))
+            {
                 continue;
             }
             let rank = deterministic_ability_target_rank(
@@ -1128,7 +1148,11 @@ impl Simulation {
                         AbilityTargetPolicy::NearestEnemyInCombat => {
                             self.faerie_fire_target_is_valid(source, ability, target, units)
                         }
-                        AbilityTargetPolicy::RandomEnemyUnitGlobal => target.team != source.team,
+                        AbilityTargetPolicy::RandomEnemyUnitGlobal => {
+                            target.team != source.team
+                                && (!matches!(ability.effect, AbilityEffect::Hex { .. })
+                                    || self.hex_trigger_eligible(target))
+                        }
                         AbilityTargetPolicy::AllEnemyUnits => false,
                         AbilityTargetPolicy::AllFriendlyUnits
                         | AbilityTargetPolicy::RandomCorpse

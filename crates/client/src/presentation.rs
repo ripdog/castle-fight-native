@@ -1228,6 +1228,15 @@ fn setup_scene(
     {
         selected_unit_models.push(stress.rawcode);
     }
+    if let AbilityEffect::Hex { profile } =
+        castle_fight_sim::building_mechanics::city_spellcasting_for_version(
+            selected_match.content.map_version,
+        )
+        .ability
+        .effect
+    {
+        selected_unit_models.extend([profile.ground.rawcode, profile.air.rawcode]);
+    }
     *unit_models = UnitModelSet::load_selected(&asset_server, &selected_unit_models);
     if let Some(stress) = visual_stress.as_ref() {
         spawn_profile_visual_stress(
@@ -3076,7 +3085,8 @@ fn prewarm_timed_wc3_effects(
                             duration_ticks,
                             ..
                         } => Some((modifier.0, duration_ticks)),
-                        AbilityEffect::Damage { .. }
+                        AbilityEffect::Hex { .. }
+                        | AbilityEffect::Damage { .. }
                         | AbilityEffect::Stun { .. }
                         | AbilityEffect::AreaDamage { .. }
                         | AbilityEffect::Purification { .. }
@@ -3320,6 +3330,7 @@ fn spawn_or_reuse_wc3_visual(
 
 fn sync_render_entities(
     mut commands: Commands,
+    selected: Res<SelectedMatch>,
     samples: Res<PresentationSamples>,
     world: SyncRenderWorld<'_>,
     mut render_map: ResMut<RenderMap>,
@@ -3615,7 +3626,58 @@ fn sync_render_entities(
         }
     }
 
+    for visual_event in &samples.current.building_spell_visuals {
+        let rawcode = match visual_event.kind {
+            castle_fight_sim::BuildingSpellVisualKind::ShieldConsumed => {
+                u32::from_be_bytes(*b"A09L")
+            }
+            castle_fight_sim::BuildingSpellVisualKind::ShieldBlocked => {
+                u32::from_be_bytes(*b"A070")
+            }
+            castle_fight_sim::BuildingSpellVisualKind::OverheatIncreased => {
+                u32::from_be_bytes(*b"A09C")
+            }
+            castle_fight_sim::BuildingSpellVisualKind::HexTransform
+            | castle_fight_sim::BuildingSpellVisualKind::HexRestore => u32::from_be_bytes(*b"A018"),
+        };
+        for visual in wc3_visuals.ability(rawcode) {
+            let position = samples.current.units.get(&visual_event.target).map_or_else(
+                || sim_point_to_terrain_world(visual_event.position, &terrain),
+                |unit| unit_ground_position(visual_event.position, unit.movement_class, &terrain),
+            );
+            let (entity, pooled_scene) = spawn_or_reuse_timed_wc3_visual(
+                &mut commands,
+                &mut effect_pool,
+                &visual.model,
+                Transform::from_translation(position),
+                !legacy_effect_pooling,
+            );
+            let lifetime = visual
+                .model
+                .effect_lifetime_seconds(ABILITY_MODEL_EFFECT_SECONDS);
+            timed_effects.0.push(TimedWc3Effect {
+                entity,
+                remaining: lifetime,
+                lifetime,
+                mesh: None,
+                fade_material: None,
+                pooled_lightning: false,
+                pooled_scene,
+            });
+        }
+    }
+
     for cast in &samples.current.ability_casts {
+        // The visible Parasite registration is only a trigger; its native base art is not Hex.
+        if cast.ability
+            == castle_fight_sim::building_mechanics::city_spellcasting_for_version(
+                selected.content.map_version,
+            )
+            .ability
+            .id
+        {
+            continue;
+        }
         let source_position =
             entity_render_position(cast.source, &samples, &metrics, &terrain, 1.0);
         let target_position = cast
@@ -3810,16 +3872,25 @@ fn sync_render_entities(
     }
 
     for unit in samples.current.units.values() {
-        if render_map.units.contains_key(&unit.id) {
-            continue;
+        let visual_rawcode = unit
+            .hex
+            .map(|hex| hex.form.rawcode)
+            .or_else(|| unit.content.map(|c| c.rawcode));
+        let desired_imported = visual_rawcode.filter(|rawcode| unit_models.get(*rawcode).is_some());
+        if let Some(entry) = render_map.units.get(&unit.id) {
+            if entry.imported_rawcode == desired_imported {
+                continue;
+            }
+            let entry = render_map
+                .units
+                .remove(&unit.id)
+                .expect("existing model entry");
+            commands.entity(entry.entity).despawn();
         }
         let position = unit_ground_position(unit.position, unit.movement_class, &terrain)
             + Vec3::Y * (unit_height(unit) * 0.5);
-        let imported_model = unit.content.and_then(|content| {
-            unit_models
-                .get(content.rawcode)
-                .map(|model| (content.rawcode, model))
-        });
+        let imported_model = visual_rawcode
+            .and_then(|rawcode| unit_models.get(rawcode).map(|model| (rawcode, model)));
         let (entity, weapon, imported_rawcode) = if let Some((rawcode, model)) = imported_model {
             let entity = commands
                 .spawn((Transform::from_translation(position), Visibility::default()))
@@ -3917,6 +3988,17 @@ fn sync_render_entities(
         }
     }
     for unit in samples.current.units.values() {
+        if unit.negative_building_shield_level > 0 && unit.hex.is_none() {
+            spawn_unit_status_visuals(
+                &mut commands,
+                &mut render_map,
+                (&wc3_visuals, &mut effect_pool, !legacy_effect_pooling),
+                unit,
+                u32::from_be_bytes(*b"A09L"),
+                Wc3StatusVisualKind::Armor,
+                &terrain,
+            );
+        }
         let movement_count = usize::from(unit.status.movement_modifier_count);
         for modifier in unit.status.movement_modifiers[..movement_count]
             .iter()
@@ -4542,6 +4624,12 @@ fn unit_status_visual_is_active(
                 .any(|modifier| modifier.id.0 == ability_rawcode && modifier.expires_tick > tick)
         }
         Wc3StatusVisualKind::Armor => {
+            if ability_rawcode == u32::from_be_bytes(*b"A09L")
+                && unit.negative_building_shield_level > 0
+                && unit.hex.is_none()
+            {
+                return true;
+            }
             let count = usize::from(unit.status.armor_modifier_count);
             unit.status.armor_modifiers[..count]
                 .iter()

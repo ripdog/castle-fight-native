@@ -3264,6 +3264,7 @@ mod tests {
             attacks: Vec::new(),
             ability_casts: Vec::new(),
             chain_lightnings: Vec::new(),
+            building_spell_visuals: Vec::new(),
         };
         PresentationSamples::new(snapshot)
     }
@@ -3355,6 +3356,8 @@ mod tests {
                 mana_maximum: None,
                 visual_kind: UnitVisualKind::Melee,
                 active_defend_ability: None,
+                hex: None,
+                negative_building_shield_level: 0,
             },
         );
         let terrain = flat_terrain();
@@ -3548,6 +3551,8 @@ mod tests {
                 mana_maximum: None,
                 visual_kind: UnitVisualKind::Melee,
                 active_defend_ability: None,
+                hex: None,
+                negative_building_shield_level: 0,
             },
         );
         let terrain = flat_terrain();

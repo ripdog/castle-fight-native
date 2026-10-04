@@ -107,11 +107,9 @@ impl Simulation {
         units: &[UnitSnapshot],
     ) -> Vec<AbilitySourceSnapshot> {
         let mut result = Vec::new();
-        for (index, unit) in units
-            .iter()
-            .enumerate()
-            .filter(|(_, unit)| unit.spellcasting.is_some())
-        {
+        for (index, unit) in units.iter().enumerate().filter(|(_, unit)| {
+            unit.spellcasting.is_some() && !unit.abilities_disabled && !unit.orders_suspended
+        }) {
             self.append_additional_ability_sources(
                 &mut result,
                 unit.entity,

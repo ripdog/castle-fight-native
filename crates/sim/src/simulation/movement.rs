@@ -173,7 +173,7 @@ impl Simulation {
         {
             return self.desired_ability_retreat_position(unit, movement_speed);
         }
-        if self.next_tick < unit.status.stunned_until_tick {
+        if unit.orders_suspended || self.next_tick < unit.status.stunned_until_tick {
             return MovementDecision::stationary(current);
         }
         if unit.movement_class == MovementClass::Air {
@@ -1006,7 +1006,9 @@ impl Simulation {
         }
 
         let (bounds_min, bounds_max) = self.navigation_world_bounds();
-        let reservation_cell_size = max_radius.saturating_mul(2).max(1);
+        let reservation_cell_size = max_radius
+            .saturating_mul(2)
+            .max(self.config.navigation_cell_size);
         let mut ground_reservations = SpatialReservationGrid::build_with_radii(
             reservation_cell_size,
             bounds_min,

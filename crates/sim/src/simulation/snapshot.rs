@@ -108,7 +108,8 @@ impl SimulationSnapshot {
                         rehydrate_optional_content(&mut definition.properties.content, content)?;
                     }
                 }
-                CanonicalEntity::Projectile(_)
+                CanonicalEntity::BuildingSpellTarget { .. }
+                | CanonicalEntity::Projectile(_)
                 | CanonicalEntity::ReflectedProjectile(_)
                 | CanonicalEntity::BallisticProjectile(_)
                 | CanonicalEntity::BounceProjectile(_)
@@ -288,6 +289,10 @@ impl Simulation {
             });
         }
 
+        super::building_spells::refresh_building_spell_controls(
+            &mut restored_world,
+            snapshot.next_tick,
+        );
         self.world = restored_world;
         self.players.clone_from(&snapshot.players);
         self.lifecycle = snapshot.lifecycle;
@@ -315,6 +320,12 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
         .iter_entities()
         .filter_map(|entity| {
             let id = *entity.get::<SimId>()?;
+            if let Some(state) = entity.get::<BuildingSpellTargetState>() {
+                return Some(CanonicalEntity::BuildingSpellTarget {
+                    id,
+                    state: state.clone(),
+                });
+            }
             if let Some(projectile) = entity.get::<GuaranteedHitProjectile>() {
                 return Some(CanonicalEntity::Projectile(CanonicalProjectile {
                     id,
@@ -575,6 +586,9 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                 if let Some(abilities) = unit.additional_abilities {
                     entity.insert(abilities);
                 }
+            }
+            CanonicalEntity::BuildingSpellTarget { id, state } => {
+                world.spawn((*id, state.clone()));
             }
             CanonicalEntity::Building(building) => {
                 let mut entity = world.spawn((

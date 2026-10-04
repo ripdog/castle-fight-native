@@ -7,7 +7,11 @@ impl Simulation {
         units: &[UnitSnapshot],
         buildings: &[BuildingSnapshot],
     ) -> bool {
-        if unit.health <= 0 || self.next_tick < unit.status.stunned_until_tick {
+        if unit.health <= 0
+            || unit.attacks_disabled
+            || unit.orders_suspended
+            || self.next_tick < unit.status.stunned_until_tick
+        {
             return false;
         }
         let current = unit
@@ -34,7 +38,7 @@ impl Simulation {
             units
                 .par_iter()
                 .map(|unit| {
-                    if unit.health <= 0 {
+                    if unit.health <= 0 || unit.attacks_disabled || unit.orders_suspended {
                         return TargetDecision::without_defense(None, false, false);
                     }
                     let current = unit.target.filter(|target| {

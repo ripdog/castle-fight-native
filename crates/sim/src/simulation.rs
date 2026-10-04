@@ -25,6 +25,13 @@ const AVOIDANCE_CLEAR_TICKS: u8 = 8;
 mod abilities;
 mod automatic_abilities;
 mod builder;
+mod building_spells;
+#[cfg(test)]
+mod building_spells_source_tests;
+#[cfg(test)]
+mod building_spells_tests;
+use building_spells::{BuildingSpellControl, BuildingSpellTargetState};
+pub use building_spells::{BuildingSpellVisualEvent, BuildingSpellVisualKind, HexState};
 mod canonical;
 mod combat;
 mod construction;
@@ -424,6 +431,8 @@ pub struct UnitView {
     pub ability_cast_sequence: Option<u64>,
     /// Active auto-maintained Warcraft Defend ability, if any.
     pub active_defend_ability: Option<AbilityId>,
+    pub hex: Option<HexState>,
+    pub negative_building_shield_level: u8,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -571,6 +580,7 @@ pub struct Simulation {
     defense_alerts: Vec<DefenseAlert>,
     last_attacks: Vec<AttackEvent>,
     last_ability_casts: Vec<AbilityCastEvent>,
+    last_building_spell_visuals: Vec<BuildingSpellVisualEvent>,
     last_chain_lightnings: Vec<ChainLightningEvent>,
     players: Vec<PlayerState>,
     lifecycle: MatchLifecycle,
@@ -708,6 +718,7 @@ impl Simulation {
             defense_alerts: Vec::new(),
             last_attacks: Vec::new(),
             last_ability_casts: Vec::new(),
+            last_building_spell_visuals: Vec::new(),
             last_chain_lightnings: Vec::new(),
             players,
             lifecycle: MatchLifecycle::Running,
@@ -1390,6 +1401,7 @@ impl Simulation {
 
         let phase_start = Instant::now();
         self.advance_cooldowns();
+        self.advance_building_spell_controls();
         let corpses_expired = self.expire_corpses();
         self.advance_builders();
         self.advance_building_construction();
@@ -1626,6 +1638,13 @@ impl Simulation {
             completed_tick,
         });
 
+        self.resolve_overheat_deaths(
+            &units,
+            &buildings,
+            &positions,
+            &mut unit_health,
+            &mut building_health,
+        );
         let mut deaths = 0;
         let mut corpse_spawns = Vec::new();
         for (index, unit) in units.iter().enumerate() {
@@ -1939,12 +1958,18 @@ impl Simulation {
     pub fn clear_presentation_events(&mut self) {
         self.last_attacks.clear();
         self.last_ability_casts.clear();
+        self.last_building_spell_visuals.clear();
         self.last_chain_lightnings.clear();
     }
 
     #[must_use]
     pub fn attacks_last_tick(&self) -> &[AttackEvent] {
         &self.last_attacks
+    }
+
+    #[must_use]
+    pub fn building_spell_visuals_last_tick(&self) -> &[BuildingSpellVisualEvent] {
+        &self.last_building_spell_visuals
     }
 
     #[must_use]
@@ -2377,13 +2402,20 @@ impl Simulation {
                     .iter()
                     .filter(|modifier| self.next_tick < modifier.expires_tick)
                     .map(|modifier| {
-                        modifier.mana_regeneration_per_second_per_10k
-                            / u32::try_from(CASTLE_FIGHT_SIMULATION_HZ).expect("positive tick rate")
+                        crate::components::per_second_increment(
+                            modifier.mana_regeneration_per_second_per_10k,
+                            self.next_tick,
+                            CASTLE_FIGHT_SIMULATION_HZ as u32,
+                        )
                     })
                     .sum::<u32>()
             });
             let accumulated = u64::from(mana.regen_remainder_per_10k)
-                + u64::from(profile.mana.regen_per_tick_per_10k)
+                + u64::from(
+                    profile
+                        .mana
+                        .regeneration_at_tick(self.next_tick, CASTLE_FIGHT_SIMULATION_HZ as u32),
+                )
                 + u64::from(aura_per_tick);
             let whole_mana = accumulated / 10_000;
             let remainder = accumulated % 10_000;
@@ -2812,6 +2844,9 @@ impl Simulation {
                         damage_type,
                         armor,
                         passive_effects,
+                        attacks_disabled: false,
+                        abilities_disabled: false,
+                        orders_suspended: false,
                         spellcasting,
                         mana_current,
                         ability_state,
@@ -2820,6 +2855,9 @@ impl Simulation {
             )
             .collect();
         units.sort_unstable_by_key(|unit| unit.id);
+        for unit in &mut units {
+            self.project_building_spell_control(unit);
+        }
         units
     }
 
@@ -2930,6 +2968,9 @@ struct UnitSnapshot {
     damage_type: DamageType,
     armor: ArmorProfile,
     passive_effects: PassiveUnitEffects,
+    attacks_disabled: bool,
+    abilities_disabled: bool,
+    orders_suspended: bool,
     spellcasting: Option<SpellcastingProfile>,
     mana_current: Option<i32>,
     ability_state: Option<AutomaticAbilityState>,
@@ -2940,6 +2981,9 @@ impl UnitSnapshot {
         self,
         movement_class: MovementClass,
     ) -> Option<(AttackProfile, AttackTargetMask, DamageType)> {
+        if self.attacks_disabled || self.orders_suspended {
+            return None;
+        }
         if let Some(secondary) = self.secondary_attack
             && !self
                 .primary_attack_targets()
@@ -2954,6 +2998,9 @@ impl UnitSnapshot {
     }
 
     fn attack_for_building(self) -> Option<(AttackProfile, AttackTargetMask, DamageType)> {
+        if self.attacks_disabled || self.orders_suspended {
+            return None;
+        }
         if let Some(secondary) = self.secondary_attack
             && !self.primary_attack_targets().can_target_buildings()
             && secondary.targets.can_target_buildings()
@@ -3525,7 +3572,10 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
     assert!(spellcasting.mana.maximum >= 0);
     assert!(spellcasting.mana.starting >= 0);
     assert!(spellcasting.mana.starting <= spellcasting.mana.maximum);
-    assert!(spellcasting.mana.regen_per_tick_per_10k <= 10_000_000);
+    assert!(match spellcasting.mana.regeneration() {
+        crate::components::ManaRegeneration::PerTickPer10k(rate) => rate <= 10_000_000,
+        crate::components::ManaRegeneration::PerSecondPer10k(rate) => rate <= 300_000_000,
+    });
     assert!(spellcasting.ability.mana_cost >= 0);
     assert!(spellcasting.ability.mana_cost <= spellcasting.mana.maximum);
     assert!(spellcasting.ability.range >= 0);
@@ -3544,6 +3594,13 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
     }
     match spellcasting.ability.effect {
+        AbilityEffect::Hex { profile } => {
+            assert!(profile.duration_ticks > 0 && profile.hero_duration_ticks > 0);
+            assert!(profile.initial_reengage_ticks > 0);
+            for form in [profile.ground, profile.air] {
+                assert!(form.speed_per_tick >= 0 && form.collision_radius > 0);
+            }
+        }
         AbilityEffect::Damage { amount } => assert!(amount >= 0),
         AbilityEffect::Stun { duration_ticks } => assert!(duration_ticks > 0),
         AbilityEffect::ModifyMovementSpeedPercent {
@@ -3853,8 +3910,17 @@ fn unit_view_from_entity(
     let ability_state = entity.get::<AutomaticAbilityState>().copied();
     let passive_effects = *entity.get::<PassiveUnitEffects>()?;
     let spawn_tick = entity.get::<SpawnTick>()?.0;
-    let active_defend_ability = active_defend_profile(passive_effects, spawn_tick, current_tick)
-        .map(|profile| profile.ability);
+    let control = entity
+        .get::<BuildingSpellControl>()
+        .copied()
+        .unwrap_or_default();
+    let hex = control.hex.filter(|hex| current_tick < hex.expires_tick);
+    let active_defend_ability = (!control.defend_disabled && hex.is_none())
+        .then(|| {
+            active_defend_profile(passive_effects, spawn_tick, current_tick)
+                .map(|profile| profile.ability)
+        })
+        .flatten();
     let status = *entity.get::<StatusState>()?;
     let attack = *entity.get::<AttackProfile>()?;
     Some(UnitView {
@@ -3863,9 +3929,14 @@ fn unit_view_from_entity(
         owner: entity.get::<Owner>()?.0,
         team: *entity.get::<Team>()?,
         position: entity.get::<Position>()?.0,
-        collision_radius: entity
-            .get::<CollisionRadius>()
-            .map_or(default_collision_radius, |radius| radius.0),
+        collision_radius: hex.map_or_else(
+            || {
+                entity
+                    .get::<CollisionRadius>()
+                    .map_or(default_collision_radius, |radius| radius.0)
+            },
+            |hex| hex.form.collision_radius,
+        ),
         movement_class: *entity.get::<MovementClass>()?,
         mechanical: entity.get::<MechanicalUnit>().is_some(),
         classifications: entity
@@ -3879,7 +3950,17 @@ fn unit_view_from_entity(
         attack_delivery: attack.delivery,
         attack_targets: *entity.get::<AttackTargetMask>()?,
         damage_type: *entity.get::<DamageType>()?,
-        armor: *entity.get::<ArmorProfile>()?,
+        armor: hex.map_or_else(
+            || {
+                let mut armor = *entity.get::<ArmorProfile>().expect("unit armor");
+                armor.armor_points += crate::building_mechanics::shield_armor_for_version(
+                    control.shield_level,
+                    crate::MapVersion::CASTLE_FIGHT_9_27,
+                );
+                armor
+            },
+            |hex| hex.form.armor,
+        ),
         target: entity.get::<TargetState>()?.current,
         direct_retaliation_lock: entity.get::<TargetState>()?.direct_retaliation_lock,
         ally_defense_lock: entity.get::<TargetState>()?.ally_defense_lock,
@@ -3893,6 +3974,8 @@ fn unit_view_from_entity(
         ability_ready_tick: ability_state.map(|state| state.ready_tick),
         ability_cast_sequence: ability_state.map(|state| state.cast_sequence),
         active_defend_ability,
+        hex,
+        negative_building_shield_level: control.shield_level,
     })
 }
 
