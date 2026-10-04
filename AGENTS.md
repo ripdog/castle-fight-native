@@ -3,6 +3,8 @@
 ## Working style
 
 - Work directly and autonomously; avoid unnecessary clarification when the intent is clear.
+- Use a single active coding agent on this host; do not launch delegated workers without explicit user approval. Run compile-heavy tasks sequentially rather than leaving concurrent build queues active.
+- `/tmp` is RAM-backed on this host. Keep worktrees and build artifacts on disk, for example under `/home/ripdog/RustroverProjects/castle-fight-native-worktrees/`, not in `/tmp`.
 - Always commit completed work automatically in logical, reviewable chunks with clear commit messages.
 - Keep commits narrowly scoped; do not mix unrelated refactors, formatting, and behavior changes unless they are inseparable.
 - Change `docs/spec` only for design changes or changes to normative engine behavior, not to record newly implemented entities. Keep implementation checklists, source audits, and progress tracking separately under `docs/verification`.
