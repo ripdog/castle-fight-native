@@ -66,7 +66,7 @@ fn wire_restored(sim: &Simulation, workers: usize) -> Simulation {
     let snapshot =
         SimulationSnapshot::decode_wire(&sim.capture_snapshot().encode_wire().unwrap(), content)
             .unwrap();
-    let mut restored = simulation(workers);
+    let mut restored = Simulation::new(sim.config.clone(), workers);
     restored.restore_snapshot(&snapshot).unwrap();
     restored
 }
@@ -248,6 +248,144 @@ fn feedback_live_mana_is_shared_between_same_tick_hits_and_not_burned_on_immune_
     }
 }
 
+#[test]
+fn ranged_bash_uses_intrinsic_hero_duration_at_impact_and_retains_profiles_on_wire() {
+    use crate::components::BashEffectProfile;
+    for hero in [false, true] {
+        let mut sim = simulation(1);
+        let source = sim.spawn_unit_with_properties(
+            unit(
+                0,
+                20,
+                10,
+                AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: 10 * SUBUNITS_PER_WORLD_UNIT,
+                },
+            ),
+            UnitGameplayProperties {
+                passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Bash(
+                    BashEffectProfile {
+                        ability: AbilityId(20),
+                        chance_per_10k: 10_000,
+                        bonus_damage: 7,
+                        stun_duration_ticks: 9,
+                        hero_stun_duration_ticks: 3,
+                        targets: AttackTargetMask::GROUND_UNITS,
+                    },
+                )),
+                ..UnitGameplayProperties::default()
+            },
+        );
+        let target = sim.spawn_unit_with_properties(
+            unit(1, 60, 0, AttackDelivery::Melee),
+            UnitGameplayProperties {
+                classifications: UnitClassifications {
+                    hero,
+                    ..UnitClassifications::default()
+                },
+                // Armor category deliberately differs from the intrinsic hero flag.
+                armor: ArmorProfile {
+                    armor_type: ArmorType::Hero,
+                    ..ArmorProfile::default()
+                },
+                ..UnitGameplayProperties::default()
+            },
+        );
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(target).unwrap().stunned_until_tick, 0);
+        let mut restored = wire_restored(&sim, 4);
+        assert_eq!(sim.checksum(), restored.checksum());
+        let source_entity = entity(&restored, source);
+        if let Some(mut effects) = restored
+            .world
+            .entity_mut(source_entity)
+            .get_mut::<PassiveUnitEffects>()
+        {
+            let PassiveUnitEffect::Bash(mut profile) = effects.iter().next().unwrap() else {
+                panic!()
+            };
+            profile.hero_stun_duration_ticks += 1;
+            *effects = PassiveUnitEffects::single(PassiveUnitEffect::Bash(profile));
+        }
+        assert_ne!(
+            sim.checksum(),
+            restored.checksum(),
+            "hero duration belongs to canonical state"
+        );
+        restored = wire_restored(&sim, 4);
+        for _ in 0..5 {
+            sim.step();
+            restored.step();
+            assert_eq!(sim.checksum(), restored.checksum());
+        }
+        assert_eq!(
+            sim.unit(target).unwrap().stunned_until_tick,
+            5 + if hero { 3 } else { 9 }
+        );
+    }
+}
+
+#[test]
+fn evasion_uses_only_the_highest_chance_independent_of_inventory_order() {
+    fn trace(effects: &[PassiveUnitEffect], workers: usize) -> Vec<bool> {
+        let mut sim = simulation(workers);
+        let mut attacker = unit(0, 20, 0, AttackDelivery::Melee);
+        attacker.attack.cooldown_ticks = 1;
+        sim.spawn_unit(attacker);
+        sim.spawn_unit_with_properties(
+            unit(1, 60, 0, AttackDelivery::Melee),
+            UnitGameplayProperties {
+                passive_effects: PassiveUnitEffects::from_slice(effects),
+                ..UnitGameplayProperties::default()
+            },
+        );
+        (0..128)
+            .filter_map(|_| {
+                sim.step();
+                sim.attacks_last_tick().first().map(|attack| attack.missed)
+            })
+            .collect()
+    }
+    let high = PassiveUnitEffect::Evasion(EvasionEffectProfile {
+        ability: AbilityId(20),
+        chance_per_10k: 6000,
+    });
+    let low = PassiveUnitEffect::Evasion(EvasionEffectProfile {
+        ability: AbilityId(21),
+        chance_per_10k: 5000,
+    });
+    let expected = trace(&[high], 1);
+    assert!(expected.contains(&true) && expected.contains(&false));
+    assert_eq!(expected, trace(&[high, low], 4));
+    assert_eq!(expected, trace(&[low, high], 1));
+}
+
+#[test]
+fn multiple_critical_strikes_use_highest_successful_multiplier_not_sum() {
+    let mut sim = simulation(1);
+    let crit = |ability, multiplier| {
+        PassiveUnitEffect::CriticalStrike(CriticalStrikeEffectProfile {
+            ability: AbilityId(ability),
+            chance_per_10k: 10_000,
+            damage_multiplier_per_10k: multiplier,
+            targets: AttackTargetMask::GROUND_UNITS,
+        })
+    };
+    sim.spawn_unit_with_properties(
+        unit(0, 20, 10, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            passive_effects: PassiveUnitEffects::from_slice(&[crit(20, 20_000), crit(21, 30_000)]),
+            ..UnitGameplayProperties::default()
+        },
+    );
+    let target = sim.spawn_unit(unit(1, 60, 0, AttackDelivery::Melee));
+    sim.step();
+    sim.step();
+    assert_eq!(sim.unit(target).unwrap().health, 970);
+    assert!(sim.attacks_last_tick().iter().any(|attack| attack.critical));
+}
+
 fn faerie_profile() -> SpellcastingProfile {
     SpellcastingProfile {
         mana: ManaProfile {
@@ -289,6 +427,118 @@ fn battle_target(
         .unwrap()
         .current = Some(caster);
     target
+}
+
+fn always_faerie_profile() -> SpellcastingProfile {
+    let mut profile = faerie_profile();
+    profile.ability.target_policy = AbilityTargetPolicy::RandomEnemyDebuff;
+    profile
+}
+
+#[test]
+fn always_autocast_faerie_fire_marks_idle_nonattacking_units_but_not_invalid_classes() {
+    let mut sim = simulation(1);
+    let caster = sim.spawn_unit_with_spellcasting(
+        unit(0, 20, 0, AttackDelivery::Melee),
+        always_faerie_profile(),
+    );
+    let allied = sim.spawn_unit(unit(0, 30, 0, AttackDelivery::Melee));
+    let immune = sim.spawn_unit_with_properties(
+        unit(1, 40, 0, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            classifications: UnitClassifications {
+                spell_immune: true,
+                ..UnitClassifications::default()
+            },
+            ..UnitGameplayProperties::default()
+        },
+    );
+    let mechanical = sim.spawn_unit(unit(1, 50, 0, AttackDelivery::Melee));
+    sim.world
+        .entity_mut(entity(&sim, mechanical))
+        .insert(MechanicalUnit);
+    let out_of_range = sim.spawn_unit(unit(1, 121, 0, AttackDelivery::Melee));
+    let target = sim.spawn_unit(unit(1, 120, 0, AttackDelivery::Melee));
+    sim.step();
+    assert!(sim.unit(target).unwrap().status.is_revealed_to(Team(0), 0));
+    for id in [allied, immune, mechanical, out_of_range] {
+        assert!(!sim.unit(id).unwrap().status.is_revealed_to(Team(0), 0));
+    }
+    assert_eq!(sim.unit(caster).unwrap().mana_current, Some(9));
+    let mut restored = wire_restored(&sim, 4);
+    assert_eq!(sim.checksum(), restored.checksum());
+    for _ in 0..6 {
+        sim.step();
+        restored.step();
+        assert_eq!(sim.checksum(), restored.checksum());
+    }
+    assert_eq!(
+        sim.unit(caster).unwrap().mana_current,
+        Some(9),
+        "marked target must not refresh or cost more mana"
+    );
+}
+
+#[test]
+fn always_autocast_faerie_fire_uses_seeded_viable_selection_not_nearest_combat_priority() {
+    let mut seen = std::collections::BTreeSet::new();
+    for seed in 0..24 {
+        let make = |workers| {
+            Simulation::new(
+                SimulationConfig {
+                    match_seed: seed,
+                    navigation_max: NavCell::new(500, 64),
+                    ..SimulationConfig::default()
+                },
+                workers,
+            )
+        };
+        let mut sim = make(1);
+        sim.spawn_unit_with_spellcasting(
+            unit(0, 20, 0, AttackDelivery::Melee),
+            always_faerie_profile(),
+        );
+        let near = sim.spawn_unit(unit(1, 40, 0, AttackDelivery::Melee));
+        let far = sim.spawn_unit(unit(1, 80, 0, AttackDelivery::Melee));
+        let mut other = wire_restored(&sim, 4);
+        sim.step();
+        other.step();
+        assert_eq!(sim.checksum(), other.checksum());
+        assert_eq!(
+            sim.ability_casts_last_tick(),
+            other.ability_casts_last_tick()
+        );
+        let selected = match sim.ability_casts_last_tick()[0].target {
+            AbilityCastTarget::Unit(id) => id,
+            _ => panic!(),
+        };
+        assert!(selected == near || selected == far);
+        seen.insert(selected == far);
+    }
+    assert_eq!(
+        seen.len(),
+        2,
+        "random viable selection must not always prefer nearest"
+    );
+}
+
+#[test]
+fn faerie_fire_simultaneous_casters_revalidate_marks_before_spending_resources() {
+    let mut sim = simulation(4);
+    let first = sim.spawn_unit_with_spellcasting(
+        unit(0, 20, 0, AttackDelivery::Melee),
+        always_faerie_profile(),
+    );
+    let second = sim.spawn_unit_with_spellcasting(
+        unit(0, 30, 0, AttackDelivery::Melee),
+        always_faerie_profile(),
+    );
+    let target = sim.spawn_unit(unit(1, 60, 0, AttackDelivery::Melee));
+    sim.step();
+    assert_eq!(sim.ability_casts_last_tick().len(), 1);
+    assert_eq!(sim.unit(first).unwrap().mana_current, Some(9));
+    assert_eq!(sim.unit(second).unwrap().mana_current, Some(12));
+    assert_eq!(sim.unit(target).unwrap().status.armor_modifier_count, 1);
 }
 
 #[test]

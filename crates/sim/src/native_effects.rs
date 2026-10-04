@@ -498,6 +498,7 @@ enum TuningEffect {
         armor_reduction_per_100: i16,
         duration_millis: u32,
         hero_duration_millis: u32,
+        always_autocast: bool,
         #[allow(dead_code)]
         provenance: serde_json::Value,
     },
@@ -546,6 +547,7 @@ enum TuningEffect {
         chance_per_10k: u16,
         bonus_damage: i32,
         stun_duration_millis: u32,
+        hero_stun_duration_millis: u32,
         targets: String,
         #[allow(dead_code)]
         provenance: serde_json::Value,
@@ -957,6 +959,7 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             chance_per_10k,
             bonus_damage,
             stun_duration_millis,
+            hero_stun_duration_millis,
             targets,
             ..
         } => {
@@ -966,7 +969,8 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
                 ability: AbilityId(rawcode(source_key).expect("validated Bash rawcode")),
                 chance_per_10k: *chance_per_10k,
                 bonus_damage: *bonus_damage,
-                stun_duration_ticks: exact_millis_to_ticks(*stun_duration_millis, "Bash duration"),
+                stun_duration_ticks: ceil_millis_to_ticks(*stun_duration_millis),
+                hero_stun_duration_ticks: ceil_millis_to_ticks(*hero_stun_duration_millis),
                 targets: target_mask(targets),
             })
         }
@@ -1089,6 +1093,7 @@ fn build_spellcasting(effect: &TuningEffect) -> SpellcastingProfile {
         armor_reduction_per_100,
         duration_millis,
         hero_duration_millis,
+        always_autocast,
         ..
     } = effect
     {
@@ -1106,7 +1111,11 @@ fn build_spellcasting(effect: &TuningEffect) -> SpellcastingProfile {
                 mana_cost: *mana_cost,
                 cooldown_ticks: exact_millis_to_ticks(*cooldown_millis, "Faerie Fire cooldown"),
                 range: world(*range_world),
-                target_policy: AbilityTargetPolicy::NearestEnemyInCombat,
+                target_policy: if *always_autocast {
+                    AbilityTargetPolicy::RandomEnemyDebuff
+                } else {
+                    AbilityTargetPolicy::NearestEnemyInCombat
+                },
                 effect: AbilityEffect::FaerieFire {
                     modifier: ModifierId(id),
                     armor_reduction_per_100: *armor_reduction_per_100,
@@ -1180,6 +1189,14 @@ fn target_mask(value: &str) -> AttackTargetMask {
         "air-ground-units" => AttackTargetMask::AIR_AND_GROUND,
         other => panic!("unsupported native-effect target mask {other}"),
     }
+}
+
+/// Native durations may lie between fixed ticks. Expire on the first tick at or
+/// after the authored deadline, never earlier (e.g. a quarter second at 30 Hz).
+fn ceil_millis_to_ticks(millis: u32) -> u16 {
+    let numerator = u64::from(millis)
+        * u64::try_from(CASTLE_FIGHT_SIMULATION_HZ).expect("positive simulation Hz");
+    u16::try_from(numerator.div_ceil(1_000)).expect("duration exceeds u16 tick range")
 }
 
 fn exact_millis_to_ticks(millis: u32, label: &str) -> u16 {

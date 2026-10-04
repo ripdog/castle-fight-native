@@ -1,0 +1,23 @@
+# Elven native passive reconciliation — 9.27 r1
+
+This supplements `elven-implementation.md` and `elven-melee-autocast.md`; it does not promote the race in isolation. Evidence is the release-pinned retained extraction tree selected by `docs/original_map/releases.json`, particularly `resolved/production-unit-abilities.tsv`, `object-fields.tsv`, `protected-ability-fields.tsv`, `units.tsv`, and the identity-only native recipes. No numerical tuning is duplicated here.
+
+## Complete ordinary-unit inventory
+
+- Archer and Master Archer (`n022` / `A08I`, `n023` / `A08J`): ranged native Bash. Bonus damage and ordinary/hero stun durations are independently projected. Pending impact carries both duration classes and selects the intrinsic target hero classification at impact. Misses, spell immunity, structures and failed chance rolls do not stun. Native ordinary attack armor treatment remains separate from the status payload.
+- Blademaster (`n006`): Critical Strike `A00T`, Evasion `A03P`, and spell resistance `A0AN`. Independent critical rolls choose the greatest successful multiplier instead of adding multipliers; Evasion chooses the greatest chance rather than rolling multiple copies. Spell resistance applies to spell payloads only, not an ordinary Magic/Chaos weapon. Attack/proc rolls use authoritative keyed randomness.
+- Elder Blademaster (`n00Y`): `A05Y` Critical Strike, `A014` Feedback, shared `A03P` Evasion and `A0AN` resistance. Feedback is independent of Critical Strike. It reads and drains live target mana at landed impact, including multiple projectiles sharing one live pool; native summoned classification selects the separate bonus. Hero/ordinary source parameters remain distinct, not flattened. Structures, missed attacks and immune targets do not receive the mana payload. `elven-melee-autocast.md` retains the original source discrepancy with the combined Magebane tooltip.
+- Bloodthirster (`h00U`): `A00W` creep Faerie Fire (`ACff`) and dormant `A0CV` order marker. Its retained `DataB1` is **Always Autocast**, not the ordinary `Afae` combat-only behavior. The projection now retains that field: ACff selects unmarked, nonmechanical, nonimmune hostile units even when idle; the generic combat-only mode still requires attacking targets. Viable selection is seeded rather than accidentally implementing nearest-only combat priority. Native hero and ordinary duration, numeric armor reduction, revealing team, mana/cooldown and buff exclusion survive wire restore. The earlier fixture audit's idle-target exclusion is superseded for ACff by this field-level reconciliation.
+All source markers stay in content inventories rather than being silently dropped because they have no independent visual effect.
+
+## Timing, state and VFX boundary
+
+Bash travels with the landed attack, not a launch-time stun. Feedback uses the same landed-hit gate and current mana. Critical/Evasion are deterministic engine rules; native enumeration and Warcraft random streams are not claimed to be identical. Faerie Fire commits before spending and does not repeatedly refresh an existing modifier; its live reveal/armor identity feeds the standard retained native buff attachment renderer. Native attack-art/proc artifacts are consumed by the combined presentation integration, not reproduced as hand-authored models here.
+
+Intrinsic hero classification and pending hero Bash duration are canonical. Fixtures exercise direct and ranged impacts, ordinary Magic/Chaos vs spell resistance, summoned Feedback with/without mana, misses/immunity/structures, multiple critical/evasion copies, and active Faerie Fire snapshot restore with differing workers/seeds. The wire fixture preserves the original configuration, including match seed.
+
+## Verification
+
+`tools/cargo-interactive test -p castle-fight-sim native_target_effects -- --test-threads=1`: **14 passed** (`/tmp/passive-completion2.log`). Simulation all-target Clippy with `-D warnings`: passed. Native tuning regeneration and generator tests must be rerun after combined recipe integration; standalone reproduction uses `build_native_tuning.py --map-version 9.27 --revision r1 --check crates/sim/data/castle-fight/9.27/native-effect-tuning.json`.
+
+Native Warcraft executable cadence/visual comparison is not an independent test oracle available in this environment. Fog-of-war consumers are an engine-wide future system; the revealed state itself is authoritative. Neither limitation justifies discarding the source-authored ability.
