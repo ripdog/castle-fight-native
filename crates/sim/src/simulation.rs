@@ -28,6 +28,8 @@ mod builder;
 mod canonical;
 mod combat;
 mod construction;
+#[cfg(test)]
+mod content_lifecycle_tests;
 mod economy;
 mod movement;
 #[cfg(test)]
