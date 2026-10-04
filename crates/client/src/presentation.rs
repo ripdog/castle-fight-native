@@ -6901,6 +6901,7 @@ mod tests {
             launch_position: SimPoint::new(0, 0),
             launch_tick: 3,
             impact_tick: 18,
+            ability: None,
             kind: ProjectileViewKind::Line {
                 source_rawcode: Some(42),
                 destination: SimPoint::new(200, 100),
