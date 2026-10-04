@@ -296,6 +296,8 @@ pub struct BashEffectProfile {
     pub chance_per_10k: u16,
     pub bonus_damage: i32,
     pub stun_duration_ticks: u16,
+    /// Hero duration is independently authored; it is not inferred from armor type.
+    pub hero_stun_duration_ticks: u16,
     pub targets: AttackTargetMask,
 }
 
@@ -831,6 +833,8 @@ pub enum AbilityTargetPolicy {
     RandomCorpse,
     RandomEnemyBasePoint,
     NearestEnemyInCombat,
+    /// Native Always Autocast debuffs consider any viable hostile in range.
+    RandomEnemyDebuff,
 }
 
 impl AbilityTargetPolicy {
@@ -847,6 +851,7 @@ impl AbilityTargetPolicy {
             Self::RandomCorpse => 7,
             Self::RandomEnemyBasePoint => 8,
             Self::NearestEnemyInCombat => 9,
+            Self::RandomEnemyDebuff => 20,
         }
     }
 }

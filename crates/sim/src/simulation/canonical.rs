@@ -1340,6 +1340,7 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                 hash.write_u16(profile.chance_per_10k);
                 hash.write_i32(profile.bonus_damage);
                 hash.write_u16(profile.stun_duration_ticks);
+                hash.write_u16(profile.hero_stun_duration_ticks);
                 hash.write_u8(profile.targets.bits());
             }
             PassiveUnitEffect::Evasion(profile) => {

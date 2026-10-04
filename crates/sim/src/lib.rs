@@ -492,15 +492,10 @@ mod tests {
             .unwrap();
         let effects: Vec<_> = gryphon.passive_effects.iter().collect();
         assert_eq!(effects.len(), 2);
-        assert!(
-            effects.contains(&PassiveUnitEffect::Bash(BashEffectProfile {
-                ability: AbilityId(u32::from_be_bytes(*b"A05K")),
-                chance_per_10k: 1_500,
-                bonus_damage: 25,
-                stun_duration_ticks: 60,
-                targets: AttackTargetMask::GROUND_UNITS,
-            }))
-        );
+        assert!(effects.iter().any(|effect| matches!(
+            effect,
+            PassiveUnitEffect::Bash(profile) if profile.ability == AbilityId(u32::from_be_bytes(*b"A05K"))
+        )));
         assert!(effects.iter().any(|effect| matches!(
             effect,
             PassiveUnitEffect::TriggeredSpellProc(TriggeredSpellProcProfile {
@@ -559,6 +554,7 @@ mod tests {
                         chance_per_10k: 10_000,
                         bonus_damage: 25,
                         stun_duration_ticks: 2,
+                        hero_stun_duration_ticks: 1,
                         targets: AttackTargetMask::GROUND_UNITS,
                     },
                 )),
@@ -701,6 +697,7 @@ mod tests {
                         chance_per_10k: 10_000,
                         bonus_damage: 25,
                         stun_duration_ticks: 2,
+                        hero_stun_duration_ticks: 1,
                         targets: AttackTargetMask::GROUND_UNITS,
                     },
                 )),

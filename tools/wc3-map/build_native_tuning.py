@@ -37,8 +37,8 @@ def unit_targets(value: str) -> str:
     tokens = set(value.split(","))
     if "structure" in tokens:
         raise ValueError("native unit-only proc primitive cannot silently drop structure targets")
-    # Current promoted combat units are non-hero, non-ward entities. Do not accept new
-    # class/team restrictions until the native target primitive can express them.
+    # Legacy child-proc restrictions are separately audited; directed Bash/Crit/
+    # Feedback projections below reject class flattening now heroes are modeled.
     supported = {"air", "ground", "enemy", "enemies", "neutral", "ward", "nonhero"}
     if tokens - supported:
         raise ValueError(f"unsupported native proc target constraints: {sorted(tokens - supported)}")
@@ -60,6 +60,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
 
     kind = recipe["kind"]
     effect: dict[str, Any] = dict(recipe)
+    if kind in {"bash", "critical-strike", "feedback", "faerie-fire"}:
+        if set(fields["targs1"].split(",")) - {"air", "ground", "enemy", "enemies", "neutral"}:
+            raise ValueError("native directed passive/debuff cannot flatten class restrictions")
     if kind == "evasion":
         effect["chance_per_10k"] = number("DataA1", 10_000)
     elif kind == "spell-resistance":
@@ -74,8 +77,8 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         effect.update(maximum_mana_drained=number("DataC1"), damage_per_mana_per_10k=number("DataD1", 10_000),
                       summoned_damage=number("DataE1"), targets=unit_targets(fields["targs1"]))
     elif kind == "faerie-fire":
-        if unit is None or number("DataB1") != 1:
-            raise ValueError("Faerie Fire requires a mana source and Always Autocast")
+        if unit is None or number("DataB1") not in {0, 1}:
+            raise ValueError("Faerie Fire requires a mana source and a boolean Always Autocast")
         if unit_targets(fields["targs1"]) != "air-ground-units":
             raise ValueError("Faerie Fire needs native coverage for this target mask")
         effect.update(mana_maximum=scaled(unit["mana_max"]), mana_starting=scaled(unit["mana_start"]),
@@ -83,11 +86,15 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
                       mana_cost=scaled(protected.get("mana_cost", fields["cost1"])),
                       cooldown_millis=scaled(protected.get("cooldown", fields["cool1"]), 1000),
                       range_world=number("Rng1"), armor_reduction_per_100=number("DataA1", 100),
-                      duration_millis=number("Dur1", 1000), hero_duration_millis=number("HeroDur1", 1000))
+                      duration_millis=number("Dur1", 1000), hero_duration_millis=number("HeroDur1", 1000),
+                      always_autocast=bool(number("DataB1")))
     elif kind == "bash":
+        if any(number(field) != 0 for field in ("DataB1", "DataD1", "DataE1")):
+            raise ValueError("Bash multiplier/miss/never-miss fields require explicit native coverage")
         effect.update(chance_per_10k=number("DataA1", 100),
                       bonus_damage=number("DataC1"),
                       stun_duration_millis=number("Dur1", 1000),
+                      hero_stun_duration_millis=number("HeroDur1", 1000),
                       targets=unit_targets(fields["targs1"]))
     elif kind == "defend":
         effect.update(ranged_damage_taken_per_10k=number("DataA1", 10_000),

@@ -3532,6 +3532,7 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
     match spellcasting.ability.target_policy {
         AbilityTargetPolicy::RandomEnemyUnit
         | AbilityTargetPolicy::NearestEnemyInCombat
+        | AbilityTargetPolicy::RandomEnemyDebuff
         | AbilityTargetPolicy::RandomGroundEnemyUnit
         | AbilityTargetPolicy::RecentlyAttackedFriendlyUnit
         | AbilityTargetPolicy::WoundedFriendlyUnit
@@ -3571,10 +3572,10 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
             ..
         } => {
             assert!(armor_reduction_per_100 > 0 && duration_ticks > 0 && hero_duration_ticks > 0);
-            assert_eq!(
+            assert!(matches!(
                 spellcasting.ability.target_policy,
-                AbilityTargetPolicy::NearestEnemyInCombat
-            );
+                AbilityTargetPolicy::NearestEnemyInCombat | AbilityTargetPolicy::RandomEnemyDebuff
+            ));
         }
         AbilityEffect::FrostArmor {
             modifier: _,

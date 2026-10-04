@@ -719,8 +719,10 @@ impl Simulation {
 
         let mut candidate_checks = 0usize;
         let target = match spellcasting.ability.target_policy {
-            AbilityTargetPolicy::RandomEnemyUnit | AbilityTargetPolicy::RandomGroundEnemyUnit => {
-                self.random_enemy_ability_target(
+            AbilityTargetPolicy::RandomEnemyUnit
+            | AbilityTargetPolicy::RandomGroundEnemyUnit
+            | AbilityTargetPolicy::RandomEnemyDebuff => self
+                .random_enemy_ability_target(
                     source,
                     spellcasting.ability,
                     state.cast_sequence,
@@ -731,8 +733,7 @@ impl Simulation {
                 .map(|index| AbilityIntentTarget::Unit {
                     index,
                     id: units[index].id,
-                })
-            }
+                }),
             AbilityTargetPolicy::NearestEnemyInCombat => self
                 .nearest_enemy_in_combat(source, spellcasting.ability, units, &mut candidate_checks)
                 .map(|index| AbilityIntentTarget::Unit {
@@ -910,6 +911,8 @@ impl Simulation {
                     || (ability.target_policy == AbilityTargetPolicy::RandomGroundEnemyUnit
                         && candidate.movement_class != MovementClass::Ground)
                     || self.ability_source_distance_sq(source.origin, candidate.position) > range_sq
+                    || (ability.target_policy == AbilityTargetPolicy::RandomEnemyDebuff
+                        && !self.faerie_fire_target_is_valid(source, ability, candidate, units))
                 {
                     return;
                 }
@@ -960,12 +963,12 @@ impl Simulation {
         };
         target.health > 0
             && target.team != source.team
-            && target.attack.damage > 0
             && !target.mechanical
             && !target.classifications.spell_immune
             && self.ability_source_distance_sq(source.origin, target.position)
                 <= square_i32(ability.range)
-            && self.enemy_is_in_combat(target, units)
+            && (ability.target_policy == AbilityTargetPolicy::RandomEnemyDebuff
+                || (target.attack.damage > 0 && self.enemy_is_in_combat(target, units)))
             && !target.status.armor_modifiers[..usize::from(target.status.armor_modifier_count)]
                 .iter()
                 .any(|active| active.id == modifier && self.next_tick < active.expires_tick)
@@ -1125,7 +1128,8 @@ impl Simulation {
                                 && self.ability_source_distance_sq(source.origin, target.position)
                                     <= square_i32(ability.range)
                         }
-                        AbilityTargetPolicy::NearestEnemyInCombat => {
+                        AbilityTargetPolicy::NearestEnemyInCombat
+                        | AbilityTargetPolicy::RandomEnemyDebuff => {
                             self.faerie_fire_target_is_valid(source, ability, target, units)
                         }
                         AbilityTargetPolicy::RandomEnemyUnitGlobal => target.team != source.team,

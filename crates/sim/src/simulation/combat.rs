@@ -369,27 +369,30 @@ impl Simulation {
             return false;
         };
         let target = &units[target_index];
-        for effect in target.passive_effects.iter() {
-            let PassiveUnitEffect::Evasion(profile) = effect else {
-                continue;
-            };
-            if profile.chance_per_10k == 0 {
-                continue;
-            }
-            let roll = deterministic_random(
-                self.config.match_seed,
-                completed_tick,
-                intent.source_id,
-                RANDOM_PURPOSE_ATTACK_PROC
-                    ^ u64::from(profile.ability.0)
-                    ^ target.id.0.rotate_left(13),
-                intent.attack_sequence,
-            ) % u64::from(ATTACK_PROC_CHANCE_SCALE);
-            if roll < u64::from(profile.chance_per_10k) {
-                return true;
-            }
-        }
-        false
+        // Native Evasion does not independently roll every copy. Only the highest
+        // chance is effective; ties use rawcode identity, not inventory order.
+        let Some(profile) = target
+            .passive_effects
+            .iter()
+            .filter_map(|effect| {
+                if let PassiveUnitEffect::Evasion(profile) = effect {
+                    Some(profile)
+                } else {
+                    None
+                }
+            })
+            .max_by_key(|profile| (profile.chance_per_10k, std::cmp::Reverse(profile.ability)))
+        else {
+            return false;
+        };
+        let roll = deterministic_random(
+            self.config.match_seed,
+            completed_tick,
+            intent.source_id,
+            RANDOM_PURPOSE_ATTACK_PROC ^ u64::from(profile.ability.0) ^ target.id.0.rotate_left(13),
+            intent.attack_sequence,
+        ) % u64::from(ATTACK_PROC_CHANCE_SCALE);
+        roll < u64::from(profile.chance_per_10k)
     }
 
     pub(super) fn resolve_passive_attack_effects(
@@ -401,6 +404,7 @@ impl Simulation {
         let mut bonus_damage = 0i32;
         let mut on_hit = PendingAttackEffects::default();
         let mut critical = false;
+        let mut critical_bonus = 0;
         for effect in intent.passive_effects.iter() {
             match effect {
                 PassiveUnitEffect::CriticalStrike(profile) => {
@@ -425,9 +429,10 @@ impl Simulation {
                         let extra = i64::from(intent.attack.damage)
                             * i64::from(profile.damage_multiplier_per_10k - 10_000)
                             / 10_000;
-                        bonus_damage = bonus_damage
-                            .checked_add(i32::try_from(extra).expect("critical bonus overflowed"))
-                            .expect("critical attack damage overflowed");
+                        // Multiple native critical multipliers roll separately, but
+                        // only the highest successful multiplier contributes damage.
+                        critical_bonus = critical_bonus
+                            .max(i32::try_from(extra).expect("critical bonus overflowed"));
                     }
                 }
                 PassiveUnitEffect::Bash(profile) => {
@@ -453,8 +458,13 @@ impl Simulation {
                     bonus_damage = bonus_damage
                         .checked_add(profile.bonus_damage)
                         .expect("passive attack bonus damage overflowed");
-                    on_hit.stun_duration_ticks =
-                        on_hit.stun_duration_ticks.max(profile.stun_duration_ticks);
+                    let duration = match intent.target {
+                        TargetIndex::Unit(index) if units[index].classifications.hero => {
+                            profile.hero_stun_duration_ticks
+                        }
+                        _ => profile.stun_duration_ticks,
+                    };
+                    on_hit.stun_duration_ticks = on_hit.stun_duration_ticks.max(duration);
                 }
                 PassiveUnitEffect::TriggeredSpellProc(profile) => {
                     let target_matches = match intent.target {
@@ -513,7 +523,13 @@ impl Simulation {
                 | PassiveUnitEffect::SpellResistance(_) => {}
             }
         }
-        (bonus_damage, on_hit, critical)
+        (
+            bonus_damage
+                .checked_add(critical_bonus)
+                .expect("passive attack damage overflowed"),
+            on_hit,
+            critical,
+        )
     }
 
     pub(super) fn attack_intents(

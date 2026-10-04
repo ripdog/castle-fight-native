@@ -30,6 +30,17 @@ class NativeTuningProjectionTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             native.unit_targets("enemy,ward")
 
+    def test_bash_keeps_hero_duration_and_rejects_unimplemented_native_fields(self) -> None:
+        recipe = {"kind": "bash", "source_key": "TEST", "source_kind": "unit-ability"}
+        fields = {"dataa1": "33", "datab1": "0", "datac1": "7", "datad1": "0", "datae1": "0", "dur1": "0.5", "herodur1": "0.25", "targs1": "air,ground"}
+        effect = native.project_effect(recipe, fields, None, {}, {})
+        self.assertEqual((effect["stun_duration_millis"], effect["hero_stun_duration_millis"]), (500, 250))
+        for field in ("datab1", "datad1", "datae1"):
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                native.project_effect(recipe, {**fields, field: "1"}, None, {}, {})
+        with self.assertRaises(ValueError):
+            native.project_effect(recipe, {**fields, "targs1": "air,ground,nonhero"}, None, {}, {})
+
     def test_class_specific_orb_chances_require_explicit_native_coverage(self) -> None:
         recipe = {"kind": "orb-spell-proc", "source_key": "TEST", "source_kind": "unit-ability"}
         fields = {"datab1": "10", "datac1": "20", "datad1": "10", "unitid1": "CHLD", "targs1": "ground"}
@@ -52,8 +63,11 @@ class NativeTuningProjectionTest(unittest.TestCase):
         self.assertEqual((effect["mana_cost"], effect["cooldown_millis"]), (4, 3000))
         self.assertEqual((effect["duration_millis"], effect["hero_duration_millis"]), (13000, 2500))
         self.assertEqual(effect["mana_regen_per_second_per_10k"], 12000)
+        self.assertTrue(effect["always_autocast"])
+        combat_only = native.project_effect(recipe, {**fields, "datab1": "0"}, unit, {}, {})
+        self.assertFalse(combat_only["always_autocast"])
         with self.assertRaises(ValueError):
-            native.project_effect(recipe, {**fields, "datab1": "0"}, unit, {}, {})
+            native.project_effect(recipe, {**fields, "datab1": "2"}, unit, {}, {})
 
     def test_recipes_cannot_become_a_second_tuning_database(self) -> None:
         root = catalog.REPO_ROOT
