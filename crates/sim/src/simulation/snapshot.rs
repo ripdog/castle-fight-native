@@ -117,6 +117,7 @@ impl SimulationSnapshot {
                     }
                 }
                 CanonicalEntity::NativeAction { .. }
+                | CanonicalEntity::BuildingSpellTarget { .. }
                 | CanonicalEntity::Projectile(_)
                 | CanonicalEntity::ReflectedProjectile(_)
                 | CanonicalEntity::BallisticProjectile(_)
@@ -300,6 +301,10 @@ impl Simulation {
             });
         }
 
+        super::building_spells::refresh_building_spell_controls(
+            &mut restored_world,
+            snapshot.next_tick,
+        );
         self.world = restored_world;
         self.players.clone_from(&snapshot.players);
         self.lifecycle = snapshot.lifecycle;
@@ -338,6 +343,12 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
                 return Some(CanonicalEntity::DelayedShrineRevival {
                     id,
                     revival: *revival,
+                });
+            }
+            if let Some(state) = entity.get::<BuildingSpellTargetState>() {
+                return Some(CanonicalEntity::BuildingSpellTarget {
+                    id,
+                    state: state.clone(),
                 });
             }
             if let Some(projectile) = entity.get::<GuaranteedHitProjectile>() {
@@ -620,6 +631,9 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
             }
             CanonicalEntity::DelayedShrineRevival { id, revival } => {
                 world.spawn((*id, *revival));
+            }
+            CanonicalEntity::BuildingSpellTarget { id, state } => {
+                world.spawn((*id, state.clone()));
             }
             CanonicalEntity::Building(building) => {
                 let mut entity = world.spawn((

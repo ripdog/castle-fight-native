@@ -401,20 +401,21 @@ fn generated_per_second_mana_encoding_preserves_arbitrary_phase_and_snapshot_rem
         for phase in 0..30 {
             assert_eq!(
                 (phase..phase + 300)
-                    .map(|tick| native_actions::native_mana_increment((1 << 31) | rate, tick))
+                    .map(|tick| ManaProfile::per_second(100, 0, rate).regeneration_at_tick(tick, 30))
                     .sum::<u32>(),
                 rate * 10
             );
         }
     }
-    assert_eq!(native_actions::native_mana_increment(333, 29), 333);
-    let mut s = sim(1);
-    let mut profile = fire();
-    profile.mana = ManaProfile {
+    let legacy = ManaProfile {
         maximum: 100,
         starting: 0,
-        regen_per_tick_per_10k: (1 << 31) | 35_000,
+        regen_per_tick_per_10k: 333,
     };
+    assert_eq!(legacy.regeneration_at_tick(29, 30), 333);
+    let mut s = sim(1);
+    let mut profile = fire();
+    profile.mana = ManaProfile::per_second(100, 0, 35_000);
     let c = caster(&mut s, profile);
     for _ in 0..17 {
         s.step();

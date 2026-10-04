@@ -95,6 +95,7 @@ roster!(CastleFightTowerKind, CastleFightBuildingId;
     GoldenShrineOfJustice = 0x3000_000d => b"h059",
     TinyWatchTower = 0x2100_0007 => b"h081",
     TinyMultishotTower = 0x2100_0008 => b"h082",
+    CityOfMagic = 0x3000_000a => b"h00Z",
 );
 
 #[cfg(test)]

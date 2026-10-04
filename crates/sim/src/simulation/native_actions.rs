@@ -4,21 +4,6 @@ use crate::components::{
     TimedMovementModifier,
 };
 
-// Compatibility bridge for generated ManaProfile::per_second profiles. The City
-// worker owns that public API; integration can replace this with regeneration_at_tick.
-// Legacy (untagged) profiles retain their existing per-tick meaning.
-pub(super) fn native_mana_increment(encoded: u32, tick: u64) -> u32 {
-    const PER_SECOND: u32 = 1 << 31;
-    if encoded & PER_SECOND == 0 {
-        return encoded;
-    }
-    let hz = CASTLE_FIGHT_SIMULATION_HZ as u64;
-    let phase = tick % hz;
-    let rate = u64::from(encoded & !PER_SECOND);
-    u32::try_from(((phase + 1) * rate / hz) - (phase * rate / hz))
-        .expect("validated mana increment fits u32")
-}
-
 // Warcraft's native Healing Wave bounce interval is 250 ms. Derive each deadline
 // from the original cast, using ceiling at 30 Hz, rather than accumulating rounded hops.
 fn healing_wave_due_tick(start: u64, jump: u8) -> u64 {

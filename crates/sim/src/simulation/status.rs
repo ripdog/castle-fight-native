@@ -174,7 +174,8 @@ pub(super) fn apply_ability_effect_to_unit(
                 },
             );
         }
-        AbilityEffect::HolyFervour { .. }
+        AbilityEffect::Hex { .. }
+        | AbilityEffect::HolyFervour { .. }
         | AbilityEffect::Purification { .. }
         | AbilityEffect::ArtilleryBombardment { .. } => return false,
     }

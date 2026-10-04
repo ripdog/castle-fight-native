@@ -141,7 +141,14 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
     let units = load_unit_assets(&units_path, &object_fields_path)?;
     let buildings = load_buildings(&buildings_path, &object_fields_path)?;
     let doodads = load_placed_doodads(&placed_doodads_path, &object_fields_path)?;
-    let visuals = load_visual_assets(&object_fields_path, &unit_spell_semantics_path)?;
+    let mut visuals = load_visual_assets(&object_fields_path, &unit_spell_semantics_path)?;
+    let building_mechanics_path =
+        manifest_dir.join("../sim/data/castle-fight/9.27/building-mechanics-r1.json");
+    println!(
+        "cargo:rerun-if-changed={}",
+        building_mechanics_path.display()
+    );
+    append_building_script_visuals(&mut visuals, &building_mechanics_path)?;
     let ui = load_ui_assets(&object_fields_path, &map_skin_path)?;
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR"));
     fs::write(
@@ -897,6 +904,34 @@ fn load_visual_assets(
         chain_lightning_abilities: chain_lightning_abilities.into_keys().collect(),
         stun_model_path,
     })
+}
+
+fn append_building_script_visuals(
+    visuals: &mut VisualAssetCatalog,
+    projection: &std::path::Path,
+) -> Result<(), Box<dyn Error>> {
+    let data: serde_json::Value = serde_json::from_str(&fs::read_to_string(projection)?)?;
+    // A09L's Mana Shield art belongs to its persistent B01H status, not interception.
+    // Keep that status recipe, but let a consume event show only the source's Vd art.
+    visuals
+        .assets
+        .retain(|visual| visual.owner_kind != "abilities" || visual.owner_rawcode != "A09L");
+    for (function, rawcode) in [("Vd", "A09L"), ("checkForShield", "A070"), ("Ed", "A09C")] {
+        for path in data["script_art"][function]
+            .as_array()
+            .ok_or("missing shield art")?
+        {
+            visuals.assets.push(VisualAssetSpec {
+                owner_kind: "abilities".to_owned(),
+                owner_rawcode: rawcode.to_owned(),
+                source_unit_rawcode: None,
+                role: "target".to_owned(),
+                model_path: path.as_str().ok_or("invalid shield art")?.to_owned(),
+                missile_arc: None,
+            });
+        }
+    }
+    Ok(())
 }
 
 fn load_ui_assets(

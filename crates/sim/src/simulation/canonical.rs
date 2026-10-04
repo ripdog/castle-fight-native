@@ -263,6 +263,38 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                     }
                 }
             }
+            CanonicalEntity::BuildingSpellTarget { id, state } => {
+                hash.write_u8(12);
+                hash.write_u64(id.0);
+                hash.write_u64(state.target.0);
+                hash.write_u16(state.version.major);
+                hash.write_u16(state.version.minor);
+                hash.write_u8(state.shield_level);
+                hash.write_u8(u8::from(state.shield_expires_tick.is_some()));
+                if let Some(tick) = state.shield_expires_tick {
+                    hash.write_u64(tick);
+                }
+                hash.write_u8(state.anti_negative as u8);
+                hash.write_u8(state.selector_excluded as u8);
+                hash.write_u8(state.overheat_level);
+                hash.write_u8(state.defend_disabled as u8);
+                hash.write_u8(state.orders_suspended as u8);
+                hash.write_u8(state.hex.is_some() as u8);
+                if let Some(hex) = state.hex {
+                    hash.write_u64(hex.expires_tick);
+                    hash_hex_form(&mut hash, hex.form);
+                }
+                hash.write_u64(state.callbacks.len() as u64);
+                for callback in &state.callbacks {
+                    hash.write_u64(callback.due_tick);
+                    hash.write_u8(match callback.action {
+                        super::building_spells::ControlAction::Attack => 0,
+                        super::building_spells::ControlAction::DefenderDefend => 1,
+                        super::building_spells::ControlAction::DefenderAttack => 2,
+                    });
+                    hash_hex_profile(&mut hash, callback.profile);
+                }
+            }
             CanonicalEntity::Unit(unit) => {
                 hash.write_u8(0);
                 hash.write_u64(unit.id.0);
@@ -862,6 +894,10 @@ pub(super) enum CanonicalEntity {
         revival: DelayedShrineRevival,
     },
     LineProjectile(CanonicalLineProjectile),
+    BuildingSpellTarget {
+        id: SimId,
+        state: BuildingSpellTargetState,
+    },
 }
 
 impl CanonicalEntity {
@@ -880,6 +916,7 @@ impl CanonicalEntity {
             Self::NativeAction { id, .. } => *id,
             Self::DelayedShrineRevival { id, .. } => *id,
             Self::LineProjectile(projectile) => projectile.id,
+            Self::BuildingSpellTarget { id, .. } => *id,
         }
     }
 }
@@ -1613,6 +1650,25 @@ fn hash_pending_attack_effects(hash: &mut Fnv64, effects: PendingAttackEffects) 
     }
 }
 
+fn hash_hex_form(hash: &mut Fnv64, form: crate::building_mechanics::HexFormProfile) {
+    hash.write_u32(form.rawcode);
+    hash.write_i32(form.speed_per_tick);
+    hash.write_i32(form.collision_radius);
+    hash.write_i32(i32::from(form.armor.armor_points));
+    hash.write_u8(form.armor.armor_type.stable_tag());
+}
+
+fn hash_hex_profile(hash: &mut Fnv64, profile: crate::building_mechanics::HexEffectProfile) {
+    hash.write_u16(profile.duration_ticks);
+    hash.write_u16(profile.hero_duration_ticks);
+    hash.write_u16(profile.initial_reengage_ticks);
+    hash.write_u16(profile.defender_restore_ticks);
+    hash.write_u16(profile.defender_resume_ticks);
+    hash.write_u32(profile.defender_rawcode);
+    hash_hex_form(hash, profile.ground);
+    hash_hex_form(hash, profile.air);
+}
+
 fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
     hash.write_u64(u64::from(ability.id.0));
     hash.write_i32(ability.mana_cost);
@@ -1621,6 +1677,7 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
     hash.write_u8(ability.target_policy.stable_tag());
     hash.write_u8(ability.effect.stable_tag());
     match ability.effect {
+        AbilityEffect::Hex { profile } => hash_hex_profile(hash, profile),
         AbilityEffect::FaerieFire {
             modifier,
             armor_reduction_per_100,

@@ -173,7 +173,7 @@ impl Simulation {
         {
             return self.desired_ability_retreat_position(unit, movement_speed);
         }
-        if self.next_tick < unit.status.stunned_until_tick {
+        if unit.orders_suspended || self.next_tick < unit.status.stunned_until_tick {
             return MovementDecision::stationary(current);
         }
         if unit.movement_class == MovementClass::Air {
