@@ -529,6 +529,7 @@ fn load_visual_assets(
     let mut ability_buff_ids = BTreeMap::<String, Vec<String>>::new();
     let mut buff_target_art = BTreeMap::<String, Vec<String>>::new();
     let mut chain_lightning_abilities = BTreeMap::<String, ()>::new();
+    let mut unit_abilities = BTreeMap::<String, Vec<String>>::new();
     let mut stun_model_path = None;
     for row in fields.records() {
         let row = row?;
@@ -543,6 +544,12 @@ fn load_visual_assets(
             continue;
         };
 
+        if kind == "units" && field == "uabi" {
+            unit_abilities.insert(
+                rawcode.to_owned(),
+                parse_json_comma_list(row.get(recovered).unwrap_or_default()),
+            );
+        }
         if kind == "abilities" {
             ability_base_rawcodes
                 .entry(rawcode.to_owned())
@@ -590,6 +597,13 @@ fn load_visual_assets(
             }
         }
 
+        if kind == "abilities"
+            && field == "amac"
+            && let Some(arc) = parse_json_f32(row.get(recovered).unwrap_or_default())
+        {
+            missile_arcs.insert((rawcode.to_owned(), "missile".to_owned()), arc);
+        }
+
         if let Some(role) = role
             && matches!(row.get(value_type), Some("model") | Some("modelList"))
         {
@@ -608,6 +622,41 @@ fn load_visual_assets(
         {
             stun_model_path = parse_json_string(row.get(base_value).unwrap_or_default())
                 .filter(|path| !path.trim().is_empty());
+        }
+    }
+
+    // Resolved fields omit native skin-only art for some base objects (notably
+    // AChv/AChV). Consume the reproducible SD projection, retaining child rawcodes.
+    let lightning_projection_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../docs/original_map/extracted/resolved/native-lightning-visuals.json");
+    println!(
+        "cargo:rerun-if-changed={}",
+        lightning_projection_path.display()
+    );
+    let lightning_projection: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(lightning_projection_path)?)?;
+    let mut native_lightning_rawcodes = BTreeSet::new();
+    for binding in lightning_projection["abilities"]
+        .as_array()
+        .ok_or("missing native lightning abilities")?
+    {
+        let rawcode = binding["rawcode"]
+            .as_str()
+            .ok_or("missing native lightning rawcode")?;
+        native_lightning_rawcodes.insert(rawcode.to_owned());
+        for path in binding["target_art"]
+            .as_array()
+            .ok_or("missing native lightning target art")?
+        {
+            let path = path.as_str().ok_or("invalid native lightning target art")?;
+            if is_renderable_model_path(path) {
+                assets.insert((
+                    "abilities".to_owned(),
+                    rawcode.to_owned(),
+                    "target".to_owned(),
+                    path.to_owned(),
+                ));
+            }
         }
     }
 
@@ -635,19 +684,93 @@ fn load_visual_assets(
                     .filter(|(kind, rawcode, role, _)| {
                         kind == "abilities"
                             && rawcode == child
-                            && matches!(role.as_str(), "caster" | "effect" | "target" | "special")
+                            && matches!(
+                                role.as_str(),
+                                "caster" | "effect" | "target" | "special" | "missile"
+                            )
                     })
                     .map(|(kind, _, role, path)| {
                         (
                             unit.to_owned(),
                             kind.clone(),
-                            parent.to_owned(),
+                            // Movers retain the child identity emitted by the authoritative
+                            // spell event; endpoint art belongs to the visible parent cast.
+                            if role == "missile"
+                                || (role == "target" && native_lightning_rawcodes.contains(child))
+                            {
+                                child.to_owned()
+                            } else {
+                                parent.to_owned()
+                            },
                             role.clone(),
                             path.clone(),
                         )
                     }),
             );
         }
+    }
+
+    // Direct/autonomous native missiles (e.g. Phoenix Fire) do not have a parent
+    // dummy-cast semantic row. Preserve their unit inventory ownership as well.
+    for (unit, abilities) in unit_abilities {
+        bundled_art.extend(
+            assets
+                .iter()
+                .filter(|(kind, rawcode, role, _)| {
+                    kind == "abilities" && role == "missile" && abilities.contains(rawcode)
+                })
+                .map(|(kind, rawcode, role, path)| {
+                    (
+                        unit.clone(),
+                        kind.clone(),
+                        rawcode.clone(),
+                        role.clone(),
+                        path.clone(),
+                    )
+                }),
+        );
+    }
+
+    // Runtime systems can grant autonomous effects to persistent invisible carriers.
+    // Retain the visible source's ownership for loading/prewarm, while events use the
+    // native child identity. Do not import the unrelated removal-list abilities.
+    let systems_path = object_fields_path
+        .parent()
+        .ok_or("missing resolved directory")?
+        .join("runtime-system-mechanics.tsv");
+    println!("cargo:rerun-if-changed={}", systems_path.display());
+    let mut systems = csv::ReaderBuilder::new()
+        .delimiter(b'\t')
+        .from_path(systems_path)?;
+    let system_headers = systems.headers()?.clone();
+    let parameters = header_index(&system_headers, "parameters_json")?;
+    for row in systems.records() {
+        let row = row?;
+        let parameters: serde_json::Value =
+            serde_json::from_str(row.get(parameters).unwrap_or("{}"))?;
+        let source = parameters["building_rawcode"]
+            .as_str()
+            .or_else(|| parameters["source_rawcode"].as_str());
+        let Some((source, effect)) = source.zip(parameters["effect_ability_rawcode"].as_str())
+        else {
+            continue;
+        };
+        bundled_art.extend(
+            assets
+                .iter()
+                .filter(|(kind, rawcode, role, _)| {
+                    kind == "abilities" && rawcode == effect && role == "missile"
+                })
+                .map(|(kind, rawcode, role, path)| {
+                    (
+                        source.to_owned(),
+                        kind.clone(),
+                        rawcode.clone(),
+                        role.clone(),
+                        path.clone(),
+                    )
+                }),
+        );
     }
 
     let mut status_visuals = Vec::new();
@@ -712,13 +835,18 @@ fn load_visual_assets(
         })
         .collect();
     visual_assets.extend(bundled_art.into_iter().map(
-        |(unit, owner_kind, owner_rawcode, role, model_path)| VisualAssetSpec {
-            owner_kind,
-            owner_rawcode,
-            source_unit_rawcode: Some(unit),
-            role,
-            model_path,
-            missile_arc: None,
+        |(unit, owner_kind, owner_rawcode, role, model_path)| {
+            let missile_arc = missile_arcs
+                .get(&(owner_rawcode.clone(), role.clone()))
+                .copied();
+            VisualAssetSpec {
+                owner_kind,
+                owner_rawcode,
+                source_unit_rawcode: Some(unit),
+                role,
+                model_path,
+                missile_arc,
+            }
         },
     ));
     // Some registered building spells create transient effects directly in the 9.27

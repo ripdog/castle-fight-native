@@ -12,6 +12,7 @@ use bevy::{
     camera::visibility::DynamicSkinnedMeshBounds,
     ecs::{entity_disabling::Disabled, system::SystemParam},
     gltf::{Gltf, GltfExtras, GltfMaterialExtras},
+    image::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor},
     mesh::{Indices, MeshTag, MeshVertexBufferLayoutRef, PrimitiveTopology, skinning::SkinnedMesh},
     pbr::{ExtendedMaterial, Material, MaterialExtension, MaterialPipeline, MaterialPipelineKey},
     prelude::*,
@@ -75,9 +76,12 @@ pub(crate) struct GameplayAnimationPoseClock {
 #[derive(Resource, Default)]
 pub struct Wc3VisualSet {
     projectile_by_rawcode: BTreeMap<u32, Wc3ProjectileVisual>,
+    spell_projectile_by_rawcode: BTreeMap<u32, Wc3ProjectileVisual>,
+    spell_projectile_sources: BTreeMap<u32, BTreeSet<u32>>,
     ability_by_rawcode: BTreeMap<u32, Vec<Wc3AbilityVisual>>,
     status_by_rawcode: BTreeMap<u32, Vec<Wc3StatusVisual>>,
     chain_lightning_abilities: BTreeSet<u32>,
+    lightning_by_rawcode: BTreeMap<u32, Vec<Wc3LightningVisual>>,
     stun: Option<Wc3VisualModel>,
 }
 
@@ -168,6 +172,16 @@ impl Wc3VisualModel {
             looping,
         })
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct Wc3LightningVisual {
+    pub texture: Handle<Image>,
+    pub width: f32,
+    pub segment_length: f32,
+    pub noise_scale: f32,
+    pub texcoord_scale: f32,
+    pub color: Color,
 }
 
 #[derive(Clone)]
@@ -363,8 +377,33 @@ struct VisualManifest {
     assets: Vec<VisualBinding>,
     status_visuals: Vec<StatusVisualBinding>,
     chain_lightning_abilities: Vec<String>,
+    #[serde(default)]
+    native_lightnings: Option<NativeLightningManifest>,
     stun: Option<VisualBinding>,
     models: Vec<ModelManifest>,
+}
+
+#[derive(Debug, Deserialize)]
+struct NativeLightningManifest {
+    abilities: Vec<NativeLightningAbility>,
+    effects: Vec<NativeLightningEffect>,
+}
+
+#[derive(Debug, Deserialize)]
+struct NativeLightningAbility {
+    rawcode: String,
+    effects: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct NativeLightningEffect {
+    id: String,
+    png: String,
+    width: f32,
+    segment_length: f32,
+    noise_scale: f32,
+    texcoord_scale: f32,
+    color: [u8; 4],
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -2937,6 +2976,37 @@ impl Wc3VisualSet {
         self.projectile_by_rawcode.get(&rawcode)
     }
 
+    /// Native projectile events must identify the effect/child ability, not just the
+    /// visible parent cast. Missing authored art returns None; no generic substitute.
+    #[must_use]
+    pub fn spell_projectile(&self, ability_rawcode: u32) -> Option<&Wc3ProjectileVisual> {
+        self.spell_projectile_by_rawcode.get(&ability_rawcode)
+    }
+
+    /// Shared selection path for ordinary attacks and authoritative spell movers.
+    #[must_use]
+    pub fn projectile_for(
+        &self,
+        source_rawcode: Option<u32>,
+        ability_rawcode: Option<u32>,
+    ) -> Option<&Wc3ProjectileVisual> {
+        match ability_rawcode {
+            Some(ability) => self.spell_projectile(ability),
+            None => source_rawcode.and_then(|source| self.projectile(source)),
+        }
+    }
+
+    pub fn spell_projectiles_for_source(
+        &self,
+        source: u32,
+    ) -> impl Iterator<Item = &Wc3ProjectileVisual> {
+        self.spell_projectile_sources
+            .get(&source)
+            .into_iter()
+            .flatten()
+            .filter_map(|ability| self.spell_projectile(*ability))
+    }
+
     #[must_use]
     pub fn ability(&self, rawcode: u32) -> &[Wc3AbilityVisual] {
         self.ability_by_rawcode
@@ -2957,6 +3027,20 @@ impl Wc3VisualSet {
         })
     }
 
+    pub fn lightning_target_visuals_for_source(
+        &self,
+        source: u32,
+    ) -> impl Iterator<Item = &Wc3AbilityVisual> {
+        self.ability_by_rawcode
+            .iter()
+            .filter(|(ability, _)| self.lightning_by_rawcode.contains_key(ability))
+            .flat_map(|(_, visuals)| visuals)
+            .filter(move |visual| {
+                visual.source_unit_rawcode == Some(source)
+                    && visual.anchor == Wc3AbilityVisualAnchor::Target
+            })
+    }
+
     #[must_use]
     pub fn status(&self, rawcode: u32) -> &[Wc3StatusVisual] {
         self.status_by_rawcode
@@ -2968,6 +3052,14 @@ impl Wc3VisualSet {
     #[must_use]
     pub fn is_chain_lightning(&self, rawcode: u32) -> bool {
         self.chain_lightning_abilities.contains(&rawcode)
+            || self.lightning_by_rawcode.contains_key(&rawcode)
+    }
+
+    /// The first event uses the primary native beam; every bounce uses the secondary.
+    #[must_use]
+    pub fn lightning(&self, rawcode: u32, bounce_index: u8) -> Option<&Wc3LightningVisual> {
+        let effects = self.lightning_by_rawcode.get(&rawcode)?;
+        effects.get(usize::from(bounce_index != 0).min(effects.len().checked_sub(1)?))
     }
 
     #[must_use]
@@ -5741,6 +5833,8 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
         .map(|model| (model.gltf.clone(), model))
         .collect();
     let mut projectile_by_rawcode = BTreeMap::new();
+    let mut spell_projectile_by_rawcode = BTreeMap::new();
+    let mut spell_projectile_sources = BTreeMap::<u32, BTreeSet<u32>>::new();
     let mut ability_by_rawcode = BTreeMap::<u32, Vec<Wc3AbilityVisual>>::new();
     for binding in &manifest.assets {
         let Some(gltf) = &binding.gltf else {
@@ -5781,9 +5875,31 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
                             .transpose()?,
                     });
             }
-            // Missile art needs an authoritative travel interval/path. Do not pin a missile
-            // model to either endpoint merely because the object data references one.
-            ("abilities", "missile") => {}
+            // Load missile art independently from endpoint/cast effects. Rendering must
+            // supply an authoritative travel interval/path rather than pinning it to a cast.
+            ("abilities", "missile") => {
+                let missile_arc = binding.missile_arc.unwrap_or(0.0);
+                if !missile_arc.is_finite() || missile_arc < 0.0 {
+                    return Err(format!(
+                        "spell projectile {} has invalid arc",
+                        binding.owner_rawcode
+                    ));
+                }
+                let ability = parse_rawcode(&binding.owner_rawcode)?;
+                if let Some(source) = &binding.source_unit_rawcode {
+                    spell_projectile_sources
+                        .entry(parse_rawcode(source)?)
+                        .or_default()
+                        .insert(ability);
+                }
+                spell_projectile_by_rawcode.insert(
+                    ability,
+                    Wc3ProjectileVisual {
+                        model: visual,
+                        missile_arc,
+                    },
+                );
+            }
             _ => {}
         }
     }
@@ -5818,11 +5934,77 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
         .map(|(gltf, model)| resolve_visual_model(gltf, model, asset_server))
         .transpose()?;
 
+    let lightning_by_rawcode = manifest
+        .native_lightnings
+        .map(|native| {
+            let effects = native
+                .effects
+                .into_iter()
+                .map(|effect| {
+                    validate_relative_asset_path(&effect.png)?;
+                    if !effect.width.is_finite()
+                        || effect.width <= 0.0
+                        || !effect.segment_length.is_finite()
+                        || effect.segment_length <= 0.0
+                        || !effect.noise_scale.is_finite()
+                        || effect.noise_scale < 0.0
+                        || !effect.texcoord_scale.is_finite()
+                        || effect.texcoord_scale <= 0.0
+                    {
+                        return Err(format!("invalid native lightning definition {}", effect.id));
+                    }
+                    let color = effect.color.map(|channel| f32::from(channel) / 255.0);
+                    Ok((
+                        effect.id,
+                        Wc3LightningVisual {
+                            texture: asset_server
+                                .load_builder()
+                                .with_settings(|settings: &mut ImageLoaderSettings| {
+                                    settings.sampler =
+                                        ImageSampler::Descriptor(ImageSamplerDescriptor {
+                                            address_mode_u: ImageAddressMode::Repeat,
+                                            ..default()
+                                        });
+                                })
+                                .load(format!("{EFFECT_ASSET_PREFIX}/{}", effect.png)),
+                            width: effect.width,
+                            segment_length: effect.segment_length,
+                            noise_scale: effect.noise_scale,
+                            texcoord_scale: effect.texcoord_scale,
+                            color: Color::srgba(color[0], color[1], color[2], color[3]),
+                        },
+                    ))
+                })
+                .collect::<Result<BTreeMap<_, _>, String>>()?;
+            native
+                .abilities
+                .into_iter()
+                .map(|binding| {
+                    let visuals = binding
+                        .effects
+                        .iter()
+                        .map(|id| {
+                            effects
+                                .get(id)
+                                .cloned()
+                                .ok_or_else(|| format!("missing native lightning definition {id}"))
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Ok((parse_rawcode(&binding.rawcode)?, visuals))
+                })
+                .collect::<Result<BTreeMap<_, _>, String>>()
+        })
+        .transpose()?
+        .unwrap_or_default();
+
     Ok(Wc3VisualSet {
         projectile_by_rawcode,
+        spell_projectile_by_rawcode,
+        spell_projectile_sources,
         ability_by_rawcode,
         status_by_rawcode,
         chain_lightning_abilities,
+        lightning_by_rawcode,
         stun,
     })
 }
@@ -6370,6 +6552,122 @@ mod tests {
             team_glow_texture_path(green),
             "wc3/units/textures/replaceabletextures__teamglow__teamglow06.png"
         );
+    }
+
+    #[test]
+    #[ignore = "requires a locally extracted SD assets/wc3 presentation pack"]
+    fn extracted_pack_resolves_native_spell_and_source_bindings() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets");
+        let mut app = App::new();
+        app.add_plugins((
+            MinimalPlugins,
+            bevy::asset::AssetPlugin {
+                file_path: root.to_string_lossy().into_owned(),
+                ..default()
+            },
+        ))
+        .init_asset::<Gltf>()
+        .init_asset::<bevy::world_serialization::WorldAsset>()
+        .init_asset::<Image>();
+        let server = app.world().resource::<AssetServer>();
+        let path = root.join(EFFECT_MANIFEST);
+        let manifest: VisualManifest =
+            serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
+        let visuals =
+            load_manifest(&path, server).expect("real client manifest loader must resolve pack");
+        for binding in &manifest.assets {
+            if binding.owner_kind == "abilities"
+                && binding.role == "missile"
+                && binding.gltf.is_some()
+            {
+                let ability = parse_rawcode(&binding.owner_rawcode).unwrap();
+                let visual = visuals
+                    .projectile_for(None, Some(ability))
+                    .expect("native child missile");
+                assert_eq!(visual.missile_arc, binding.missile_arc.unwrap_or(0.0));
+                if let Some(source) = &binding.source_unit_rawcode {
+                    assert!(
+                        visuals.spell_projectile_sources[&parse_rawcode(source).unwrap()]
+                            .contains(&ability)
+                    );
+                }
+            }
+        }
+        for binding in &manifest.native_lightnings.unwrap().abilities {
+            let ability = parse_rawcode(&binding.rawcode).unwrap();
+            assert!(visuals.lightning(ability, 0).is_some());
+            assert!(visuals.lightning(ability, u8::MAX).is_some());
+        }
+    }
+
+    #[test]
+    fn projectile_lookup_keeps_spell_identity_and_never_falls_back_to_attack_art() {
+        let model = Wc3VisualModel {
+            scene: Handle::default(),
+            gltf: Handle::default(),
+            animation_name: None,
+            animation_duration_seconds: None,
+            stand_animation_name: None,
+            poolable_instance: false,
+            emitters: Vec::new(),
+            ribbons: Vec::new(),
+        };
+        let mut visuals = Wc3VisualSet::default();
+        visuals.projectile_by_rawcode.insert(
+            1,
+            Wc3ProjectileVisual {
+                model: model.clone(),
+                missile_arc: 0.37,
+            },
+        );
+        visuals.spell_projectile_by_rawcode.insert(
+            2,
+            Wc3ProjectileVisual {
+                model,
+                missile_arc: 0.82,
+            },
+        );
+        visuals
+            .spell_projectile_sources
+            .insert(1, BTreeSet::from([2]));
+        assert_eq!(
+            visuals.projectile_for(Some(1), None).unwrap().missile_arc,
+            0.37
+        );
+        assert_eq!(
+            visuals
+                .projectile_for(Some(1), Some(2))
+                .unwrap()
+                .missile_arc,
+            0.82
+        );
+        assert!(visuals.projectile_for(Some(1), Some(3)).is_none());
+        assert_eq!(visuals.spell_projectiles_for_source(1).count(), 1);
+        assert_eq!(visuals.spell_projectiles_for_source(3).count(), 0);
+    }
+
+    #[test]
+    fn native_lightning_uses_secondary_art_for_every_bounce_without_spell_fallback() {
+        let primary = Wc3LightningVisual {
+            texture: Handle::default(),
+            width: 17.0,
+            segment_length: 23.0,
+            noise_scale: 0.0,
+            texcoord_scale: 0.4,
+            color: Color::WHITE,
+        };
+        let secondary = Wc3LightningVisual {
+            width: 9.0,
+            ..primary.clone()
+        };
+        let mut visuals = Wc3VisualSet::default();
+        visuals
+            .lightning_by_rawcode
+            .insert(1, vec![primary, secondary]);
+        assert_eq!(visuals.lightning(1, 0).unwrap().width, 17.0);
+        assert_eq!(visuals.lightning(1, 1).unwrap().width, 9.0);
+        assert_eq!(visuals.lightning(1, u8::MAX).unwrap().width, 9.0);
+        assert!(visuals.lightning(2, 0).is_none());
     }
 
     #[test]
