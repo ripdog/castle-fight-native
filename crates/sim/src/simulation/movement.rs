@@ -1006,7 +1006,8 @@ impl Simulation {
         }
 
         let (bounds_min, bounds_max) = self.navigation_world_bounds();
-        let reservation_cell_size = max_radius.saturating_mul(2).max(1);
+        let reservation_cell_size =
+            collision_reservation_cell_size(max_radius, self.config.navigation_cell_size);
         let mut ground_reservations = SpatialReservationGrid::build_with_radii(
             reservation_cell_size,
             bounds_min,
@@ -1666,6 +1667,16 @@ fn pursuit_arc_step(
     SimPoint::new(0, 0).step_towards(raw, distance)
 }
 
+// Reservation cells need not resolve below navigation geometry. Tiny synthetic or morphed
+// bodies must not turn a bounded navigation map into billions of dense reservation buckets.
+// A larger bucket remains conservative: exact circle-distance checks decide overlap.
+fn collision_reservation_cell_size(max_radius: i32, navigation_cell_size: i32) -> i32 {
+    max_radius
+        .saturating_mul(2)
+        .max(navigation_cell_size)
+        .max(1)
+}
+
 fn building_attack_envelope_goal(
     source: SimPoint,
     footprint: BuildingFootprint,
@@ -1674,4 +1685,55 @@ fn building_attack_envelope_goal(
 ) -> SimPoint {
     let closest = closest_point_on_footprint(source, footprint, cell_size);
     point_attack_envelope_goal(source, closest, max_range)
+}
+
+#[cfg(test)]
+mod reservation_memory_tests {
+    use super::*;
+
+    #[test]
+    fn tiny_collision_bodies_keep_reservation_storage_bounded_and_worker_independent() {
+        // Assert the allocation bound before exercising it, so a regression cannot OOM the host.
+        let config = SimulationConfig {
+            unit_separation_distance: 0,
+            max_separation_per_tick: 0,
+            ..SimulationConfig::default()
+        };
+        assert_eq!(
+            collision_reservation_cell_size(1, config.navigation_cell_size),
+            config.navigation_cell_size
+        );
+        assert_eq!(collision_reservation_cell_size(100, 10), 200);
+        assert_eq!(collision_reservation_cell_size(i32::MAX, 10), i32::MAX);
+        let mut original = Simulation::new(config.clone(), 1);
+        let mut parallel = Simulation::new(config, 4);
+        for sim in [&mut original, &mut parallel] {
+            for team in [0, 1] {
+                sim.spawn_unit_with_properties(
+                    UnitSpawn {
+                        team: Team(team),
+                        position: SimPoint::new(20 * SUBUNITS_PER_WORLD_UNIT + i32::from(team), 0),
+                        health: 100,
+                        attack: AttackProfile {
+                            delivery: AttackDelivery::Melee,
+                            damage: 0,
+                            range: 0,
+                            acquisition_range: 0,
+                            cooldown_ticks: 1,
+                        },
+                        movement: MovementProfile { speed_per_tick: 0 },
+                    },
+                    UnitGameplayProperties {
+                        collision_radius: Some(CollisionRadius(1)),
+                        ..UnitGameplayProperties::default()
+                    },
+                );
+            }
+        }
+        for _ in 0..3 {
+            assert_eq!(original.step().checksum, parallel.step().checksum);
+        }
+        let units = original.units();
+        assert!(units[0].position.distance_sq(units[1].position) >= 4);
+    }
 }

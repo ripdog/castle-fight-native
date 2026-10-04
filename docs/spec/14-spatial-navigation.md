@@ -177,6 +177,8 @@ For **melee/ground-reachability target acquisition**, the verification implement
 
 Other query classes (for example long-range attacks that may hit across disconnected ground components, auras, or projectiles) MUST use an index/query partition appropriate to their own semantics rather than incorrectly inheriting the melee reachability partition.
 
+Dense collision-reservation storage MUST remain bounded by navigation-map resolution even for very small collision bodies. Its bucket width is at least one navigation cell and at least twice the largest active collision radius. Bucket granularity is only a conservative broad phase: exact circle-distance checks still decide overlap, and a coarser bucket MUST NOT change collision results or deterministic commitment order.
+
 ## 12. Grid query determinism
 
 Grid storage order MUST NOT become a targeting tie-break.
