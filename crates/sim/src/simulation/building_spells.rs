@@ -221,6 +221,51 @@ impl Simulation {
         true
     }
 
+    /// Native buff removal and the retained ability-removal list do not cancel
+    /// script callbacks, order recovery, Defend restoration, or unrelated grants.
+    pub(super) fn cleanse_building_spell_controls(
+        &mut self,
+        target: SimId,
+        position: SimPoint,
+        removed_abilities: &[AbilityId],
+    ) {
+        let Some(entity) = self.world.iter_entities().find_map(|entity| {
+            entity
+                .get::<BuildingSpellTargetState>()
+                .filter(|state| state.target == target)
+                .map(|_| entity.id())
+        }) else {
+            return;
+        };
+        let (hex_removed, shield_removed) = {
+            let mut state = self
+                .world
+                .get_mut::<BuildingSpellTargetState>(entity)
+                .unwrap();
+            let hex_removed = state.hex.take().is_some();
+            let remove_shield =
+                removed_abilities.contains(&AbilityId(u32::from_be_bytes(*b"A09L")));
+            let shield_removed =
+                remove_shield && (state.shield_level > 0 || state.shield_expires_tick.is_some());
+            if remove_shield {
+                state.shield_level = 0;
+                state.shield_expires_tick = None;
+            }
+            (hex_removed, shield_removed)
+        };
+        if hex_removed {
+            self.last_building_spell_visuals
+                .push(BuildingSpellVisualEvent {
+                    target,
+                    position,
+                    kind: BuildingSpellVisualKind::HexRestore,
+                });
+        }
+        if hex_removed || shield_removed {
+            refresh_building_spell_controls(&mut self.world, self.next_tick);
+        }
+    }
+
     pub(super) fn hex_trigger_eligible(&self, unit: &UnitSnapshot, version: MapVersion) -> bool {
         let code = self
             .world

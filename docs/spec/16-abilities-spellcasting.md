@@ -170,6 +170,12 @@ The constrained effect vocabulary should support at least:
 
 Effects reuse the deterministic resolution rules in `15-targeting-combat.md`. The executable `AreaDamage` primitive requires a selected enemy unit, captures that unit's authoritative position at cast resolution as the area center, and damages every live enemy combat unit whose authoritative point lies within the authored radius, including the selected unit itself. The affected set is traversed in stable `SimId` order; the primitive does not implicitly damage buildings and does not generate ordinary attack retaliation/ally-defense events. `AreaDamage` is therefore not valid with `AllEnemyUnits`, which has no single center. Corpse-targeted abilities operate on authoritative corpse entities rather than presentation objects. They MUST revalidate corpse existence/eligibility at resolution, use canonical ordering/tie-breaking when selecting among multiple corpses, and atomically consume a corpse when the effect definition says it is spent so one corpse cannot satisfy multiple competing casts nondeterministically.
 
+### 8.1 Native projections and removal
+
+A temporary morph or ability-disable projection MUST NOT overwrite the logical unit's persistent movement/armor/passive baseline or its cold resurrection definition. Removing explicitly listed permanent grants operates on the live baseline, not on a snapshot whose passives may currently be suppressed. After native morph removal, the current baseline is projected again; unrelated grants remain intact.
+
+Native buff removal and independent script control are separate operations. Dispel MUST NOT erase delayed callbacks, order recovery, or unrelated permanent control state merely because they affect the same target. Ability-granted state is removed only when the version-scoped source recipe explicitly identifies that grant. Native positive-damage/live-source removal predicates are revalidated at impact; failure MUST NOT dispel the existing native/control states, even when the committed projectile still deals damage or applies its own native buff. Presentation restore events do not substitute for authoritative removal or schedule gameplay callbacks.
+
 ## 9. Buffing spell buildings
 
 A spell building may automatically cast a buff on nearby friendly combat units.

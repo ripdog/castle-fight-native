@@ -1,6 +1,7 @@
 use super::*;
 use crate::components::{EvasionEffectProfile, SpellResistanceEffectProfile};
 
+mod cleanse;
 mod homing;
 
 fn simulation(workers: usize) -> Simulation {

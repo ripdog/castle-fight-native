@@ -448,14 +448,27 @@ impl Simulation {
                                 )
                         });
                         if damage > 0 && source_has_ability {
-                            cleanse_native_effects(
-                                &mut units[index],
-                                &mut unit_health[index],
-                                carrier_for_version(bolt.map_version).unwrap(),
+                            let profile = carrier_for_version(bolt.map_version).unwrap();
+                            // Hex/Defend projections suppress passives; they are not the
+                            // mutable baseline from which permanent grants may be removed.
+                            {
+                                let mut baseline = self
+                                    .world
+                                    .get_mut::<PassiveUnitEffects>(units[index].entity)
+                                    .expect("unit passive baseline");
+                                cleanse_native_effects(
+                                    &mut units[index],
+                                    &mut unit_health[index],
+                                    &mut baseline,
+                                    profile,
+                                );
+                            }
+                            self.cleanse_building_spell_controls(
+                                units[index].id,
+                                units[index].position,
+                                &profile.removed_persistent_abilities,
                             );
-                            self.world
-                                .entity_mut(units[index].entity)
-                                .insert(units[index].passive_effects);
+                            self.project_building_spell_control(&mut units[index]);
                         }
                         // Phoenix Fire applies its native buff after dealing initial damage;
                         // the script cleanse occurs inside that damage event. Zero DPS still has
@@ -482,6 +495,7 @@ impl Simulation {
 fn cleanse_native_effects(
     unit: &mut UnitSnapshot,
     health: &mut i32,
+    passive_baseline: &mut PassiveUnitEffects,
     profile: &crate::native_carriers::NativeCarrierProfile,
 ) {
     let status = &mut unit.status;
@@ -512,7 +526,7 @@ fn cleanse_native_effects(
     );
     status.damage_over_time = Default::default();
     status.damage_over_time_count = 0;
-    unit.passive_effects.retain(|effect| {
+    passive_baseline.retain(|effect| {
         let ability = match effect {
             PassiveUnitEffect::Bash(p) => Some(p.ability),
             PassiveUnitEffect::CriticalStrike(p) => Some(p.ability),
