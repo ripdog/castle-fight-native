@@ -228,6 +228,7 @@ mod tests {
     fn test_builder_configuration(build_catalog: Vec<u32>) -> BuilderConfiguration {
         BuilderConfiguration {
             appearance: ContentIdentity {
+                map_version: CASTLE_FIGHT_DEFAULT_MAP_VERSION,
                 rawcode: u32::from_be_bytes(*b"TEST"),
                 name: "Test Builder",
             },
@@ -239,6 +240,7 @@ mod tests {
     fn test_building_properties(rawcode: u32) -> BuildingGameplayProperties {
         BuildingGameplayProperties {
             content: Some(ContentIdentity {
+                map_version: CASTLE_FIGHT_DEFAULT_MAP_VERSION,
                 rawcode,
                 name: "Test Building",
             }),

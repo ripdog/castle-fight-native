@@ -6,7 +6,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 12;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 13;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -103,10 +103,8 @@ impl SimulationSnapshot {
                     }
                 }
                 CanonicalEntity::Builder(builder) => {
-                    builder.configuration.appearance = resolve_content_identity(
-                        builder.configuration.appearance.rawcode,
-                        content,
-                    )?;
+                    builder.configuration.appearance =
+                        resolve_content_identity(builder.configuration.appearance, content)?;
                     if let Some(build_order) = &mut builder.build_order {
                         rehydrate_building_properties(&mut build_order.properties, content)?;
                     }
@@ -137,7 +135,7 @@ fn rehydrate_optional_content(
     content: &CastleFightContentBundle,
 ) -> Result<(), SnapshotWireError> {
     if let Some(identity) = identity {
-        *identity = resolve_content_identity(identity.rawcode, content)?;
+        *identity = resolve_content_identity(*identity, content)?;
     }
     Ok(())
 }
@@ -151,12 +149,18 @@ fn rehydrate_building_properties(
 }
 
 fn resolve_content_identity(
-    rawcode: u32,
+    identity: ContentIdentity,
     content: &CastleFightContentBundle,
 ) -> Result<ContentIdentity, SnapshotWireError> {
+    if identity.map_version != content.map_version {
+        return Err(SnapshotWireError::ContentVersionMismatch {
+            expected: content.map_version,
+            actual: identity.map_version,
+        });
+    }
     content
-        .content_identity_for_rawcode(rawcode)
-        .ok_or(SnapshotWireError::UnknownContentRawcode(rawcode))
+        .content_identity_for_rawcode(identity.rawcode)
+        .ok_or(SnapshotWireError::UnknownContentRawcode(identity.rawcode))
 }
 
 #[derive(Debug)]
@@ -164,6 +168,10 @@ pub enum SnapshotWireError {
     Encode(serde_json::Error),
     Decode(serde_json::Error),
     UnknownContentRawcode(u32),
+    ContentVersionMismatch {
+        expected: crate::MapVersion,
+        actual: crate::MapVersion,
+    },
 }
 
 impl fmt::Display for SnapshotWireError {
@@ -171,6 +179,10 @@ impl fmt::Display for SnapshotWireError {
         match self {
             Self::Encode(error) => write!(formatter, "snapshot encoding failed: {error}"),
             Self::Decode(error) => write!(formatter, "snapshot decoding failed: {error}"),
+            Self::ContentVersionMismatch { expected, actual } => write!(
+                formatter,
+                "snapshot content version {actual} differs from selected bundle {expected}"
+            ),
             Self::UnknownContentRawcode(rawcode) => write!(
                 formatter,
                 "snapshot references unknown content rawcode {rawcode:#010x}"
@@ -183,7 +195,7 @@ impl std::error::Error for SnapshotWireError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Encode(error) | Self::Decode(error) => Some(error),
-            Self::UnknownContentRawcode(_) => None,
+            Self::UnknownContentRawcode(_) | Self::ContentVersionMismatch { .. } => None,
         }
     }
 }
@@ -1083,6 +1095,7 @@ mod tests {
             },
             configuration: BuilderConfiguration {
                 appearance: ContentIdentity {
+                    map_version: crate::CASTLE_FIGHT_DEFAULT_MAP_VERSION,
                     rawcode: 0x6253_4e50,
                     name: "snapshot-builder",
                 },

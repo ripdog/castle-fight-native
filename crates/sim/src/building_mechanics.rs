@@ -31,6 +31,7 @@ pub struct HexFormProfile {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct HexEffectProfile {
+    pub map_version: MapVersion,
     pub duration_ticks: u16,
     pub hero_duration_ticks: u16,
     pub ground: HexFormProfile,
@@ -111,6 +112,7 @@ fn build_city_spellcasting(version: MapVersion) -> SpellcastingProfile {
             target_policy: AbilityTargetPolicy::RandomEnemyUnitGlobal,
             effect: AbilityEffect::Hex {
                 profile: HexEffectProfile {
+                    map_version: version,
                     duration_ticks: ticks(&effect["duration_normal"]),
                     hero_duration_ticks: ticks(&effect["duration_hero"]),
                     ground: form("n00F"),

@@ -812,7 +812,11 @@ mod tests {
             position,
             profile,
             configuration: BuilderConfiguration {
-                appearance: ContentIdentity { rawcode, name },
+                appearance: ContentIdentity {
+                    map_version: castle_fight_sim::CASTLE_FIGHT_DEFAULT_MAP_VERSION,
+                    rawcode,
+                    name,
+                },
                 locomotion: BuilderLocomotion::Foot,
                 build_catalog: Vec::new(),
             },

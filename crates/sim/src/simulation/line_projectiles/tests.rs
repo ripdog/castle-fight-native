@@ -366,6 +366,7 @@ fn source_art_identity_survives_death_wire_restore_and_canonical_hashing() {
         .id();
     let rawcode = crate::CastleFightUnitKind::Ballista.definition().rawcode;
     sim.world.entity_mut(entity).insert(ContentIdentity {
+        map_version: crate::CASTLE_FIGHT_DEFAULT_MAP_VERSION,
         rawcode,
         name: "synthetic source",
     });

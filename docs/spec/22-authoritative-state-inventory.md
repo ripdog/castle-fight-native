@@ -69,12 +69,12 @@ Every authoritative ECS entity has exactly one stable `SimId`. Canonical travers
 The complete current unit state is:
 
 - `SimId`;
-- optional `ContentIdentity.rawcode`; `ContentIdentity.name` is presentation metadata and is not gameplay identity;
+- optional `ContentIdentity` (map version and rawcode); `ContentIdentity.name` is presentation metadata and is not gameplay identity;
 - owning `PlayerId`, plus `Team`, `Position`, and `Health`;
 - `AttackProfile` including delivery parameters, `AttackTargetMask`, `DamageType`, and `ArmorProfile`;
 - `PassiveUnitEffects` and every nested ability/effect parameter;
 - `MovementClass`, `MovementProfile`, optional `CollisionRadius`, and `MechanicalUnit` marker presence;
-- intrinsic `UnitClassifications` values (hero, summoned, spell-immune), including in original resurrection definitions. Absent component storage represents the all-false logical value; only non-default flags need an ECS component;
+- intrinsic `UnitClassifications` values (hero, summoned, spell-immune, combat-sapper, invulnerable, legendary, summoned marker, illusion, invisible), including in original resurrection definitions. Absent component storage represents the all-false logical value; only non-default flags need an ECS component;
 - optional `BuildTimeTicks` and `RepairTimeTicks` component presence and values;
 - `AttackCooldown` and `AttackSequence`;
 - `TargetState` including both lock flags;
@@ -93,16 +93,18 @@ Optional component presence is canonical. `None` must not alias a present zero-v
 
 The complete current building state is:
 
-- `SimId`, optional content rawcode, optional owning `PlayerId`, `Team`, `BuildingFootprint`, and `Health`;
+- `SimId`, optional content identity (map version and rawcode), optional owning `PlayerId`, `Team`, `BuildingFootprint`, and `Health`;
 - optional `BuildingConstruction`: start/complete ticks plus the complete pending authored building definition/properties. The current checksum hashes that definition canonically; snapshots must preserve the logical definition or an exact compatible definition reference;
 - optional `BuildingEconomyProfile` and optional `RepairTimeTicks`;
 - `DamageType` and `ArmorProfile`;
 - optional production definition and `ProductionState.next_spawn_tick`;
-- production content rawcode, corpse profile, collision radius, movement class, mechanical/build/repair metadata, intrinsic classifications, target mask, damage type, armor, passive effects, primary spellcasting profile, and optional additional automatic-ability definitions;
+- production content identity (map version and rawcode), corpse profile, collision radius, movement class, mechanical/build/repair metadata, intrinsic classifications, target mask, damage type, armor, passive effects, primary spellcasting profile, and optional additional automatic-ability definitions;
 - optional attack profile plus target mask, cooldown, target-lock state, and spawn tick;
 - optional `StatusState`;
 - optional building spellcasting profile plus shared mana remainder/current value and primary automatic-ability ready/cast sequence/control flags;
 - optional `AdditionalAutomaticAbilities`, with the same profile/state coverage as units. In-progress upgrade cancellation preserves the complete precursor ability set and state; a successful definition replacement discards obsolete slots.
+
+Content identity includes its retained map version before activation, not a version inferred from a live rawcode or a process default. This identity participates in every live/cold hash and snapshot location, including original resurrection bodies, paid build orders, pending construction, production children, and saved upgrade precursors. Native carrier/regeneration state and delayed building-spell controls consume this identity; Hex profiles/callbacks also retain the source effect version.
 
 Production metadata is authoritative because it defines future spawned units. It must remain complete even when no produced unit is currently alive, including inside pending construction and saved upgrade precursors. Every ordinary or companion production spawn receives the complete definition set with fresh per-ability runtime state; producer metadata MUST NOT carry a previous child's cooldowns, sequences, or pending actions.
 
@@ -112,7 +114,7 @@ The complete current builder state is:
 
 - `SimId`, owning `PlayerId`, `Team`, `Position`, and builder marker presence;
 - `BuilderProfile` movement/build/repair/autocast/blink values;
-- `BuilderConfiguration`: appearance rawcode, locomotion, and ordered build catalog;
+- `BuilderConfiguration`: appearance identity (map version and rawcode), locomotion, and ordered build catalog;
 - `BuilderState`: optional destination, follow target, repair target, repair-progress remainder, and repair-autocast toggle;
 - optional `BuilderBuildOrder`, including the full pending `BuildingSpawn` and `BuildingGameplayProperties` purchased for the order.
 

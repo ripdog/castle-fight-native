@@ -47,6 +47,7 @@ pub(super) struct BuildingSpellTargetState {
 /// Rebuildable cache. Only BuildingSpellTargetState is canonical.
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub(super) struct BuildingSpellControl {
+    pub version: Option<MapVersion>,
     pub hex: Option<HexState>,
     pub shield_level: u8,
     pub overheat_level: u8,
@@ -71,12 +72,38 @@ pub struct BuildingSpellVisualEvent {
 }
 
 impl Simulation {
-    fn building_spell_state_entity(&mut self, target: SimId, unit_entity: Entity) -> Entity {
+    fn building_spell_target_version(&self, entity: Entity) -> MapVersion {
+        self.world
+            .entity(entity)
+            .get::<ContentIdentity>()
+            .map_or(crate::CASTLE_FIGHT_DEFAULT_MAP_VERSION, |content| {
+                content.map_version
+            })
+    }
+
+    fn building_spell_state_entity(
+        &mut self,
+        target: SimId,
+        unit_entity: Entity,
+        version: MapVersion,
+    ) -> Entity {
+        if let Some(content) = self.world.entity(unit_entity).get::<ContentIdentity>() {
+            assert_eq!(
+                content.map_version, version,
+                "building spell and target content versions must agree"
+            );
+        }
         if let Some(entity) = self.world.iter_entities().find_map(|entity| {
             entity
                 .get::<BuildingSpellTargetState>()
                 .filter(|state| state.target == target)
-                .map(|_| entity.id())
+                .map(|state| {
+                    assert_eq!(
+                        state.version, version,
+                        "building spell control cannot change version"
+                    );
+                    entity.id()
+                })
         }) {
             return entity;
         }
@@ -85,7 +112,6 @@ impl Simulation {
             .entity(unit_entity)
             .get::<ContentIdentity>()
             .map_or(0, |content| content.rawcode);
-        let version = MapVersion::CASTLE_FIGHT_9_27;
         let (anti_negative, selector_excluded) = markers_for_version(code, version);
         let id = self.allocate_id();
         self.world
@@ -129,7 +155,8 @@ impl Simulation {
         }) else {
             return false;
         };
-        let entity = self.building_spell_state_entity(target, unit_entity);
+        let version = self.building_spell_target_version(unit_entity);
+        let entity = self.building_spell_state_entity(target, unit_entity, version);
         let mut state = self.world.entity_mut(entity);
         let mut state = state.get_mut::<BuildingSpellTargetState>().unwrap();
         state.shield_level = level;
@@ -167,7 +194,8 @@ impl Simulation {
         }) else {
             return false;
         };
-        let entity = self.building_spell_state_entity(target, unit_entity);
+        let version = self.building_spell_target_version(unit_entity);
+        let entity = self.building_spell_state_entity(target, unit_entity, version);
         let mut entity = self.world.entity_mut(entity);
         let mut state = entity.get_mut::<BuildingSpellTargetState>().unwrap();
         state.anti_negative = anti_negative;
@@ -193,13 +221,13 @@ impl Simulation {
         true
     }
 
-    pub(super) fn hex_trigger_eligible(&self, unit: &UnitSnapshot) -> bool {
+    pub(super) fn hex_trigger_eligible(&self, unit: &UnitSnapshot, version: MapVersion) -> bool {
         let code = self
             .world
             .entity(unit.entity)
             .get::<ContentIdentity>()
             .map_or(0, |c| c.rawcode);
-        if markers_for_version(code, MapVersion::CASTLE_FIGHT_9_27).1 {
+        if markers_for_version(code, version).1 {
             return false;
         }
         !self.world.iter_entities().any(|e| {
@@ -215,7 +243,8 @@ impl Simulation {
         caster: SimId,
         cast_sequence: u64,
     ) -> bool {
-        let entity = self.building_spell_state_entity(target.id, target.entity);
+        let entity =
+            self.building_spell_state_entity(target.id, target.entity, profile.map_version);
         let mut state = self
             .world
             .entity(entity)
@@ -433,11 +462,12 @@ impl Simulation {
         let Some(control) = entity.get::<BuildingSpellControl>() else {
             return;
         };
+        let version = control
+            .version
+            .expect("projected building spell control retains its version");
         unit.orders_suspended = control.orders_suspended;
         if control.overheat_level > 0 {
-            let profile = crate::building_mechanics::overheat_shield_for_version(
-                MapVersion::CASTLE_FIGHT_9_27,
-            );
+            let profile = crate::building_mechanics::overheat_shield_for_version(version);
             apply_timed_attack_speed_modifier(
                 &mut unit.status,
                 ModifierId(profile.attack_speed_ability.0),
@@ -445,8 +475,7 @@ impl Simulation {
                 u64::MAX,
             );
         }
-        unit.armor.armor_points +=
-            shield_armor_for_version(control.shield_level, MapVersion::CASTLE_FIGHT_9_27);
+        unit.armor.armor_points += shield_armor_for_version(control.shield_level, version);
         if control.defend_disabled {
             unit.passive_effects = unit.passive_effects.without_defend();
         }
@@ -484,19 +513,20 @@ impl Simulation {
                     continue;
                 }
                 resolved[index] = true;
-                let level = self
-                    .world
-                    .entity(unit.entity)
-                    .get::<BuildingSpellControl>()
-                    .map_or(0, |c| c.overheat_level);
+                let Some(control) = self.world.entity(unit.entity).get::<BuildingSpellControl>()
+                else {
+                    continue;
+                };
+                let level = control.overheat_level;
                 if level == 0 || unit.abilities_disabled {
                     continue;
                 }
                 changed = true;
-                let profile = crate::building_mechanics::overheat_shield_for_version(
-                    MapVersion::CASTLE_FIGHT_9_27,
-                )
-                .explosions[usize::from(level - 1)];
+                let version = control
+                    .version
+                    .expect("projected overheat control retains its version");
+                let profile = crate::building_mechanics::overheat_shield_for_version(version)
+                    .explosions[usize::from(level - 1)];
                 let damage_at = |distance: u64| {
                     if distance <= square_i32(profile.full_radius) {
                         profile.full_damage
@@ -551,6 +581,7 @@ pub(super) fn refresh_building_spell_controls(world: &mut World, tick: u64) {
             Some((
                 state.target,
                 BuildingSpellControl {
+                    version: Some(state.version),
                     hex: state.hex.filter(|h| tick < h.expires_tick),
                     shield_level: if state.shield_expires_tick.is_some_and(|t| tick >= t) {
                         0

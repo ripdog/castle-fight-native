@@ -3284,6 +3284,7 @@ mod tests {
                     100 * SUBUNITS_PER_WORLD_UNIT,
                 ),
                 appearance: ContentIdentity {
+                    map_version: castle_fight_sim::CASTLE_FIGHT_DEFAULT_MAP_VERSION,
                     rawcode: u32::from_be_bytes(*b"X00C"),
                     name: "Human Builder",
                 },
@@ -3329,6 +3330,7 @@ mod tests {
             UnitSample {
                 id: SimId(7),
                 content: Some(ContentIdentity {
+                    map_version: castle_fight_sim::CASTLE_FIGHT_DEFAULT_MAP_VERSION,
                     rawcode: u32::from_be_bytes(*b"hfoo"),
                     name: "Footman",
                 }),
@@ -3472,6 +3474,7 @@ mod tests {
             BuildingSample {
                 id: SimId(9),
                 content: Some(ContentIdentity {
+                    map_version: castle_fight_sim::CASTLE_FIGHT_DEFAULT_MAP_VERSION,
                     rawcode: u32::from_be_bytes(*b"h000"),
                     name: "Barracks",
                 }),
@@ -3524,6 +3527,7 @@ mod tests {
             UnitSample {
                 id: SimId(11),
                 content: Some(ContentIdentity {
+                    map_version: castle_fight_sim::CASTLE_FIGHT_DEFAULT_MAP_VERSION,
                     rawcode: u32::from_be_bytes(*b"h016"),
                     name: "Gryphon Rider",
                 }),

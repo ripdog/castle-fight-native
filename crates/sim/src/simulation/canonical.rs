@@ -890,6 +890,8 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u16(builder.profile.full_repair_duration_ticks);
                 hash.write_i32(builder.profile.blink_range);
                 hash.write_i32(builder.profile.blink_boundary_inset);
+                hash.write_u16(builder.configuration.appearance.map_version.major);
+                hash.write_u16(builder.configuration.appearance.map_version.minor);
                 hash.write_u64(u64::from(builder.configuration.appearance.rawcode));
                 hash.write_u8(match builder.configuration.locomotion {
                     BuilderLocomotion::Foot => 0,
@@ -1211,6 +1213,8 @@ fn hash_content_identity(hash: &mut Fnv64, content: Option<ContentIdentity>) {
     match content {
         Some(content) => {
             hash.write_u8(1);
+            hash.write_u16(content.map_version.major);
+            hash.write_u16(content.map_version.minor);
             hash.write_u64(u64::from(content.rawcode));
         }
         None => hash.write_u8(0),
@@ -1736,6 +1740,8 @@ fn hash_hex_form(hash: &mut Fnv64, form: crate::building_mechanics::HexFormProfi
 }
 
 fn hash_hex_profile(hash: &mut Fnv64, profile: crate::building_mechanics::HexEffectProfile) {
+    hash.write_u16(profile.map_version.major);
+    hash.write_u16(profile.map_version.minor);
     hash.write_u16(profile.duration_ticks);
     hash.write_u16(profile.hero_duration_ticks);
     hash.write_u16(profile.initial_reengage_ticks);
@@ -2150,6 +2156,7 @@ mod tests {
             inert_unit(),
             UnitGameplayProperties {
                 content: Some(ContentIdentity {
+                    map_version: crate::MapVersion::new(1, 1),
                     rawcode: u32::from_be_bytes(*b"u001"),
                     name: "first",
                 }),
@@ -2162,6 +2169,7 @@ mod tests {
             inert_unit(),
             UnitGameplayProperties {
                 content: Some(ContentIdentity {
+                    map_version: crate::MapVersion::new(1, 1),
                     rawcode: u32::from_be_bytes(*b"u002"),
                     name: "second",
                 }),

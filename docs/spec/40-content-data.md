@@ -142,6 +142,8 @@ status immunities
 
 `collision/separation radius` is imported gameplay geometry and MUST remain distinct from presentation mesh size or selection scale. Where the original content exposes this value reliably, conversion SHOULD preserve it as an explicit authoritative radius rather than collapsing all units to one simulation-wide spacing constant.
 
+Retained unit/building/builder identities MUST include their map version, including definitions for future production, construction, upgrades, and resurrection. Native runtime consumers MUST use that authoritative version rather than recover it from an unqualified rawcode lookup. Version identity is gameplay metadata; display names remain presentation metadata.
+
 The simulation should consume compact validated IDs/structures rather than dynamically interpret arbitrary scripts in hot loops.
 
 ## 8. Attack definitions

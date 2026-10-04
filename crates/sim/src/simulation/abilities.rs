@@ -1319,8 +1319,12 @@ impl Simulation {
             *candidate_checks += 1;
             if candidate.health <= 0
                 || candidate.team == source.team
-                || (matches!(ability.effect, AbilityEffect::Hex { .. })
-                    && !self.hex_trigger_eligible(candidate))
+                || match ability.effect {
+                    AbilityEffect::Hex { profile } => {
+                        !self.hex_trigger_eligible(candidate, profile.map_version)
+                    }
+                    _ => false,
+                }
             {
                 continue;
             }
@@ -1406,8 +1410,12 @@ impl Simulation {
                         }
                         AbilityTargetPolicy::RandomEnemyUnitGlobal => {
                             target.team != source.team
-                                && (!matches!(ability.effect, AbilityEffect::Hex { .. })
-                                    || self.hex_trigger_eligible(target))
+                                && match ability.effect {
+                                    AbilityEffect::Hex { profile } => {
+                                        self.hex_trigger_eligible(target, profile.map_version)
+                                    }
+                                    _ => true,
+                                }
                         }
                         AbilityTargetPolicy::AllEnemyUnits => false,
                         AbilityTargetPolicy::AllFriendlyUnits

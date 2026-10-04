@@ -173,6 +173,7 @@ fn overheat_shield_roll_precedence_progression_and_ground_death_splash_follow_ev
         spawn(1),
         UnitGameplayProperties {
             content: Some(ContentIdentity {
+                map_version: version,
                 rawcode: shield.rawcode,
                 name: "Shield fixture",
             }),

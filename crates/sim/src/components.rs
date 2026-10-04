@@ -329,6 +329,8 @@ pub struct GameplayBundleIdentity {
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContentIdentity {
+    /// Retained definition version, including cold future-spawn and upgrade identities.
+    pub map_version: crate::version::MapVersion,
     pub rawcode: u32,
     #[serde(skip, default)]
     pub name: &'static str,

@@ -32,6 +32,7 @@ fn profile() -> HexEffectProfile {
         },
     };
     HexEffectProfile {
+        map_version: crate::CASTLE_FIGHT_DEFAULT_MAP_VERSION,
         duration_ticks: 10,
         hero_duration_ticks: 4,
         ground: form(1, 2, 1),
@@ -90,6 +91,7 @@ fn defender_properties() -> UnitGameplayProperties {
     let source = crate::CastleFightUnitKind::Defender.definition();
     UnitGameplayProperties {
         content: Some(ContentIdentity {
+            map_version: source.map_version,
             rawcode: source.rawcode,
             name: source.name,
         }),

@@ -1,11 +1,10 @@
 use super::*;
 #[cfg(test)]
 mod tests;
-use crate::{
-    native_carriers::{
-        NativeCarrierBolt, NativeCarrierState, barrage_for_version, carrier_for_version,
-    },
-    version::MapVersion,
+#[cfg(test)]
+use crate::MapVersion;
+use crate::native_carriers::{
+    NativeCarrierBolt, NativeCarrierState, barrage_for_version, carrier_for_version,
 };
 
 const RANDOM_PURPOSE_NATIVE_CARRIER: u64 = 0x4341_5252_4945_5201;
@@ -27,13 +26,22 @@ impl Simulation {
         {
             return;
         }
-        let Some(rawcode) = building
-            .get::<ContentIdentity>()
-            .map(|content| content.rawcode)
-        else {
+        let Some(content) = building.get::<ContentIdentity>().copied() else {
             return;
         };
-        let version = MapVersion::CASTLE_FIGHT_9_27;
+        let version = content.map_version;
+        let rawcode = content.rawcode;
+        let kind = crate::CastleFightTowerKind::from_rawcode_for_version(rawcode, version)
+            .expect("building content must reference a supported version");
+        if !matches!(
+            kind,
+            Some(
+                crate::CastleFightTowerKind::ArcaneTower
+                    | crate::CastleFightTowerKind::ObeliskOfLight
+            )
+        ) {
+            return;
+        }
         let profile = carrier_for_version(version).expect("registered carrier version");
         let building_id = *building.get::<SimId>().unwrap();
         let arcane_rawcode = crate::content::CastleFightTowerKind::ArcaneTower
@@ -149,14 +157,19 @@ impl Simulation {
             return 0;
         };
         let source = self.world.entity(buildings[index].entity);
-        let arcane = crate::content::CastleFightTowerKind::ArcaneTower.definition();
-        if source
-            .get::<ContentIdentity>()
-            .is_none_or(|content| content.rawcode != arcane.rawcode)
-        {
+        let Some(content) = source.get::<ContentIdentity>() else {
+            return 0;
+        };
+        let kind = crate::CastleFightTowerKind::from_rawcode_for_version(
+            content.rawcode,
+            content.map_version,
+        )
+        .expect("building content must reference a supported version");
+        if kind != Some(crate::CastleFightTowerKind::ArcaneTower) {
             return 0;
         }
-        let profile = barrage_for_version(arcane.map_version).unwrap();
+        let version = content.map_version;
+        let profile = barrage_for_version(version).expect("registered Barrage version");
         let mut candidates: Vec<_> = units
             .iter()
             .enumerate()
@@ -187,7 +200,7 @@ impl Simulation {
                 source_team: intent.source_team,
                 target: target.id,
                 ability: profile.ability,
-                map_version: arcane.map_version,
+                map_version: version,
                 damage,
                 attack_damage_type: Some(intent.damage_type),
                 launch_position: intent.source_position,

@@ -70,6 +70,7 @@ fn replacement_uses_cold_content_stats_mana_and_all_ability_definitions_not_dead
         .unwrap();
     let mut cold = definition();
     cold.properties.content = Some(ContentIdentity {
+        map_version: crate::CASTLE_FIGHT_DEFAULT_MAP_VERSION,
         rawcode: CastleFightUnitKind::Footman.definition().rawcode,
         name: "synthetic baseline",
     });

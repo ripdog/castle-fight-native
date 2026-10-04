@@ -93,7 +93,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 4;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 5;
 
 // Coordinator promotion switch; object/menu registration alone is not fidelity closure.
 const ELVEN_RACE_PROMOTED_927: bool = false;
@@ -253,6 +253,7 @@ impl CastleFightContentBundle {
             .values()
             .find(|definition| definition.rawcode == rawcode)
             .map(|definition| ContentIdentity {
+                map_version: self.map_version,
                 rawcode,
                 name: definition.name,
             })
@@ -261,6 +262,7 @@ impl CastleFightContentBundle {
                     .values()
                     .find(|definition| definition.rawcode == rawcode)
                     .map(|definition| ContentIdentity {
+                        map_version: self.map_version,
                         rawcode,
                         name: definition.name,
                     })
@@ -270,6 +272,7 @@ impl CastleFightContentBundle {
                     .values()
                     .find(|definition| definition.rawcode == rawcode)
                     .map(|definition| ContentIdentity {
+                        map_version: self.map_version,
                         rawcode,
                         name: definition.name,
                     })
@@ -279,12 +282,14 @@ impl CastleFightContentBundle {
                     .values()
                     .find(|definition| definition.rawcode == rawcode)
                     .map(|definition| ContentIdentity {
+                        map_version: self.map_version,
                         rawcode,
                         name: definition.name,
                     })
             })
             .or_else(|| {
                 (rawcode == u32::from_be_bytes(*b"hcas")).then_some(ContentIdentity {
+                    map_version: self.map_version,
                     rawcode,
                     name: "Main Castle",
                 })
@@ -754,6 +759,7 @@ impl CastleFightBuilderDefinition {
     pub fn configuration_with_catalog(&self, build_catalog: Vec<u32>) -> BuilderConfiguration {
         BuilderConfiguration {
             appearance: ContentIdentity {
+                map_version: self.map_version,
                 rawcode: self.rawcode,
                 name: self.name,
             },
@@ -1006,6 +1012,7 @@ impl CastleFightUnitKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CastleFightUnitDefinition {
+    pub map_version: MapVersion,
     pub rawcode: u32,
     pub name: &'static str,
     pub health: i32,
@@ -1065,6 +1072,7 @@ impl CastleFightUnitDefinition {
     pub const fn gameplay_properties(self) -> UnitGameplayProperties {
         UnitGameplayProperties {
             content: Some(ContentIdentity {
+                map_version: self.map_version,
                 rawcode: self.rawcode,
                 name: self.name,
             }),
@@ -1219,9 +1227,14 @@ impl CastleFightProductionDefinition {
 
     #[must_use]
     pub fn gameplay_properties(self) -> BuildingGameplayProperties {
+        assert_eq!(
+            self.produced_unit.map_version, self.map_version,
+            "production and its resolved child must retain the same definition version"
+        );
         let unit = self.produced_unit.resolved();
         BuildingGameplayProperties {
             content: Some(ContentIdentity {
+                map_version: self.map_version,
                 rawcode: self.rawcode,
                 name: self.name,
             }),
@@ -1436,6 +1449,7 @@ impl CastleFightTowerDefinition {
     pub const fn gameplay_properties(self) -> BuildingGameplayProperties {
         BuildingGameplayProperties {
             content: Some(ContentIdentity {
+                map_version: self.map_version,
                 rawcode: self.rawcode,
                 name: self.name,
             }),
@@ -1976,6 +1990,8 @@ fn hash_damage_rules(hash: &mut ContentHash64, rules: DamageRules) {
 }
 
 fn hash_unit_definition(hash: &mut ContentHash64, definition: CastleFightUnitDefinition) {
+    hash.write_u16(definition.map_version.major);
+    hash.write_u16(definition.map_version.minor);
     hash.write_u32(definition.rawcode);
     hash.write_i32(definition.health);
     hash.write_u32(definition.health_regen_per_second_per_10k);
@@ -2035,6 +2051,8 @@ fn hash_production_definition(
     hash: &mut ContentHash64,
     definition: CastleFightProductionDefinition,
 ) {
+    hash.write_u16(definition.map_version.major);
+    hash.write_u16(definition.map_version.minor);
     hash.write_u32(definition.rawcode);
     hash.write_u16(definition.gold_cost);
     hash.write_u16(definition.lumber_cost);
@@ -2081,6 +2099,8 @@ fn hash_production_definition(
 }
 
 fn hash_tower_definition(hash: &mut ContentHash64, definition: CastleFightTowerDefinition) {
+    hash.write_u16(definition.map_version.major);
+    hash.write_u16(definition.map_version.minor);
     hash.write_u32(definition.rawcode);
     hash.write_u16(definition.gold_cost);
     hash.write_u16(definition.lumber_cost);
@@ -2106,6 +2126,8 @@ fn hash_tower_definition(hash: &mut ContentHash64, definition: CastleFightTowerD
 }
 
 fn hash_builder_definition(hash: &mut ContentHash64, definition: &CastleFightBuilderDefinition) {
+    hash.write_u16(definition.map_version.major);
+    hash.write_u16(definition.map_version.minor);
     hash.write_u32(definition.rawcode);
     hash.write_u8(definition.race_index);
     hash.write_u8(u8::from(definition.campaign_only));
@@ -2352,6 +2374,8 @@ fn hash_automatic_ability_profile(hash: &mut ContentHash64, ability: AutomaticAb
     hash.write_u8(ability.effect.stable_tag());
     match ability.effect {
         AbilityEffect::Hex { profile } => {
+            hash.write_u16(profile.map_version.major);
+            hash.write_u16(profile.map_version.minor);
             hash.write_u16(profile.duration_ticks);
             hash.write_u16(profile.hero_duration_ticks);
             hash.write_u16(profile.initial_reengage_ticks);
@@ -4246,6 +4270,7 @@ fn extracted_unit_definition_927(
     });
 
     CastleFightUnitDefinition {
+        map_version: MapVersion::CASTLE_FIGHT_9_27,
         rawcode,
         name: unit.name,
         health: protected.health,

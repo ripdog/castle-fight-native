@@ -376,6 +376,7 @@ fn create_resolved_castle_fight_match(
 
     let castle_properties = BuildingGameplayProperties {
         content: Some(ContentIdentity {
+            map_version: resolved.content.map_version,
             rawcode: u32::from_be_bytes(*b"hcas"),
             name: "Main Castle",
         }),

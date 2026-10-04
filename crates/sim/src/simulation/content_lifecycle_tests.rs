@@ -6,6 +6,8 @@ use crate::{
     CASTLE_FIGHT_DEFAULT_MAP_VERSION, CastleFightProductionKind, castle_fight_content_bundle,
 };
 
+mod versioned_identity;
+
 fn wire_restore(original: &Simulation, workers: usize) -> Simulation {
     let content = castle_fight_content_bundle(CASTLE_FIGHT_DEFAULT_MAP_VERSION).unwrap();
     let encoded = original.capture_snapshot().encode_wire().unwrap();
