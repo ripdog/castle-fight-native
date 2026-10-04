@@ -3264,6 +3264,7 @@ mod tests {
             attacks: Vec::new(),
             ability_casts: Vec::new(),
             chain_lightnings: Vec::new(),
+            shrine_revivals: Vec::new(),
         };
         PresentationSamples::new(snapshot)
     }

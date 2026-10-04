@@ -158,6 +158,7 @@ pub(super) struct CanonicalMatchState<'a> {
     pub(super) lifecycle: MatchLifecycle,
     pub(super) team_objectives: [Option<SimId>; 2],
     pub(super) gjallarhorn_constructed_count: [u32; 2],
+    pub(super) shrine_death_generation: u64,
 }
 
 pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) -> u64 {
@@ -170,6 +171,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
         lifecycle,
         team_objectives,
         gjallarhorn_constructed_count,
+        shrine_death_generation,
     } = state;
     let entities = super::snapshot::canonical_entities(world);
 
@@ -179,6 +181,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
     hash.write_u64(configuration_identity);
     hash.write_u64(next_tick);
     hash.write_u64(next_id);
+    hash.write_u64(shrine_death_generation);
     match lifecycle {
         MatchLifecycle::Running => hash.write_u8(0),
         MatchLifecycle::PausedForDisconnect {
@@ -284,6 +287,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 });
                 hash.write_u8(u8::from(unit.mechanical));
                 hash_unit_classifications(&mut hash, unit.classifications);
+                hash_shrine_state(&mut hash, unit.shrine_state);
                 hash_optional_u32(&mut hash, unit.build_time_ticks);
                 hash_optional_u32(&mut hash, unit.repair_time_ticks);
                 hash.write_i32(unit.attack.damage);
@@ -377,6 +381,13 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u16(building.footprint.height);
                 hash.write_i32(building.health.current);
                 hash.write_i32(building.health.max);
+                if let Some(regeneration) = building.health_regeneration {
+                    hash.write_u8(1);
+                    hash.write_u32(regeneration.per_second_per_10k);
+                    hash.write_u32(regeneration.remainder_per_10k_hz);
+                } else {
+                    hash.write_u8(0);
+                }
                 if let Some(construction) = building.construction {
                     hash.write_u8(1);
                     hash.write_u64(construction.started_tick);
@@ -676,6 +687,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u64(corpse.corpse.decay_start_tick);
                 hash_optional_u64(&mut hash, corpse.corpse.expires_tick);
                 hash_resolved_unit_definition(&mut hash, corpse.corpse.resurrection);
+                hash_shrine_state(&mut hash, corpse.corpse.shrine_state);
             }
             CanonicalEntity::BurningOil(zone) => {
                 hash.write_u8(7);
@@ -709,6 +721,18 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 for target in chain.state.hit_targets {
                     hash.write_u64(target.0);
                 }
+            }
+            CanonicalEntity::DelayedShrineRevival { id, revival } => {
+                hash.write_u8(11);
+                hash.write_u64(id.0);
+                hash.write_u64(revival.source_unit.0);
+                hash.write_u8(revival.owner.0);
+                hash.write_u8(revival.team.0);
+                hash.write_i32(revival.position.x);
+                hash.write_i32(revival.position.y);
+                hash.write_u64(revival.due_tick);
+                hash.write_u64(revival.death_generation);
+                hash_resolved_unit_definition(&mut hash, Some(revival.definition));
             }
             CanonicalEntity::Builder(builder) => {
                 hash.write_u8(9);
@@ -792,7 +816,14 @@ pub(super) enum CanonicalEntity {
     BurningOil(CanonicalBurningOil),
     ChainLightning(CanonicalChainLightning),
     Builder(CanonicalBuilder),
-    NativeAction { id: SimId, action: NativeAction },
+    NativeAction {
+        id: SimId,
+        action: NativeAction,
+    },
+    DelayedShrineRevival {
+        id: SimId,
+        revival: DelayedShrineRevival,
+    },
 }
 
 impl CanonicalEntity {
@@ -809,6 +840,7 @@ impl CanonicalEntity {
             Self::ChainLightning(chain) => chain.id,
             Self::Builder(builder) => builder.id,
             Self::NativeAction { id, .. } => *id,
+            Self::DelayedShrineRevival { id, .. } => *id,
         }
     }
 }
@@ -843,6 +875,7 @@ pub(super) struct CanonicalUnit {
     pub(super) movement_class: MovementClass,
     pub(super) mechanical: bool,
     pub(super) classifications: UnitClassifications,
+    pub(super) shrine_state: ShrineRevivalState,
     pub(super) build_time_ticks: Option<u32>,
     pub(super) repair_time_ticks: Option<u32>,
     pub(super) movement: MovementProfile,
@@ -938,6 +971,7 @@ pub(super) struct CanonicalBuilding {
     pub(super) team: Team,
     pub(super) footprint: BuildingFootprint,
     pub(super) health: Health,
+    pub(super) health_regeneration: Option<HealthRegeneration>,
     pub(super) construction: Option<Box<BuildingConstruction>>,
     pub(super) economy: Option<BuildingEconomyProfile>,
     pub(super) repair_time_ticks: Option<u32>,
@@ -1483,6 +1517,15 @@ fn hash_unit_classifications(hash: &mut Fnv64, flags: UnitClassifications) {
     hash.write_u8(u8::from(flags.spell_immune));
     hash.write_u8(u8::from(flags.combat_sapper));
     hash.write_u8(u8::from(flags.invulnerable));
+    hash.write_u8(u8::from(flags.legendary));
+    hash.write_u8(u8::from(flags.summoned_marker));
+    hash.write_u8(u8::from(flags.illusion));
+}
+
+fn hash_shrine_state(hash: &mut Fnv64, state: ShrineRevivalState) {
+    hash.write_u8(u8::from(state.revived));
+    hash.write_u8(u8::from(state.suppress_next_death));
+    hash_optional_sim_id(hash, state.death_identity);
 }
 
 fn hash_feedback_profile(hash: &mut Fnv64, profile: crate::components::FeedbackEffectProfile) {

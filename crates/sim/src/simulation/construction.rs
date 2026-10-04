@@ -430,11 +430,24 @@ impl Simulation {
         if building.attack.is_some() || building.spellcasting.is_some() {
             entity.insert(StatusState::default());
         }
+        let shrine =
+            crate::golden_shrine_definition_for_version(crate::CASTLE_FIGHT_DEFAULT_MAP_VERSION)
+                .expect("registered shrine building baseline");
+        if properties
+            .content
+            .is_some_and(|content| content.rawcode == shrine.parameters.golden_shrine_unit_id)
+        {
+            entity.insert(HealthRegeneration {
+                per_second_per_10k: shrine.building_health_regen_per_second_per_10k,
+                remainder_per_10k_hz: 0,
+            });
+        }
     }
 
     fn deactivate_building_entity(&mut self, entity: Entity) {
         let mut entity = self.world.entity_mut(entity);
         entity.remove::<BuildingEconomyProfile>();
+        entity.remove::<HealthRegeneration>();
         entity.remove::<RepairTimeTicks>();
         entity.remove::<ProductionProfile>();
         entity.remove::<ProductionState>();

@@ -7,7 +7,11 @@ mod match_driver;
 mod match_setup;
 mod math;
 mod native_effects;
+mod shrine_system;
 mod simulation;
+pub use shrine_system::{
+    GoldenShrineDefinition, GoldenShrineParameters, golden_shrine_definition_for_version,
+};
 mod spatial;
 mod terrain;
 mod topology;
@@ -83,8 +87,8 @@ pub use simulation::{
     BuildingConstructionCancelError, BuildingConstructionCancelOutcome, BuildingPlacementError,
     BuildingUpgradeError, BuildingView, CANONICAL_CHECKSUM_SCHEMA_VERSION, ChainLightningEvent,
     CombatRules, CorpseView, MatchLifecycle, MatchOutcome, PlayerConfig, PlayerConnectionStatus,
-    PlayerView, ProjectileView, ProjectileViewKind, Simulation, SimulationConfig,
-    SimulationSnapshot, SnapshotRestoreError, SnapshotWireError, TargetlessLane,
+    PlayerView, ProjectileView, ProjectileViewKind, ShrineRevivalEvent, Simulation,
+    SimulationConfig, SimulationSnapshot, SnapshotRestoreError, SnapshotWireError, TargetlessLane,
     TeamObjectiveError, TickResult, TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
 };
 pub use terrain::{

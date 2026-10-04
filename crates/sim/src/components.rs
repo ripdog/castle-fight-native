@@ -428,6 +428,30 @@ pub struct UnitClassifications {
     pub combat_sapper: bool,
     /// Native Avul marker. Distinct from magic immunity.
     pub invulnerable: bool,
+    pub legendary: bool,
+    pub summoned_marker: bool,
+    /// Native IsUnitIllusion handle classification (not the summoned marker).
+    pub illusion: bool,
+}
+
+/// Per-handle script flags, never part of a cold resurrection definition.
+#[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct ShrineRevivalState {
+    pub revived: bool,
+    pub suppress_next_death: bool,
+    /// Native resurrection preserves the original handle's script identity.
+    pub death_identity: Option<SimId>,
+}
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct DelayedShrineRevival {
+    pub source_unit: SimId,
+    pub owner: PlayerId,
+    pub team: Team,
+    pub position: SimPoint,
+    pub due_tick: u64,
+    pub death_generation: u64,
+    pub definition: ResolvedUnitDefinition,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -585,6 +609,7 @@ pub(crate) struct Corpse {
     pub decay_start_tick: u64,
     pub expires_tick: Option<u64>,
     pub resurrection: Option<ResolvedUnitDefinition>,
+    pub shrine_state: ShrineRevivalState,
 }
 
 impl Corpse {

@@ -780,11 +780,24 @@ impl Simulation {
                 .resurrection
                 .expect("eligible corpse retains template");
             self.world.despawn(entity);
-            self.spawn_resolved_unit_unchecked(
+            let unit = self.spawn_resolved_unit_unchecked(
                 Some(corpse.source_owner),
                 UnitSpawn::from_template(team, position, definition.template),
                 definition,
             );
+            let entity = self
+                .world
+                .iter_entities()
+                .find(|entity| entity.get::<SimId>() == Some(&unit))
+                .expect("native resurrection unit")
+                .id();
+            self.world.entity_mut(entity).insert(ShrineRevivalState {
+                death_identity: corpse
+                    .shrine_state
+                    .death_identity
+                    .or(Some(corpse.source_unit)),
+                ..corpse.shrine_state
+            });
             revived += 1;
         }
         revived
@@ -1489,6 +1502,7 @@ mod tests {
                 decay_start_tick: 2,
                 expires_tick: None,
                 resurrection: Some(definition),
+                shrine_state: ShrineRevivalState::default(),
             },
         ));
 
@@ -1563,6 +1577,7 @@ mod tests {
                     decay_start_tick: 0,
                     expires_tick: None,
                     resurrection: Some(definition),
+                    shrine_state: ShrineRevivalState::default(),
                 },
             ));
         }

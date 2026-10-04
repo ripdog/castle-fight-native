@@ -3618,6 +3618,29 @@ fn sync_render_entities(
         }
     }
 
+    for revival in &samples.current.shrine_revivals {
+        let Some(model) = wc3_visuals.system_model(revival.model_path) else {
+            continue;
+        };
+        let (entity, pooled_scene) = spawn_or_reuse_timed_wc3_visual(
+            &mut commands,
+            &mut effect_pool,
+            model,
+            Transform::from_translation(sim_point_to_terrain_world(revival.position, &terrain)),
+            !legacy_effect_pooling,
+        );
+        let lifetime = model.effect_lifetime_seconds(ABILITY_MODEL_EFFECT_SECONDS);
+        timed_effects.0.push(TimedWc3Effect {
+            entity,
+            remaining: lifetime,
+            lifetime,
+            mesh: None,
+            fade_material: None,
+            pooled_lightning: false,
+            pooled_scene,
+        });
+    }
+
     for cast in &samples.current.ability_casts {
         let source_position =
             entity_render_position(cast.source, &samples, &metrics, &terrain, 1.0);

@@ -90,6 +90,7 @@ roster!(CastleFightTowerKind, CastleFightBuildingId;
     VesselOfPurity = 0x2100_0005 => b"h07U",
     HeroicShrine = 0x2100_0006 => b"h05G",
     TreasureBox = 0x2100_0009 => b"h008",
+    GoldenShrineOfJustice = 0x3000_000d => b"h059",
     TinyWatchTower = 0x2100_0007 => b"h081",
     TinyMultishotTower = 0x2100_0008 => b"h082",
 );

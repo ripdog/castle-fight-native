@@ -1,0 +1,70 @@
+{
+  "building_health_regen_per_second_per_10k": 40000,
+  "dormant_attack_abilities": [
+    1093678657
+  ],
+  "map_version": "9.27",
+  "parameters": {
+    "chance_percent_per_shrine": 20,
+    "chance_roll_max": 99,
+    "chance_roll_min": 0,
+    "exclude_already_revived_units": true,
+    "exclude_legendary_marker_ability_id": 1093678920,
+    "exclude_summoned_unit_marker_ability_id": 1093678919,
+    "exclude_wc3_illusions": true,
+    "exclude_wc3_summoned_unit_type": true,
+    "golden_shrine_name": "Golden Shrine of Justice",
+    "golden_shrine_tooltip": "|cffffac00Utility|r / |cffffac00Legendary|r|n|n|cff80ff00Light's Blessing|r \u2022 Non-legendary allied units gain a |cffffff0020|r-|cffffff0040|r% |cff959697(+20% per building)|r chance to be revived once with a delay of |cffffff002|rs. To maximize the effect you need two Shrines.",
+    "golden_shrine_unit_id": 1747989817,
+    "maximum_effective_chance_percent": 40,
+    "remove_original_dead_unit_on_success": true,
+    "requires_unit_actually_dead": true,
+    "revive_delay_seconds": 2,
+    "revive_requires_same_death_generation": true,
+    "revived_unit_cannot_trigger_golden_shrine_again": true,
+    "revived_unit_owner": "original-owner",
+    "revived_unit_position": "exact-death-position",
+    "revived_unit_type": "same-as-dead-unit",
+    "scripted_death_suppression_is_one_shot": true
+  },
+  "resurrection_model": "Abilities\\Spells\\Human\\Resurrect\\ResurrectCaster.mdl",
+  "retained_revision": "r1",
+  "source": {
+    "ability_coverage_sha256": "c51b60a06b62136c547c7dbcce74b65da153aea4a2edb3614810c00de52fe25a",
+    "additional_audited_functions": [
+      "QE",
+      "migrateBuildingLifecycleOwner",
+      "onBuildingFinished",
+      "isCombatSapper",
+      "eJ",
+      "dJ",
+      "Action_watch_OnUnitDeathHandler_run_watch_OnUnitDeathHandler"
+    ],
+    "buildings_sha256": "edcac4d629e04ee3a4ae360a5ffd5490805fe24a31e6b737c0829d6c6af7104d",
+    "callback": "CallbackSingle_doAfter_OnUnitDeathHandler_call_doAfter_OnUnitDeathHandler",
+    "functions": "ME,acquireElvenShrine,elvenShrineEffectiveReviveChance,fJ,CallbackSingle_doAfter_OnUnitDeathHandler_call_doAfter_OnUnitDeathHandler,markShrineReviveBlocked",
+    "mechanics_path": "docs/original_map/extracted/resolved/runtime-system-mechanics.tsv",
+    "mechanics_sha256": "436cbff2586e2d540d06c86ca7b403f4d5f0d9b37ee27d68d31f896c3b0f412e",
+    "protected_death_calls": {
+      "GetKillingUnit": {
+        "cipher": "4a6bcbd9772d546b67a851244db4",
+        "key": 636619
+      },
+      "__wurst_safe_IsUnitIllusion": {
+        "cipher": "080adee1aeaf69b7ded23ea0db4c786886cfe44ececeb251ea4989",
+        "key": 969
+      },
+      "consumeDontReviveFlag": {
+        "cipher": "c4bb2cf6bc71450a639263a6bdc724273a50525f09",
+        "key": 340296
+      },
+      "isShrineReviveBlocked": {
+        "cipher": "676a33f89b6d34d1fcd1b3182f9f2995064c1878d0",
+        "key": 48292
+      }
+    },
+    "script_sha256": "e478835f6c2bd79320f463472a7f043bf1d40770c74c3647cdfed655ed33874a",
+    "system_id": "golden-shrine-revival",
+    "units_sha256": "59b14699740198de9614221029ce2c9c7423a7ee55d12c9c5d04b59313b2d470"
+  }
+}
