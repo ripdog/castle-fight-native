@@ -1,0 +1,322 @@
+{
+  "map_version": "9.27",
+  "release_revision": "r1",
+  "sources": [
+    {
+      "path": "war3.w3mod:units/abilityskin.txt",
+      "sha256": "ae42f7e61c7054563adeb6c25b8e7b0e178a647eb4bacd7b99167ac0e178ab18"
+    },
+    {
+      "path": "war3.w3mod:splats/lightningdata.slk",
+      "sha256": "92b4f4c8c9b1b2dad22dc3bd3175e3a3933a86db726136eac520647f32a884be"
+    }
+  ],
+  "objects_sha256": "01040f03e4a625ac1d960a0a2d43d0732d64b797e9357f4f40e8c2c0d6d9710d",
+  "abilities": [
+    {
+      "rawcode": "A00L",
+      "base_rawcode": "ACcl",
+      "native_section": "ACcl",
+      "effects": [
+        "CLPB",
+        "CLSB"
+      ],
+      "target_art": [
+        "Abilities\\Weapons\\Bolt\\BoltImpact.mdl"
+      ]
+    },
+    {
+      "rawcode": "A00Y",
+      "base_rawcode": "AChv",
+      "native_section": "AChV",
+      "effects": [
+        "HWPB",
+        "HWSB"
+      ],
+      "target_art": [
+        "Abilities\\Spells\\Orc\\HealingWave\\HealingWaveTarget.mdl"
+      ]
+    },
+    {
+      "rawcode": "A05X",
+      "base_rawcode": "ACcl",
+      "native_section": "ACcl",
+      "effects": [
+        "CLPB",
+        "CLSB"
+      ],
+      "target_art": [
+        "Abilities\\Weapons\\Bolt\\BoltImpact.mdl"
+      ]
+    },
+    {
+      "rawcode": "A08Q",
+      "base_rawcode": "ACf3",
+      "native_section": "ACf3",
+      "effects": [
+        "AFOD"
+      ],
+      "target_art": [
+        "Abilities\\Spells\\Demon\\DemonBoltImpact\\DemonBoltImpact.mdl"
+      ]
+    },
+    {
+      "rawcode": "A09T",
+      "base_rawcode": "ACcl",
+      "native_section": "ACcl",
+      "effects": [
+        "CLPB",
+        "CLSB"
+      ],
+      "target_art": [
+        "Abilities\\Weapons\\Bolt\\BoltImpact.mdl"
+      ]
+    },
+    {
+      "rawcode": "A0A8",
+      "base_rawcode": "AChv",
+      "native_section": "AChV",
+      "effects": [
+        "HWPB",
+        "HWSB"
+      ],
+      "target_art": [
+        "Abilities\\Spells\\Orc\\HealingWave\\HealingWaveTarget.mdl"
+      ]
+    },
+    {
+      "rawcode": "A0AA",
+      "base_rawcode": "ACcl",
+      "native_section": "ACcl",
+      "effects": [
+        "CLPB",
+        "CLSB"
+      ],
+      "target_art": [
+        "Abilities\\Weapons\\Bolt\\BoltImpact.mdl"
+      ]
+    },
+    {
+      "rawcode": "A0C3",
+      "base_rawcode": "AEmb",
+      "native_section": "AEmb",
+      "effects": [
+        "MBUR"
+      ],
+      "target_art": [
+        "Abilities\\Spells\\NightElf\\ManaBurn\\ManaBurnTarget.mdl"
+      ]
+    },
+    {
+      "rawcode": "A0CJ",
+      "base_rawcode": "ACfl",
+      "native_section": "ACfl",
+      "effects": [
+        "FORK"
+      ],
+      "target_art": [
+        ""
+      ]
+    },
+    {
+      "rawcode": "A0CK",
+      "base_rawcode": "ACfl",
+      "native_section": "ACfl",
+      "effects": [
+        "FORK"
+      ],
+      "target_art": [
+        ""
+      ]
+    },
+    {
+      "rawcode": "A0F6",
+      "base_rawcode": "ACfl",
+      "native_section": "ACfl",
+      "effects": [
+        "FORK"
+      ],
+      "target_art": [
+        ""
+      ]
+    },
+    {
+      "rawcode": "A0F8",
+      "base_rawcode": "ACfl",
+      "native_section": "ACfl",
+      "effects": [
+        "FORK"
+      ],
+      "target_art": [
+        ""
+      ]
+    },
+    {
+      "rawcode": "A0FW",
+      "base_rawcode": "ACdr",
+      "native_section": "ACdr",
+      "effects": [
+        "DRAB",
+        "DRAL",
+        "DRAM"
+      ],
+      "target_art": [
+        ""
+      ]
+    },
+    {
+      "rawcode": "cfOL",
+      "base_rawcode": "ACcl",
+      "native_section": "ACcl",
+      "effects": [
+        "CLPB",
+        "CLSB"
+      ],
+      "target_art": [
+        "Abilities\\Weapons\\Bolt\\BoltImpact.mdl"
+      ]
+    }
+  ],
+  "effects": [
+    {
+      "id": "AFOD",
+      "texture": "ReplaceableTextures\\Weather\\LightningRed.blp",
+      "width": 50.0,
+      "segment_length": 100.0,
+      "noise_scale": 0.05,
+      "texcoord_scale": 0.5,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "id": "CLPB",
+      "texture": "ReplaceableTextures\\Weather\\Lightning.blp",
+      "width": 50.0,
+      "segment_length": 100.0,
+      "noise_scale": 0.05,
+      "texcoord_scale": 0.5,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "id": "CLSB",
+      "texture": "ReplaceableTextures\\Weather\\Lightning.blp",
+      "width": 30.0,
+      "segment_length": 100.0,
+      "noise_scale": 0.05,
+      "texcoord_scale": 0.5,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "id": "DRAB",
+      "texture": "ReplaceableTextures\\Weather\\DrainLightning.blp",
+      "width": 40.0,
+      "segment_length": 50.0,
+      "noise_scale": 0.01,
+      "texcoord_scale": -0.8,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "id": "DRAL",
+      "texture": "ReplaceableTextures\\Weather\\DrainLightning.blp",
+      "width": 40.0,
+      "segment_length": 50.0,
+      "noise_scale": 0.01,
+      "texcoord_scale": -0.8,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "id": "DRAM",
+      "texture": "ReplaceableTextures\\Weather\\DrainManaLightning.blp",
+      "width": 40.0,
+      "segment_length": 50.0,
+      "noise_scale": 0.01,
+      "texcoord_scale": -0.8,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "id": "FORK",
+      "texture": "ReplaceableTextures\\Weather\\LightningForked.blp",
+      "width": 50.0,
+      "segment_length": 100.0,
+      "noise_scale": 0.05,
+      "texcoord_scale": 0.5,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "id": "HWPB",
+      "texture": "ReplaceableTextures\\Weather\\HealBeam.blp",
+      "width": 50.0,
+      "segment_length": 100.0,
+      "noise_scale": 0.0001,
+      "texcoord_scale": 0.6,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "id": "HWSB",
+      "texture": "ReplaceableTextures\\Weather\\HealBeam.blp",
+      "width": 40.0,
+      "segment_length": 100.0,
+      "noise_scale": 0.0001,
+      "texcoord_scale": 0.6,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ]
+    },
+    {
+      "id": "MBUR",
+      "texture": "ReplaceableTextures\\Weather\\ManaBurnBeam.blp",
+      "width": 45.0,
+      "segment_length": 100.0,
+      "noise_scale": 0.04,
+      "texcoord_scale": 0.6,
+      "color": [
+        255,
+        255,
+        255,
+        255
+      ]
+    }
+  ]
+}

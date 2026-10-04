@@ -58,12 +58,12 @@ use crate::{
     wc3_effects::{
         Wc3AbilityVisualAnchor, Wc3AnimatedAlphaMaterial, Wc3AttachToNode, Wc3AttachmentOwner,
         Wc3ComposedMetadataCache, Wc3ConvertedModelRegistry, Wc3EffectReusePending,
-        Wc3EffectWarmup, Wc3EmitterSource, Wc3MaterialProcessed, Wc3ModelSequenceSelection,
-        Wc3ParticleAssets, Wc3RibbonSource, Wc3SplatMaterial, Wc3StatusVisualKind,
-        Wc3TeamColorMaterial, Wc3TeamTint, Wc3VertexTint, Wc3VisualAnimationGraphs,
-        Wc3VisualAnimationSource, Wc3VisualModel, Wc3VisualSet, advance_wc3_model_sequence_clocks,
-        apply_wc3_non_inheritance, emit_wc3_model_particles, emit_wc3_particles,
-        emit_wc3_sound_events, emit_wc3_spawn_events, emit_wc3_splat_events,
+        Wc3EffectWarmup, Wc3EmitterSource, Wc3LightningVisual, Wc3MaterialProcessed,
+        Wc3ModelSequenceSelection, Wc3ParticleAssets, Wc3RibbonSource, Wc3SplatMaterial,
+        Wc3StatusVisualKind, Wc3TeamColorMaterial, Wc3TeamTint, Wc3VertexTint,
+        Wc3VisualAnimationGraphs, Wc3VisualAnimationSource, Wc3VisualModel, Wc3VisualSet,
+        advance_wc3_model_sequence_clocks, apply_wc3_non_inheritance, emit_wc3_model_particles,
+        emit_wc3_particles, emit_wc3_sound_events, emit_wc3_spawn_events, emit_wc3_splat_events,
         fix_wc3_scene_materials, flush_wc3_particle_buffers, index_wc3_model_attachments,
         mark_wc3_effect_warmup_hierarchy, reset_reused_wc3_effect_instances,
         resolve_wc3_emitter_nodes, resolve_wc3_visual_attachments,
@@ -104,12 +104,6 @@ const PROJECTILE_IMPACT_RADIUS: f32 = 8.0;
 const ABILITY_AREA_EFFECT_SECONDS: f32 = 0.65;
 const ABILITY_MODEL_EFFECT_SECONDS: f32 = 0.9;
 const LIGHTNING_EFFECT_SECONDS: f32 = 0.22;
-const WC3_CHAIN_LIGHTNING_TEXTURE: &str =
-    "wc3/effects/textures/replaceabletextures__weather__lightning.png";
-const WC3_CHAIN_LIGHTNING_AVG_SEGMENT_LENGTH: f32 = 100.0;
-const WC3_CHAIN_LIGHTNING_PRIMARY_WIDTH: f32 = 50.0;
-const WC3_CHAIN_LIGHTNING_SECONDARY_WIDTH: f32 = 30.0;
-const WC3_CHAIN_LIGHTNING_NOISE_SCALE: f32 = 0.05;
 const DEATH_REMAINS_SECONDS: f32 = 0.7;
 const FLESH_DECAY_TICKS: u64 = 2 * CASTLE_FIGHT_SIMULATION_HZ as u64;
 const BONE_DECAY_TICKS: u64 = 25 * CASTLE_FIGHT_SIMULATION_HZ as u64;
@@ -1384,7 +1378,6 @@ fn setup_scene(
     });
     let lightning_material = materials.add(StandardMaterial {
         base_color: Color::WHITE,
-        base_color_texture: Some(asset_server.load(WC3_CHAIN_LIGHTNING_TEXTURE)),
         alpha_mode: AlphaMode::Add,
         unlit: true,
         double_sided: true,
@@ -2987,6 +2980,11 @@ fn prewarm_timed_wc3_effects(
                 *populations.entry(content.rawcode).or_default() += 1;
             }
         }
+        for building in samples.current.buildings.values() {
+            if let Some(content) = building.content {
+                *populations.entry(content.rawcode).or_default() += 1;
+            }
+        }
         let mut changed = false;
         for (rawcode, population) in populations {
             let previous = plan.populations.entry(rawcode).or_default();
@@ -3132,6 +3130,25 @@ fn prewarm_timed_wc3_effects(
                             interval,
                         );
                     }
+                }
+            }
+            // Source-owned proxy/carrier inventory covers spells outside automatic_abilities,
+            // including building carriers. Prewarm art only; never infer gameplay timing.
+            for (&source, &population) in &plan.populations {
+                for model in visuals
+                    .spell_projectiles_for_source(source)
+                    .map(|visual| &visual.model)
+                    .chain(
+                        visuals
+                            .lightning_target_visuals_for_source(source)
+                            .map(|visual| &visual.model),
+                    )
+                {
+                    let entry = capacities
+                        .entry(Wc3EffectPlayback::OneShot.key(model))
+                        .or_insert_with(|| (model.clone(), 0, 0));
+                    entry.1 = (entry.1 + population).min(EFFECT_PREWARM_ROOTS_PER_TEMPLATE);
+                    entry.2 = (entry.2 + population).min(EFFECT_PREWARM_ROOTS_PER_TEMPLATE);
                 }
             }
             // Stable asset-path ordering keeps startup budgets reproducible; this has
@@ -3574,49 +3591,55 @@ fn sync_render_entities(
         if !wc3_visuals.is_chain_lightning(chain.ability.0) {
             continue;
         }
+        let Some(visual) = wc3_visuals.lightning(chain.ability.0, chain.bounce_index) else {
+            // An older/missing pack must not substitute damage lightning for Healing Wave.
+            continue;
+        };
         for (segment_index, points) in chain.points().windows(2).enumerate() {
             let start = sim_point_to_terrain_world(points[0], &terrain) + Vec3::Y * 8.0;
             let end = sim_point_to_terrain_world(points[1], &terrain) + Vec3::Y * 8.0;
-            let width = wc3_chain_lightning_width(chain.bounce_index);
             let seed = chain.ability.0
                 ^ chain.source.0 as u32
                 ^ samples.current.tick as u32
                 ^ lightning_segment_seed(segment_index as u32, 0x9e37_79b9);
-            let lightning_mesh = build_wc3_chain_lightning_mesh(start, end, seed, width);
-            let (entity, mesh, lightning_material, pooled_lightning) = if !legacy_effect_pooling
-                && !effect_pool.lightning.is_empty()
-            {
-                let effect = effect_pool
-                    .lightning
-                    .pop()
-                    .expect("non-empty lightning pool must yield an effect");
-                *meshes
-                    .get_mut(&effect.mesh)
-                    .expect("pooled WC3 Chain Lightning mesh must remain allocated") =
-                    lightning_mesh;
-                materials
-                    .get_mut(&effect.material)
-                    .expect("pooled WC3 Chain Lightning material must remain allocated")
-                    .base_color = Color::WHITE;
-                commands
-                    .entity(effect.entity)
-                    .insert((Transform::IDENTITY, Visibility::Inherited));
-                (effect.entity, effect.mesh, effect.material, true)
-            } else {
-                let mesh = meshes.add(lightning_mesh);
-                let lightning_material = materials.get(&assets.lightning_material).cloned().expect(
-                    "WC3 Chain Lightning material must exist while presentation is running",
-                );
-                let lightning_material = materials.add(lightning_material);
-                let entity = commands
-                    .spawn((
-                        Mesh3d(mesh.clone()),
-                        MeshMaterial3d(lightning_material.clone()),
-                        Transform::IDENTITY,
-                    ))
-                    .id();
-                (entity, mesh, lightning_material, !legacy_effect_pooling)
-            };
+            let lightning_mesh = build_wc3_lightning_mesh(start, end, seed, visual);
+            let (entity, mesh, lightning_material, pooled_lightning) =
+                if !legacy_effect_pooling && !effect_pool.lightning.is_empty() {
+                    let effect = effect_pool
+                        .lightning
+                        .pop()
+                        .expect("non-empty lightning pool must yield an effect");
+                    *meshes
+                        .get_mut(&effect.mesh)
+                        .expect("pooled WC3 Chain Lightning mesh must remain allocated") =
+                        lightning_mesh;
+                    let mut material = materials
+                        .get_mut(&effect.material)
+                        .expect("pooled WC3 lightning material must remain allocated");
+                    material.base_color = visual.color;
+                    material.base_color_texture = Some(visual.texture.clone());
+                    commands
+                        .entity(effect.entity)
+                        .insert((Transform::IDENTITY, Visibility::Inherited));
+                    (effect.entity, effect.mesh, effect.material, true)
+                } else {
+                    let mesh = meshes.add(lightning_mesh);
+                    let mut lightning_material = materials
+                        .get(&assets.lightning_material)
+                        .cloned()
+                        .expect("WC3 lightning material must exist while presentation is running");
+                    lightning_material.base_color = visual.color;
+                    lightning_material.base_color_texture = Some(visual.texture.clone());
+                    let lightning_material = materials.add(lightning_material);
+                    let entity = commands
+                        .spawn((
+                            Mesh3d(mesh.clone()),
+                            MeshMaterial3d(lightning_material.clone()),
+                            Transform::IDENTITY,
+                        ))
+                        .id();
+                    (entity, mesh, lightning_material, !legacy_effect_pooling)
+                };
             timed_effects.0.push(TimedWc3Effect {
                 entity,
                 remaining: LIGHTNING_EFFECT_SECONDS,
@@ -3626,6 +3649,36 @@ fn sync_render_entities(
                 pooled_lightning,
                 pooled_scene: None,
             });
+            // Native Healing Wave target art appears at each authoritative endpoint,
+            // not at the parent's earlier dummy/order cast. No inferred heal timing.
+            for endpoint in wc3_visuals
+                .ability(chain.ability.0)
+                .iter()
+                .filter(|effect| {
+                    effect.source_unit_rawcode.is_none()
+                        && effect.anchor == Wc3AbilityVisualAnchor::Target
+                })
+            {
+                let (entity, pooled_scene) = spawn_or_reuse_timed_wc3_visual(
+                    &mut commands,
+                    &mut effect_pool,
+                    &endpoint.model,
+                    Transform::from_translation(end),
+                    !legacy_effect_pooling,
+                );
+                let lifetime = endpoint
+                    .model
+                    .effect_lifetime_seconds(ABILITY_MODEL_EFFECT_SECONDS);
+                timed_effects.0.push(TimedWc3Effect {
+                    entity,
+                    remaining: lifetime,
+                    lifetime,
+                    mesh: None,
+                    fade_material: None,
+                    pooled_lightning: false,
+                    pooled_scene,
+                });
+            }
         }
     }
 
@@ -3684,6 +3737,12 @@ fn sync_render_entities(
                     .and_then(|building| building.content.map(|content| content.rawcode))
             });
         for visual in wc3_visuals.ability_for_source(cast.ability.0, source_rawcode) {
+            if visual.anchor == Wc3AbilityVisualAnchor::Target
+                && wc3_visuals.lightning(cast.ability.0, 0).is_some()
+            {
+                // Native lightning endpoints are emitted at each authoritative hop above.
+                continue;
+            }
             let position = match visual.anchor {
                 Wc3AbilityVisualAnchor::Source => source_position,
                 Wc3AbilityVisualAnchor::Target => target_position,
@@ -4200,8 +4259,10 @@ fn sync_render_entities(
         }
         let position = sim_point_to_terrain_world(projectile.launch_position, &terrain)
             + Vec3::Y * PROJECTILE_HEIGHT;
-        let imported_projectile = projectile_source_rawcode(projectile, &samples)
-            .and_then(|rawcode| wc3_visuals.projectile(rawcode));
+        let imported_projectile = wc3_visuals.projectile_for(
+            projectile_source_rawcode(projectile, &samples),
+            None, // Native spell movers supply their child ability here once the view carries it.
+        );
         let missile_arc = imported_projectile.map(|visual| visual.missile_arc);
         let mut pooled_visual = None;
         let entity = if let Some(visual) = imported_projectile {
@@ -4873,24 +4934,18 @@ fn wc3_lightning_fade_strength(remaining: f32, lifetime: f32) -> f32 {
     fade * fade * (3.0 - 2.0 * fade)
 }
 
-fn wc3_chain_lightning_width(bounce_index: u8) -> f32 {
-    if bounce_index == 0 {
-        WC3_CHAIN_LIGHTNING_PRIMARY_WIDTH
-    } else {
-        WC3_CHAIN_LIGHTNING_SECONDARY_WIDTH
-    }
-}
-
-fn build_wc3_chain_lightning_mesh(start: Vec3, end: Vec3, seed: u32, width: f32) -> Mesh {
+fn build_wc3_lightning_mesh(
+    start: Vec3,
+    end: Vec3,
+    seed: u32,
+    visual: &Wc3LightningVisual,
+) -> Mesh {
     let delta = end - start;
     let length = delta.length().max(1.0);
-    let segment_count = (length / WC3_CHAIN_LIGHTNING_AVG_SEGMENT_LENGTH)
-        .ceil()
-        .clamp(1.0, 64.0) as usize;
+    let segment_count = (length / visual.segment_length).ceil().clamp(1.0, 64.0) as usize;
     let direction = delta.normalize_or(Vec3::X);
     let lateral = Vec3::Y.cross(direction).normalize_or(Vec3::X);
-    let noise_amplitude = (length * WC3_CHAIN_LIGHTNING_NOISE_SCALE)
-        .min(WC3_CHAIN_LIGHTNING_AVG_SEGMENT_LENGTH * 0.75);
+    let noise_amplitude = (length * visual.noise_scale).min(visual.segment_length * 0.75);
 
     let mut centers = Vec::with_capacity(segment_count + 1);
     for point_index in 0..=segment_count {
@@ -4916,7 +4971,7 @@ fn build_wc3_chain_lightning_mesh(start: Vec3, end: Vec3, seed: u32, width: f32)
     let mut normals = Vec::with_capacity(segment_count * 4);
     let mut uvs = Vec::with_capacity(segment_count * 4);
     let mut indices = Vec::with_capacity(segment_count * 6);
-    let half_width = width * 0.5;
+    let half_width = visual.width * 0.5;
 
     for segment in 0..segment_count {
         let from = centers[segment];
@@ -4931,9 +4986,9 @@ fn build_wc3_chain_lightning_mesh(start: Vec3, end: Vec3, seed: u32, width: f32)
             (to + segment_lateral).to_array(),
         ]);
         normals.extend_from_slice(&[[0.0, 1.0, 0.0]; 4]);
-        // AvgSegLen in LightningData controls the texture segment length, so each generated
-        // segment receives one complete copy of the stock 256x64 lightning texture.
-        uvs.extend_from_slice(&[[0.0, 1.0], [0.0, 0.0], [1.0, 1.0], [1.0, 0.0]]);
+        // Native LightningData controls repeat length; HealBeam and Lightning differ.
+        let repeats = (to - from).length() / (visual.width / visual.texcoord_scale);
+        uvs.extend_from_slice(&[[0.0, 1.0], [0.0, 0.0], [repeats, 1.0], [repeats, 0.0]]);
         indices.extend_from_slice(&[base, base + 2, base + 1, base + 1, base + 2, base + 3]);
     }
 
@@ -6455,13 +6510,6 @@ mod tests {
     }
 
     #[test]
-    fn wc3_chain_lightning_uses_primary_width_only_for_first_jump() {
-        assert_eq!(wc3_chain_lightning_width(0), 50.0);
-        assert_eq!(wc3_chain_lightning_width(1), 30.0);
-        assert_eq!(wc3_chain_lightning_width(7), 30.0);
-    }
-
-    #[test]
     fn wc3_chain_lightning_fades_smoothly_after_the_initial_flash() {
         assert_eq!(
             wc3_lightning_fade_strength(LIGHTNING_EFFECT_SECONDS, LIGHTNING_EFFECT_SECONDS),
@@ -6481,24 +6529,28 @@ mod tests {
     }
 
     #[test]
-    fn wc3_chain_lightning_mesh_uses_stock_segment_length_and_width() {
-        let mesh = build_wc3_chain_lightning_mesh(
-            Vec3::ZERO,
-            Vec3::new(250.0, 0.0, 0.0),
-            0x1234_5678,
-            WC3_CHAIN_LIGHTNING_PRIMARY_WIDTH,
-        );
+    fn lightning_mesh_consumes_catalog_geometry_without_damage_lightning_defaults() {
+        let visual = Wc3LightningVisual {
+            texture: Handle::default(),
+            width: 18.0,
+            segment_length: 60.0,
+            noise_scale: 0.0,
+            texcoord_scale: 0.4,
+            color: Color::WHITE,
+        };
+        let mesh =
+            build_wc3_lightning_mesh(Vec3::ZERO, Vec3::new(150.0, 0.0, 0.0), 0x1234_5678, &visual);
         let positions = mesh
             .attribute(Mesh::ATTRIBUTE_POSITION)
             .unwrap()
             .as_float3()
             .unwrap();
 
-        // ceil(250 / 100) = three stock-length textured segments, four vertices each.
+        // Synthetic fixture: ceil(150 / 60) segments, not any particular WC3 tuning.
         assert_eq!(positions.len(), 12);
         let first_left = Vec3::from_array(positions[0]);
         let first_right = Vec3::from_array(positions[1]);
-        assert!((first_left.distance(first_right) - 50.0).abs() < 1.0e-4);
+        assert!((first_left.distance(first_right) - visual.width).abs() < 1.0e-4);
     }
 
     #[test]

@@ -71,7 +71,6 @@ fn handle_selection_commands(
         && let Some(builder) = resources.authoritative.simulation.builder(actor)
         && let Some(kind) = build_menu_hotkey_target(
             &resources.keys,
-            &resources.selected_match.direct_buildings,
             &builder.configuration,
             resources.selected_match.content,
         )
@@ -667,15 +666,17 @@ fn try_open_build_menu_hotkey(
 
 fn build_menu_hotkey_target(
     keys: &ButtonInput<KeyCode>,
-    direct_buildings: &[BuildKind],
     builder: &BuilderConfiguration,
     content: &castle_fight_sim::CastleFightContentBundle,
 ) -> Option<BuildKind> {
     let mut selected = None;
-    for &kind in direct_buildings {
-        if builder.allows_building(kind.rawcode(content))
-            && hotkey_just_pressed(keys, kind.hotkey(content))
-        {
+    for kind in builder
+        .build_catalog
+        .iter()
+        .filter_map(|rawcode| content.building_kind_for_rawcode(*rawcode))
+        .map(BuildKind::from)
+    {
+        if hotkey_just_pressed(keys, kind.hotkey(content)) {
             selected = Some(kind);
         }
     }

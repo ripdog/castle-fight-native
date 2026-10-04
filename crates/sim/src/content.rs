@@ -95,6 +95,9 @@ impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
 pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 4;
 
+// Coordinator promotion switch; object/menu registration alone is not fidelity closure.
+const ELVEN_RACE_PROMOTED_927: bool = false;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CastleFightUnitId(pub u32);
 
@@ -318,13 +321,43 @@ impl CastleFightContentBundle {
         let Some(builder) = self.builder(race) else {
             return Vec::new();
         };
-        self.direct_building_kinds()
-            .into_iter()
-            .filter(|kind| {
-                kind.rawcode(self)
-                    .is_some_and(|rawcode| builder.build_catalog.contains(&rawcode))
-            })
+        let direct = self.direct_building_kinds();
+        builder
+            .build_catalog
+            .iter()
+            .filter_map(|rawcode| self.building_kind_for_rawcode(*rawcode))
+            .filter(|kind| direct.contains(kind))
             .collect()
+    }
+
+    /// Race promotion is independent of object-data/menu coverage. Keep Elf closed until
+    /// its complete scripted/native fidelity and presentation audit has been signed off.
+    #[must_use]
+    pub fn supported_builder_races(&self) -> &'static [CastleFightBuilderRace] {
+        match self.map_version {
+            MapVersion::CASTLE_FIGHT_9_27 => {
+                if ELVEN_RACE_PROMOTED_927 {
+                    &[CastleFightBuilderRace::Human, CastleFightBuilderRace::Elf]
+                } else {
+                    &[CastleFightBuilderRace::Human]
+                }
+            }
+            _ => &[],
+        }
+    }
+
+    #[must_use]
+    pub fn supports_builder_race(&self, race: CastleFightBuilderRace) -> bool {
+        self.supported_builder_races().contains(&race)
+    }
+
+    /// Resolve selection identifiers from the retained builder object (e.g. X00P),
+    /// not from independently maintained race indices or display labels.
+    #[must_use]
+    pub fn builder_race_for_rawcode(&self, rawcode: u32) -> Option<CastleFightBuilderRace> {
+        self.builder_definitions()
+            .find(|builder| builder.rawcode == rawcode)
+            .map(|builder| builder.race)
     }
 
     #[must_use]
@@ -4943,6 +4976,28 @@ mod tests {
         assert!(!direct.contains(&CastleFightBuildingKind::Tower(
             CastleFightTowerKind::TinyMultishotTower
         )));
+    }
+
+    #[test]
+    fn builder_selection_ids_and_direct_menus_are_source_owned_for_every_race() {
+        let bundle = castle_fight_content_bundle(MapVersion::CASTLE_FIGHT_9_27).unwrap();
+        for builder in bundle.builder_definitions() {
+            assert_eq!(
+                bundle.builder_race_for_rawcode(builder.rawcode),
+                Some(builder.race)
+            );
+            let expected = builder
+                .build_catalog
+                .iter()
+                .filter_map(|rawcode| bundle.building_kind_for_rawcode(*rawcode))
+                .filter(|kind| bundle.direct_building_kinds().contains(kind))
+                .collect::<Vec<_>>();
+            assert_eq!(
+                bundle.direct_building_kinds_for_race(builder.race),
+                expected
+            );
+        }
+        assert_eq!(bundle.builder_race_for_rawcode(0), None);
     }
 
     #[test]

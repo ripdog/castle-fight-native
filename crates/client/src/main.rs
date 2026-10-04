@@ -734,6 +734,7 @@ struct ClientOptions {
     release_revision: String,
     match_seed: u64,
     team_size: usize,
+    builder_rawcodes: [Option<u32>; 9],
     server: Option<std::net::SocketAddr>,
     list_map_versions: bool,
 }
@@ -760,6 +761,7 @@ impl ClientOptions {
             release_revision: "r1".to_owned(),
             match_seed: DEVELOPMENT_MATCH_SEED,
             team_size: 1,
+            builder_rawcodes: [None; 9],
             server: None,
             list_map_versions: false,
         };
@@ -858,6 +860,23 @@ impl ClientOptions {
                         "--team-size requires 1, 2, or 3"
                     );
                 }
+                "--builder" => {
+                    let value = args
+                        .next()
+                        .expect("--builder requires SLOT:RAWCODE (e.g. 6:X00P)");
+                    let (slot, rawcode) = value
+                        .split_once(':')
+                        .expect("--builder requires SLOT:RAWCODE");
+                    let slot = slot.parse::<usize>().expect("builder slot must be numeric");
+                    assert!(
+                        matches!(slot, 0..=2 | 6..=8),
+                        "builder slot must be 0/1/2/6/7/8"
+                    );
+                    options.builder_rawcodes[slot] = Some(
+                        parse_profile_rawcode(rawcode)
+                            .expect("builder rawcode must be four ASCII characters"),
+                    );
+                }
                 "--server" => {
                     options.server = Some(
                         args.next()
@@ -869,7 +888,7 @@ impl ClientOptions {
                 "--list-map-versions" => options.list_map_versions = true,
                 "-h" | "--help" => {
                     println!(
-                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--list-map-versions] [--stress-units N] [--stress-visual RAWCODE N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS] [--profile-paused] [--profile] [--profile-screenshot PATH] [--render-experiment baseline|freeze-bounds|hide-skinned|hide-particles|hide-transparent|legacy-team-color|legacy-geoset-visibility|legacy-attachment-search|legacy-attachment-index|legacy-effect-pooling|legacy-splat-updates|legacy-splat-material-state|legacy-animated-alpha-state|legacy-animated-texture-state|freeze-materials|freeze-poses|bindless-auto|bindless-64|bindless-128|bindless-256|no-bindless]"
+                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--builder SLOT:RAWCODE] [--list-map-versions] [--stress-units N] [--stress-visual RAWCODE N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS] [--profile-paused] [--profile] [--profile-screenshot PATH] [--render-experiment baseline|freeze-bounds|hide-skinned|hide-particles|hide-transparent|legacy-team-color|legacy-geoset-visibility|legacy-attachment-search|legacy-attachment-index|legacy-effect-pooling|legacy-splat-updates|legacy-splat-material-state|legacy-animated-alpha-state|legacy-animated-texture-state|freeze-materials|freeze-poses|bindless-auto|bindless-64|bindless-128|bindless-256|no-bindless]"
                     );
                     std::process::exit(0);
                 }
@@ -946,7 +965,20 @@ fn client_match_config(
                     builder_race: CastleFightBuilderRace::Human,
                 }
             }))
-            .collect();
+            .collect::<Vec<_>>();
+    let content = castle_fight_sim::castle_fight_content_bundle(options.map_version)
+        .map_err(CastleFightMatchSetupError::UnsupportedContent)?;
+    let participants = participants
+        .into_iter()
+        .map(|mut participant: CastleFightParticipantConfig| {
+            if let Some(rawcode) = options.builder_rawcodes[usize::from(participant.id.0)] {
+                participant.builder_race = content
+                    .builder_race_for_rawcode(rawcode)
+                    .ok_or(CastleFightMatchSetupError::UnsupportedParticipants)?;
+            }
+            Ok(participant)
+        })
+        .collect::<Result<Vec<_>, CastleFightMatchSetupError>>()?;
     CastleFightMatchConfig::development_subset_with_participants(
         options.map_version,
         &options.release_revision,

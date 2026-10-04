@@ -16,6 +16,7 @@ struct ServerOptions {
     release_revision: String,
     seed: u64,
     team_size: usize,
+    builder_rawcodes: [Option<u32>; 9],
     workers: usize,
     disconnect_timeout: Duration,
 }
@@ -28,6 +29,7 @@ impl ServerOptions {
             release_revision: "r1".to_owned(),
             seed: 0x4341_5354_4c45,
             team_size: 1,
+            builder_rawcodes: [None; 9],
             workers: default_worker_count(),
             disconnect_timeout: DEFAULT_DISCONNECT_TIMEOUT,
         };
@@ -71,6 +73,26 @@ impl ServerOptions {
                         "--team-size requires 1, 2, or 3"
                     );
                 }
+                "--builder" => {
+                    let value = args
+                        .next()
+                        .expect("--builder requires SLOT:RAWCODE (e.g. 6:X00P)");
+                    let (slot, rawcode) = value
+                        .split_once(':')
+                        .expect("--builder requires SLOT:RAWCODE");
+                    let slot = slot.parse::<usize>().expect("builder slot must be numeric");
+                    assert!(
+                        matches!(slot, 0..=2 | 6..=8),
+                        "builder slot must be 0/1/2/6/7/8"
+                    );
+                    assert!(
+                        rawcode.len() == 4 && rawcode.is_ascii(),
+                        "builder rawcode must be four ASCII characters"
+                    );
+                    options.builder_rawcodes[slot] = Some(u32::from_be_bytes(
+                        rawcode.as_bytes().try_into().expect("validated rawcode"),
+                    ));
+                }
                 "--workers" => {
                     options.workers = args
                         .next()
@@ -89,7 +111,7 @@ impl ServerOptions {
                 }
                 "-h" | "--help" => {
                     println!(
-                        "Usage: castle-fight-server [--bind 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--workers N] [--disconnect-timeout-seconds N]"
+                        "Usage: castle-fight-server [--bind 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--builder SLOT:RAWCODE] [--workers N] [--disconnect-timeout-seconds N]"
                     );
                     std::process::exit(0);
                 }
@@ -118,7 +140,20 @@ impl ServerOptions {
                         builder_race: CastleFightBuilderRace::Human,
                     }
                 }))
-                .collect();
+                .collect::<Vec<_>>();
+        let content = castle_fight_sim::castle_fight_content_bundle(self.map_version)
+            .expect("selected content must be available");
+        let participants = participants
+            .into_iter()
+            .map(|mut participant| {
+                if let Some(rawcode) = self.builder_rawcodes[usize::from(participant.id.0)] {
+                    participant.builder_race = content
+                        .builder_race_for_rawcode(rawcode)
+                        .expect("selected rawcode must identify an extracted builder");
+                }
+                participant
+            })
+            .collect();
         CastleFightMatchConfig::development_subset_with_participants(
             self.map_version,
             &self.release_revision,
@@ -181,6 +216,7 @@ mod tests {
             release_revision: "r1".to_owned(),
             seed: 9,
             team_size: 2,
+            builder_rawcodes: [None; 9],
             workers: 1,
             disconnect_timeout: DEFAULT_DISCONNECT_TIMEOUT,
         };
@@ -193,5 +229,21 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![(0, 0), (1, 0), (6, 1), (7, 1)]
         );
+        let mut options = options;
+        let content = castle_fight_sim::castle_fight_content_bundle(options.map_version).unwrap();
+        for builder in content.builder_definitions() {
+            options.builder_rawcodes[6] = Some(builder.rawcode);
+            let result = std::panic::catch_unwind(|| options.match_config());
+            if content.supports_builder_race(builder.race) {
+                assert_eq!(result.unwrap().participants[2].builder_race, builder.race);
+            } else {
+                assert!(
+                    result.is_err(),
+                    "server must not silently replace an unsupported race"
+                );
+            }
+        }
+        options.builder_rawcodes[6] = Some(0);
+        assert!(std::panic::catch_unwind(|| options.match_config()).is_err());
     }
 }

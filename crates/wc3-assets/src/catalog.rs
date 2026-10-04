@@ -113,6 +113,43 @@ pub fn load_embedded_visuals() -> Result<VisualAssetCatalog, Box<dyn Error>> {
     Ok(serde_json::from_str(json)?)
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct NativeLightningCatalog {
+    pub map_version: String,
+    pub release_revision: String,
+    pub abilities: Vec<NativeLightningAbility>,
+    pub effects: Vec<NativeLightningEffect>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct NativeLightningAbility {
+    pub rawcode: String,
+    pub base_rawcode: String,
+    pub native_section: String,
+    pub effects: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct NativeLightningEffect {
+    pub id: String,
+    pub texture: String,
+    pub width: f32,
+    pub segment_length: f32,
+    pub noise_scale: f32,
+    pub texcoord_scale: f32,
+    pub color: [u8; 4],
+}
+
+pub fn load_embedded_lightnings() -> Result<NativeLightningCatalog, Box<dyn Error>> {
+    let catalog: NativeLightningCatalog = serde_json::from_str(include_str!(
+        "../../../docs/original_map/extracted/resolved/native-lightning-visuals.json"
+    ))?;
+    if catalog.map_version != CATALOG_VERSION || catalog.release_revision != "r1" {
+        return Err("native lightning projection does not match the embedded map catalog".into());
+    }
+    Ok(catalog)
+}
+
 pub fn load_embedded_ui() -> Result<UiAssetCatalog, Box<dyn Error>> {
     let json = include_str!(concat!(env!("OUT_DIR"), "/ui-assets.json"));
     Ok(serde_json::from_str(json)?)
@@ -533,6 +570,68 @@ mod tests {
                 && asset.role == "atlas"
                 && asset.texture_path == r"UI\Cursor\NightElfCursor.blp"
         }));
+    }
+
+    #[test]
+    fn native_proxy_art_keeps_effect_identity_and_source_inventory() {
+        let catalog = load_embedded_visuals().unwrap();
+        let native = load_embedded_lightnings().unwrap();
+        let mut semantics = csv::ReaderBuilder::new().delimiter(b'\t').from_reader(
+            include_bytes!(
+                "../../../docs/original_map/extracted/resolved/unit-spell-semantics.tsv"
+            )
+            .as_slice(),
+        );
+        let headers = semantics.headers().unwrap().clone();
+        let unit = header_index(&headers, "unit_rawcode").unwrap();
+        let effects = header_index(&headers, "effect_rawcodes").unwrap();
+        for row in semantics.records() {
+            let row = row.unwrap();
+            for child in row
+                .get(effects)
+                .unwrap()
+                .split(',')
+                .filter(|child| !child.is_empty())
+            {
+                for art in catalog.assets.iter().filter(|art| {
+                    art.owner_kind == "abilities"
+                        && art.owner_rawcode == child
+                        && art.source_unit_rawcode.is_none()
+                        && (art.role == "missile"
+                            || (art.role == "target"
+                                && native
+                                    .abilities
+                                    .iter()
+                                    .any(|binding| binding.rawcode == child)))
+                }) {
+                    assert!(
+                        catalog.assets.iter().any(|inventory| {
+                            inventory.owner_rawcode == art.owner_rawcode
+                                && inventory.source_unit_rawcode.as_deref() == row.get(unit)
+                                && inventory.role == art.role
+                                && inventory.model_path == art.model_path
+                                && inventory.missile_arc == art.missile_arc
+                        }),
+                        "missing child/source binding: {child}/{:?}",
+                        row.get(unit)
+                    );
+                }
+            }
+        }
+        let definitions = native
+            .effects
+            .iter()
+            .map(|effect| effect.id.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+        for ability in &native.abilities {
+            assert!(!ability.effects.is_empty());
+            assert!(
+                ability
+                    .effects
+                    .iter()
+                    .all(|effect| definitions.contains(effect.as_str()))
+            );
+        }
     }
 
     #[test]

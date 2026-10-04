@@ -155,6 +155,7 @@ impl CastleFightMatchConfig {
         )?;
         let bundle = resolve_playable_bundle(release)?;
         validate_participants(&participants)?;
+        validate_builder_races(bundle, &participants)?;
         participants.sort_unstable_by_key(|participant| participant.id);
         Ok(Self {
             release,
@@ -205,6 +206,7 @@ pub enum CastleFightMatchSetupError {
         actual: CastleFightContentIdentity,
     },
     UnsupportedParticipants,
+    UnsupportedBuilderRace(CastleFightBuilderRace),
     MapSource(String),
     Terrain(TerrainLoadError),
 }
@@ -243,6 +245,10 @@ impl fmt::Display for CastleFightMatchSetupError {
             Self::UnsupportedParticipants => formatter.write_str(
                 "Castle Fight 9.27 development matches support balanced 1v1, 2v2, or 3v3 rosters using authored slots 0/1/2 versus 6/7/8",
             ),
+            Self::UnsupportedBuilderRace(race) => write!(
+                formatter,
+                "builder race {race:?} has not been promoted for the selected content revision"
+            ),
             Self::MapSource(error) => formatter.write_str(error),
             Self::Terrain(error) => error.fmt(formatter),
         }
@@ -265,6 +271,7 @@ pub fn resolve_castle_fight_match(
         .participants
         .sort_unstable_by_key(|participant| participant.id);
     let content = resolve_playable_bundle(config.release)?;
+    validate_builder_races(content, &config.participants)?;
     if content.identity != config.content_identity {
         return Err(CastleFightMatchSetupError::ContentIdentityMismatch {
             expected: config.content_identity,
@@ -289,6 +296,7 @@ pub fn resolve_castle_fight_match(
         uphill_miss_chance_per_10k: DEVELOPMENT_UPHILL_MISS_CHANCE_PER_10K,
         damage_rules: content.damage_rules,
     };
+    let direct_buildings = participant_direct_buildings(content, &config.participants);
     Ok(CastleFightResolvedMatch {
         match_config: config,
         content,
@@ -296,7 +304,7 @@ pub fn resolve_castle_fight_match(
         terrain,
         simulation_config,
         combat_rules,
-        direct_buildings: content.playable_human_direct_building_kinds(),
+        direct_buildings,
     })
 }
 
@@ -304,7 +312,13 @@ pub fn create_castle_fight_match(
     config: CastleFightMatchConfig,
     workers: usize,
 ) -> Result<CastleFightMatch, CastleFightMatchSetupError> {
-    let resolved = resolve_castle_fight_match(config)?;
+    create_resolved_castle_fight_match(resolve_castle_fight_match(config)?, workers)
+}
+
+fn create_resolved_castle_fight_match(
+    resolved: CastleFightResolvedMatch,
+    workers: usize,
+) -> Result<CastleFightMatch, CastleFightMatchSetupError> {
     let simulation_config = resolved.simulation_config.clone();
     let player_configs = resolved
         .match_config
@@ -322,15 +336,6 @@ pub fn create_castle_fight_match(
         resolved.content.identity.into(),
         &player_configs,
     );
-    let direct_rawcodes = resolved
-        .direct_buildings
-        .iter()
-        .map(|kind| {
-            kind.rawcode(resolved.content)
-                .expect("resolved direct building must belong to content bundle")
-        })
-        .collect::<Vec<_>>();
-
     for participant in resolved.match_config.participants.iter().copied() {
         let builder = resolved
             .content
@@ -353,7 +358,17 @@ pub fn create_castle_fight_match(
                 team: participant.team,
                 position: world_point(x, y),
                 profile: builder.profile,
-                configuration: builder.configuration_with_catalog(direct_rawcodes.clone()),
+                configuration: builder.configuration_with_catalog(
+                    resolved
+                        .content
+                        .direct_building_kinds_for_race(participant.builder_race)
+                        .into_iter()
+                        .map(|kind| {
+                            kind.rawcode(resolved.content)
+                                .expect("catalog belongs to bundle")
+                        })
+                        .collect(),
+                ),
                 repair_autocast_enabled: builder.repair_autocast_enabled_by_default,
             },
         );
@@ -418,6 +433,35 @@ fn resolve_playable_bundle(
                 .map_err(CastleFightMatchSetupError::UnsupportedContent)
         }
     }
+}
+
+fn validate_builder_races(
+    content: &CastleFightContentBundle,
+    participants: &[CastleFightParticipantConfig],
+) -> Result<(), CastleFightMatchSetupError> {
+    for participant in participants {
+        if !content.supports_builder_race(participant.builder_race) {
+            return Err(CastleFightMatchSetupError::UnsupportedBuilderRace(
+                participant.builder_race,
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn participant_direct_buildings(
+    content: &CastleFightContentBundle,
+    participants: &[CastleFightParticipantConfig],
+) -> Vec<CastleFightBuildingKind> {
+    let mut kinds = Vec::new();
+    for participant in participants {
+        for kind in content.direct_building_kinds_for_race(participant.builder_race) {
+            if !kinds.contains(&kind) {
+                kinds.push(kind);
+            }
+        }
+    }
+    kinds
 }
 
 fn validate_participants(
@@ -1064,6 +1108,117 @@ mod tests {
         assert_eq!(first.simulation.building_count(), 2);
         assert_eq!(first.content.identity, config.content_identity);
         assert_eq!(first.direct_buildings.len(), 12);
+    }
+
+    #[test]
+    fn unpromoted_races_are_rejected_at_selection_and_authoritative_resolution() {
+        let mut config =
+            CastleFightMatchConfig::development_subset(MapVersion::CASTLE_FIGHT_9_27, "r1", 1)
+                .unwrap();
+        let race = config.participants[1].builder_race;
+        let content = resolve_playable_bundle(config.release).unwrap();
+        assert!(content.supports_builder_race(race));
+        for unsupported in CastleFightBuilderRace::ALL
+            .into_iter()
+            .filter(|race| !content.supports_builder_race(*race))
+        {
+            config.participants[1].builder_race = unsupported;
+            assert!(
+                matches!(CastleFightMatchConfig::development_subset_with_participants(
+                config.release.map_version, "r1", 1, config.participants.clone()),
+                Err(CastleFightMatchSetupError::UnsupportedBuilderRace(race)) if race == unsupported)
+            );
+            assert!(matches!(resolve_castle_fight_match(config.clone()),
+                Err(CastleFightMatchSetupError::UnsupportedBuilderRace(race)) if race == unsupported));
+        }
+    }
+
+    #[test]
+    fn mixed_race_fixture_owns_source_menus_and_rejects_cross_catalog_commands() {
+        let mut config =
+            CastleFightMatchConfig::development_subset(MapVersion::CASTLE_FIGHT_9_27, "r1", 1)
+                .unwrap();
+        let allies = config
+            .participants
+            .iter()
+            .map(|participant| CastleFightParticipantConfig {
+                id: PlayerId(participant.id.0 + 1),
+                ..*participant
+            })
+            .collect::<Vec<_>>();
+        config.participants.extend(allies);
+        let human = create_castle_fight_match(config.clone(), 1).unwrap();
+        let mut resolved = resolve_castle_fight_match(config).unwrap();
+        // Internal integration fixture exercises the future promotion path without
+        // weakening public/authoritative validation or opening the release gate.
+        for participant in &mut resolved.match_config.participants {
+            if participant.id.0 % 2 != 0 {
+                participant.builder_race = CastleFightBuilderRace::Elf;
+            }
+        }
+        resolved.direct_buildings =
+            participant_direct_buildings(resolved.content, &resolved.match_config.participants);
+        let game = create_resolved_castle_fight_match(resolved, 1).unwrap();
+        assert_ne!(
+            game.simulation.capture_snapshot().configuration_identity(),
+            human.simulation.capture_snapshot().configuration_identity(),
+            "network configuration identity must distinguish source-owned race rosters"
+        );
+        let snapshot = game.simulation.capture_snapshot();
+        let encoded = snapshot.encode_wire().unwrap();
+        let decoded = crate::SimulationSnapshot::decode_wire(&encoded, game.content).unwrap();
+        assert_eq!(
+            decoded.configuration_identity(),
+            snapshot.configuration_identity()
+        );
+        let mut restored = crate::Simulation::new(game.simulation_config.clone(), 4);
+        restored.restore_snapshot(&decoded).unwrap();
+        assert_eq!(restored.checksum(), game.simulation.checksum());
+        for participant in &game.match_config.participants {
+            let builder = game.simulation.builder_for_player(participant.id).unwrap();
+            let source = game.content.builder(participant.builder_race).unwrap();
+            let expected = source
+                .build_catalog
+                .iter()
+                .copied()
+                .filter(|rawcode| {
+                    game.direct_buildings
+                        .iter()
+                        .any(|kind| kind.rawcode(game.content) == Some(*rawcode))
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(builder.configuration.build_catalog, expected);
+            for &kind in &game.direct_buildings {
+                let result = crate::admit_player_command(
+                    &game.simulation,
+                    game.content,
+                    participant.id,
+                    crate::PlayerCommand::PlaceBuilding {
+                        builder: builder.id,
+                        building: kind.stable_id(),
+                        position: crate::BuildPosition::new(0, 0),
+                    },
+                );
+                if builder
+                    .configuration
+                    .allows_building(kind.rawcode(game.content).unwrap())
+                {
+                    assert_eq!(result, Ok(()));
+                } else {
+                    assert!(matches!(
+                        result,
+                        Err(crate::CommandAdmissionError::BuildingNotInBuilderCatalog { .. })
+                    ));
+                }
+            }
+        }
+        let human = game.simulation.builder_for_player(PlayerId(0)).unwrap();
+        let elf = game.simulation.builder_for_player(PlayerId(1)).unwrap();
+        assert_ne!(
+            human.configuration.build_catalog,
+            elf.configuration.build_catalog
+        );
+        assert_ne!(human.configuration.appearance, elf.configuration.appearance);
     }
 
     #[test]

@@ -1,5 +1,5 @@
 use bevy::{ecs::system::SystemParam, prelude::*};
-use castle_fight_sim::PlayerId;
+use castle_fight_sim::{CastleFightBuilderRace, CastleFightContentBundle, PlayerId};
 
 use crate::{
     AuthoritativeSimulation, ClientOptions, SelectedMatch, SimulationPlayback,
@@ -66,11 +66,27 @@ impl LobbyState {
         }
     }
 
+    fn content(&self) -> &'static CastleFightContentBundle {
+        castle_fight_sim::castle_fight_content_bundle(self.options.map_version)
+            .expect("lobby content was resolved before display")
+    }
+
+    fn race(&self, player: u8) -> CastleFightBuilderRace {
+        match self.options.builder_rawcodes[usize::from(player)] {
+            Some(rawcode) => self
+                .content()
+                .builder_race_for_rawcode(rawcode)
+                .expect("selected rawcode was validated before lobby display"),
+            None => CastleFightBuilderRace::Human,
+        }
+    }
+
     fn selected(&self, action: LobbyAction) -> bool {
         match action {
             LobbyAction::TeamSize(size) => size == self.team_size,
             LobbyAction::Position(player) => player == self.local_player,
-            LobbyAction::RaceHuman(_) | LobbyAction::Start => true,
+            LobbyAction::Race(player, race) => self.race(player) == race,
+            LobbyAction::Start => true,
             LobbyAction::RaceDropdown(_) => false,
         }
     }
@@ -100,7 +116,9 @@ impl LobbyState {
                 self.host_player != Some(self.local_player)
                     || self.connected_players.len() < self.required_players
             }
-            LobbyAction::RaceDropdown(_) | LobbyAction::RaceHuman(_) => false,
+            // Network rosters are server-configured and compatibility-checked before joining.
+            // Changing them here would require a protocol-level lobby negotiation.
+            LobbyAction::RaceDropdown(_) | LobbyAction::Race(_, _) => true,
         }
     }
 
@@ -117,7 +135,7 @@ enum LobbyAction {
     TeamSize(usize),
     Position(PlayerId),
     RaceDropdown(u8),
-    RaceHuman(u8),
+    Race(u8, CastleFightBuilderRace),
     Start,
 }
 
@@ -306,10 +324,17 @@ fn spawn_position_row(
                 .with_children(|race| {
                     button(
                         race,
-                        "Human  v",
+                        format!(
+                            "{}  v",
+                            lobby
+                                .content()
+                                .builder(lobby.race(player.0))
+                                .expect("selected builder")
+                                .name
+                        ),
                         LobbyAction::RaceDropdown(player.0),
                         false,
-                        false,
+                        lobby.networked,
                     );
                     if lobby.open_race == Some(player.0) {
                         race.spawn((
@@ -327,7 +352,17 @@ fn spawn_position_row(
                             GlobalZIndex(10_001),
                         ))
                         .with_children(|menu| {
-                            button(menu, "Human", LobbyAction::RaceHuman(player.0), true, false);
+                            for &race in lobby.content().supported_builder_races() {
+                                let builder =
+                                    lobby.content().builder(race).expect("supported builder");
+                                button(
+                                    menu,
+                                    builder.name,
+                                    LobbyAction::Race(player.0, race),
+                                    lobby.race(player.0) == race,
+                                    lobby.networked,
+                                );
+                            }
                         });
                     }
                 });
@@ -473,8 +508,15 @@ fn handle_lobby_buttons(
                     lobby.open_race = (lobby.open_race != Some(player)).then_some(player);
                     redraw = true;
                 }
-                LobbyAction::RaceHuman(player) => {
-                    if lobby.open_race == Some(player) {
+                LobbyAction::Race(player, race) => {
+                    if !lobby.networked && lobby.content().supports_builder_race(race) {
+                        lobby.options.builder_rawcodes[usize::from(player)] = Some(
+                            lobby
+                                .content()
+                                .builder(race)
+                                .expect("supported builder")
+                                .rawcode,
+                        );
                         lobby.open_race = None;
                         redraw = true;
                     }
@@ -554,9 +596,32 @@ mod tests {
             release_revision: "r1".to_owned(),
             match_seed: 1,
             team_size: 1,
+            builder_rawcodes: [None; 9],
             server: None,
             list_map_versions: false,
         }
+    }
+
+    #[test]
+    fn source_builder_selection_obeys_promotion_gate_without_human_fallback() {
+        let mut options = options();
+        let content = castle_fight_sim::castle_fight_content_bundle(options.map_version).unwrap();
+        for builder in content.builder_definitions() {
+            options.builder_rawcodes[6] = Some(builder.rawcode);
+            let result = client_match_config(&options);
+            if content.supports_builder_race(builder.race) {
+                assert_eq!(result.unwrap().participants[1].builder_race, builder.race);
+            } else {
+                assert!(matches!(result,
+                    Err(crate::CastleFightMatchSetupError::UnsupportedBuilderRace(race))
+                    if race == builder.race));
+            }
+        }
+        options.builder_rawcodes[6] = Some(0);
+        assert!(client_match_config(&options).is_err());
+        let network = LobbyState::new(options, PlayerId(0), true);
+        assert!(network.action_disabled(LobbyAction::RaceDropdown(0)));
+        assert!(network.action_disabled(LobbyAction::Race(0, CastleFightBuilderRace::Elf)));
     }
 
     #[test]

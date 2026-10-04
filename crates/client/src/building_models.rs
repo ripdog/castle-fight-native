@@ -397,6 +397,25 @@ mod tests {
     use super::*;
 
     #[test]
+    #[ignore = "requires a locally extracted SD assets/wc3 presentation pack"]
+    fn extracted_pack_resolves_all_delivered_building_bindings() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/wc3/buildings");
+        let json = fs::read_to_string(root.join("manifest.json")).unwrap();
+        let manifest: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let entries = resolve_manifest_entries(&json, "wc3/buildings").unwrap();
+        for source in manifest["buildings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|source| source["gltf"].is_string() && source["fallback_to_base_art"] == false)
+        {
+            let rawcode = parse_rawcode(source["rawcode"].as_str().unwrap()).unwrap();
+            assert!(entries.iter().any(|entry| entry.rawcode == rawcode));
+            assert!(root.join(source["gltf"].as_str().unwrap()).is_file());
+        }
+    }
+
+    #[test]
     fn resolves_building_manifest_lifecycle_and_model_metadata() {
         let json = r#"{
             "schema_version": 5,

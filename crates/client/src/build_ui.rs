@@ -1264,25 +1264,19 @@ fn action_layout(
             let Some(builder) = authoritative.simulation.builder(actor) else {
                 return slots;
             };
-            let available = selected_match
-                .direct_buildings
+            let available = builder
+                .configuration
+                .build_catalog
                 .iter()
-                .copied()
-                .filter(|kind| {
-                    builder
-                        .configuration
-                        .allows_building(kind.rawcode(selected_match.content))
-                })
+                .filter_map(|rawcode| selected_match.content.building_kind_for_rawcode(*rawcode))
+                .map(BuildKind::from)
                 .collect::<Vec<_>>();
-            // X00C.ubui contains twelve entries. In the original map availability/tech state can
-            // hide individual choices, but the native full-race development catalog deliberately
-            // exposes all twelve at once. Use the otherwise-reserved Cancel cell for the displaced
-            // authored collision in that case; Esc still leaves the build menu.
+            // Source-owned menus may fill the card. Resolve authored collisions in catalog
+            // order, using Cancel's cell when necessary; Esc still leaves the build menu.
             let reserve_cancel = available.len() < SLOT_COUNT;
             for kind in available {
-                // Some 9.27 Human build slots share authored command-card positions because
-                // map modes can replace one choice with another. Preserve authored positions when
-                // possible and resolve simultaneously exposed collisions in stable bundle order.
+                // Map modes can replace choices at shared authored positions. Preserve
+                // those positions when possible, resolving collisions in builder catalog order.
                 insert_panel_action_with_cancel_reservation(
                     &mut slots,
                     command_slot(kind.command_card_position(selected_match.content)),
@@ -2479,6 +2473,71 @@ mod tests {
             action_layout(&state, &authoritative, &selected_match)
                 .contains(&Some(PanelAction::GjallarhornSpell))
         );
+    }
+
+    #[test]
+    fn mixed_race_menus_use_actor_catalog_even_without_match_wide_root_list() {
+        let demo = create_demo_world(1, Some(0));
+        let mut authoritative = AuthoritativeSimulation::new(demo.simulation, demo.content);
+        let selected_match = SelectedMatch {
+            content: demo.content,
+            direct_buildings: Vec::new(),
+            local_player: PlayerId(0),
+        };
+        let actor = authoritative
+            .simulation
+            .builder_for_player(PlayerId(0))
+            .unwrap()
+            .id;
+        let state = ActionPanelState {
+            actor: Some(actor),
+            mode: ActionPanelMode::BuildMenu,
+            ..default()
+        };
+        let mut menus = Vec::new();
+        for race in [
+            castle_fight_sim::CastleFightBuilderRace::Human,
+            castle_fight_sim::CastleFightBuilderRace::Elf,
+        ] {
+            let definition = demo.content.builder(race).unwrap();
+            let kinds = demo.content.direct_building_kinds_for_race(race);
+            let catalog = kinds
+                .iter()
+                .map(|kind| kind.rawcode(demo.content).unwrap())
+                .collect();
+            authoritative
+                .simulation
+                .configure_builder(
+                    actor,
+                    definition.profile,
+                    definition.configuration_with_catalog(catalog),
+                )
+                .unwrap();
+            let layout = action_layout(&state, &authoritative, &selected_match);
+            let menu = layout
+                .into_iter()
+                .filter_map(|action| match action {
+                    Some(PanelAction::Target(TargetingAction::Build(kind))) => Some(kind),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(menu.len(), kinds.len());
+            for kind in &menu {
+                assert!(
+                    definition
+                        .build_catalog
+                        .contains(&kind.rawcode(demo.content))
+                );
+                assert!(
+                    kinds.iter().any(|expected| expected.rawcode(demo.content)
+                        == Some(kind.rawcode(demo.content)))
+                );
+                // Tooltips/positions are the bundle's resolved object metadata, not race labels.
+                assert!(!kind.tooltips(demo.content).0.is_empty());
+            }
+            menus.push(menu);
+        }
+        assert_ne!(menus[0], menus[1]);
     }
 
     #[test]

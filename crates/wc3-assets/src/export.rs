@@ -583,9 +583,23 @@ pub struct VisualAssetManifest {
     pub assets: Vec<VisualBindingManifest>,
     pub status_visuals: Vec<StatusVisualBindingManifest>,
     pub chain_lightning_abilities: Vec<String>,
+    pub native_lightnings: NativeLightningManifest,
     pub stun: Option<VisualBindingManifest>,
     pub models: Vec<ModelManifest>,
     pub failures: Vec<VisualFailureManifest>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct NativeLightningManifest {
+    pub abilities: Vec<crate::catalog::NativeLightningAbility>,
+    pub effects: Vec<NativeLightningEffectManifest>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct NativeLightningEffectManifest {
+    #[serde(flatten)]
+    pub definition: crate::catalog::NativeLightningEffect,
+    pub png: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1106,6 +1120,27 @@ impl Exporter {
             missile_arc: None,
         });
 
+        let native_lightning_catalog = crate::catalog::load_embedded_lightnings()?;
+        let native_lightnings = NativeLightningManifest {
+            abilities: native_lightning_catalog.abilities,
+            effects: native_lightning_catalog
+                .effects
+                .into_iter()
+                .map(|definition| {
+                    let png = self
+                        .export_texture(&definition.texture)?
+                        .png
+                        .ok_or_else(|| {
+                            io::Error::other(format!(
+                                "lightning texture {} could not be exported",
+                                definition.texture
+                            ))
+                        })?;
+                    Ok(NativeLightningEffectManifest { definition, png })
+                })
+                .collect::<Result<_, Box<dyn Error>>>()?,
+        };
+
         Ok(VisualAssetManifest {
             schema_version: 5,
             castle_fight_catalog_version: CATALOG_VERSION,
@@ -1114,6 +1149,7 @@ impl Exporter {
             assets,
             status_visuals,
             chain_lightning_abilities: catalog.chain_lightning_abilities.clone(),
+            native_lightnings,
             stun,
             models,
             failures,
