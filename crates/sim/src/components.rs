@@ -421,6 +421,9 @@ pub struct UnitClassifications {
     pub hero: bool,
     pub summoned: bool,
     pub spell_immune: bool,
+    /// Native invisibility; revelation is tracked independently by status buff identity.
+    #[serde(default)]
+    pub invisible: bool,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -480,6 +483,21 @@ impl PassiveUnitEffects {
         self.effects[..usize::from(self.count)]
             .iter()
             .map(|effect| effect.expect("active passive effect slot must be populated"))
+    }
+
+    /// Remove identity-scoped permanent abilities without reallocating or reordering survivors.
+    pub fn retain(&mut self, mut keep: impl FnMut(PassiveUnitEffect) -> bool) {
+        let count = usize::from(self.count);
+        let mut write = 0;
+        for read in 0..count {
+            let effect = self.effects[read].expect("active passive effect slot must be populated");
+            if keep(effect) {
+                self.effects[write] = Some(effect);
+                write += 1;
+            }
+        }
+        self.effects[write..count].fill(None);
+        self.count = u8::try_from(write).expect("passive effect count fits u8");
     }
 
     #[must_use]

@@ -6,6 +6,7 @@ mod economy;
 mod match_driver;
 mod match_setup;
 mod math;
+mod native_carriers;
 mod native_effects;
 mod simulation;
 mod spatial;
@@ -72,6 +73,9 @@ pub use match_setup::{
     castle_fight_release_descriptor, create_castle_fight_match, resolve_castle_fight_match,
 };
 pub use math::{SUBUNITS_PER_WORLD_UNIT, SimPoint};
+pub use native_carriers::{
+    NativeBarrageProfile, NativeCarrierProfile, barrage_for_version, carrier_for_version,
+};
 pub use native_effects::{
     NativeEffectImplementationId, NativeEffectResolveError, NativeEffectSource,
     NativeEffectSourceKind, ResolvedNativeEffectBinding, native_effect_implementation_for,
@@ -4754,6 +4758,7 @@ mod tests {
         let destination = match sim.projectiles()[0].kind {
             ProjectileViewKind::Ballistic { destination, .. } => destination,
             ProjectileViewKind::GuaranteedHit { .. }
+            | ProjectileViewKind::NativeCarrierBolt { .. }
             | ProjectileViewKind::Reflected { .. }
             | ProjectileViewKind::Bounce { .. } => {
                 panic!("expected ballistic projectile")

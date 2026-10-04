@@ -71,6 +71,30 @@
     },
     {
       "source_kind": "unit-ability",
+      "source_key": "A015",
+      "implementation": "warcraft-barrage-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Arcane Tower native Aroc missiles consume the retained versioned carrier projection."
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A07W",
+      "implementation": "warcraft-persistent-carrier-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Obelisk's marker accompanies its script-created persistent A000 carrier; it is not a direct building weapon."
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A000",
+      "implementation": "warcraft-persistent-carrier-v1",
+      "valid_from": "9.27",
+      "valid_through": "9.27",
+      "notes": "Script-owned Phoenix Fire carrier with positive-damage cleanse and explicit persistent-ability removal."
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A09A",
       "implementation": "warcraft-marker-only-v1",
       "valid_from": "9.27",

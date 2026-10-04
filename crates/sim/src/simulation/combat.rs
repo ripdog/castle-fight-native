@@ -16,6 +16,7 @@ pub(super) struct AttackResolutionContext<'a> {
 
 pub(super) struct AttackResolution {
     pub(super) attacks_resolved: usize,
+    pub(super) native_barrage_launches: usize,
     pub(super) projectile_launches: Vec<ProjectileLaunch>,
     pub(super) ballistic_projectile_launches: Vec<BallisticProjectileLaunch>,
     pub(super) bounce_projectile_launches: Vec<BounceProjectileLaunch>,
@@ -44,6 +45,7 @@ impl Simulation {
         intents.sort_unstable_by_key(|intent| (intent.source_id, intent.target_id));
 
         let mut attacks_resolved = 0;
+        let mut native_barrage_launches = 0;
         let mut projectile_launches = Vec::new();
         let mut ballistic_projectile_launches = Vec::new();
         let mut bounce_projectile_launches = Vec::new();
@@ -279,6 +281,17 @@ impl Simulation {
                     }
                 }
             }
+            // Native critical strikes suppress Barrage. A primary miss is not a
+            // critical strike and does not collapse independent secondary arrows.
+            if !critical {
+                native_barrage_launches += self.launch_native_barrage(
+                    &intent,
+                    units,
+                    buildings,
+                    unit_health,
+                    completed_tick,
+                );
+            }
             match intent.source {
                 AttackSourceIndex::Unit(index) => {
                     cooldowns[index] = effective_attack_cooldown_ticks(
@@ -307,6 +320,7 @@ impl Simulation {
 
         AttackResolution {
             attacks_resolved,
+            native_barrage_launches,
             projectile_launches,
             ballistic_projectile_launches,
             bounce_projectile_launches,

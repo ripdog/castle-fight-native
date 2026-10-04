@@ -5751,7 +5751,7 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
         };
         let visual = resolve_visual_model(gltf, model, asset_server)?;
         match (binding.owner_kind.as_str(), binding.role.as_str()) {
-            ("units", "attack1_projectile") => {
+            ("units", "attack1_projectile") | ("abilities", "missile") => {
                 let missile_arc = binding.missile_arc.unwrap_or(0.0);
                 if !missile_arc.is_finite() || missile_arc < 0.0 {
                     return Err(format!(
@@ -5781,9 +5781,8 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
                             .transpose()?,
                     });
             }
-            // Missile art needs an authoritative travel interval/path. Do not pin a missile
-            // model to either endpoint merely because the object data references one.
-            ("abilities", "missile") => {}
+            // Ability missiles are indexed independently from endpoint caster/impact art;
+            // callers require an authoritative projectile travel interval.
             _ => {}
         }
     }

@@ -430,9 +430,13 @@ impl Simulation {
         if building.attack.is_some() || building.spellcasting.is_some() {
             entity.insert(StatusState::default());
         }
+        let entity_id = entity.id();
+        self.start_native_carrier(entity_id);
     }
 
-    fn deactivate_building_entity(&mut self, entity: Entity) {
+    pub(super) fn deactivate_building_entity(&mut self, entity: Entity) {
+        let id = *self.world.get::<SimId>(entity).expect("building id");
+        self.stop_native_carrier(id);
         let mut entity = self.world.entity_mut(entity);
         entity.remove::<BuildingEconomyProfile>();
         entity.remove::<RepairTimeTicks>();
@@ -731,6 +735,7 @@ impl Simulation {
             return false;
         };
         self.release_building_legendary_points(entity);
+        self.stop_native_carrier(id);
         self.world.despawn(entity);
         self.topology_dirty = true;
         true

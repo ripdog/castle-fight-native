@@ -86,6 +86,8 @@ roster!(CastleFightTowerKind, CastleFightBuildingId;
     TreasureBox = 0x2100_0009 => b"h008",
     TinyWatchTower = 0x2100_0007 => b"h081",
     TinyMultishotTower = 0x2100_0008 => b"h082",
+    ArcaneTower = 0x3000_000b => b"h014",
+    ObeliskOfLight = 0x3000_000c => b"h005",
 );
 
 #[cfg(test)]

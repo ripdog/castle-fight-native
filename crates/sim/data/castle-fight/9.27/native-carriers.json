@@ -1,0 +1,349 @@
+{
+  "cleanse": {
+    "building_name": "Obelisk of Light",
+    "building_rawcode": "h005",
+    "building_tooltip": "|cffffac00Utility|r|n|n|cff80ff00Cleansing Light|r \u2022 Shoots a beam at a random visible enemy unit, which deals |cffffff00180|r spell damage and then removes all effects from the target. \u2022 Cooldown: |cffffff005|rs.",
+    "building_unit_id": 1747988533,
+    "carrier_effect_ability_id": 1093677104,
+    "carrier_owner": "building-owner",
+    "carrier_position": "building-position",
+    "carrier_removed_on_building_death": true,
+    "carrier_removed_on_building_leave": true,
+    "cleanse_requires_damage_source_has_effect_ability": true,
+    "cleanse_requires_positive_damage": true,
+    "effect_ability_base_rawcode": "Apxf",
+    "effect_ability_name": "HEL: Obelisk of Light",
+    "effect_ability_rawcode": "A000",
+    "effect_area": 99999.0,
+    "effect_cooldown_seconds": 5.0,
+    "effect_damage_per_second": 0.0,
+    "effect_initial_damage": 180.0,
+    "effect_targets": "ground,air,enemy",
+    "one_carrier_per_live_building": true,
+    "remove_native_positive_and_negative_buffs": true,
+    "removed_persistent_abilities": [
+      {
+        "ability_id": 1093679171,
+        "name": "NEL: Obelisk Of Wilderness (spell resist)",
+        "rawcode": "A08C"
+      },
+      {
+        "ability_id": 1093679172,
+        "name": "Hardened Skin",
+        "rawcode": "A08D"
+      },
+      {
+        "ability_id": 1093679174,
+        "name": "Endurance Aura",
+        "rawcode": "A08F"
+      },
+      {
+        "ability_id": 1093677890,
+        "name": "Item Attack Speed Bonus",
+        "rawcode": "A03B"
+      },
+      {
+        "ability_id": 1093677889,
+        "name": "Item Damage Bonus",
+        "rawcode": "A03A"
+      },
+      {
+        "ability_id": 1093677892,
+        "name": "Item Life Bonus",
+        "rawcode": "A03D"
+      },
+      {
+        "ability_id": 1093679180,
+        "name": "Item Armor Bonus",
+        "rawcode": "A08L"
+      },
+      {
+        "ability_id": 1093678409,
+        "name": "Critical Strike",
+        "rawcode": "A05I"
+      },
+      {
+        "ability_id": 1093678679,
+        "name": "Endurance Aura",
+        "rawcode": "A06W"
+      },
+      {
+        "ability_id": 1093679181,
+        "name": "Evasion",
+        "rawcode": "A08M"
+      },
+      {
+        "ability_id": 1093678681,
+        "name": "Endurance Aura",
+        "rawcode": "A06Y"
+      },
+      {
+        "ability_id": 1093679186,
+        "name": "Demolish",
+        "rawcode": "A08R"
+      },
+      {
+        "ability_id": 1093678680,
+        "name": "Endurance Aura",
+        "rawcode": "A06X"
+      },
+      {
+        "ability_id": 1093679441,
+        "name": "Item Armor Bonus",
+        "rawcode": "A09Q"
+      },
+      {
+        "ability_id": 1093679442,
+        "name": "Command Aura",
+        "rawcode": "A09R"
+      },
+      {
+        "ability_id": 1093683286,
+        "name": "pp spell resist",
+        "rawcode": "A0HV"
+      },
+      {
+        "ability_id": 1093682231,
+        "name": "ELE: Enchant(Haste)",
+        "rawcode": "A0D7"
+      },
+      {
+        "ability_id": 1093682739,
+        "name": "Spell Book",
+        "rawcode": "A0F3"
+      },
+      {
+        "ability_id": 1093682737,
+        "name": "Slow Aura",
+        "rawcode": "A0F1"
+      },
+      {
+        "ability_id": 1093677905,
+        "name": "Channel",
+        "rawcode": "A03Q"
+      },
+      {
+        "ability_id": 1093682740,
+        "name": "Channel",
+        "rawcode": "A0F4"
+      },
+      {
+        "ability_id": 1093679436,
+        "name": "Devotion Aura",
+        "rawcode": "A09L"
+      },
+      {
+        "ability_id": 1093678676,
+        "name": "Item Life Bonus",
+        "rawcode": "A06T"
+      },
+      {
+        "ability_id": 1093678677,
+        "name": "Item Damage Bonus",
+        "rawcode": "A06U"
+      },
+      {
+        "ability_id": 1093683033,
+        "name": "Blood Corrosion",
+        "rawcode": "A0GY"
+      }
+    ],
+    "removed_persistent_ability_ids": [
+      1093679171,
+      1093679172,
+      1093679174,
+      1093677890,
+      1093677889,
+      1093677892,
+      1093679180,
+      1093678409,
+      1093678679,
+      1093679181,
+      1093678681,
+      1093679186,
+      1093678680,
+      1093679441,
+      1093679442,
+      1093683286,
+      1093682231,
+      1093682739,
+      1093682737,
+      1093677905,
+      1093682740,
+      1093679436,
+      1093678676,
+      1093678677,
+      1093683033
+    ],
+    "unit_remove_buffs_negative": true,
+    "unit_remove_buffs_positive": true
+  },
+  "extraction_git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+  "fields": {
+    "A000": {
+      "aare": 99999,
+      "abuf": "B01M",
+      "acdn": 5,
+      "adur": 0.01,
+      "ahdu": 0.01,
+      "amat": "Abilities\\Weapons\\FaerieDragonMissile\\FaerieDragonMissile.mdl",
+      "amsp": 6500,
+      "atar": "ground,air,enemy",
+      "pxf1": 180,
+      "pxf2": 0
+    },
+    "A015": {
+      "Efk1": 0,
+      "Efk2": 99999,
+      "Efk3": 3,
+      "aare": 600,
+      "acdn": 99,
+      "adur": 1,
+      "ahdu": 1,
+      "amac": 0,
+      "amat": "Abilities\\Weapons\\SpiritOfVengeanceMissile\\SpiritOfVengeanceMissile.mdl",
+      "amsp": "900",
+      "atar": "air,enemies,ground"
+    },
+    "A03D": {
+      "Ilif": 200,
+      "aare": "-",
+      "acdn": 0,
+      "adur": 0,
+      "ahdu": 0,
+      "atar": "_"
+    },
+    "A03N": {
+      "Efk1": 0,
+      "Efk2": 99999,
+      "Efk3": 1,
+      "aare": 600,
+      "acdn": 99,
+      "adur": 1,
+      "ahdu": 1,
+      "amac": 0,
+      "amat": "Abilities\\Weapons\\Arrow\\ArrowMissile.mdl",
+      "amsp": 1000,
+      "atar": "air,enemies,ground"
+    },
+    "B01M": {
+      "ftat": "",
+      "ftip": "Ray of Light"
+    },
+    "h005": {
+      "uhpr": 0.5
+    },
+    "h014": {
+      "uhpr": 2
+    }
+  },
+  "map_version": "9.27",
+  "native_buff_ids": [
+    1110454320,
+    1110454321,
+    1110454322,
+    1110454323,
+    1110454324,
+    1110454325,
+    1110454326,
+    1110454327,
+    1110454328,
+    1110454329,
+    1110454337,
+    1110454338,
+    1110454339,
+    1110454340,
+    1110454341,
+    1110454342,
+    1110454343,
+    1110454344,
+    1110454345,
+    1110454346,
+    1110454347,
+    1110454348,
+    1110454349,
+    1110454350,
+    1110454351,
+    1110454352,
+    1110454353,
+    1110454354,
+    1110454355,
+    1110454356,
+    1110454357,
+    1110454358,
+    1110454359,
+    1110454360,
+    1110454361,
+    1110454362,
+    1110454576,
+    1110454577,
+    1110454578,
+    1110454579,
+    1110454580,
+    1110454581,
+    1110454582,
+    1110454583,
+    1110454584,
+    1110454585,
+    1110454593,
+    1110454594,
+    1110454595,
+    1110454596,
+    1110454597,
+    1110454598,
+    1110454599,
+    1110454600,
+    1110454601,
+    1110454602,
+    1110454603,
+    1110454604,
+    1110454605,
+    1110454606,
+    1110454607,
+    1110454608,
+    1110454609,
+    1110454610,
+    1110454611,
+    1110454612,
+    1110454613,
+    1110454614,
+    1110454615,
+    1110454616,
+    1110454617,
+    1110454618,
+    1110454832,
+    1110454833,
+    1110454834,
+    1110454835,
+    1110454836,
+    1110454837,
+    1110454838,
+    1110454839,
+    1110454840,
+    1110454841,
+    1110454849,
+    1110454850,
+    1110454851,
+    1110454852,
+    1110454853,
+    1110454854,
+    1110454855,
+    1110454863,
+    1110454865,
+    1110454866,
+    1110454867,
+    1110454868,
+    1110454869,
+    1110454871,
+    1112435043,
+    1113747302,
+    1115120994,
+    1482843252
+  ],
+  "source_revision": "r1",
+  "sources": {
+    "object-fields.tsv": "01040f03e4a625ac1d960a0a2d43d0732d64b797e9357f4f40e8c2c0d6d9710d",
+    "objects.tsv": "974d21575d4106609146f2e228b99ec5494732462a1e40735f48e63e7cdae96d",
+    "runtime-system-mechanics.tsv": "436cbff2586e2d540d06c86ca7b403f4d5f0d9b37ee27d68d31f896c3b0f412e"
+  }
+}

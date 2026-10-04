@@ -1006,7 +1006,10 @@ impl Simulation {
         }
 
         let (bounds_min, bounds_max) = self.navigation_world_bounds();
-        let reservation_cell_size = max_radius.saturating_mul(2).max(1);
+        let reservation_cell_size = max_radius
+            .saturating_mul(2)
+            .max(self.config.navigation_cell_size)
+            .max(1);
         let mut ground_reservations = SpatialReservationGrid::build_with_radii(
             reservation_cell_size,
             bounds_min,
