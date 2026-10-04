@@ -23,6 +23,18 @@
     {"source_kind": "unit-ability", "source_key": "A02J", "unit_rawcode": "o001", "kind": "burning-oil"},
     {"source_kind": "unit-ability", "source_key": "A03Z", "unit_rawcode": "n015", "kind": "frost-armor"},
     {"source_kind": "unit-ability", "source_key": "A01A", "unit_rawcode": "h03B", "kind": "bash"},
-    {"source_kind": "unit-ability", "source_key": "A090", "unit_rawcode": "h074", "kind": "bash"}
+    {"source_kind": "unit-ability", "source_key": "A090", "unit_rawcode": "h074", "kind": "bash"},
+    {"source_kind": "unit-ability", "source_key": "A08V", "unit_rawcode": "n01Y", "kind": "solar-strike"},
+    {"source_kind": "ability-effect", "source_key": "A08U", "unit_rawcode": "n01Y", "kind": "solar-strike"},
+    {"source_kind": "unit-ability", "source_key": "A0A7", "unit_rawcode": "h07B", "kind": "healing-wave"},
+    {"source_kind": "ability-effect", "source_key": "A0A8", "unit_rawcode": "h07B", "kind": "healing-wave"},
+    {"source_kind": "unit-ability", "source_key": "A00X", "unit_rawcode": "h00W", "kind": "healing-wave"},
+    {"source_kind": "ability-effect", "source_key": "A00Y", "unit_rawcode": "h00W", "kind": "healing-wave"},
+    {"source_kind": "unit-ability", "source_key": "A010", "unit_rawcode": "h00W", "kind": "phoenix-fire"},
+    {"source_kind": "unit-ability", "source_key": "A0A9", "unit_rawcode": "h07B", "kind": "orb-spell-proc"},
+    {"source_kind": "ability-effect", "source_key": "A0AA", "kind": "chain-lightning"},
+    {"source_kind": "unit-ability", "source_key": "A00Z", "unit_rawcode": "h00W", "kind": "orb-spell-proc"},
+    {"source_kind": "ability-effect", "source_key": "A00L", "kind": "chain-lightning"},
+    {"source_kind": "unit-ability", "source_key": "A0AH", "unit_rawcode": "h00W", "kind": "spell-resistance"}
   ]
 }

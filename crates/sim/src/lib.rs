@@ -2166,9 +2166,11 @@ mod tests {
     fn imported_typed_battle_is_worker_count_independent() {
         fn run(workers: usize) -> u64 {
             let world = SUBUNITS_PER_WORLD_UNIT;
+            // Keep synthetic spawn margins legal as the source-derived roster grows.
+            let battle_width = 80 + i32::try_from(CastleFightUnitKind::ALL.len()).unwrap() * 36;
             let config = SimulationConfig {
-                navigation_max: NavCell::new(800, 64),
-                team_objective: [SimPoint::new(800 * world, 0), SimPoint::new(0, 0)],
+                navigation_max: NavCell::new(battle_width, 64),
+                team_objective: [SimPoint::new(battle_width * world, 0), SimPoint::new(0, 0)],
                 ..SimulationConfig::default()
             };
             let mut sim = Simulation::new_with_combat_rules(
@@ -2185,7 +2187,7 @@ mod tests {
                     let x = if team == 0 {
                         40 + index as i32 * 36
                     } else {
-                        760 - index as i32 * 36
+                        battle_width - 40 - index as i32 * 36
                     };
                     sim.spawn_unit_with_properties(
                         UnitSpawn::from_template(

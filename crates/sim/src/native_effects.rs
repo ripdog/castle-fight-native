@@ -44,6 +44,7 @@ pub enum NativeEffectImplementationId {
     WarcraftSpellResistanceV1,
     WarcraftFeedbackV1,
     WarcraftFaerieFireV1,
+    WarcraftElvenAutomaticV1,
 }
 
 impl NativeEffectImplementationId {
@@ -67,6 +68,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftSpellResistanceV1 => 14,
             Self::WarcraftFeedbackV1 => 15,
             Self::WarcraftFaerieFireV1 => 16,
+            Self::WarcraftElvenAutomaticV1 => 17,
         }
     }
 
@@ -464,6 +466,14 @@ struct TuningFile {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum TuningEffect {
+    ElvenAutomatic {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        spellcasting: SpellcastingProfile,
+        mana_regen_per_second_per_10k: u32,
+        effect_ability_rawcode: Option<String>,
+    },
     Feedback {
         source_kind: String,
         source_key: String,
@@ -618,12 +628,16 @@ impl TuningEffect {
     }
 
     fn dependency_source(&self) -> Result<Option<NativeEffectSource>, String> {
-        let Self::OrbSpellProc {
-            effect_ability_rawcode,
-            ..
-        } = self
-        else {
-            return Ok(None);
+        let effect_ability_rawcode = match self {
+            Self::OrbSpellProc {
+                effect_ability_rawcode,
+                ..
+            } => effect_ability_rawcode,
+            Self::ElvenAutomatic {
+                effect_ability_rawcode: Some(effect),
+                ..
+            } => effect,
+            _ => return Ok(None),
         };
         Ok(Some(NativeEffectSource::new(
             NativeEffectSourceKind::AbilityEffect,
@@ -633,7 +647,8 @@ impl TuningEffect {
 
     fn source_kind(&self) -> &str {
         match self {
-            Self::Feedback { source_kind, .. }
+            Self::ElvenAutomatic { source_kind, .. }
+            | Self::Feedback { source_kind, .. }
             | Self::FaerieFire { source_kind, .. }
             | Self::SpellResistance { source_kind, .. }
             | Self::Evasion { source_kind, .. }
@@ -650,7 +665,8 @@ impl TuningEffect {
 
     fn source_key(&self) -> &str {
         match self {
-            Self::Feedback { source_key, .. }
+            Self::ElvenAutomatic { source_key, .. }
+            | Self::Feedback { source_key, .. }
             | Self::FaerieFire { source_key, .. }
             | Self::SpellResistance { source_key, .. }
             | Self::Evasion { source_key, .. }
@@ -667,7 +683,8 @@ impl TuningEffect {
 
     fn unit_rawcode(&self) -> Option<&str> {
         match self {
-            Self::Feedback { unit_rawcode, .. }
+            Self::ElvenAutomatic { unit_rawcode, .. }
+            | Self::Feedback { unit_rawcode, .. }
             | Self::FaerieFire { unit_rawcode, .. }
             | Self::SpellResistance { unit_rawcode, .. }
             | Self::Evasion { unit_rawcode, .. }
@@ -683,6 +700,7 @@ impl TuningEffect {
 
     const fn expected_implementation(&self) -> NativeEffectImplementationId {
         match self {
+            Self::ElvenAutomatic { .. } => NativeEffectImplementationId::WarcraftElvenAutomaticV1,
             Self::SpellResistance { .. } => NativeEffectImplementationId::WarcraftSpellResistanceV1,
             Self::Feedback { .. } => NativeEffectImplementationId::WarcraftFeedbackV1,
             Self::FaerieFire { .. } => NativeEffectImplementationId::WarcraftFaerieFireV1,
@@ -700,6 +718,7 @@ impl TuningEffect {
 
     const fn kind_name(&self) -> &'static str {
         match self {
+            Self::ElvenAutomatic { .. } => "elven-automatic",
             Self::SpellResistance { .. } => "spell-resistance",
             Self::Feedback { .. } => "feedback",
             Self::FaerieFire { .. } => "faerie-fire",
@@ -759,7 +778,9 @@ fn native_unit_mechanics_from_tuning(
             .filter(|effect| effect.source().ok() == Some(source))
         {
             match effect {
-                TuningEffect::FrostArmor { .. } | TuningEffect::FaerieFire { .. } => {
+                TuningEffect::ElvenAutomatic { .. }
+                | TuningEffect::FrostArmor { .. }
+                | TuningEffect::FaerieFire { .. } => {
                     let candidate = build_spellcasting(effect);
                     if let Some(existing) = automatic_spell {
                         assert_eq!(
@@ -998,7 +1019,8 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             target_ground_units: *target_ground_units,
             target_buildings: *target_buildings,
         }),
-        TuningEffect::ChainLightning { .. }
+        TuningEffect::ElvenAutomatic { .. }
+        | TuningEffect::ChainLightning { .. }
         | TuningEffect::EntanglingRoots { .. }
         | TuningEffect::FrostArmor { .. }
         | TuningEffect::FaerieFire { .. } => {
@@ -1042,6 +1064,20 @@ fn build_triggered_effect(effect: &TuningEffect) -> TriggeredAttackEffect {
 }
 
 fn build_spellcasting(effect: &TuningEffect) -> SpellcastingProfile {
+    if let TuningEffect::ElvenAutomatic {
+        spellcasting,
+        mana_regen_per_second_per_10k,
+        ..
+    } = effect
+    {
+        assert!(*mana_regen_per_second_per_10k <= 10_000_000);
+        assert_eq!(
+            spellcasting.mana.regen_per_tick_per_10k,
+            (1 << 31) | *mana_regen_per_second_per_10k,
+            "generated automatic profile must retain its exact per-second rate unit"
+        );
+        return *spellcasting;
+    }
     if let TuningEffect::FaerieFire {
         source_key,
         mana_maximum,

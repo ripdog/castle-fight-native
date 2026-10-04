@@ -1,11 +1,12 @@
 use super::{canonical::*, *};
 use crate::CastleFightContentBundle;
+use crate::components::NativeAction;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 11;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 12;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -108,7 +109,8 @@ impl SimulationSnapshot {
                         rehydrate_optional_content(&mut definition.properties.content, content)?;
                     }
                 }
-                CanonicalEntity::Projectile(_)
+                CanonicalEntity::NativeAction { .. }
+                | CanonicalEntity::Projectile(_)
                 | CanonicalEntity::ReflectedProjectile(_)
                 | CanonicalEntity::BallisticProjectile(_)
                 | CanonicalEntity::BounceProjectile(_)
@@ -315,6 +317,12 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
         .iter_entities()
         .filter_map(|entity| {
             let id = *entity.get::<SimId>()?;
+            if let Some(action) = entity.get::<NativeAction>() {
+                return Some(CanonicalEntity::NativeAction {
+                    id,
+                    action: action.clone(),
+                });
+            }
             if let Some(projectile) = entity.get::<GuaranteedHitProjectile>() {
                 return Some(CanonicalEntity::Projectile(CanonicalProjectile {
                     id,
@@ -575,6 +583,9 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                 if let Some(abilities) = unit.additional_abilities {
                     entity.insert(abilities);
                 }
+            }
+            CanonicalEntity::NativeAction { id, action } => {
+                world.spawn((*id, action.clone()));
             }
             CanonicalEntity::Building(building) => {
                 let mut entity = world.spawn((
@@ -990,6 +1001,7 @@ mod tests {
                 pulse_interval_ticks: 20,
                 next_pulse_tick: 44,
                 expires_tick: 88,
+                final_pulse_at_expiry: true,
             };
             status.damage_over_time_count = 1;
         }

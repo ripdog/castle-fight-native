@@ -49,6 +49,11 @@ pub(super) fn apply_ability_effect_to_unit(
                 .checked_sub(adjusted)
                 .expect("area ability damage overflowed validated bounds");
         }
+        AbilityEffect::HealingWave(_)
+        | AbilityEffect::PhoenixFire(_)
+        | AbilityEffect::SolarStrike { .. } => {
+            unreachable!("native delivery requires authoritative action state")
+        }
         AbilityEffect::FaerieFire {
             modifier,
             armor_reduction_per_100,
@@ -216,7 +221,11 @@ pub(super) fn purge_expired_status_modifiers(status: &mut StatusState, tick: u64
     let mut dot_write = 0usize;
     for read_index in 0..dot_count {
         let effect = status.damage_over_time[read_index];
-        if tick < effect.expires_tick {
+        if tick < effect.expires_tick
+            || (effect.final_pulse_at_expiry
+                && effect.next_pulse_tick <= effect.expires_tick
+                && tick == effect.expires_tick)
+        {
             status.damage_over_time[dot_write] = effect;
             dot_write += 1;
         }
@@ -384,6 +393,7 @@ pub(super) fn apply_timed_damage_over_time(
                 pulse_interval_ticks,
                 next_pulse_tick,
                 expires_tick,
+                final_pulse_at_expiry: false,
             };
             status.damage_over_time_count = status
                 .damage_over_time_count
@@ -404,17 +414,36 @@ pub(super) fn resolve_periodic_unit_statuses(
         }
         let count = usize::from(unit.status.damage_over_time_count);
         debug_assert!(count <= MAX_TIMED_DAMAGE_OVER_TIME);
+        let resistance = unit
+            .passive_effects
+            .iter()
+            .filter_map(|effect| match effect {
+                PassiveUnitEffect::SpellResistance(profile) => Some(profile.damage_taken_per_10k),
+                _ => None,
+            })
+            .min()
+            .unwrap_or(10_000);
         let spell_damage_taken_per_10k =
             active_defend_profile(unit.passive_effects, unit.spawn_tick, completed_tick)
                 .map(|profile| profile.spell_damage_taken_per_10k);
         for index in 0..count {
             let effect = &mut unit.status.damage_over_time[index];
             while completed_tick >= effect.next_pulse_tick
-                && effect.next_pulse_tick < effect.expires_tick
+                && (effect.next_pulse_tick < effect.expires_tick
+                    || (effect.final_pulse_at_expiry
+                        && effect.next_pulse_tick == effect.expires_tick))
                 && unit.health > 0
             {
-                let adjusted =
-                    damage_rules.apply_spell(effect.damage_per_pulse, unit.armor.armor_type);
+                let adjusted = if unit.classifications.spell_immune
+                    || unit.classifications.invulnerable
+                {
+                    0
+                } else {
+                    scale_damage_per_10k(
+                        damage_rules.apply_spell(effect.damage_per_pulse, unit.armor.armor_type),
+                        resistance,
+                    )
+                };
                 let adjusted = spell_damage_taken_per_10k
                     .map_or(adjusted, |factor| scale_damage_per_10k(adjusted, factor));
                 unit.health = unit
@@ -427,6 +456,7 @@ pub(super) fn resolve_periodic_unit_statuses(
                     .expect("damage-over-time pulse tick overflow");
             }
         }
+        purge_expired_status_modifiers(&mut unit.status, completed_tick);
     }
 }
 

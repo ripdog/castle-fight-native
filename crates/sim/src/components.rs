@@ -1,5 +1,8 @@
 use bevy_ecs::prelude::Component;
 
+mod native_actions;
+pub use native_actions::{HealingWaveProfile, NativeBoltProfile};
+pub(crate) use native_actions::{HealingWaveState, NativeAction, NativeBoltState};
 mod automatic_abilities;
 pub(crate) use automatic_abilities::compose_spellcasting_profiles;
 pub use automatic_abilities::{
@@ -421,6 +424,10 @@ pub struct UnitClassifications {
     pub hero: bool,
     pub summoned: bool,
     pub spell_immune: bool,
+    /// Script UNIT_TYPE_SAPPER and not a structure.
+    pub combat_sapper: bool,
+    /// Native Avul marker. Distinct from magic immunity.
+    pub invulnerable: bool,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
@@ -831,6 +838,8 @@ pub enum AbilityTargetPolicy {
     RandomCorpse,
     RandomEnemyBasePoint,
     NearestEnemyInCombat,
+    FlyingEnemyUnit,
+    RandomEnemyUnitOrBuilding,
 }
 
 impl AbilityTargetPolicy {
@@ -847,6 +856,8 @@ impl AbilityTargetPolicy {
             Self::RandomCorpse => 7,
             Self::RandomEnemyBasePoint => 8,
             Self::NearestEnemyInCombat => 9,
+            Self::FlyingEnemyUnit => 10,
+            Self::RandomEnemyUnitOrBuilding => 11,
         }
     }
 }
@@ -919,6 +930,13 @@ pub enum AbilityEffect {
         reveal_radius: i32,
         reveal_duration_ticks: u16,
     },
+    SolarStrike {
+        profile: NativeBoltProfile,
+        radius: i32,
+        maximum_targets: u8,
+    },
+    PhoenixFire(NativeBoltProfile),
+    HealingWave(HealingWaveProfile),
     FaerieFire {
         modifier: ModifierId,
         armor_reduction_per_100: i16,
@@ -949,6 +967,9 @@ impl AbilityEffect {
             Self::Purification { .. } => 8,
             Self::ArtilleryBombardment { .. } => 9,
             Self::FaerieFire { .. } => 10,
+            Self::HealingWave(_) => 11,
+            Self::SolarStrike { .. } => 12,
+            Self::PhoenixFire(_) => 13,
         }
     }
 }
@@ -1026,6 +1047,8 @@ pub struct TimedDamageOverTime {
     pub pulse_interval_ticks: u16,
     pub next_pulse_tick: u64,
     pub expires_tick: u64,
+    /// Phoenix Fire's last one-second pulse lands at buff expiry, before removal.
+    pub final_pulse_at_expiry: bool,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

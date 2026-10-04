@@ -325,6 +325,358 @@
         "ability": "A090",
         "source": "resolved/object-fields.tsv"
       }
+    },
+    {
+      "kind": "elven-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A08V",
+      "unit_rawcode": "n01Y",
+      "spellcasting": {
+        "mana": {
+          "maximum": 200,
+          "starting": 125,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093679190,
+          "mana_cost": 50,
+          "cooldown_ticks": 420,
+          "range": 819200,
+          "target_policy": "FlyingEnemyUnit",
+          "effect": {
+            "SolarStrike": {
+              "profile": {
+                "ability": 1093679189,
+                "damage": 80,
+                "stun_ticks": 120,
+                "hero_stun_ticks": 60,
+                "damage_per_second": 0,
+                "duration_ticks": 120,
+                "speed_per_tick": 30720,
+                "cleanse": false,
+                "targets": 2
+              },
+              "radius": 409600,
+              "maximum_targets": 4
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": "A08U",
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv"
+      }
+    },
+    {
+      "kind": "elven-automatic",
+      "source_kind": "ability-effect",
+      "source_key": "A08U",
+      "unit_rawcode": "n01Y",
+      "spellcasting": {
+        "mana": {
+          "maximum": 200,
+          "starting": 125,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093679189,
+          "mana_cost": 0,
+          "cooldown_ticks": 0,
+          "range": 0,
+          "target_policy": "FlyingEnemyUnit",
+          "effect": {
+            "SolarStrike": {
+              "profile": {
+                "ability": 1093679189,
+                "damage": 80,
+                "stun_ticks": 120,
+                "hero_stun_ticks": 60,
+                "damage_per_second": 0,
+                "duration_ticks": 120,
+                "speed_per_tick": 30720,
+                "cleanse": false,
+                "targets": 2
+              },
+              "radius": 409600,
+              "maximum_targets": 4
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv"
+      }
+    },
+    {
+      "kind": "elven-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0A7",
+      "unit_rawcode": "h07B",
+      "spellcasting": {
+        "mana": {
+          "maximum": 200,
+          "starting": 140,
+          "regen_per_tick_per_10k": 2147498648
+        },
+        "ability": {
+          "id": 1093681463,
+          "mana_cost": 50,
+          "cooldown_ticks": 240,
+          "range": 512000,
+          "target_policy": "WoundedFriendlyUnit",
+          "effect": {
+            "HealingWave": {
+              "ability": 1093681464,
+              "healing": 150,
+              "trigger_healing": 1,
+              "maximum_targets": 2,
+              "jump_radius": 512000,
+              "retention_per_10k": 6000,
+              "recovery_ticks": 24
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 15000,
+      "effect_ability_rawcode": "A0A8",
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv"
+      }
+    },
+    {
+      "kind": "elven-automatic",
+      "source_kind": "ability-effect",
+      "source_key": "A0A8",
+      "unit_rawcode": "h07B",
+      "spellcasting": {
+        "mana": {
+          "maximum": 200,
+          "starting": 140,
+          "regen_per_tick_per_10k": 2147498648
+        },
+        "ability": {
+          "id": 1093681464,
+          "mana_cost": 0,
+          "cooldown_ticks": 0,
+          "range": 0,
+          "target_policy": "WoundedFriendlyUnit",
+          "effect": {
+            "HealingWave": {
+              "ability": 1093681464,
+              "healing": 150,
+              "trigger_healing": 0,
+              "maximum_targets": 2,
+              "jump_radius": 512000,
+              "retention_per_10k": 6000,
+              "recovery_ticks": 24
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 15000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv"
+      }
+    },
+    {
+      "kind": "elven-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A00X",
+      "unit_rawcode": "h00W",
+      "spellcasting": {
+        "mana": {
+          "maximum": 250,
+          "starting": 180,
+          "regen_per_tick_per_10k": 2147518648
+        },
+        "ability": {
+          "id": 1093677144,
+          "mana_cost": 70,
+          "cooldown_ticks": 360,
+          "range": 512000,
+          "target_policy": "WoundedFriendlyUnit",
+          "effect": {
+            "HealingWave": {
+              "ability": 1093677145,
+              "healing": 300,
+              "trigger_healing": 1,
+              "maximum_targets": 6,
+              "jump_radius": 512000,
+              "retention_per_10k": 8000,
+              "recovery_ticks": 24
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 35000,
+      "effect_ability_rawcode": "A00Y",
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv"
+      }
+    },
+    {
+      "kind": "elven-automatic",
+      "source_kind": "ability-effect",
+      "source_key": "A00Y",
+      "unit_rawcode": "h00W",
+      "spellcasting": {
+        "mana": {
+          "maximum": 250,
+          "starting": 180,
+          "regen_per_tick_per_10k": 2147518648
+        },
+        "ability": {
+          "id": 1093677145,
+          "mana_cost": 0,
+          "cooldown_ticks": 0,
+          "range": 0,
+          "target_policy": "WoundedFriendlyUnit",
+          "effect": {
+            "HealingWave": {
+              "ability": 1093677145,
+              "healing": 300,
+              "trigger_healing": 0,
+              "maximum_targets": 6,
+              "jump_radius": 512000,
+              "retention_per_10k": 8000,
+              "recovery_ticks": 24
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 35000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv"
+      }
+    },
+    {
+      "kind": "elven-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A010",
+      "unit_rawcode": "h00W",
+      "spellcasting": {
+        "mana": {
+          "maximum": 250,
+          "starting": 180,
+          "regen_per_tick_per_10k": 2147518648
+        },
+        "ability": {
+          "id": 1093677360,
+          "mana_cost": 0,
+          "cooldown_ticks": 90,
+          "range": 716800,
+          "target_policy": "RandomEnemyUnitOrBuilding",
+          "effect": {
+            "PhoenixFire": {
+              "ability": 1093677360,
+              "damage": 75,
+              "stun_ticks": 0,
+              "hero_stun_ticks": 0,
+              "damage_per_second": 25,
+              "duration_ticks": 120,
+              "speed_per_tick": 23893,
+              "cleanse": false,
+              "targets": 7
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 35000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0A9",
+      "unit_rawcode": "h07B",
+      "kind": "orb-spell-proc",
+      "chance_per_10k": 2500,
+      "effect_ability_rawcode": "A0AA",
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A0A9",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A0AA",
+      "kind": "chain-lightning",
+      "initial_damage": 150,
+      "maximum_targets": 2,
+      "jump_radius_world": 400,
+      "damage_reduction_per_10k": 3000,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A0AA",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A00Z",
+      "unit_rawcode": "h00W",
+      "kind": "orb-spell-proc",
+      "chance_per_10k": 3000,
+      "effect_ability_rawcode": "A00L",
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A00Z",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A00L",
+      "kind": "chain-lightning",
+      "initial_damage": 230,
+      "maximum_targets": 7,
+      "jump_radius_world": 600,
+      "damage_reduction_per_10k": 2000,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A00L",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0AH",
+      "unit_rawcode": "h00W",
+      "kind": "spell-resistance",
+      "damage_taken_per_10k": 3000,
+      "provenance": {
+        "ability": "A0AH",
+        "source": "resolved/object-fields.tsv"
+      }
     }
   ]
 }

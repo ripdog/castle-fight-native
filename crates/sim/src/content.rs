@@ -775,7 +775,11 @@ impl CastleFightUnitKind {
         {
             passive_effects.push(PassiveUnitEffect::SplashFalloff(profile));
         }
-        passive_effects.extend(self.human_passive_effects_9_27());
+        for effect in self.human_passive_effects_9_27() {
+            if !passive_effects.contains(&effect) {
+                passive_effects.push(effect);
+            }
+        }
         definition.passive_effects = PassiveUnitEffects::from_slice(&passive_effects);
         let native_mana = mechanics.spellcasting.map(|profile| profile.mana);
         let native_additional = mechanics
@@ -1413,6 +1417,8 @@ impl CastleFightTowerDefinition {
                     hero: false,
                     summoned: false,
                     spell_immune: false,
+                    combat_sapper: false,
+                    invulnerable: false,
                 },
                 build_time_ticks: None,
                 repair_time_ticks: None,
@@ -1717,6 +1723,42 @@ fn stable_ability_id(
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A00W") => {
             0x4000_0032
         }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A08V") => {
+            0x4000_0033
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A08U") => {
+            0x4000_0034
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0A7") => {
+            0x4000_0035
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A0A8") => {
+            0x4000_0036
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A00X") => {
+            0x4000_0037
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A00Y") => {
+            0x4000_0038
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A010") => {
+            0x4000_0039
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0A9") => {
+            0x4000_003a
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A0AA") => {
+            0x4000_003b
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A00Z") => {
+            0x4000_003c
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A00L") => {
+            0x4000_003d
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A013") => {
+            0x4000_003e
+        }
         _ => return Err(CastleFightContentError::MissingStableAbilityId(source)),
     };
     Ok(CastleFightAbilityId(id))
@@ -1847,6 +1889,8 @@ fn hash_unit_definition(hash: &mut ContentHash64, definition: CastleFightUnitDef
     hash.write_u8(u8::from(definition.classifications.hero));
     hash.write_u8(u8::from(definition.classifications.summoned));
     hash.write_u8(u8::from(definition.classifications.spell_immune));
+    hash.write_u8(u8::from(definition.classifications.combat_sapper));
+    hash.write_u8(u8::from(definition.classifications.invulnerable));
     hash.write_i32(definition.collision_radius.0);
     match definition.corpse {
         Some(corpse) => {
@@ -2149,6 +2193,21 @@ fn hash_additional_ability_definitions(
     }
 }
 
+fn hash_native_bolt_profile(
+    hash: &mut ContentHash64,
+    profile: crate::components::NativeBoltProfile,
+) {
+    hash.write_u32(profile.ability.0);
+    hash.write_i32(profile.damage);
+    hash.write_u16(profile.stun_ticks);
+    hash.write_u16(profile.hero_stun_ticks);
+    hash.write_i32(profile.damage_per_second);
+    hash.write_u16(profile.duration_ticks);
+    hash.write_i32(profile.speed_per_tick);
+    hash.write_u8(u8::from(profile.cleanse));
+    hash.write_u8(profile.targets.bits());
+}
+
 fn hash_automatic_ability_profile(hash: &mut ContentHash64, ability: AutomaticAbilityProfile) {
     hash.write_u32(ability.id.0);
     hash.write_i32(ability.mana_cost);
@@ -2167,6 +2226,25 @@ fn hash_automatic_ability_profile(hash: &mut ContentHash64, ability: AutomaticAb
             hash.write_i32(i32::from(armor_reduction_per_100));
             hash.write_u16(duration_ticks);
             hash.write_u16(hero_duration_ticks);
+        }
+        AbilityEffect::PhoenixFire(profile) => hash_native_bolt_profile(hash, profile),
+        AbilityEffect::SolarStrike {
+            profile,
+            radius,
+            maximum_targets,
+        } => {
+            hash_native_bolt_profile(hash, profile);
+            hash.write_i32(radius);
+            hash.write_u8(maximum_targets);
+        }
+        AbilityEffect::HealingWave(profile) => {
+            hash.write_u32(profile.ability.0);
+            hash.write_i32(profile.healing);
+            hash.write_i32(profile.trigger_healing);
+            hash.write_u8(profile.maximum_targets);
+            hash.write_i32(profile.jump_radius);
+            hash.write_u16(profile.retention_per_10k);
+            hash.write_u16(profile.recovery_ticks);
         }
         AbilityEffect::Damage { amount } => hash.write_i32(amount),
         AbilityEffect::Stun { duration_ticks } => hash.write_u16(duration_ticks),
@@ -2744,6 +2822,8 @@ impl ExtractedContent927 {
                         .iter()
                         .any(|value| value.eq_ignore_ascii_case("summoned")),
                     spell_immune: false,
+                    combat_sapper: sapper,
+                    invulnerable: columns[23].split(',').any(|ability| ability == "Avul"),
                 },
                 sapper,
                 undead,

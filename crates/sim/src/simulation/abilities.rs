@@ -1,5 +1,11 @@
 use super::*;
 
+fn native_fire_buff_active(status: &StatusState, ability: AbilityId, tick: u64) -> bool {
+    status.damage_over_time[..usize::from(status.damage_over_time_count)]
+        .iter()
+        .any(|effect| effect.id.0 == ability.0 && tick < effect.expires_tick)
+}
+
 impl Simulation {
     pub(super) fn resolve_automatic_abilities(
         &mut self,
@@ -142,7 +148,8 @@ impl Simulation {
             };
             if source.health <= 0
                 || source.id != intent.source_id
-                || self.next_tick < source.stunned_until_tick
+                || (self.next_tick < source.stunned_until_tick
+                    && !matches!(intent.ability.effect, AbilityEffect::PhoenixFire(_)))
             {
                 continue;
             }
@@ -220,6 +227,15 @@ impl Simulation {
                                 .due_tick = due_tick;
                         }
                     }
+                    if let AbilityEffect::HealingWave(profile) = intent.ability.effect {
+                        units[index].status.stunned_until_tick = units[index]
+                            .status
+                            .stunned_until_tick
+                            .max(self.next_tick + u64::from(profile.recovery_ticks));
+                        units[index].target = None;
+                        units[index].direct_retaliation_lock = false;
+                        units[index].ally_defense_lock = false;
+                    }
                     if intent.ability.id == AbilityId(u32::from_be_bytes(*b"A00K")) {
                         let retreat_start = self
                             .next_tick
@@ -281,6 +297,7 @@ impl Simulation {
             let target_position = match intent.target {
                 AbilityIntentTarget::Unit { index, .. } => Some(units[index].position),
                 AbilityIntentTarget::Corpse { position, .. }
+                | AbilityIntentTarget::Building { position, .. }
                 | AbilityIntentTarget::Point { position } => Some(position),
                 AbilityIntentTarget::AllEnemyUnits | AbilityIntentTarget::AllFriendlyUnits => None,
             };
@@ -304,7 +321,75 @@ impl Simulation {
 
             match intent.target {
                 AbilityIntentTarget::Unit { index, .. } => {
-                    if let AbilityEffect::Prayer { radius, .. } = intent.ability.effect {
+                    if let AbilityEffect::SolarStrike {
+                        profile,
+                        radius,
+                        maximum_targets,
+                    } = intent.ability.effect
+                    {
+                        let center = units[index].position;
+                        let AbilitySourceOrigin::Unit(origin) = source.origin else {
+                            unreachable!("Solar Strike requires a unit caster")
+                        };
+                        let mut targets = units
+                            .iter()
+                            .filter(|target| {
+                                target.health > 0
+                                    && target.team != source.team
+                                    && target.movement_class == MovementClass::Air
+                                    && target.classifications.combat_sapper
+                                    && !target.classifications.invulnerable
+                                    && center.distance_sq(target.position) <= square_i32(radius)
+                            })
+                            .map(|target| (target.id, target.position))
+                            .collect::<Vec<_>>();
+                        targets.sort_unstable_by_key(|(id, _)| *id);
+                        for (target, position) in
+                            targets.into_iter().take(usize::from(maximum_targets))
+                        {
+                            self.launch_native_bolt(
+                                source.id,
+                                source.team,
+                                origin,
+                                target,
+                                position,
+                                profile,
+                            );
+                            metrics.effects += 1;
+                        }
+                    } else if let AbilityEffect::PhoenixFire(profile) = intent.ability.effect {
+                        let origin = match source.origin {
+                            AbilitySourceOrigin::Unit(position) => position,
+                            AbilitySourceOrigin::Building(footprint) => {
+                                footprint_center_point(footprint, self.config.navigation_cell_size)
+                            }
+                        };
+                        self.launch_native_bolt(
+                            source.id,
+                            source.team,
+                            origin,
+                            units[index].id,
+                            units[index].position,
+                            profile,
+                        );
+                        metrics.effects += 1;
+                    } else if let AbilityEffect::HealingWave(profile) = intent.ability.effect {
+                        let origin = match source.origin {
+                            AbilitySourceOrigin::Unit(position) => position,
+                            AbilitySourceOrigin::Building(footprint) => {
+                                footprint_center_point(footprint, self.config.navigation_cell_size)
+                            }
+                        };
+                        self.start_healing_wave(
+                            source.id,
+                            source.team,
+                            origin,
+                            index,
+                            profile,
+                            units,
+                        );
+                        metrics.effects += 1;
+                    } else if let AbilityEffect::Prayer { radius, .. } = intent.ability.effect {
                         let AbilitySourceOrigin::Unit(center) = source.origin else {
                             unreachable!("Prayer must originate from a unit")
                         };
@@ -369,6 +454,19 @@ impl Simulation {
                     ) {
                         metrics.effects += 1;
                     }
+                }
+                AbilityIntentTarget::Building { id, position } => {
+                    let AbilityEffect::PhoenixFire(profile) = intent.ability.effect else {
+                        unreachable!("building spell target requires a directed bolt")
+                    };
+                    let origin = match source.origin {
+                        AbilitySourceOrigin::Unit(position) => position,
+                        AbilitySourceOrigin::Building(footprint) => {
+                            footprint_center_point(footprint, self.config.navigation_cell_size)
+                        }
+                    };
+                    self.launch_native_bolt(source.id, source.team, origin, id, position, profile);
+                    metrics.effects += 1;
                 }
                 AbilityIntentTarget::AllEnemyUnits => {
                     for target in units.iter_mut() {
@@ -701,7 +799,10 @@ impl Simulation {
         let Some(spellcasting) = source.spellcasting else {
             return AbilityEvaluation::default();
         };
-        if source.health <= 0 || self.next_tick < source.stunned_until_tick {
+        if source.health <= 0
+            || (self.next_tick < source.stunned_until_tick
+                && !matches!(spellcasting.ability.effect, AbilityEffect::PhoenixFire(_)))
+        {
             return AbilityEvaluation::default();
         }
         let Some(state) = source.ability_state else {
@@ -733,6 +834,14 @@ impl Simulation {
                     id: units[index].id,
                 })
             }
+            AbilityTargetPolicy::FlyingEnemyUnit
+            | AbilityTargetPolicy::RandomEnemyUnitOrBuilding => self.native_bolt_target(
+                source,
+                spellcasting.ability,
+                state.cast_sequence,
+                units,
+                &mut candidate_checks,
+            ),
             AbilityTargetPolicy::NearestEnemyInCombat => self
                 .nearest_enemy_in_combat(source, spellcasting.ability, units, &mut candidate_checks)
                 .map(|index| AbilityIntentTarget::Unit {
@@ -929,6 +1038,108 @@ impl Simulation {
         best.map(|(_, _, unit_index)| unit_index)
     }
 
+    fn native_bolt_target(
+        &self,
+        source: AbilitySourceSnapshot,
+        ability: AutomaticAbilityProfile,
+        sequence: u64,
+        units: &[UnitSnapshot],
+        checks: &mut usize,
+    ) -> Option<AbilityIntentTarget> {
+        let mut best = None;
+        for (index, target) in units.iter().enumerate() {
+            *checks += 1;
+            if target.health <= 0
+                || target.team == source.team
+                || target.classifications.invulnerable
+                || target.classifications.spell_immune
+                || (ability.target_policy == AbilityTargetPolicy::FlyingEnemyUnit
+                    && (target.movement_class != MovementClass::Air
+                        || !target.classifications.combat_sapper
+                        || target.classifications.hero))
+                || self.ability_source_distance_sq(source.origin, target.position)
+                    > square_i32(ability.range)
+            {
+                continue;
+            }
+            if let AbilityEffect::PhoenixFire(profile) = ability.effect
+                && (!profile.targets.can_target_unit(target.movement_class)
+                    || native_fire_buff_active(&target.status, profile.ability, self.next_tick))
+            {
+                continue;
+            }
+            let rank = deterministic_ability_target_rank(
+                self.config.match_seed,
+                source.id,
+                ability.id,
+                sequence,
+                target.id,
+            );
+            let candidate = (
+                rank,
+                target.id,
+                AbilityIntentTarget::Unit {
+                    index,
+                    id: target.id,
+                },
+            );
+            if best
+                .as_ref()
+                .is_none_or(|&(rank, id, _)| (candidate.0, candidate.1) < (rank, id))
+            {
+                best = Some(candidate);
+            }
+        }
+        if let AbilityEffect::PhoenixFire(profile) = ability.effect
+            && profile.targets.can_target_buildings()
+        {
+            for entity in self.world.iter_entities() {
+                let (Some(id), Some(team), Some(health), Some(footprint)) = (
+                    entity.get::<SimId>(),
+                    entity.get::<Team>(),
+                    entity.get::<Health>(),
+                    entity.get::<BuildingFootprint>(),
+                ) else {
+                    continue;
+                };
+                *checks += 1;
+                let position = footprint_center_point(*footprint, self.config.navigation_cell_size);
+                if health.current <= 0
+                    || entity.get::<StatusState>().is_some_and(|status| {
+                        native_fire_buff_active(status, profile.ability, self.next_tick)
+                    })
+                    || entity
+                        .get::<UnitClassifications>()
+                        .is_some_and(|flags| flags.spell_immune || flags.invulnerable)
+                    || *team == source.team
+                    || self.ability_source_distance_sq(source.origin, position)
+                        > square_i32(ability.range)
+                {
+                    continue;
+                }
+                let rank = deterministic_ability_target_rank(
+                    self.config.match_seed,
+                    source.id,
+                    ability.id,
+                    sequence,
+                    *id,
+                );
+                let candidate = (
+                    rank,
+                    *id,
+                    AbilityIntentTarget::Building { id: *id, position },
+                );
+                if best
+                    .as_ref()
+                    .is_none_or(|&(rank, id, _)| (candidate.0, candidate.1) < (rank, id))
+                {
+                    best = Some(candidate);
+                }
+            }
+        }
+        best.map(|(_, _, target)| target)
+    }
+
     fn enemy_is_in_combat(&self, candidate: &UnitSnapshot, units: &[UnitSnapshot]) -> bool {
         candidate
             .target
@@ -1114,6 +1325,34 @@ impl Simulation {
                 target.id == id
                     && target.health > 0
                     && match ability.target_policy {
+                        AbilityTargetPolicy::FlyingEnemyUnit
+                        | AbilityTargetPolicy::RandomEnemyUnitOrBuilding => {
+                            target.team != source.team
+                                && !target.classifications.invulnerable
+                                && !target.classifications.spell_immune
+                                && (ability.target_policy != AbilityTargetPolicy::FlyingEnemyUnit
+                                    || (target.movement_class == MovementClass::Air
+                                        && target.classifications.combat_sapper
+                                        && !target.classifications.hero))
+                                && self.ability_source_distance_sq(source.origin, target.position)
+                                    <= square_i32(ability.range)
+                                && match ability.effect {
+                                    AbilityEffect::PhoenixFire(profile) => {
+                                        profile.targets.can_target_unit(target.movement_class)
+                                            && !target.status.damage_over_time[..usize::from(
+                                                target.status.damage_over_time_count,
+                                            )]
+                                                .iter()
+                                                .any(
+                                                    |effect| {
+                                                        effect.id.0 == profile.ability.0
+                                                            && self.next_tick < effect.expires_tick
+                                                    },
+                                                )
+                                    }
+                                    _ => true,
+                                }
+                        }
                         AbilityTargetPolicy::RandomEnemyUnit => {
                             target.team != source.team
                                 && self.ability_source_distance_sq(source.origin, target.position)
@@ -1161,6 +1400,26 @@ impl Simulation {
                                     <= square_i32(ability.range)
                         }
                     }
+            }
+            AbilityIntentTarget::Building { id, position } => {
+                ability.target_policy == AbilityTargetPolicy::RandomEnemyUnitOrBuilding
+                    && self.ability_source_distance_sq(source.origin, position)
+                        <= square_i32(ability.range)
+                    && self.world.iter_entities().any(|entity| {
+                        entity.get::<SimId>() == Some(&id)
+                            && !entity.get::<StatusState>().is_some_and(|status| {
+                                native_fire_buff_active(status, ability.id, self.next_tick)
+                            })
+                            && !entity
+                                .get::<UnitClassifications>()
+                                .is_some_and(|flags| flags.spell_immune || flags.invulnerable)
+                            && entity
+                                .get::<Team>()
+                                .is_some_and(|team| *team != source.team)
+                            && entity
+                                .get::<Health>()
+                                .is_some_and(|health| health.current > 0)
+                    })
             }
             AbilityIntentTarget::AllEnemyUnits => {
                 ability.target_policy == AbilityTargetPolicy::AllEnemyUnits

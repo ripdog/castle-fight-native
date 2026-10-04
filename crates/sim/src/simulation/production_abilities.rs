@@ -121,6 +121,7 @@ fn unspawned_production_definitions_survive_wire_restore_and_initialize_every_ch
         hero: true,
         summoned: true,
         spell_immune: true,
+        ..UnitClassifications::default()
     };
     let mut first = simulation(1);
     first.spawn_building_with_properties(spawn, properties);

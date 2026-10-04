@@ -3076,7 +3076,10 @@ fn prewarm_timed_wc3_effects(
                             duration_ticks,
                             ..
                         } => Some((modifier.0, duration_ticks)),
-                        AbilityEffect::Damage { .. }
+                        AbilityEffect::HealingWave(_)
+                        | AbilityEffect::SolarStrike { .. }
+                        | AbilityEffect::PhoenixFire(_)
+                        | AbilityEffect::Damage { .. }
                         | AbilityEffect::Stun { .. }
                         | AbilityEffect::AreaDamage { .. }
                         | AbilityEffect::Purification { .. }
@@ -6609,6 +6612,7 @@ mod tests {
     #[test]
     fn guaranteed_projectile_points_along_travel_direction() {
         let projectile = ProjectileView {
+            ability: None,
             id: SimId(1),
             source: SimId(2),
             launch_position: SimPoint::new(0, 0),
@@ -6639,6 +6643,7 @@ mod tests {
     #[test]
     fn ballistic_projectile_follows_and_pitches_with_arc() {
         let projectile = ProjectileView {
+            ability: None,
             id: SimId(1),
             source: SimId(2),
             launch_position: SimPoint::new(0, 0),

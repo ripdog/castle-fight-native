@@ -60,6 +60,8 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
 
     kind = recipe["kind"]
     effect: dict[str, Any] = dict(recipe)
+    if kind in {"healing-wave", "solar-strike", "phoenix-fire"}:
+        return project_elven_automatic(recipe, fields, unit, protected, mechanics)
     if kind == "evasion":
         effect["chance_per_10k"] = number("DataA1", 10_000)
     elif kind == "spell-resistance":
@@ -142,6 +144,77 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     return effect
 
 
+def project_elven_automatic(recipe: dict[str, str], fields: dict[str, str], unit: dict[str, str] | None,
+                            protected: dict[str, str], mechanics: dict[str, Any]) -> dict[str, Any]:
+    if unit is None:
+        raise ValueError("native automatic spell needs a retained mana source")
+    source = recipe["source_key"]
+    effect_key = mechanics.get("effect_key", source)
+    effect_fields = mechanics.get("effect_fields", fields)
+    def field(name: str, scale: int = 1) -> int:
+        return scaled(effect_fields[name.lower()], scale)
+    def fourcc(value: str) -> int:
+        return int.from_bytes(value.encode("ascii"), "big")
+    def ticks(value: str | int | float) -> int:
+        # Native deadlines use ceiling to the first observable simulation tick.
+        value = Decimal(str(value)) * 30
+        return int(value.to_integral_value(rounding="ROUND_CEILING"))
+    rate = scaled(unit["mana_regen"] if unit["mana_regen"].strip() not in {"-", "", "_"} else 0, 10_000)
+    def mana(name: str) -> int:
+        value = unit[name].strip()
+        return 0 if value in {"-", "", "_"} else scaled(value)
+    # Wire-compatible ManaProfile::per_second encoding (bit 31 distinguishes the
+    # rate unit). Keep the source rate exact; dividing by Hz would lose 1/s and 3.5/s.
+    if not 0 <= rate <= 10_000_000:
+        raise ValueError("native mana regeneration is outside the validated per-second range")
+    mana_profile = {"maximum": mana("mana_max"), "starting": mana("mana_start"), "regen_per_tick_per_10k": (1 << 31) | rate}
+    kind = recipe["kind"]
+    if effect_key != source or recipe["source_kind"] == "ability-effect":
+        child_protected = mechanics.get("effect_protected", protected)
+        if scaled(child_protected.get("mana_cost", effect_fields.get("cost1", 0))) != 0 or Decimal(child_protected.get("cooldown", effect_fields.get("cool1", 0))) != 0:
+            raise ValueError("automatic proxy requires independent resource state for a non-free child")
+    if kind == "healing-wave":
+        delay = json.loads(mechanics["mechanics_row"]["scheduled_delays_json"])
+        if len(delay) != 1:
+            raise ValueError("Healing Wave recovery needs one resolved script deadline")
+        effect = {"HealingWave": {"ability": fourcc(effect_key), "healing": field("DataA1"),
+            "trigger_healing": 0 if recipe["source_kind"] == "ability-effect" else scaled(fields["dataa1"]),
+            "maximum_targets": field("DataB1"), "jump_radius": field("Area1", 1024),
+            "retention_per_10k": 10_000 - field("DataC1", 10_000), "recovery_ticks": ticks(delay[0])}}
+        policy = "WoundedFriendlyUnit"
+    else:
+        tokens = set(effect_fields["targs1"].split(","))
+        mask = (1 if "ground" in tokens else 0) | (2 if "air" in tokens else 0) | (4 if "structure" in tokens else 0)
+        bolt = {"ability": fourcc(effect_key), "damage": field("DataA1"),
+            "stun_ticks": ticks(effect_fields["dur1"]) if kind == "solar-strike" else 0,
+            "hero_stun_ticks": ticks(effect_fields["herodur1"]) if kind == "solar-strike" else 0,
+            "damage_per_second": field("DataB1") if kind == "phoenix-fire" else 0,
+            "duration_ticks": ticks(effect_fields["dur1"]),
+            # World motion uses integer subunits/tick, like ordinary imported missiles.
+            "speed_per_tick": int(Decimal(effect_fields["missilespeed"]) * 1024 / 30),
+            "cleanse": False, "targets": mask}
+        if kind == "solar-strike":
+            parameters = json.loads(mechanics["semantics_row"]["parameters_json"])
+            effect = {"SolarStrike": {"profile": bolt, "radius": scaled(parameters["search_radius"], 1024),
+                "maximum_targets": parameters["max_targets"]}}
+            policy = "FlyingEnemyUnit"
+        else:
+            effect = {"PhoenixFire": bolt}
+            policy = "RandomEnemyUnitOrBuilding"
+    child = recipe["source_kind"] == "ability-effect"
+    profile = {"mana": mana_profile, "ability": {"id": fourcc(source),
+        "mana_cost": 0 if child else scaled(protected.get("mana_cost", fields.get("cost1", 0))),
+        "cooldown_ticks": 0 if child else ticks(protected.get("cooldown", fields.get("cool1", 0))),
+        "range": 0 if child else scaled(fields["area1"] if kind == "phoenix-fire" else fields["rng1"], 1024),
+        "target_policy": policy, "effect": effect}}
+    return {"kind": "elven-automatic", "source_kind": recipe["source_kind"], "source_key": source,
+        "unit_rawcode": recipe["unit_rawcode"], "spellcasting": profile,
+        "mana_regen_per_second_per_10k": rate,
+        "effect_ability_rawcode": effect_key if effect_key != source else None,
+        "provenance": {"source": "resolved/object-fields.tsv", "unit": "resolved/units.tsv",
+            "protected": "resolved/protected-ability-fields.tsv", "script": "resolved/unit-spell-mechanics.tsv"}}
+
+
 def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, Any]) -> dict[str, Any]:
     if recipes["schema_version"] != 1:
         raise ValueError("unsupported native recipe schema")
@@ -151,7 +224,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
 
     abilities: dict[str, dict[str, str]] = {}
     for row in rows(retained("resolved/object-fields.tsv")):
-        if row["category"] == "abilities" and row["level"] == "1":
+        if row["category"] == "abilities" and row["level"] in {"0", "1"}:
             field = row["source_field"].lower()
             if field:
                 abilities.setdefault(row["rawcode"], {})[field] = scalar(row["recovered_value_json"])
@@ -165,6 +238,8 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "automatic-defend-state-maintenance"
     }
+    spell_mechanics = {row["ability_rawcode"]: row for row in rows(retained("resolved/unit-spell-mechanics.tsv"))}
+    spell_semantics = {row["ability_rawcode"]: row for row in rows(retained("resolved/unit-spell-semantics.tsv"))}
     effects = []
     seen = set()
     for recipe in recipes["effects"]:
@@ -181,9 +256,18 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         if recipe["source_kind"] == "unit-ability":
             if unit is None or recipe["source_key"] not in unit["abilities"].split(","):
                 raise ValueError(f"recipe {key} is not in its source unit's extracted ability inventory")
-        effects.append(project_effect(recipe, abilities[recipe["source_key"]], unit,
-                                      protected.get(recipe["source_key"], {}),
-                                      mechanics.get(recipe.get("unit_rawcode", ""), {})))
+        source = recipe["source_key"]
+        spell = spell_mechanics.get(source)
+        if spell is None and recipe["kind"] in {"healing-wave", "solar-strike"}:
+            spell = next((row for row in spell_mechanics.values() if source in row["direct_map_rawcodes"].split(",")
+                or source in row["reachable_map_objects_json"]), None)
+        detail = dict(mechanics.get(recipe.get("unit_rawcode", ""), {}))
+        if spell is not None:
+            semantics = spell_semantics[spell["ability_rawcode"]]
+            effect_key = semantics["effect_rawcodes"].split(",")[0]
+            detail.update(effect_key=effect_key, effect_fields=abilities[effect_key],
+                effect_protected=protected.get(effect_key, {}), mechanics_row=spell, semantics_row=semantics)
+        effects.append(project_effect(recipe, abilities[source], unit, protected.get(source, {}), detail))
     return {"schema_version": 2, "map_version": release["map_version"], "effects": effects}
 
 
