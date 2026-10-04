@@ -3965,6 +3965,7 @@ fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option
     }
     if let Some(projectile) = entity.get::<LineProjectile>() {
         return Some(ProjectileView {
+            ability: None,
             id,
             source: projectile.source,
             launch_position: projectile.launch_position,

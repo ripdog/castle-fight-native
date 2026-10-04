@@ -1158,11 +1158,16 @@ mod tests {
         }
         resolved.direct_buildings =
             participant_direct_buildings(resolved.content, &resolved.match_config.participants);
+        let mut restored = create_resolved_castle_fight_match(resolved.clone(), 4)
+            .unwrap()
+            .simulation;
         let game = create_resolved_castle_fight_match(resolved, 1).unwrap();
+        // The immutable simulation inputs/content are shared. Source-owned builder rosters
+        // are canonical entity state, so their initial gameplay checksum must differ.
         assert_ne!(
-            game.simulation.capture_snapshot().configuration_identity(),
-            human.simulation.capture_snapshot().configuration_identity(),
-            "network configuration identity must distinguish source-owned race rosters"
+            game.simulation.checksum(),
+            human.simulation.checksum(),
+            "initial authoritative state must distinguish source-owned race rosters"
         );
         let snapshot = game.simulation.capture_snapshot();
         let encoded = snapshot.encode_wire().unwrap();
@@ -1171,7 +1176,6 @@ mod tests {
             decoded.configuration_identity(),
             snapshot.configuration_identity()
         );
-        let mut restored = crate::Simulation::new(game.simulation_config.clone(), 4);
         restored.restore_snapshot(&decoded).unwrap();
         assert_eq!(restored.checksum(), game.simulation.checksum());
         for participant in &game.match_config.participants {
