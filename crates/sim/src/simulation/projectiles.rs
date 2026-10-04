@@ -55,6 +55,7 @@ pub(super) struct ProjectileWorldChanges {
     )>,
     pub(super) chain_lightning_launches: Vec<ChainLightningState>,
     pub(super) projectile_launches: Vec<ProjectileLaunch>,
+    pub(super) line_projectile_launches: Vec<LineProjectile>,
     pub(super) reflected_projectile_launches: Vec<ReflectedProjectileLaunch>,
     pub(super) ballistic_projectile_launches: Vec<BallisticProjectileLaunch>,
     pub(super) bounce_projectile_launches: Vec<BounceProjectileLaunch>,
@@ -708,6 +709,7 @@ impl Simulation {
             burning_oil_zone_launches,
             chain_lightning_launches,
             projectile_launches,
+            line_projectile_launches,
             reflected_projectile_launches,
             ballistic_projectile_launches,
             bounce_projectile_launches,
@@ -809,6 +811,10 @@ impl Simulation {
                     impact_tick: launch.impact_tick,
                 },
             ));
+        }
+        for launch in line_projectile_launches {
+            let id = self.allocate_id();
+            self.world.spawn((id, launch));
         }
         for launch in bounce_projectile_launches {
             let id = self.allocate_id();

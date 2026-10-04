@@ -571,6 +571,43 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u64(projectile.projectile.launch_tick);
                 hash.write_u64(projectile.projectile.impact_tick);
             }
+            CanonicalEntity::LineProjectile(projectile) => {
+                hash.write_u8(10);
+                hash.write_u64(projectile.id.0);
+                let p = &projectile.projectile;
+                hash.write_u64(p.source.0);
+                match p.source_rawcode {
+                    Some(rawcode) => {
+                        hash.write_u8(1);
+                        hash.write_u32(rawcode);
+                    }
+                    None => hash.write_u8(0),
+                }
+                hash.write_u8(p.source_team.0);
+                hash.write_u64(p.target.0);
+                hash.write_i32(p.damage);
+                hash.write_u8(p.damage_type.stable_tag());
+                hash_attack_delivery(&mut hash, p.delivery);
+                hash.write_i32(p.launch_position.x);
+                hash.write_i32(p.launch_position.y);
+                hash.write_u64(p.launch_tick);
+                hash.write_u64(p.primary_impact_tick);
+                hash.write_u64(p.impact_tick);
+                match p.spill_origin {
+                    Some(origin) => {
+                        hash.write_u8(1);
+                        hash.write_i32(origin.x);
+                        hash.write_i32(origin.y);
+                    }
+                    None => hash.write_u8(0),
+                }
+                hash.write_i32(p.destination.x);
+                hash.write_i32(p.destination.y);
+                hash.write_u64(p.hit_targets.len() as u64);
+                for target in &p.hit_targets {
+                    hash.write_u64(target.0);
+                }
+            }
             CanonicalEntity::BallisticProjectile(projectile) => {
                 hash.write_u8(4);
                 hash.write_u64(projectile.id.0);
@@ -755,6 +792,7 @@ pub(super) enum CanonicalEntity {
     BurningOil(CanonicalBurningOil),
     ChainLightning(CanonicalChainLightning),
     Builder(CanonicalBuilder),
+    LineProjectile(CanonicalLineProjectile),
 }
 
 impl CanonicalEntity {
@@ -770,8 +808,15 @@ impl CanonicalEntity {
             Self::BurningOil(zone) => zone.id,
             Self::ChainLightning(chain) => chain.id,
             Self::Builder(builder) => builder.id,
+            Self::LineProjectile(projectile) => projectile.id,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(super) struct CanonicalLineProjectile {
+    pub(super) id: SimId,
+    pub(super) projectile: LineProjectile,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1661,6 +1706,21 @@ fn hash_attack_delivery(hash: &mut Fnv64, delivery: AttackDelivery) {
         } => {
             hash.write_i32(speed_per_tick);
             hash.write_i32(impact_radius);
+        }
+        AttackDelivery::Line {
+            speed_per_tick,
+            minimum_range,
+            spill_distance,
+            spill_radius,
+            damage_retention_per_10k,
+            spill_targets,
+        } => {
+            hash.write_i32(speed_per_tick);
+            hash.write_i32(minimum_range);
+            hash.write_i32(spill_distance);
+            hash.write_i32(spill_radius);
+            hash.write_u16(damage_retention_per_10k);
+            hash.write_u8(spill_targets.bits());
         }
         AttackDelivery::Bounce {
             speed_per_tick,

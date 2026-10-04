@@ -14,6 +14,20 @@ SPEC.loader.exec_module(MODULE)
 
 
 class RuntimeCatalogTest(unittest.TestCase):
+    def test_line_projection_rejects_lossy_world_distances(self) -> None:
+        for value in ("0", "37", "100.0"):
+            self.assertEqual(MODULE._line_world_integer(value), int(float(value)))
+        for value in ("1.25", "-1", "NaN", "Infinity"):
+            with self.assertRaises(SystemExit):
+                MODULE._line_world_integer(value)
+
+    def test_line_projection_retains_damage_loss_without_binary_float_rounding(self) -> None:
+        for loss, retained in (("0", 10000), ("0.125", 8750), ("0.9999", 1), ("1", 0)):
+            self.assertEqual(MODULE._line_damage_retention(loss), retained)
+        for loss in ("0.00001", "-0.1", "1.1", "NaN", "Infinity"):
+            with self.assertRaises(SystemExit):
+                MODULE._line_damage_retention(loss)
+
     def test_catalog_text_hashing_normalizes_crlf(self) -> None:
         self.assertEqual(
             MODULE._canonical_text_bytes(b"a\r\nb\r\n"),

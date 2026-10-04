@@ -52,6 +52,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
     Blademaster = 0x1000_0011 => b"n006",
     ElderBlademaster = 0x1000_0012 => b"n00Y",
     Bloodthirster = 0x1000_0013 => b"h00U",
+    Ballista = 0x1000_0014 => b"e005",
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
@@ -74,6 +75,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
     HallOfHonor = 0x2000_0011 => b"h00T",
     HallOfTheEldest = 0x2000_0012 => b"h03F",
     BloodelfWarAcademy = 0x2000_0013 => b"h00V",
+    HighelfSiegeFactory = 0x2000_0014 => b"h070",
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;

@@ -4755,7 +4755,8 @@ mod tests {
             ProjectileViewKind::Ballistic { destination, .. } => destination,
             ProjectileViewKind::GuaranteedHit { .. }
             | ProjectileViewKind::Reflected { .. }
-            | ProjectileViewKind::Bounce { .. } => {
+            | ProjectileViewKind::Bounce { .. }
+            | ProjectileViewKind::Line { .. } => {
                 panic!("expected ballistic projectile")
             }
         };

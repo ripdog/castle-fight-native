@@ -781,7 +781,11 @@ impl Simulation {
         let Some((attack, _, _)) = source.attack_for_unit(target.movement_class) else {
             return false;
         };
-        let in_attack_range = distance_sq <= attack.range_sq();
+        let in_attack_range = attack.in_range(distance_sq);
+        if matches!(attack.delivery, AttackDelivery::Line { minimum_range, .. } if distance_sq < square_i32(minimum_range))
+        {
+            return false;
+        }
         if source.movement_class == MovementClass::Air {
             return in_attack_range || source.movement.speed_per_tick > 0;
         }
@@ -813,7 +817,8 @@ impl Simulation {
             AttackDelivery::RangedInstant
             | AttackDelivery::RangedGuaranteedHit { .. }
             | AttackDelivery::RangedBallistic { .. }
-            | AttackDelivery::Bounce { .. } => {
+            | AttackDelivery::Bounce { .. }
+            | AttackDelivery::Line { .. } => {
                 in_attack_range
                     || (source.movement.speed_per_tick > 0
                         && self.topology.same_component(
@@ -841,7 +846,11 @@ impl Simulation {
         let Some((attack, _, _)) = source.attack_for_building() else {
             return false;
         };
-        let in_attack_range = distance_sq <= attack.range_sq();
+        let in_attack_range = attack.in_range(distance_sq);
+        if matches!(attack.delivery, AttackDelivery::Line { minimum_range, .. } if distance_sq < square_i32(minimum_range))
+        {
+            return false;
+        }
         if source.movement_class == MovementClass::Air {
             return in_attack_range || source.movement.speed_per_tick > 0;
         }
@@ -851,6 +860,7 @@ impl Simulation {
                 | AttackDelivery::RangedGuaranteedHit { .. }
                 | AttackDelivery::RangedBallistic { .. }
                 | AttackDelivery::Bounce { .. }
+                | AttackDelivery::Line { .. }
         ) && in_attack_range
         {
             return true;
