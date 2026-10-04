@@ -1501,7 +1501,8 @@ mod tests {
         let after_cast = sim.unit(caster).unwrap();
         assert_eq!(after_cast.status.ability_retreat_start_tick, 9);
         assert_eq!(after_cast.status.ability_retreat_end_tick, 159);
-        assert_eq!(after_cast.stunned_until_tick, 357);
+        assert_eq!(after_cast.stunned_until_tick, 0);
+        assert_eq!(after_cast.status.order_recovery_until_tick, 357);
         assert_eq!(after_cast.ability_ready_tick, Some(360));
         assert_eq!(after_cast.target, None);
 

@@ -65,6 +65,8 @@ fn status(sim: &mut Simulation, id: SimId) {
         },
     );
     apply_timed_movement_modifier(&mut s, ModifierId(901), -20, tick + 1000);
+    s.stunned_until_tick = tick + 1000;
+    s.order_recovery_until_tick = tick + 50;
     s.ability_retreat_start_tick = tick + 20;
     s.ability_retreat_end_tick = tick + 30;
 }

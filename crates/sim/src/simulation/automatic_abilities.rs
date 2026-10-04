@@ -107,9 +107,11 @@ impl Simulation {
         units: &[UnitSnapshot],
     ) -> Vec<AbilitySourceSnapshot> {
         let mut result = Vec::new();
-        for (index, unit) in units.iter().enumerate().filter(|(_, unit)| {
-            unit.spellcasting.is_some() && !unit.abilities_disabled && !unit.orders_suspended
-        }) {
+        for (index, unit) in units
+            .iter()
+            .enumerate()
+            .filter(|(_, unit)| unit.spellcasting.is_some() && !unit.abilities_disabled)
+        {
             self.append_additional_ability_sources(
                 &mut result,
                 unit.entity,
@@ -124,6 +126,7 @@ impl Simulation {
                     mana_current: unit.mana_current,
                     ability_state: unit.ability_state,
                 },
+                unit.orders_suspended,
             );
         }
         for (index, building) in buildings
@@ -147,6 +150,7 @@ impl Simulation {
                     mana_current: building.mana_current,
                     ability_state: building.ability_state,
                 },
+                false,
             );
         }
         result
@@ -157,6 +161,7 @@ impl Simulation {
         result: &mut Vec<AbilitySourceSnapshot>,
         entity: Entity,
         source: AbilitySourceSnapshot,
+        orders_suspended: bool,
     ) {
         let Some(set) = self
             .world
@@ -169,6 +174,9 @@ impl Simulation {
             .spellcasting
             .expect("additional ability source needs a mana profile");
         for entry in set.iter() {
+            if orders_suspended && !entry.profile.effect.ignores_order_interruptions() {
+                continue;
+            }
             result.push(AbilitySourceSnapshot {
                 spellcasting: Some(SpellcastingProfile {
                     mana: primary.mana,

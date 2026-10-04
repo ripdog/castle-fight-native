@@ -1055,6 +1055,12 @@ pub enum AbilityEffect {
 }
 
 impl AbilityEffect {
+    /// Autonomous native firing does not issue an interruptible caster order.
+    /// Ability disable (for example a morph) still suppresses it.
+    pub(crate) const fn ignores_order_interruptions(self) -> bool {
+        matches!(self, Self::PhoenixFire(_))
+    }
+
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
@@ -1186,6 +1192,8 @@ pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusState {
     pub stunned_until_tick: u64,
+    /// Independent script/order recovery, not a removable native stun buff.
+    pub order_recovery_until_tick: u64,
     pub ability_retreat_start_tick: u64,
     pub ability_retreat_end_tick: u64,
     pub secondary_resurrection_due_tick: u64,

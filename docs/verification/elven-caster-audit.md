@@ -56,7 +56,7 @@ was introduced. Production and direct spawning share resolved definitions.
 The source `sapper` flag is now available as authoritative `combat_sapper`, and
 `Avul` is represented separately from spell immunity. Synthetic entities must
 explicitly opt into the sapper class; not every flying entity is a combat sapper.
-The Shrine worker also introduces `combat_sapper`: retain one shared field on merge.
+The integrated Shrine/caster content shares one authoritative classification field; runtime mask consumers still require the negative-case audit below.
 
 ### Dragonhawk Rider
 
@@ -147,8 +147,9 @@ nearest-unvisited rule is distinct from Healing Wave's least-HP rule.
 profiles, native target history and healing falloff, original launch identity,
 current homing position/tick and live projected arrival. Native DOT final-pulse
 policy and new intrinsic classifications are also canonical/snapshotted.
-Checksum schema is 15 and snapshot schema is 12 in this worktree; the coordinator
-must reconcile all workers' tags/schema additions before publishing content.
+The integrated compatibility constants are bundle schema 5, checksum schema 17,
+snapshot schema 14. Independent post-cast order recovery is canonical status,
+not removable native stun. Final content/release/source publication remains open.
 
 Presentation transport includes child ability IDs on staged healing-lightning
 events, ability IDs on native projectile views, and successful native impact
@@ -156,31 +157,31 @@ casts for both units and structures. No generic model/rawcode placeholder is
 encoded by the simulation. Actual child missile, caster/target/buff and lightning
 art comes from the frontend worker's retained visual projection.
 
-## Cross-worker integration gates (not claimed complete here)
+## Integrated contracts and remaining promotion gates
 
-1. **City Hex disables Phoenix Fire:** after merging City, check its authoritative
-   `BuildingSpellControl.hex` for the source entity before both ability evaluation
-   and intent commitment. This is a separate gate from stun/order suspension;
-   do not restore the old stun guard for Phoenix Fire. Add a shared synthetic
-   Hex + independent-passive test. The City Hex types do not exist in this isolated
-   branch, so no fabricated shadow copy was added.
-2. **Mana API consolidation:** generated profiles now encode exact per-second
-   rates using bit 31, compatible with City's `ManaProfile::per_second` API.
-   The small `native_mana_increment` bridge makes this branch exact and runnable
-   without copying City files. On integration replace the profile-rate increment
-   call with `profile.mana.regeneration_at_tick(self.next_tick, hz)` and delete the
-   bridge; preserve its arbitrary-phase/snapshot regression coverage. In
-   `build_spellcasting(ElvenAutomatic)`, use `ManaProfile::per_second(maximum,
-   starting, *mana_regen_per_second_per_10k)` after verifying the generated profile.
-   Untagged legacy rates remain per-tick. Generator rejects negative/out-of-range
-   source rates and non-free child resources.
-3. **Frontend projectile API:** replace source-unit-only projectile selection with
-   `wc3_visuals.projectile_for(projectile.ability.map(|id| id.0),
-   projectile_source_rawcode(projectile, &samples))`. Parent cast visuals and native
-   impact visuals must be distinguished, Healing Wave children must be recognized
-   by the lightning renderer, and `A010` native buff visuals must consume DOT status
-   for units **and structures**. The frontend worker owns these APIs/art; this
-   branch adds only required exhaustive-match/test-constructor compatibility.
+1. **Interruption and native firing — integrated:** primary and additional
+   Phoenix Fire slots ignore ordinary stun, independent cast recovery, and script
+   order suspension at evaluation and commitment. Both still honor the projected
+   Hex ability-disable flag. An earlier same-tick Hex cancels an evaluated passive
+   intent without consuming resources or sequences; a committed missile survives
+   source disable. Healing Wave and the existing Warlock retreat/sleep use a
+   separate order-recovery deadline. Native cleansing clears native stun but
+   preserves that deadline, script callbacks and other independent controls.
+   Four reusable mixed-feature recovery tests, three cleanse regressions and the
+   existing retreat regression passed; all 378 integrated simulation tests,
+   strict all-target simulation Clippy and client all-target checking also passed
+   (`casting-recovery-{focused2,cleanse,warlock,sim,clippy,client}.log`). This is
+   synthetic continuation evidence, not native-executable conformance.
+2. **Mana API consolidation — integrated:** generated profiles use
+   `ManaProfile::per_second` and `regeneration_at_tick`; the temporary
+   `native_mana_increment` bridge is removed. Untagged legacy rates remain
+   per-tick. Arbitrary-phase/snapshot regressions remain, and the generator
+   rejects negative/out-of-range rates and non-free child resources.
+3. **Frontend transport — integrated, rendered fidelity open:** projectile
+   selection calls `wc3_visuals.projectile_for(source_rawcode, ability_rawcode)`
+   with independent child identity rather than weapon fallback. Parent/impact
+   visuals, Healing Wave lightning endpoints, and unit/structure native buff
+   visuals still need the final asset-loading/attachment and rendered review.
 4. **Sub-tick Parasite carrier corner:** the parent's retained Parasite buff has a
    sub-tick lifetime and an inherited `nfbr` death summon. Native proxy missiles
    cannot normally hit during that window, but same-native-frame unrelated death
@@ -201,7 +202,8 @@ art comes from the frontend worker's retained visual projection.
 - ground-only healing triggers and air/self secondary targets; organic/team/life
   negative cases; independent trigger healing and bounce falloff;
 - lowest-current-HP selection and cumulative quarter-second deadlines;
-- independent passive shooting during disable; ground/air/structure delivery;
+- independent passive shooting during ordinary stun/recovery, but not Hex ability
+  disable; primary/additional evaluation and same-tick commitment; ground/air/structure delivery;
 - native buff exclusion, all DOT pulses including the expiry boundary;
 - homing target movement, target disappearance and impact immunity;
 - save/restore during healing, native flight, unit/structure DOT and mana remainder,

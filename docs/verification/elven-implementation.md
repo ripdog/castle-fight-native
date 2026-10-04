@@ -37,8 +37,17 @@ identity and `docs/original_map/extracted/` for its working evidence alias:
 | `h014` | Native multishot semantics; reconcile object/script/tooltip discrepancy |
 | `h059` | Delayed one-time revival, classifications and death-generation checks |
 
-See [melee/autocast fixture audit](elven-melee-autocast.md) for source traces,
-reusable verification and explicit remaining gates on these two fixtures.
+See the [melee/autocast](elven-melee-autocast.md), [caster](elven-caster-audit.md),
+[City](city-of-magic-9.27-r1.md), and [tower](elven-towers.md) audits for source
+traces, reusable verification and explicit remaining gates.
+
+Integrated recovery/cleansing checks now separate removable native stun from
+scripted order recovery and preserve callbacks/passive baselines. Primary and
+additional Phoenix Fire ignore ordinary order interruption but respect Hex at
+evaluation and live commitment. All 378 simulation tests, strict simulation
+Clippy and client all-target checks passed at this stage. This does not close
+runtime version consumers, classification/mask semantics, imported visual closure,
+final release/source publication, workspace validation, or native-oracle caveats.
 
 Before lobby exposure, finish reachable behavior coverage, consume authored build
 roots in race-aware match setup, and verify presentation bindings/attachments.

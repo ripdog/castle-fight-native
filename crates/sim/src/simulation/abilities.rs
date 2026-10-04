@@ -59,9 +59,11 @@ impl Simulation {
                             origin: AbilitySourceOrigin::Unit(source.position),
                             health: source.health,
                             stunned_until_tick: source.status.stunned_until_tick,
-                            spellcasting: (!source.abilities_disabled && !source.orders_suspended)
-                                .then_some(source.spellcasting)
-                                .flatten(),
+                            spellcasting: source.spellcasting.filter(|profile| {
+                                !source.abilities_disabled
+                                    && (!source.orders_suspended
+                                        || profile.ability.effect.ignores_order_interruptions())
+                            }),
                             mana_current: source.mana_current,
                             ability_state: source.ability_state,
                         },
@@ -109,7 +111,9 @@ impl Simulation {
 
         for intent in intents {
             if let AbilitySourceIndex::Unit(index) = intent.source
-                && (units[index].abilities_disabled || units[index].orders_suspended)
+                && (units[index].abilities_disabled
+                    || (units[index].orders_suspended
+                        && !intent.ability.effect.ignores_order_interruptions()))
             {
                 continue;
             }
@@ -156,7 +160,7 @@ impl Simulation {
             if source.health <= 0
                 || source.id != intent.source_id
                 || (self.next_tick < source.stunned_until_tick
-                    && !matches!(intent.ability.effect, AbilityEffect::PhoenixFire(_)))
+                    && !intent.ability.effect.ignores_order_interruptions())
             {
                 continue;
             }
@@ -235,10 +239,15 @@ impl Simulation {
                         }
                     }
                     if let AbilityEffect::HealingWave(profile) = intent.ability.effect {
-                        units[index].status.stunned_until_tick = units[index]
+                        let recovery_end = self
+                            .next_tick
+                            .checked_add(u64::from(profile.recovery_ticks))
+                            .expect("Healing Wave recovery overflow");
+                        units[index].status.order_recovery_until_tick = units[index]
                             .status
-                            .stunned_until_tick
-                            .max(self.next_tick + u64::from(profile.recovery_ticks));
+                            .order_recovery_until_tick
+                            .max(recovery_end);
+                        units[index].orders_suspended |= self.next_tick < recovery_end;
                         units[index].target = None;
                         units[index].direct_retaliation_lock = false;
                         units[index].ally_defense_lock = false;
@@ -265,8 +274,11 @@ impl Simulation {
                             .expect("Warlock recovery end overflow");
                         units[index].status.ability_retreat_start_tick = retreat_start;
                         units[index].status.ability_retreat_end_tick = retreat_end;
-                        units[index].status.stunned_until_tick =
-                            units[index].status.stunned_until_tick.max(recovery_end);
+                        units[index].status.order_recovery_until_tick = units[index]
+                            .status
+                            .order_recovery_until_tick
+                            .max(recovery_end);
+                        units[index].orders_suspended = true;
                         units[index].target = None;
                         units[index].direct_retaliation_lock = false;
                         units[index].ally_defense_lock = false;
@@ -830,7 +842,7 @@ impl Simulation {
         };
         if source.health <= 0
             || (self.next_tick < source.stunned_until_tick
-                && !matches!(spellcasting.ability.effect, AbilityEffect::PhoenixFire(_)))
+                && !spellcasting.ability.effect.ignores_order_interruptions())
         {
             return AbilityEvaluation::default();
         }

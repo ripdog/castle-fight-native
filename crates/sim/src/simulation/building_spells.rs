@@ -503,14 +503,14 @@ impl Simulation {
             .unwrap_or_else(|| self.default_collision_radius());
         unit.attacks_disabled = false;
         unit.abilities_disabled = false;
-        unit.orders_suspended = false;
+        unit.orders_suspended = self.next_tick < unit.status.order_recovery_until_tick;
         let Some(control) = entity.get::<BuildingSpellControl>() else {
             return;
         };
         let version = control
             .version
             .expect("projected building spell control retains its version");
-        unit.orders_suspended = control.orders_suspended;
+        unit.orders_suspended |= control.orders_suspended;
         if control.overheat_level > 0 {
             let profile = crate::building_mechanics::overheat_shield_for_version(version);
             apply_timed_attack_speed_modifier(

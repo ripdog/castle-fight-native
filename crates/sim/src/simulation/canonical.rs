@@ -1392,6 +1392,7 @@ fn hash_additional_abilities(hash: &mut Fnv64, abilities: Option<AdditionalAutom
 
 fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     hash.write_u64(status.stunned_until_tick);
+    hash.write_u64(status.order_recovery_until_tick);
     hash.write_u64(status.ability_retreat_start_tick);
     hash.write_u64(status.ability_retreat_end_tick);
     hash.write_u64(status.secondary_resurrection_due_tick);

@@ -146,6 +146,8 @@ fn positive_cleanse_restores_baseline_and_removes_shield_without_erasing_overhea
     assert_eq!(projected.passive_effects, retained.without_defend());
     assert_eq!(projected.status.movement_modifier_count, 0);
     assert_eq!(projected.status.armor_modifier_count, 0);
+    assert_eq!(projected.status.stunned_until_tick, 0);
+    assert_eq!(projected.status.order_recovery_until_tick, 50);
     assert_eq!(projected.status.ability_retreat_start_tick, 20);
     assert_eq!(projected.status.ability_retreat_end_tick, 30);
     assert!(
@@ -206,6 +208,9 @@ fn zero_damage_or_removed_source_does_not_cleanse_morph_shield_or_passive_baseli
         assert_eq!(state.shield_level, 2);
         assert_eq!(state.overheat_level, 2);
         assert_eq!(state.callbacks, callbacks);
+        let status = original.unit(target).unwrap().status;
+        assert_eq!(status.stunned_until_tick, 1000);
+        assert_eq!(status.order_recovery_until_tick, 50);
         assert_eq!(
             *original
                 .world

@@ -1,6 +1,8 @@
 use super::*;
 use crate::components::{HealingWaveProfile, ManaProfile, NativeBoltProfile};
 
+mod recovery;
+
 fn unit(sim: &mut Simulation, team: u8, x: i32, movement: MovementClass, wounded: bool) -> SimId {
     let id = sim.spawn_unit_with_properties(
         UnitSpawn {

@@ -79,7 +79,7 @@ The complete current unit state is:
 - `AttackCooldown` and `AttackSequence`;
 - `TargetState` including both lock flags;
 - `RetaliationState` including optional attacker and attacked tick;
-- complete `StatusState`: stun expiry, ability-retreat deadlines, primary secondary-resurrection ability identity/deadline/readiness, active movement/attack-speed/armor modifiers, reactive slow parameters, optional revealing team on timed armor effects, damage-over-time pulse state, and active counts;
+- complete `StatusState`: native stun expiry, independent order-recovery expiry, ability-retreat deadlines, primary secondary-resurrection ability identity/deadline/readiness, active movement/attack-speed/armor modifiers, reactive slow parameters, optional revealing team on timed armor effects, damage-over-time pulse state, and active counts;
 - `NavigationState`: goal kind/reference, bypass side, and clear-tick continuity. This is stored movement continuity, not a disposable route cache;
 - `SpawnTick`;
 - optional `CorpseProducer` definition and optional lifetime;
