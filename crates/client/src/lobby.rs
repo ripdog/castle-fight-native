@@ -504,6 +504,18 @@ struct LobbyGame<'w> {
     camera_focus: Option<ResMut<'w, CameraFocusRequest>>,
 }
 
+impl LobbyGame<'_> {
+    fn focus_local_builder(&mut self) {
+        if let Some(camera_focus) = self.camera_focus.as_deref_mut() {
+            camera_focus.0 = self
+                .authoritative
+                .simulation
+                .builder_for_player(self.selected_match.local_player)
+                .map(|builder| builder.id);
+        }
+    }
+}
+
 fn handle_lobby_buttons(
     mut commands: Commands,
     lobby: Option<ResMut<LobbyState>>,
@@ -548,6 +560,7 @@ fn handle_lobby_buttons(
                 redraw = true;
             }
             if status.started {
+                game.focus_local_builder();
                 lobby.active = false;
                 game.authoritative.commands_enabled = true;
                 game.playback.paused = false;
@@ -625,13 +638,7 @@ fn handle_lobby_buttons(
                             game.selected_match.content = demo.content;
                             game.selected_match.direct_buildings = demo.direct_buildings;
                             game.selected_match.local_player = lobby.local_player();
-                            if let Some(camera_focus) = game.camera_focus.as_deref_mut() {
-                                camera_focus.0 = game
-                                    .authoritative
-                                    .simulation
-                                    .builder_for_player(lobby.local_player())
-                                    .map(|builder| builder.id);
-                            }
+                            game.focus_local_builder();
                         }
                         Err(error) => {
                             lobby.error = Some(error.to_string());
@@ -789,6 +796,54 @@ mod tests {
                 player.builder_race == castle_fight_sim::CastleFightBuilderRace::Human
             }));
         }
+    }
+
+    #[test]
+    fn network_start_focuses_assigned_builder_once() {
+        let options = options();
+        let demo =
+            create_demo_world_for_match_config(1, None, client_match_config(&options).unwrap())
+                .unwrap();
+        let snapshot = PresentationSnapshot::capture(&demo.simulation);
+        let player = PlayerId(6);
+        let target = demo.simulation.builder_for_player(player).unwrap().id;
+        let mut authoritative = AuthoritativeSimulation::new(demo.simulation, demo.content);
+        authoritative.commands_enabled = false;
+        authoritative.network_lobby_status = Some(castle_fight_protocol::LobbyStatus {
+            host_player_id: 0,
+            debug_paused: false,
+            debug_speed: castle_fight_protocol::DebugSpeed::Normal,
+            connected_player_ids: vec![0, 6],
+            required_players: 2,
+            participants: Vec::new(),
+            started: false,
+        });
+        let mut app = App::new();
+        app.insert_resource(LobbyState::new(options, player, true))
+            .insert_resource(authoritative)
+            .insert_resource(PresentationSamples::new(snapshot))
+            .insert_resource(SelectedMatch {
+                content: demo.content,
+                direct_buildings: demo.direct_buildings,
+                local_player: player,
+            })
+            .insert_resource(SimulationPlayback { paused: true })
+            .insert_resource(CameraFocusRequest::default())
+            .add_plugins(LobbyPlugin);
+        app.update();
+        assert!(app.world().resource::<LobbyState>().active());
+        app.world_mut()
+            .resource_mut::<AuthoritativeSimulation>()
+            .network_lobby_status
+            .as_mut()
+            .unwrap()
+            .started = true;
+        app.update();
+        assert_eq!(app.world().resource::<CameraFocusRequest>().0, Some(target));
+        assert!(!app.world().resource::<SimulationPlayback>().paused);
+        app.world_mut().resource_mut::<CameraFocusRequest>().0 = None;
+        app.update();
+        assert_eq!(app.world().resource::<CameraFocusRequest>().0, None);
     }
 
     #[test]

@@ -220,6 +220,8 @@ Offline development clients MAY also expose quicksave/quickload at completed aut
 
 ## 15. Camera/input mappings
 
+At match start, each active player's camera focuses on that player's builder, including when a local or network lobby closes. Camera focus remains client-local; subsequent camera movement does not change simulation state. Profiling camera overrides may retain their configured map-centre view.
+
 Controls should be configurable and may include:
 
 - edge/keyboard pan;
