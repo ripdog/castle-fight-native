@@ -3400,6 +3400,13 @@ fn sync_render_entities(
         .filter(|id| !samples.current.builders.contains_key(id))
         .collect();
     for id in stale_builders {
+        retire_target_status_visuals(
+            &mut commands,
+            &mut render_map,
+            &mut effect_pool,
+            id,
+            &world_instances,
+        );
         if let Some(entry) = render_map.builders.remove(&id) {
             commands.entity(entry.entity).despawn();
         }
@@ -3929,8 +3936,25 @@ fn sync_render_entities(
     }
 
     for builder in samples.current.builders.values() {
-        if render_map.builders.contains_key(&builder.id) {
-            continue;
+        let desired_imported = unit_models
+            .get(builder.appearance.rawcode)
+            .map(|_| builder.appearance.rawcode);
+        if let Some(entry) = render_map.builders.get(&builder.id) {
+            if entry.imported_rawcode == desired_imported {
+                continue;
+            }
+            retire_target_status_visuals(
+                &mut commands,
+                &mut render_map,
+                &mut effect_pool,
+                builder.id,
+                &world_instances,
+            );
+            let entry = render_map
+                .builders
+                .remove(&builder.id)
+                .expect("existing builder model entry");
+            commands.entity(entry.entity).despawn();
         }
         let position = sim_point_to_terrain_world(builder.position, &terrain)
             + Vec3::Y * (BUILDER_HEIGHT * 0.5);

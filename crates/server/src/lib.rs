@@ -4,9 +4,9 @@ pub mod tcp;
 
 use castle_fight_protocol::{
     Checkpoint, CheckpointReport, ClientHello, ClientMessage, CommandAcknowledgement,
-    CompatibilityIdentity, HandshakeRejectReason, ProtocolErrorCode, ReconnectHello,
-    ReconnectToken, ServerMessage, SessionAssignment, WireCanonicalStreamRecord,
-    WireCommandExecution, WireExecutionBatch,
+    CompatibilityIdentity, HandshakeRejectReason, LobbyParticipant, LobbyRaceRejectReason,
+    ProtocolErrorCode, ReconnectHello, ReconnectToken, ServerMessage, SessionAssignment,
+    WireCanonicalStreamRecord, WireCommandExecution, WireExecutionBatch,
 };
 use castle_fight_sim::{
     AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION, CANONICAL_CHECKSUM_SCHEMA_VERSION, CanonicalStreamError,
@@ -263,6 +263,63 @@ impl AuthoritativeMatch {
             .filter(|session| session.connected)
             .map(|session| session.player)
             .collect()
+    }
+
+    pub(crate) fn lobby_participants(&self) -> Vec<LobbyParticipant> {
+        self.game
+            .match_config
+            .participants
+            .iter()
+            .map(|participant| LobbyParticipant {
+                player_id: participant.id.0,
+                builder_rawcode: self
+                    .game
+                    .content
+                    .builder(participant.builder_race)
+                    .expect("configured participant has a supported builder")
+                    .rawcode,
+            })
+            .collect()
+    }
+
+    /// Rebuilds tick-zero state while retaining authenticated sessions. Races belong to the
+    /// canonical initial entities; they do not change the immutable handshake configuration.
+    pub(crate) fn select_lobby_race(
+        &mut self,
+        session_id: SessionId,
+        builder_rawcode: u32,
+    ) -> Result<(), LobbyRaceRejectReason> {
+        if self.game.simulation.tick() != 0 || self.driver.next_stream_position().0 != 0 {
+            return Err(LobbyRaceRejectReason::AlreadyStarted);
+        }
+        let race = self
+            .game
+            .content
+            .builder_race_for_rawcode(builder_rawcode)
+            .filter(|race| self.game.content.supports_builder_race(*race))
+            .ok_or(LobbyRaceRejectReason::RaceUnavailable)?;
+        let player = self
+            .session_player(session_id)
+            .ok_or(LobbyRaceRejectReason::RaceUnavailable)?;
+        let mut config = self.game.match_config.clone();
+        let participant = config
+            .participants
+            .iter_mut()
+            .find(|participant| participant.id == player)
+            .ok_or(LobbyRaceRejectReason::RaceUnavailable)?;
+        if participant.builder_race == race {
+            return Ok(());
+        }
+        participant.builder_race = race;
+        let game = create_castle_fight_match(config, self.game.simulation.worker_count())
+            .map_err(|_| LobbyRaceRejectReason::RaceUnavailable)?;
+        debug_assert_eq!(
+            game.simulation.capture_snapshot().configuration_identity(),
+            self.compatibility.configuration_identity
+        );
+        self.driver = MatchDriver::new(&game.simulation, game.content);
+        self.game = game;
+        Ok(())
     }
 
     pub(crate) fn set_lobby_session_connected(&mut self, session_id: SessionId, connected: bool) {
@@ -548,6 +605,7 @@ impl AuthoritativeMatch {
         match message {
             ClientMessage::Hello { .. }
             | ClientMessage::Reconnect { .. }
+            | ClientMessage::SelectRace { .. }
             | ClientMessage::StartMatch => {
                 vec![OutboundMessage::to_session(
                     session_id,

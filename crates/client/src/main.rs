@@ -87,6 +87,7 @@ enum AuthorityMode {
     Local,
     Network {
         client: Box<NetworkClient>,
+        match_config: CastleFightMatchConfig,
         assigned_player: PlayerId,
         next_sequence: u64,
         connected: bool,
@@ -142,6 +143,7 @@ impl AuthoritativeSimulation {
     fn new_networked(
         simulation: Simulation,
         content: &'static CastleFightContentBundle,
+        match_config: CastleFightMatchConfig,
         client: NetworkClient,
         assigned_player: PlayerId,
         next_sequence: u64,
@@ -156,6 +158,7 @@ impl AuthoritativeSimulation {
             catch_up: None,
             authority: AuthorityMode::Network {
                 client: Box::new(client),
+                match_config,
                 assigned_player,
                 next_sequence,
                 connected: true,
@@ -173,19 +176,25 @@ impl AuthoritativeSimulation {
     }
 
     pub(crate) fn request_network_start(&mut self) -> Result<(), String> {
-        let AuthorityMode::Network {
-            client, connected, ..
-        } = &mut self.authority
-        else {
-            return Err("match is not connected to a server".to_owned());
+        self.send_network_lobby_request(ClientMessage::StartMatch)
+    }
+
+    pub(crate) fn request_network_race(&mut self, builder_rawcode: u32) -> Result<(), String> {
+        self.send_network_lobby_request(ClientMessage::SelectRace { builder_rawcode })
+    }
+
+    fn send_network_lobby_request(&mut self, message: ClientMessage) -> Result<(), String> {
+        let result = match &mut self.authority {
+            AuthorityMode::Network {
+                client,
+                connected: true,
+                ..
+            } => client.send(message).map_err(|error| error.to_string()),
+            AuthorityMode::Network { .. } => Err("network session is unavailable".to_owned()),
+            AuthorityMode::Local => Err("match is not connected to a server".to_owned()),
         };
-        if !*connected {
-            return Err("network session is unavailable".to_owned());
-        }
-        self.network_lobby_error = None;
-        client
-            .send(ClientMessage::StartMatch)
-            .map_err(|error| error.to_string())
+        self.network_lobby_error = result.as_ref().err().cloned();
+        result
     }
 
     pub(crate) fn submit_local_command(
@@ -409,6 +418,7 @@ fn main() {
         AuthoritativeSimulation::new_networked(
             demo.simulation,
             demo.content,
+            demo.match_config,
             client,
             local_player,
             next_sequence,
@@ -1217,6 +1227,7 @@ fn advance_authoritative_simulation(
     playback: Res<SimulationPlayback>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
     mut presentation: ResMut<PresentationSamples>,
+    mut selected_match: ResMut<SelectedMatch>,
     mut performance: Option<ResMut<PerformanceCounters>>,
 ) {
     let fixed_started = std::time::Instant::now();
@@ -1225,6 +1236,7 @@ fn advance_authoritative_simulation(
         let result = process_network_events(
             &mut authoritative,
             &mut presentation,
+            &mut selected_match,
             performance.as_deref_mut(),
         );
         if let Some(performance) = performance.as_deref_mut() {
@@ -1277,6 +1289,7 @@ pub(crate) fn advance_authoritative_simulation_once(
 fn process_network_events(
     authoritative: &mut AuthoritativeSimulation,
     presentation: &mut PresentationSamples,
+    selected_match: &mut SelectedMatch,
     mut performance: Option<&mut PerformanceCounters>,
 ) -> Result<(), String> {
     let events = match &mut authoritative.authority {
@@ -1349,8 +1362,24 @@ fn process_network_events(
             }
             NetworkEvent::Message(message) => match message {
                 ServerMessage::LobbyStatus { status } => {
+                    apply_network_lobby_roster(
+                        authoritative,
+                        presentation,
+                        selected_match,
+                        &status,
+                    )?;
                     authoritative.network_lobby_error = None;
                     authoritative.network_lobby_status = Some(status);
+                }
+                ServerMessage::LobbyRaceRejected { reason } => {
+                    authoritative.network_lobby_error = Some(match reason {
+                        castle_fight_protocol::LobbyRaceRejectReason::AlreadyStarted => {
+                            "Race selection is closed after the match starts.".to_owned()
+                        }
+                        castle_fight_protocol::LobbyRaceRejectReason::RaceUnavailable => {
+                            "That race is unavailable in this release.".to_owned()
+                        }
+                    });
                 }
                 ServerMessage::LobbyStartRejected { reason } => {
                     authoritative.network_lobby_error = Some(match reason {
@@ -1545,6 +1574,70 @@ fn process_network_events(
                 }
             },
         }
+    }
+    Ok(())
+}
+
+fn apply_network_lobby_roster(
+    authoritative: &mut AuthoritativeSimulation,
+    presentation: &mut PresentationSamples,
+    selected_match: &mut SelectedMatch,
+    status: &castle_fight_protocol::LobbyStatus,
+) -> Result<(), String> {
+    let AuthorityMode::Network { match_config, .. } = &authoritative.authority else {
+        return Err("network lobby status arrived in local mode".to_owned());
+    };
+    let mut roster = status.participants.clone();
+    roster.sort_unstable_by_key(|participant| participant.player_id);
+    if roster.len() != match_config.participants.len()
+        || usize::from(status.required_players) != roster.len()
+        || roster
+            .iter()
+            .zip(&match_config.participants)
+            .any(|(wire, participant)| wire.player_id != participant.id.0)
+    {
+        return Err("server lobby changed the authenticated player slots".to_owned());
+    }
+    let mut config = match_config.clone();
+    for (wire, participant) in roster.iter().zip(&mut config.participants) {
+        participant.builder_race = selected_match
+            .content
+            .builder_race_for_rawcode(wire.builder_rawcode)
+            .filter(|race| selected_match.content.supports_builder_race(*race))
+            .ok_or_else(|| "server lobby selected an unavailable builder".to_owned())?;
+    }
+    if config == *match_config {
+        return Ok(());
+    }
+    if authoritative.simulation.tick() != 0
+        || authoritative.driver.next_stream_position().0 != 0
+        || authoritative.catch_up.is_some()
+    {
+        return Err("server lobby changed the roster after canonical play began".to_owned());
+    }
+    let demo = create_demo_world_for_match_config(
+        authoritative.simulation.worker_count(),
+        None,
+        config.clone(),
+    )
+    .map_err(|error| format!("invalid server lobby roster: {error}"))?;
+    if demo.simulation.capture_snapshot().configuration_identity()
+        != authoritative
+            .simulation
+            .capture_snapshot()
+            .configuration_identity()
+    {
+        return Err("server lobby changed the handshake configuration".to_owned());
+    }
+    authoritative.driver = MatchDriver::new(&demo.simulation, demo.content);
+    authoritative.simulation = demo.simulation;
+    authoritative.pending_feedback.clear();
+    authoritative.expected_execution_batch = None;
+    *presentation =
+        PresentationSamples::new(PresentationSnapshot::capture(&authoritative.simulation));
+    selected_match.direct_buildings = demo.direct_buildings;
+    if let AuthorityMode::Network { match_config, .. } = &mut authoritative.authority {
+        *match_config = config;
     }
     Ok(())
 }
@@ -1934,6 +2027,142 @@ mod tests {
     }
 
     #[test]
+    fn network_lobby_roster_is_applied_before_first_tick_in_same_event_batch() {
+        use castle_fight_protocol::{LobbyParticipant, LobbyStatus};
+        let config = crate::demo::create_demo_world(1, None).match_config;
+        let mut selected_config = config.clone();
+        selected_config.participants[1].builder_race = CastleFightBuilderRace::Elf;
+        let mut server = castle_fight_server::AuthoritativeMatch::new(
+            selected_config.clone(),
+            1,
+            Default::default(),
+        )
+        .unwrap();
+        let expected_initial_checksum = server.simulation().checksum();
+        let content =
+            castle_fight_sim::castle_fight_content_bundle(config.release.map_version).unwrap();
+        let status = LobbyStatus {
+            host_player_id: 0,
+            connected_player_ids: vec![0, 6],
+            required_players: 2,
+            started: false,
+            participants: selected_config
+                .participants
+                .iter()
+                .map(|participant| LobbyParticipant {
+                    player_id: participant.id.0,
+                    builder_rawcode: content.builder(participant.builder_race).unwrap().rawcode,
+                })
+                .collect(),
+        };
+        let tick_messages = server.finalize_next_tick().unwrap();
+        for player in [PlayerId(0), PlayerId(6)] {
+            let demo = create_demo_world_for_match_config(4, None, config.clone()).unwrap();
+            let compatibility = compatibility_identity_for_demo(&demo);
+            assert_eq!(&compatibility, server.compatibility());
+            let client = NetworkClient::connected_test_fixture(compatibility);
+            let mut presentation =
+                PresentationSamples::new(PresentationSnapshot::capture(&demo.simulation));
+            let mut selected = SelectedMatch {
+                content: demo.content,
+                direct_buildings: demo.direct_buildings,
+                local_player: player,
+            };
+            let mut authoritative = AuthoritativeSimulation::new_networked(
+                demo.simulation,
+                demo.content,
+                demo.match_config,
+                client,
+                player,
+                0,
+            );
+            let checksum = authoritative.simulation.checksum();
+            let mut invalid = status.clone();
+            invalid.participants[1].builder_rawcode = 0;
+            assert!(
+                apply_network_lobby_roster(
+                    &mut authoritative,
+                    &mut presentation,
+                    &mut selected,
+                    &invalid
+                )
+                .is_err()
+            );
+            invalid = status.clone();
+            invalid.participants[1].player_id = 0;
+            assert!(
+                apply_network_lobby_roster(
+                    &mut authoritative,
+                    &mut presentation,
+                    &mut selected,
+                    &invalid
+                )
+                .is_err()
+            );
+            assert_eq!(authoritative.simulation.checksum(), checksum);
+            apply_network_lobby_roster(
+                &mut authoritative,
+                &mut presentation,
+                &mut selected,
+                &status,
+            )
+            .unwrap();
+            assert_eq!(
+                authoritative.simulation.checksum(),
+                expected_initial_checksum
+            );
+            let selected_catalog = &authoritative
+                .simulation
+                .builder_for_player(PlayerId(6))
+                .unwrap()
+                .configuration
+                .build_catalog;
+            assert!(
+                selected
+                    .direct_buildings
+                    .iter()
+                    .any(|kind| selected_catalog.contains(&kind.rawcode(content)))
+            );
+            let AuthorityMode::Network { client, .. } = &authoritative.authority else {
+                unreachable!()
+            };
+            client.inject_server_message_for_test(ServerMessage::LobbyStatus {
+                status: status.clone(),
+            });
+            client.inject_server_message_for_test(ServerMessage::LobbyStatus {
+                status: LobbyStatus {
+                    started: true,
+                    ..status.clone()
+                },
+            });
+            for outbound in &tick_messages {
+                client.inject_server_message_for_test(outbound.message.clone());
+            }
+            process_network_events(&mut authoritative, &mut presentation, &mut selected, None)
+                .unwrap();
+            assert_eq!(
+                authoritative.simulation.checksum(),
+                server.simulation().checksum()
+            );
+            assert_eq!(authoritative.simulation.tick(), 1);
+            invalid = status.clone();
+            invalid.participants[1].builder_rawcode = content
+                .builder(CastleFightBuilderRace::Human)
+                .unwrap()
+                .rawcode;
+            assert!(
+                apply_network_lobby_roster(
+                    &mut authoritative,
+                    &mut presentation,
+                    &mut selected,
+                    &invalid
+                )
+                .is_err()
+            );
+        }
+    }
+
+    #[test]
     fn network_snapshot_handoff_replaces_divergent_state_and_resets_presentation() {
         let mut source = crate::demo::create_demo_world(1, Some(0));
         let mut source_driver = MatchDriver::new(&source.simulation, source.content);
@@ -1971,11 +2200,17 @@ mod tests {
         let mut authoritative = AuthoritativeSimulation::new_networked(
             replica.simulation,
             replica.content,
+            replica.match_config,
             client,
             PlayerId(0),
             0,
         );
         let mut presentation = PresentationSamples::new(initial_presentation);
+        let mut selected_match = SelectedMatch {
+            content: replica.content,
+            direct_buildings: replica.direct_buildings,
+            local_player: PlayerId(0),
+        };
         let mut performance = PerformanceCounters::default();
 
         let network = match &authoritative.authority {
@@ -1997,6 +2232,7 @@ mod tests {
         process_network_events(
             &mut authoritative,
             &mut presentation,
+            &mut selected_match,
             Some(&mut performance),
         )
         .unwrap();
@@ -2034,6 +2270,11 @@ mod tests {
             .insert_resource(AuthoritativeSimulation::new(simulation, content))
             .insert_resource(PresentationSamples::new(initial_snapshot))
             .init_resource::<ActionPanelState>()
+            .insert_resource(SelectedMatch {
+                content,
+                direct_buildings: Vec::new(),
+                local_player: PlayerId(0),
+            })
             .add_systems(Update, advance_authoritative_simulation);
 
         app.update();

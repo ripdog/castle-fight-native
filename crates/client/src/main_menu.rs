@@ -496,6 +496,7 @@ fn install_network_session(
     *game.authoritative = AuthoritativeSimulation::new_networked(
         demo.simulation,
         demo.content,
+        demo.match_config,
         client,
         local_player,
         next_sequence,

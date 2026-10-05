@@ -8,9 +8,9 @@ use std::{
 };
 
 use castle_fight_protocol::{
-    CatchUpComplete, ClientMessage, FrameError, HandshakeRejectReason, LobbyStartRejectReason,
-    LobbyStatus, MAX_SNAPSHOT_BYTES, ProtocolEnvelope, ProtocolErrorCode, ProtocolSchemaError,
-    SNAPSHOT_CHUNK_BYTES, ServerMessage, SnapshotChunk, SnapshotTransferBegin,
+    CatchUpComplete, ClientMessage, FrameError, HandshakeRejectReason, LobbyRaceRejectReason,
+    LobbyStartRejectReason, LobbyStatus, MAX_SNAPSHOT_BYTES, ProtocolEnvelope, ProtocolErrorCode,
+    ProtocolSchemaError, SNAPSHOT_CHUNK_BYTES, ServerMessage, SnapshotChunk, SnapshotTransferBegin,
     WireCanonicalStreamRecord, read_frame, write_frame,
 };
 use castle_fight_sim::{
@@ -367,6 +367,31 @@ impl TcpAuthoritativeServer {
         if matches!(message, ClientMessage::StartMatch) {
             return self.process_start_match(connection_id, session_id);
         }
+        if let ClientMessage::SelectRace { builder_rawcode } = message {
+            let result = if !self.lobby_mode || self.started {
+                Err(LobbyRaceRejectReason::AlreadyStarted)
+            } else {
+                self.authoritative
+                    .select_lobby_race(session_id, builder_rawcode)
+            };
+            return match result {
+                Ok(()) => self.broadcast_lobby_status(),
+                Err(reason) => self
+                    .send_to_connection(connection_id, ServerMessage::LobbyRaceRejected { reason }),
+            };
+        }
+        // Tick-zero roster replacement must never discard an admitted gameplay command.
+        if self.lobby_mode
+            && !self.started
+            && matches!(message, ClientMessage::SubmitCommand { .. })
+        {
+            return self.send_to_connection(
+                connection_id,
+                ServerMessage::ProtocolError {
+                    code: ProtocolErrorCode::Unauthorized,
+                },
+            );
+        }
         let checkpoint_reported = matches!(&message, ClientMessage::CheckpointReport { .. });
         let outbound = self
             .authoritative
@@ -520,6 +545,7 @@ impl TcpAuthoritativeServer {
                 Ok(())
             }
             ClientMessage::StartMatch
+            | ClientMessage::SelectRace { .. }
             | ClientMessage::SubmitCommand { .. }
             | ClientMessage::CheckpointReport { .. } => self.send_to_connection(
                 connection_id,
@@ -565,6 +591,7 @@ impl TcpAuthoritativeServer {
                 .map(|player| player.0)
                 .collect(),
             required_players,
+            participants: self.authoritative.lobby_participants(),
             started: self.started,
         })
     }
@@ -1074,6 +1101,32 @@ mod tests {
             }
         ));
 
+        // A later join still handshakes against the same immutable configuration after selections.
+        let compatibility = server.authoritative.compatibility().clone();
+        let human = server
+            .authoritative
+            .game
+            .content
+            .builder(castle_fight_sim::CastleFightBuilderRace::Human)
+            .unwrap()
+            .rawcode;
+        let elf = server
+            .authoritative
+            .game
+            .content
+            .builder(castle_fight_sim::CastleFightBuilderRace::Elf)
+            .unwrap()
+            .rawcode;
+        for builder_rawcode in [elf, human] {
+            send_client(&mut host, ClientMessage::SelectRace { builder_rawcode });
+            pump_network(&mut server);
+            assert_eq!(server.authoritative.compatibility(), &compatibility);
+            assert!(matches!(
+                receive_server(&mut host),
+                ServerMessage::LobbyStatus { .. }
+            ));
+        }
+
         let mut guest = connect(&server);
         server.poll_network().unwrap();
         send_client(&mut guest, hello(&server, 2));
@@ -1097,6 +1150,88 @@ mod tests {
             }
         }
 
+        let builder = server
+            .authoritative
+            .simulation()
+            .builder_for_player(PlayerId(6))
+            .unwrap()
+            .id;
+        send_client(
+            &mut guest,
+            ClientMessage::SubmitCommand {
+                request: CommandRequest {
+                    client_sequence: 0,
+                    observed_completed_tick: None,
+                    command: WirePlayerCommand::StopBuilder { builder: builder.0 },
+                },
+            },
+        );
+        pump_network(&mut server);
+        assert!(matches!(
+            receive_server(&mut guest),
+            ServerMessage::ProtocolError {
+                code: ProtocolErrorCode::Unauthorized
+            }
+        ));
+        assert!(server.authoritative.driver().pending_commands().is_empty());
+
+        let original_checksum = server.authoritative.simulation().checksum();
+        send_client(
+            &mut guest,
+            ClientMessage::SelectRace {
+                builder_rawcode: elf,
+            },
+        );
+        pump_network(&mut server);
+        assert_ne!(
+            server.authoritative.simulation().checksum(),
+            original_checksum
+        );
+        let selected = server.authoritative.lobby_participants();
+        assert_eq!(
+            selected
+                .iter()
+                .map(|participant| (participant.player_id, participant.builder_rawcode))
+                .collect::<Vec<_>>(),
+            vec![(0, human), (6, elf)]
+        );
+        for stream in [&mut host, &mut guest] {
+            match receive_server(stream) {
+                ServerMessage::LobbyStatus { status } => assert_eq!(status.participants, selected),
+                message => panic!("expected race selection, got {message:?}"),
+            }
+        }
+        let selected_checksum = server.authoritative.simulation().checksum();
+        let mut invalid = server
+            .authoritative
+            .game
+            .content
+            .builder_definitions()
+            .filter(|builder| {
+                !server
+                    .authoritative
+                    .game
+                    .content
+                    .supports_builder_race(builder.race)
+            })
+            .map(|builder| builder.rawcode)
+            .collect::<Vec<_>>();
+        invalid.push(0);
+        for builder_rawcode in invalid {
+            send_client(&mut guest, ClientMessage::SelectRace { builder_rawcode });
+            pump_network(&mut server);
+            assert!(matches!(
+                receive_server(&mut guest),
+                ServerMessage::LobbyRaceRejected {
+                    reason: LobbyRaceRejectReason::RaceUnavailable
+                }
+            ));
+            assert_eq!(
+                server.authoritative.simulation().checksum(),
+                selected_checksum
+            );
+        }
+
         send_client(&mut guest, ClientMessage::StartMatch);
         pump_network(&mut server);
         assert!(matches!(
@@ -1115,6 +1250,24 @@ mod tests {
                 message => panic!("expected started lobby status, got {message:?}"),
             }
         }
+
+        send_client(
+            &mut guest,
+            ClientMessage::SelectRace {
+                builder_rawcode: human,
+            },
+        );
+        pump_network(&mut server);
+        assert!(matches!(
+            receive_server(&mut guest),
+            ServerMessage::LobbyRaceRejected {
+                reason: LobbyRaceRejectReason::AlreadyStarted
+            }
+        ));
+        assert_eq!(
+            server.authoritative.simulation().checksum(),
+            selected_checksum
+        );
 
         server.finalize_next_tick().unwrap();
         assert!(matches!(
@@ -1295,13 +1448,16 @@ mod tests {
         send_client(&mut first, hello(&server, 1));
         send_client(&mut second, hello(&server, 2));
         pump_until(&mut server, |view| view.started);
-        let _ = receive_server(&mut first);
+        let assignment = match receive_server(&mut first) {
+            ServerMessage::HelloAccepted { assignment } => assignment,
+            message => panic!("expected handshake, got {message:?}"),
+        };
         let _ = receive_server(&mut second);
 
         let builder = server
             .authoritative()
             .simulation()
-            .builder_for_player(PlayerId(0))
+            .builder_for_player(PlayerId(assignment.player_id))
             .unwrap()
             .id;
         let request = ClientMessage::SubmitCommand {
