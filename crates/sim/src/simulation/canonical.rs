@@ -1411,11 +1411,18 @@ fn hash_additional_abilities(hash: &mut Fnv64, abilities: Option<AdditionalAutom
 
 fn hash_action_timing(hash: &mut Fnv64, timing: ActionTimingProfile) {
     hash.write_u16(timing.primary_attack_ticks);
+    hash.write_u16(timing.primary_attack_point_ticks);
     hash.write_u16(timing.secondary_attack_ticks);
+    hash.write_u16(timing.secondary_attack_point_ticks);
     hash.write_u16(timing.cast_ticks);
 }
 
 fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
+    hash.write_u8(u8::from(status.pending_attack.is_some()));
+    if let Some(pending) = status.pending_attack {
+        hash.write_u64(pending.target.0);
+        hash.write_u64(pending.release_tick);
+    }
     hash.write_u8(u8::from(status.action_animation.is_some()));
     if let Some(action) = status.action_animation {
         hash.write_u8(match action.kind {

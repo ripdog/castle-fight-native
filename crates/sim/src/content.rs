@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r14";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r15";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 7;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 8;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1469,7 +1469,9 @@ impl CastleFightTowerDefinition {
             production_unit: UnitGameplayProperties {
                 action_timing: ActionTimingProfile {
                     primary_attack_ticks: 0,
+                    primary_attack_point_ticks: 0,
                     secondary_attack_ticks: 0,
+                    secondary_attack_point_ticks: 0,
                     cast_ticks: 0,
                 },
                 content: None,
@@ -2011,7 +2013,9 @@ fn hash_unit_definition(hash: &mut ContentHash64, definition: CastleFightUnitDef
     hash.write_i32(definition.health);
     hash.write_u32(definition.health_regen_per_second_per_10k);
     hash.write_u16(definition.action_timing.primary_attack_ticks);
+    hash.write_u16(definition.action_timing.primary_attack_point_ticks);
     hash.write_u16(definition.action_timing.secondary_attack_ticks);
+    hash.write_u16(definition.action_timing.secondary_attack_point_ticks);
     hash.write_u16(definition.action_timing.cast_ticks);
     hash.write_u32(definition.build_time_ticks);
     hash.write_u32(definition.repair_time_ticks);
@@ -3461,7 +3465,7 @@ impl ExtractedContent927 {
 fn catalog_supplement_927() -> Result<CatalogSupplement927, String> {
     let supplement: CatalogSupplement927 = serde_json::from_str(CATALOG_SUPPLEMENT_927_R1_JSON)
         .map_err(|error| format!("invalid 9.27 catalog supplement: {error}"))?;
-    if supplement.schema_version != 3 {
+    if supplement.schema_version != 4 {
         return Err(format!(
             "unsupported 9.27 catalog supplement schema {}",
             supplement.schema_version
@@ -4515,8 +4519,16 @@ mod tests {
                 unit.rawcode
             );
             assert_eq!(unit.gameplay_properties().action_timing, unit.action_timing);
+            assert!(
+                unit.action_timing.primary_attack_point_ticks
+                    <= unit.action_timing.primary_attack_ticks
+            );
+            assert!(
+                unit.action_timing.secondary_attack_point_ticks
+                    <= unit.action_timing.secondary_attack_ticks
+            );
             let mut changed = unit;
-            changed.action_timing.primary_attack_ticks += 1;
+            changed.action_timing.primary_attack_point_ticks += 1;
             let mut before = ContentHash64::new();
             let mut after = ContentHash64::new();
             hash_unit_definition(&mut before, unit);

@@ -22,6 +22,12 @@ class RuntimeCatalogTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 MODULE._action_duration_ticks(value, "0", 30)
 
+    def test_attack_damage_point_is_projected_independently_without_rounding_backswing_twice(self) -> None:
+        self.assertEqual(MODULE._action_duration_ticks("0.014", "0", 30), 1)
+        self.assertEqual(MODULE._action_duration_ticks("0.034", "0", 30), 2)
+        self.assertEqual(MODULE._action_duration_ticks("0", "0", 30), 0)
+        self.assertEqual(MODULE._action_duration_ticks("-", "0", 30), 0)
+
     def test_line_projection_rejects_lossy_world_distances(self) -> None:
         for value in ("0", "37", "100.0"):
             self.assertEqual(MODULE._line_world_integer(value), int(float(value)))

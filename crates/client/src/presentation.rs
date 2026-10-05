@@ -2540,7 +2540,28 @@ fn trigger_attack_animations(
     if !samples.is_changed() {
         return;
     }
+    for unit in samples.current.units.values() {
+        if unit.status.action_animation.is_some_and(|action| {
+            action.kind == ActionAnimationKind::Attack
+                && action.started_tick == samples.current.tick.saturating_sub(1)
+        }) && let Some(entity) = render_map
+            .units
+            .get(&unit.id)
+            .and_then(|entry| entry.weapon)
+            && let Ok(mut weapon) = weapons.get_mut(entity)
+        {
+            weapon.elapsed = Some(0.0);
+        }
+    }
     for attack in &samples.current.attacks {
+        if samples
+            .current
+            .units
+            .get(&attack.source)
+            .is_some_and(|unit| unit.status.action_animation.is_some())
+        {
+            continue;
+        }
         let Some(weapon_entity) = render_map
             .units
             .get(&attack.source)

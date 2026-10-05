@@ -271,13 +271,15 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
         bounce_weapons.append({"rawcode": unit["rawcode"], "maximum_targets": targets,
                                "damage_percent_per_bounce": int(retained_percent), "range_world": int(fields["ua1f"])})
     return {
-        "schema_version": 3,
+        "schema_version": 4,
         "simulation_hz": simulation_hz,
         "action_timings": [
             {
                 "rawcode": rawcode,
                 "primary_attack_ticks": _action_duration_ticks(fields.get("udp1", "-"), fields.get("ubs1", "-"), simulation_hz),
+                "primary_attack_point_ticks": _action_duration_ticks(fields.get("udp1", "-"), "0", simulation_hz),
                 "secondary_attack_ticks": _action_duration_ticks(fields.get("udp2", "-"), fields.get("ubs2", "-"), simulation_hz),
+                "secondary_attack_point_ticks": _action_duration_ticks(fields.get("udp2", "-"), "0", simulation_hz),
                 "cast_ticks": _action_duration_ticks(fields.get("ucpt", "-"), fields.get("ucbs", "-"), simulation_hz),
             }
             for rawcode, fields in sorted(action_fields.items())

@@ -35,11 +35,11 @@ pub use components::{
     CorpseProfile, CriticalStrikeEffectProfile, DefendEffectProfile, EntanglingRootsEffectProfile,
     EvasionEffectProfile, FeedbackEffectProfile, GameplayBundleIdentity, HealingWaveProfile,
     MAX_AUTOMATIC_ABILITIES, ManaProfile, ManaRegeneration, ModifierId, MovementClass,
-    MovementProfile, NativeBoltProfile, Owner, PassiveUnitEffect, PassiveUnitEffects, PlayerId,
-    ProductionProfile, ResolvedUnitDefinition, SecondaryAttackProfile, SecondaryResurrectionState,
-    SimId, SpellcastingProfile, SplashFalloffProfile, StatusState, Team, TriggeredAttackEffect,
-    TriggeredSpellProcProfile, UnitClassifications, UnitGameplayProperties, UnitSpawn,
-    UnitTemplate,
+    MovementProfile, NativeBoltProfile, Owner, PassiveUnitEffect, PassiveUnitEffects,
+    PendingAttackState, PlayerId, ProductionProfile, ResolvedUnitDefinition,
+    SecondaryAttackProfile, SecondaryResurrectionState, SimId, SpellcastingProfile,
+    SplashFalloffProfile, StatusState, Team, TriggeredAttackEffect, TriggeredSpellProcProfile,
+    UnitClassifications, UnitGameplayProperties, UnitSpawn, UnitTemplate,
 };
 pub use content::{
     CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION, CASTLE_FIGHT_CONTENT_REVISION_927,
@@ -457,8 +457,9 @@ mod tests {
             catapult.gameplay_properties(),
         );
 
-        sim.step();
-        sim.step();
+        for _ in 0..=footman.action_timing.primary_attack_point_ticks + 1 {
+            sim.step();
+        }
         // 26 Normal * 175% vs Medium, then 5 armor => exactly 35 after rounding.
         assert_eq!(sim.unit(target).unwrap().health, catapult.health - 35);
     }
@@ -492,9 +493,17 @@ mod tests {
             footman.gameplay_properties(),
         );
 
-        for _ in 0..5 {
-            sim.step();
+        let mut impact = false;
+        for _ in 0..ranger.attack.cooldown_ticks {
+            if sim.step().projectile_impacts > 0 {
+                impact = true;
+                break;
+            }
         }
+        assert!(
+            impact,
+            "the first authored projectile must arrive before the next cycle"
+        );
         // 65 Pierce * 70% vs Large, then 4 armor => 37 damage after rounding.
         assert_eq!(sim.unit(target).unwrap().health, footman.health - 37);
     }

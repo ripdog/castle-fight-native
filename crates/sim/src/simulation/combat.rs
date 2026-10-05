@@ -45,6 +45,23 @@ impl Simulation {
         let mut line_projectile_launches = Vec::new();
         let mut intents = self.attack_intents(units, buildings);
         intents.sort_unstable_by_key(|intent| (intent.source_id, intent.target_id));
+        for unit in units.iter_mut() {
+            let Some(pending) = unit.status.pending_attack else {
+                continue;
+            };
+            let cancelled = unit.status.is_stunned(completed_tick)
+                || unit.attacks_disabled
+                || unit.orders_suspended
+                || unit.target != Some(pending.target)
+                || (completed_tick >= pending.release_tick
+                    && intents
+                        .binary_search_by_key(&unit.id, |intent| intent.source_id)
+                        .is_err());
+            if cancelled {
+                unit.status.pending_attack = None;
+                unit.status.action_animation = None;
+            }
+        }
 
         let mut attacks_resolved = 0;
         let mut native_barrage_launches = 0;
@@ -68,8 +85,74 @@ impl Simulation {
                 building_health,
                 self.config.navigation_cell_size,
             ) else {
+                if let AttackSourceIndex::Unit(index) = intent.source
+                    && intent.completing_windup
+                {
+                    units[index].status.pending_attack = None;
+                    units[index].status.action_animation = None;
+                }
                 continue;
             };
+
+            if let AttackSourceIndex::Unit(index) = intent.source {
+                if intent.completing_windup {
+                    units[index].status.pending_attack = None;
+                } else {
+                    let primary = match intent.target {
+                        TargetIndex::Unit(target) => units[index]
+                            .primary_attack_targets()
+                            .can_target_unit(units[target].movement_class),
+                        TargetIndex::Building(_) => {
+                            units[index].primary_attack_targets().can_target_buildings()
+                        }
+                    };
+                    let timing = units[index].action_timing;
+                    let (animation_ticks, point_ticks) = if primary {
+                        (
+                            timing.primary_attack_ticks,
+                            timing.primary_attack_point_ticks,
+                        )
+                    } else {
+                        (
+                            timing.secondary_attack_ticks,
+                            timing.secondary_attack_point_ticks,
+                        )
+                    };
+                    let cooldown = effective_attack_cooldown_ticks(
+                        intent.attack.cooldown_ticks,
+                        units[index].status,
+                    );
+                    let windup = if point_ticks == 0 {
+                        0
+                    } else {
+                        effective_attack_cooldown_ticks(point_ticks, units[index].status)
+                            .min(cooldown.saturating_sub(1))
+                    };
+                    let duration = if animation_ticks == 0 {
+                        0
+                    } else {
+                        effective_attack_cooldown_ticks(animation_ticks, units[index].status)
+                            .min(cooldown)
+                    }
+                    .max(if windup > 0 { windup + 1 } else { 0 });
+                    units[index].status.begin_action_animation(
+                        ActionAnimationKind::Attack,
+                        completed_tick,
+                        duration,
+                    );
+                    // Windup is part of the existing cycle, never added on top of the cooldown.
+                    cooldowns[index] = cooldown;
+                    if windup > 0 {
+                        units[index].status.pending_attack = Some(crate::PendingAttackState {
+                            target: intent.target_id,
+                            release_tick: completed_tick
+                                .checked_add(u64::from(windup))
+                                .expect("attack release tick overflow"),
+                        });
+                        continue;
+                    }
+                }
+            }
 
             let missed = self.uphill_attack_misses(&intent, target_position, completed_tick, units)
                 || self.attack_is_evaded(&intent, units, completed_tick);
@@ -345,34 +428,18 @@ impl Simulation {
             }
             match intent.source {
                 AttackSourceIndex::Unit(index) => {
-                    let primary = match intent.target {
-                        TargetIndex::Unit(target) => units[index]
-                            .primary_attack_targets()
-                            .can_target_unit(units[target].movement_class),
-                        TargetIndex::Building(_) => {
-                            units[index].primary_attack_targets().can_target_buildings()
-                        }
-                    };
-                    let animation_ticks = if primary {
-                        units[index].action_timing.primary_attack_ticks
+                    let elapsed = if intent.completing_windup {
+                        units[index].status.action_animation.map_or(0, |action| {
+                            completed_tick.saturating_sub(action.started_tick)
+                        })
                     } else {
-                        units[index].action_timing.secondary_attack_ticks
+                        0
                     };
-                    if animation_ticks > 0 {
-                        let duration = effective_attack_cooldown_ticks(
-                            animation_ticks.min(intent.attack.cooldown_ticks),
-                            units[index].status,
-                        );
-                        units[index].status.begin_action_animation(
-                            ActionAnimationKind::Attack,
-                            completed_tick,
-                            duration,
-                        );
-                    }
                     cooldowns[index] = effective_attack_cooldown_ticks(
                         intent.attack.cooldown_ticks,
                         units[index].status,
-                    );
+                    )
+                    .saturating_sub(u16::try_from(elapsed).unwrap_or(u16::MAX));
                     attack_sequences[index] = attack_sequences[index]
                         .checked_add(1)
                         .expect("unit attack sequence overflow");
@@ -633,13 +700,28 @@ impl Simulation {
                 .enumerate()
                 .filter_map(|(source_index, source)| {
                     if source.spawn_tick == self.next_tick
-                        || source.cooldown_remaining != 0
-                        || source.status.is_performing_action(self.next_tick)
-                        || self.next_tick < source.status.stunned_until_tick
+                        || source.status.is_stunned(self.next_tick)
+                        || source.attacks_disabled
+                        || source.orders_suspended
                     {
                         return None;
                     }
-                    let target_id = source.target?;
+                    let completing_windup = source.status.pending_attack.is_some();
+                    let target_id = if let Some(pending) = source.status.pending_attack {
+                        if self.next_tick < pending.release_tick
+                            || source.target != Some(pending.target)
+                        {
+                            return None;
+                        }
+                        pending.target
+                    } else {
+                        if source.cooldown_remaining != 0
+                            || source.status.is_performing_action(self.next_tick)
+                        {
+                            return None;
+                        }
+                        source.target?
+                    };
                     let (target, distance_sq, attack, attack_targets, damage_type) =
                         if let Some(index) = find_unit_index(units, target_id) {
                             let (attack, targets, damage_type) =
@@ -695,6 +777,7 @@ impl Simulation {
                         passive_effects: source.passive_effects,
                         attack_sequence: source.attack_sequence,
                         distance_sq,
+                        completing_windup,
                     })
                 })
                 .collect()
@@ -765,6 +848,7 @@ impl Simulation {
                         passive_effects: PassiveUnitEffects::EMPTY,
                         attack_sequence: 0,
                         distance_sq,
+                        completing_windup: false,
                     })
                 })
                 .collect()

@@ -78,10 +78,11 @@ The complete current unit state is:
 - `MovementClass`, `MovementProfile`, optional `CollisionRadius`, and `MechanicalUnit` marker presence;
 - intrinsic `UnitClassifications` values (hero, summoned, spell-immune, combat-sapper, invulnerable, legendary, summoned marker, illusion, invisible), including in original resurrection definitions. Absent component storage represents the all-false logical value; only non-default flags need an ECS component;
 - optional `BuildTimeTicks` and `RepairTimeTicks` component presence and values;
+- `ActionTimingProfile`: independent primary/secondary point-plus-backswing and damage-point tick durations, plus cast duration; retained in production/resurrection definitions as well;
 - `AttackCooldown` and `AttackSequence`;
 - `TargetState` including both lock flags;
 - `RetaliationState` including optional attacker and attacked tick;
-- complete `StatusState`: native stun expiry, independent order-recovery expiry, ability-retreat deadlines, primary secondary-resurrection ability identity/deadline/readiness, active movement/attack-speed/armor modifiers, reactive slow parameters, optional revealing team on timed armor effects, damage-over-time pulse state, and active counts;
+- complete `StatusState`: action-animation kind/start/end, optional committed ordinary-attack target and absolute release tick, native stun expiry, independent order-recovery expiry, ability-retreat deadlines, primary secondary-resurrection ability identity/deadline/readiness, active movement/attack-speed/armor modifiers, reactive slow parameters, optional revealing team on timed armor effects, damage-over-time pulse state, and active counts;
 - `NavigationState`: goal kind/reference, bypass side, and clear-tick continuity. This is stored movement continuity, not a disposable route cache;
 - `SpawnTick`;
 - optional `CorpseProducer` definition and optional lifetime;

@@ -35,6 +35,7 @@ fn properties(movement_class: MovementClass) -> UnitGameplayProperties {
             primary_attack_ticks: 3,
             secondary_attack_ticks: 5,
             cast_ticks: 4,
+            ..ActionTimingProfile::default()
         },
         ..UnitGameplayProperties::default()
     }
@@ -268,5 +269,183 @@ fn crowd_steering_reserves_acting_units_before_movers_regardless_of_id() {
             );
             assert!(actor.distance_sq(sim.unit(mover_id).unwrap().position) >= 16 * 16);
         }
+    }
+}
+
+#[test]
+fn attack_windup_precedes_damage_and_projectiles_without_extending_cadence() {
+    for class in [MovementClass::Ground, MovementClass::Air] {
+        for delivery in [
+            AttackDelivery::Melee,
+            AttackDelivery::RangedGuaranteedHit { speed_per_tick: 4 },
+        ] {
+            let mut sim = Simulation::new(configuration(), 1);
+            let mut attacker = spawn(Team(0), SimPoint::new(0, 0));
+            attacker.attack.cooldown_ticks = 6;
+            let mut props = properties(class);
+            props.action_timing.primary_attack_ticks = 4;
+            props.action_timing.primary_attack_point_ticks = 2;
+            attacker.attack.delivery = delivery;
+            let source = sim.spawn_unit_with_properties(attacker, props);
+            let mut victim = spawn(Team(1), SimPoint::new(40, 0));
+            victim.health = 1_000;
+            victim.attack.damage = 0;
+            victim.attack.acquisition_range = 0;
+            victim.attack.range = 0;
+            victim.movement.speed_per_tick = 0;
+            let target = sim.spawn_unit_with_properties(victim, properties(MovementClass::Ground));
+            sim.step();
+            let origin = sim.unit(source).unwrap().position;
+            let start = sim.step();
+            assert_eq!(start.attacks_resolved, 0);
+            assert_eq!(start.projectiles_launched, 0);
+            assert_eq!(sim.unit(target).unwrap().health, victim.health);
+            let action = sim.unit(source).unwrap().status.action_animation.unwrap();
+            assert_eq!((action.started_tick, action.until_tick), (1, 5));
+            assert_eq!(
+                sim.unit(source)
+                    .unwrap()
+                    .status
+                    .pending_attack
+                    .unwrap()
+                    .release_tick,
+                3
+            );
+            let mut restored = wire_restore(&sim);
+            assert_eq!(sim.step().checksum, restored.step().checksum);
+            assert_eq!(sim.unit(source).unwrap().position, origin);
+            assert_eq!(sim.unit(target).unwrap().health, victim.health);
+            assert!(sim.attacks_last_tick().is_empty());
+            let release = sim.step();
+            assert_eq!(release.checksum, restored.step().checksum);
+            assert_eq!(release.attacks_resolved, 1);
+            assert_eq!(
+                sim.unit(source).unwrap().status.action_animation,
+                Some(action)
+            );
+            assert!(sim.unit(source).unwrap().status.pending_attack.is_none());
+            assert_eq!(sim.unit(source).unwrap().cooldown_remaining, 4);
+            if delivery == AttackDelivery::Melee {
+                assert!(sim.unit(target).unwrap().health < victim.health);
+            } else {
+                assert_eq!(release.projectiles_launched, 1);
+            }
+            let mut releases = vec![release.completed_tick];
+            while sim.tick() <= 15 {
+                let result = sim.step();
+                assert_eq!(result.checksum, restored.step().checksum);
+                if sim
+                    .attacks_last_tick()
+                    .iter()
+                    .any(|event| event.source == source)
+                {
+                    releases.push(result.completed_tick);
+                }
+            }
+            assert_eq!(releases, [3, 9, 15]);
+        }
+    }
+}
+
+#[test]
+fn secondary_attack_and_speed_modifiers_scale_windup_inside_the_existing_cycle() {
+    for (secondary, speed_delta) in [(false, 0), (true, 0), (true, 100), (true, -50)] {
+        let mut sim = Simulation::new(configuration(), 1);
+        let mut props = properties(MovementClass::Ground);
+        props.action_timing.primary_attack_point_ticks = 1;
+        props.action_timing.secondary_attack_point_ticks = 3;
+        let attacker = spawn(Team(0), SimPoint::new(0, 0));
+        props.secondary_attack = Some(SecondaryAttackProfile {
+            primary_targets: AttackTargetMask::GROUND_AND_BUILDINGS,
+            attack: attacker.attack,
+            targets: AttackTargetMask::AIR_UNITS,
+            damage_type: DamageType::Normal,
+        });
+        let source = sim.spawn_unit_with_properties(attacker, props);
+        target(
+            &mut sim,
+            if secondary {
+                MovementClass::Air
+            } else {
+                MovementClass::Ground
+            },
+        );
+        let entity = sim
+            .snapshot_units()
+            .into_iter()
+            .find(|unit| unit.id == source)
+            .unwrap()
+            .entity;
+        let mut status = sim.world.get_mut::<StatusState>(entity).unwrap();
+        status.attack_speed_modifiers[0] = TimedAttackSpeedModifier {
+            id: ModifierId(123),
+            percent_delta: speed_delta,
+            expires_tick: 100,
+        };
+        status.attack_speed_modifier_count = 1;
+        let expected_point =
+            effective_attack_cooldown_ticks(if secondary { 3 } else { 1 }, *status);
+        let expected_cycle =
+            effective_attack_cooldown_ticks(attacker.attack.cooldown_ticks, *status);
+        sim.step();
+        assert_eq!(sim.step().attacks_resolved, 0);
+        let state = sim.unit(source).unwrap();
+        assert_eq!(state.cooldown_remaining, expected_cycle);
+        assert_eq!(
+            state.status.pending_attack.unwrap().release_tick,
+            1 + u64::from(expected_point)
+        );
+        while sim.tick() < 1 + u64::from(expected_point) {
+            assert_eq!(sim.step().attacks_resolved, 0);
+        }
+        assert_eq!(sim.step().attacks_resolved, 1);
+    }
+}
+
+#[test]
+fn interrupted_windup_does_not_release_or_switch_to_a_new_target() {
+    for interruption in 0..4 {
+        let mut sim = Simulation::new(configuration(), 1);
+        let mut props = properties(MovementClass::Ground);
+        props.action_timing.primary_attack_point_ticks = 2;
+        let source = sim.spawn_unit_with_properties(spawn(Team(0), SimPoint::new(0, 0)), props);
+        let victim = target(&mut sim, MovementClass::Ground);
+        sim.step();
+        sim.step();
+        assert!(sim.unit(source).unwrap().status.pending_attack.is_some());
+        let units = sim.snapshot_units();
+        let source_entity = units.iter().find(|unit| unit.id == source).unwrap().entity;
+        let victim_entity = units.iter().find(|unit| unit.id == victim).unwrap().entity;
+        match interruption {
+            0 => {
+                sim.world
+                    .get_mut::<StatusState>(source_entity)
+                    .unwrap()
+                    .stunned_until_tick = 5;
+            }
+            1 => {
+                sim.world.get_mut::<Health>(victim_entity).unwrap().current = 0;
+                target(&mut sim, MovementClass::Ground);
+            }
+            2 => {
+                sim.world.get_mut::<Position>(victim_entity).unwrap().0 = SimPoint::new(200, 0);
+            }
+            3 => {
+                sim.world
+                    .get_mut::<StatusState>(source_entity)
+                    .unwrap()
+                    .begin_action_animation(ActionAnimationKind::Cast, 2, 4);
+            }
+            _ => unreachable!(),
+        }
+        for _ in 2..5 {
+            sim.step();
+            assert!(
+                !sim.attacks_last_tick()
+                    .iter()
+                    .any(|attack| attack.source == source)
+            );
+        }
+        assert!(sim.unit(source).unwrap().status.pending_attack.is_none());
     }
 }

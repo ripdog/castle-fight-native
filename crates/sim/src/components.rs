@@ -99,11 +99,14 @@ impl AttackDelivery {
     }
 }
 
-/// Native action animation duration (point plus backswing), rounded once to simulation ticks.
+/// Versioned native action totals (point plus backswing) and independent attack damage points.
+/// Each source duration is rounded once to simulation ticks.
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ActionTimingProfile {
     pub primary_attack_ticks: u16,
+    pub primary_attack_point_ticks: u16,
     pub secondary_attack_ticks: u16,
+    pub secondary_attack_point_ticks: u16,
     pub cast_ticks: u16,
 }
 
@@ -1222,6 +1225,13 @@ pub(crate) struct ChainLightningState {
     pub hit_count: u8,
 }
 
+/// Committed ordinary attack windup. The target cannot silently change before release.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PendingAttackState {
+    pub target: SimId,
+    pub release_tick: u64,
+}
+
 pub const MAX_TIMED_ATTACK_SPEED_MODIFIERS: usize = 8;
 pub const MAX_TIMED_ARMOR_MODIFIERS: usize = 8;
 pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
@@ -1229,6 +1239,7 @@ pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusState {
     pub action_animation: Option<ActionAnimationState>,
+    pub pending_attack: Option<PendingAttackState>,
     pub stunned_until_tick: u64,
     /// Independent script/order recovery, not a removable native stun buff.
     pub order_recovery_until_tick: u64,
@@ -1268,6 +1279,9 @@ impl StatusState {
         tick: u64,
         duration_ticks: u16,
     ) {
+        if kind == ActionAnimationKind::Cast {
+            self.pending_attack = None;
+        }
         if duration_ticks > 0 {
             self.action_animation = Some(ActionAnimationState {
                 kind,
