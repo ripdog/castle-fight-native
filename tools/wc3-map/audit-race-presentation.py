@@ -193,7 +193,43 @@ def audit_native_inventory_ownership(inventories, relevant, native_abilities):
     return sorted(set(findings))
 
 
-def audit(evidence, assets, builder, lightning_projection=None):
+def audit_native_status_visuals(projection, fields, abilities, manifest):
+    """Require source-linked persistent buff models, including native stock art and empty overrides."""
+    recipes = {"Aenr": ("movement",), "ACf2": ("armor", "movement"),
+               "Ainf": ("armor",), "AIrr": ("armor",), "AHad": ("armor",),
+               "ACff": ("armor",), "Afae": ("armor",), "Ablo": ("attack_speed",),
+               "Apxf": ("damage_over_time",)}
+    buffs = {row["rawcode"]: row for row in projection["buffs"]}
+    findings, selected = [], []
+    for field in fields:
+        if (field["category"] != "abilities" or field["field_id"] != "abuf"
+                or field["rawcode"] not in abilities or field["base_rawcode"] not in recipes):
+            continue
+        codes = [code.strip() for code in json.loads(field["recovered_value_json"]).split(",")
+                 if code.strip() not in ("", "_", "-", "0")]
+        for code, kind in zip(codes, recipes[field["base_rawcode"]]):
+            buff = buffs[code]
+            entries = [entry for entry in manifest.get("status_visuals", [])
+                       if entry["ability_rawcode"] == field["rawcode"] and entry["status_kind"] == kind]
+            expected = {model_identity(path) for path in buff["target_art"]}
+            for entry in entries:
+                if entry.get("buff_rawcode") != code or model_identity(entry["source_model"]) not in expected:
+                    findings.append(f"unexpected native status art {field['rawcode']}/{code}/{kind}")
+            for path in buff["target_art"]:
+                matches = [entry for entry in entries if entry.get("buff_rawcode") == code
+                           and model_identity(entry["source_model"]) == model_identity(path)]
+                if len(matches) != 1 or not matches[0].get("gltf"):
+                    findings.append(f"missing/duplicate native status art {field['rawcode']}/{code}/{kind}: {path}")
+                    continue
+                entry = matches[0]
+                if (entry.get("target_attachment_count") != buff["target_attachment_count"]
+                        or entry.get("target_attachments") != buff["target_attachments"]):
+                    findings.append(f"stale native status attachments {field['rawcode']}/{code}/{kind}")
+                selected.append(entry)
+    return sorted(set(findings)), selected
+
+
+def audit(evidence, assets, builder, lightning_projection=None, buff_projection=None):
     roster = [row for row in table(evidence / "script/race-buildings.tsv")
               if row["builder_rawcode"] == builder]
     if not roster:
@@ -205,6 +241,12 @@ def audit(evidence, assets, builder, lightning_projection=None):
     fields_digest = hashlib.sha256(fields_path.read_bytes()).hexdigest()
     if lightning_projection["objects_sha256"] != fields_digest:
         raise ValueError("native lightning projection does not match the selected object evidence")
+    buff_path = buff_projection or ROOT / "crates/wc3-assets/data/castle-fight" / lightning_projection["map_version"] / f"native-buff-visuals-{lightning_projection['release_revision']}.json"
+    buff_projection = json.loads(buff_path.read_text())
+    if (buff_projection["sources"]["object-fields.tsv"] != fields_digest
+            or buff_projection["map_version"] != lightning_projection["map_version"]
+            or buff_projection["source_revision"] != lightning_projection["release_revision"]):
+        raise ValueError("native buff projection does not match the selected object evidence/version")
     objects = {}
     for row in fields:
         objects.setdefault((row["category"], row["rawcode"]), {})[row["field_id"]] = json.loads(
@@ -328,12 +370,18 @@ def audit(evidence, assets, builder, lightning_projection=None):
         code for code in str(objects.get(("units", owner), {}).get("uabi", "")).split(",")
         if code}) for owner in owners}
     findings.extend(audit_native_inventory_ownership(inventories, relevant, native_abilities))
+    status_findings, statuses = audit_native_status_visuals(buff_projection, fields, abilities, manifests["effects"])
+    findings.extend(status_findings)
+    for status in statuses:
+        check_model("effects", status["gltf"])
     return {"builder": builder, "map_version": manifests["units"]["castle_fight_catalog_version"],
             "source_sha256": {str(path.relative_to(evidence)): hashlib.sha256(path.read_bytes()).hexdigest()
                               for path in (fields_path, evidence / "script/race-buildings.tsv",
                                            evidence / "resolved/unit-spell-semantics.tsv",
                                            building_mechanics, runtime_mechanics)},
             "lightning_projection_sha256": hashlib.sha256(lightning_path.read_bytes()).hexdigest(),
+            "buff_projection_sha256": hashlib.sha256(buff_path.read_bytes()).hexdigest(),
+            "status_visuals": statuses,
             "direct_roots": roots, "model_variants": sorted(model_variants),
             "entities": entities, "abilities": sorted(abilities),
             "buffs": sorted(buffs), "proxy_links": proxy_links,
@@ -354,8 +402,10 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--lightning-projection", type=Path,
                         help="source-linked native lightning projection (object digest must match --evidence)")
+    parser.add_argument("--buff-projection", type=Path,
+                        help="source-linked native buff projection (object digest/version must match --evidence)")
     args = parser.parse_args()
-    report = audit(args.evidence, args.assets, args.builder, args.lightning_projection)
+    report = audit(args.evidence, args.assets, args.builder, args.lightning_projection, args.buff_projection)
     args.output.write_text(json.dumps(report, indent=2) + "\n")
     print(f"{len(report['entities'])} source-owned entities; {report['checked_models']} model/dependency bindings; "
           f"{len(report['findings'])} findings; report: {args.output}")

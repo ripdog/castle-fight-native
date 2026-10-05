@@ -56,6 +56,29 @@ Native structure-buff lifetime/attachment visuals and loading still need
 integrated review. Script City/Shield/Overheat art is now present in the
 regenerated pack, but appearance/lifecycle is not established by delivery.
 
+## Native buff source closure and required delivery
+
+The versioned `native-buff-visuals-r1.json` projection covers all 174 referenced
+buffs. `build_native_buff_visuals.py` reads the retained release's object fields,
+base-data manifest and native-build summary. The cached native skin must match
+its retained byte count and digest before any projection is produced; this uses
+the original resolved-data build, not a newer install merely sharing filenames.
+All six projection tests and complete regeneration checks passed. Native stock
+Faerie Fire target art and its authored head attachment are retained; Phoenix's
+resolved burn art is retained; the carrier's explicit empty target art remains
+empty. No independent stock-buff path table is needed.
+
+The delivery audit now requires persistent status bindings and their buff
+identity/attachment metadata against that projection, rather than accepting an
+unrelated ordinary target-art row or a model already on disk. All 13 presentation
+audit tests passed, including missing/duplicate/unresolved status art, attachment
+drift and forbidden fallback from an explicit empty carrier buff. The previously
+zero-finding staged pack correctly reports **two native-status findings** for
+Faerie Fire and Phoenix (`current-pack-native-buff-before.json`). Effects-pack
+regeneration and the post-regeneration audit remain pending. Requiring delivered
+attachment metadata does not prove that the client applies it to the correct
+animated node; source attachment placement and rendered inspection remain open.
+
 ## Integrated structure-status readback
 
 The presentation bridge copies the authoritative `StatusState` for every

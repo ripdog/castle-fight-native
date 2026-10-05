@@ -51,6 +51,43 @@ class LightningProjectionTests(unittest.TestCase):
         self.assertTrue(all(set(ability["effects"]) <= definitions for ability in projection["abilities"]))
 
 
+class NativeStatusDeliveryAuditTests(unittest.TestCase):
+    def setUp(self):
+        self.buff = {"rawcode": "BUFF", "target_art": ["stock.mdl"],
+                     "target_attachment_count": None,
+                     "target_attachments": [{"index": 0, "point": "head", "source": "native"}]}
+        self.projection = {"buffs": [self.buff]}
+        self.fields = [{"category": "abilities", "rawcode": "CAST", "base_rawcode": "ACff",
+                        "field_id": "abuf", "recovered_value_json": '"BUFF"'}]
+        self.binding = {"ability_rawcode": "CAST", "buff_rawcode": "BUFF", "status_kind": "armor",
+                        "source_model": "stock.mdx", "gltf": "models/stock.gltf",
+                        "target_attachment_count": None,
+                        "target_attachments": self.buff["target_attachments"]}
+
+    def audit(self, entries):
+        return audit.audit_native_status_visuals(self.projection, self.fields, {"CAST"},
+                                                {"status_visuals": entries})
+
+    def test_missing_duplicate_and_unresolved_native_stock_art_fail(self):
+        self.assertEqual(self.audit([self.binding]), ([], [self.binding]))
+        for entries in ([], [self.binding, self.binding], [dict(self.binding, gltf=None)]):
+            self.assertEqual(len(self.audit(entries)[0]), 1)
+        self.assertEqual(audit.audit_native_status_visuals(self.projection, self.fields, set(), {}), ([], []))
+
+    def test_authored_attachment_changes_are_not_delivery_success(self):
+        for invalid in (dict(self.binding, target_attachments=[]),
+                        dict(self.binding, target_attachment_count=2)):
+            self.assertEqual(len(self.audit([invalid])[0]), 1)
+        self.assertTrue(self.audit([dict(self.binding, buff_rawcode="WRNG")])[0])
+
+    def test_explicit_empty_carrier_art_must_not_fall_back_to_stock(self):
+        self.fields[0]["base_rawcode"] = "Apxf"
+        self.buff["target_art"] = []
+        self.assertEqual(self.audit([]), ([], []))
+        unexpected = dict(self.binding, status_kind="damage_over_time")
+        self.assertEqual(len(self.audit([unexpected])[0]), 1)
+
+
 class ModelBindingAuditTests(unittest.TestCase):
     def test_safe_paths_allow_pack_local_gltf_dependencies_but_reject_escape(self):
         with tempfile.TemporaryDirectory() as directory:
