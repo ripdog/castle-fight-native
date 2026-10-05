@@ -258,6 +258,32 @@ python3 -m unittest discover -s tools/wc3-map -p 'test_build_*.py'
 
 Without `--check`, generators print the new artifact to stdout. Update the content revision and affected release digests when updating a committed projection. Do not hand-edit generated map values or introduce matching constants into entity tests/specifications.
 
+## Reproducible native buff presentation
+
+`build_native_buff_visuals.py` projects every referenced native/custom buff's
+resolved target art, attachment points and attachment count. It reads object
+fields and the base-data manifest from the selected release's retained Git tree,
+not the mutable extraction alias. The local native `abilityskin.txt` must match
+both the byte count and SHA-256 recorded by that manifest; a different installed
+Warcraft build or same-named stale cache is rejected. The artifact retains map
+version/revision, extraction tree, all input digests and the native build identity.
+No proprietary skin file is committed.
+
+```sh
+python3 tools/wc3-map/build_native_buff_visuals.py --map-version 9.27 --revision r1 --check crates/wc3-assets/data/castle-fight/9.27/native-buff-visuals-r1.json
+python3 -m unittest discover -s tools/wc3-map -p 'test_build_native_buff_visuals.py'
+```
+
+The default input is `.wc3-base/source/base/units/abilityskin.txt`; `--skin` can
+select another verified copy. Without `--check`, this generator writes to
+`--output` (the versioned asset projection by default). Explicit empty map art
+remains empty rather than falling through to inherited art. Missing fields stay
+distinct from explicit empty fields; attachment names/count/order are retained,
+not replaced by guessed origin/head placement. Unrelated duplicate native icon
+fields are not parsed, while conflicting relevant fields/identities and
+unsupported attachment metadata are errors. This is source/presentation data,
+not a rendering or native-executable comparison.
+
 ## Tests
 
 ```sh

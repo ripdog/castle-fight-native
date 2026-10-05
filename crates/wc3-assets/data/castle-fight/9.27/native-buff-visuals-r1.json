@@ -1,0 +1,2495 @@
+{
+  "buffs": [
+    {
+      "base_rawcode": "AEsd",
+      "native_section": "AEsd",
+      "rawcode": "AEsd",
+      "target_art": [
+        "Abilities\\Spells\\NightElf\\Starfall\\StarfallTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "AEtr",
+      "native_section": "AEtr",
+      "rawcode": "AEtr",
+      "target_art": [
+        "Abilities\\Spells\\NightElf\\Tranquility\\TranquilityTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "ANmd",
+      "native_section": "ANmd",
+      "rawcode": "ANmd",
+      "target_art": [
+        "Abilities\\Spells\\Other\\Monsoon\\MonsoonBoltTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bblo",
+      "native_section": "Bblo",
+      "rawcode": "B000",
+      "target_art": [
+        "Abilities\\Spells\\Undead\\DevourMagic\\DevourMagicBirthMissile.mdl",
+        "Abilities\\Spells\\Items\\ClarityPotion\\ClarityTarget"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": 2,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "hand,left",
+          "source": "resolved"
+        },
+        {
+          "index": 1,
+          "point": "hand,right",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bapl",
+      "native_section": "Bapl",
+      "rawcode": "B001",
+      "target_art": [
+        "Units\\Undead\\PlagueCloud\\PlagueCloudtarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BHfs",
+      "native_section": "BHfs",
+      "rawcode": "B002",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bapl",
+      "native_section": "Bapl",
+      "rawcode": "B003",
+      "target_art": [
+        "Units\\Undead\\PlagueCloud\\PlagueCloudtarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "head",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bbof",
+      "native_section": "Bbof",
+      "rawcode": "B004",
+      "target_art": [
+        "Abilities\\Spells\\Orc\\SpiritLink\\SpiritLinkTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BPSE",
+      "native_section": "BPSE",
+      "rawcode": "B005",
+      "target_art": [
+        "Abilities\\Spells\\NightElf\\shadowstrike\\shadowstrike.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "overhead",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bblo",
+      "native_section": "Bblo",
+      "rawcode": "B007",
+      "target_art": [
+        "Abilities\\Spells\\Orc\\TrollBerserk\\HeadhunterWEAPONSLeft.mdl",
+        "Abilities\\Spells\\Orc\\TrollBerserk\\HeadhunterWEAPONSLeft.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": 2,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "hand,left",
+          "source": "resolved"
+        },
+        {
+          "index": 1,
+          "point": "hand,right",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BOac",
+      "native_section": "BOac",
+      "rawcode": "B008",
+      "target_art": [
+        "Abilities\\Spells\\Other\\GeneralAuraTarget\\GeneralAuraTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Binf",
+      "native_section": "Binf",
+      "rawcode": "B009",
+      "target_art": [
+        "Abilities\\Spells\\Orc\\Bloodlust\\BloodlustTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": 1,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "head",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BOsf",
+      "native_section": "BOsf",
+      "rawcode": "B00A",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BNab",
+      "native_section": "BNab",
+      "rawcode": "B00C",
+      "target_art": [
+        "Abilities\\Spells\\Other\\AcidBomb\\BottleImpact.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BPSE",
+      "native_section": "BPSE",
+      "rawcode": "B00D",
+      "target_art": [
+        "Abilities\\Spells\\Other\\Incinerate\\IncinerateBuff.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "head",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BHad",
+      "native_section": "BHad",
+      "rawcode": "B00E",
+      "target_art": [
+        "Abilities\\Spells\\Other\\GeneralAuraTarget\\GeneralAuraTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BHad",
+      "native_section": "BHad",
+      "rawcode": "B00F",
+      "target_art": [
+        "Abilities\\Spells\\Other\\GeneralAuraTarget\\GeneralAuraTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bcri",
+      "native_section": "Bcri",
+      "rawcode": "B00G",
+      "target_art": [
+        "Abilities\\Weapons\\PoisonSting\\PoisonStingTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BNbr",
+      "native_section": "BNbr",
+      "rawcode": "B00H",
+      "target_art": [
+        "Abilities\\Spells\\Other\\Parasite\\ParasiteTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "overhead",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BNbr",
+      "native_section": "BNbr",
+      "rawcode": "B00I",
+      "target_art": [
+        "Abilities\\Spells\\Human\\ManaFlare\\ManaFlareBase.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "overhead",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Binf",
+      "native_section": "Binf",
+      "rawcode": "B00J",
+      "target_art": [
+        "Abilities\\Spells\\Human\\InnerFire\\InnerFireTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": 1,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "overhead",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Broa",
+      "native_section": "Broa",
+      "rawcode": "B00K",
+      "target_art": [
+        "Environment\\SmallBuildingFire\\SmallBuildingFire2.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "overhead",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BOac",
+      "native_section": "BOac",
+      "rawcode": "B00L",
+      "target_art": [
+        "Abilities\\Spells\\Other\\GeneralAuraTarget\\GeneralAuraTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BEer",
+      "native_section": "BEer",
+      "rawcode": "B00M",
+      "target_art": [
+        "Abilities\\Spells\\Undead\\FreezingBreath\\FreezingBreathTargetArt.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BHab",
+      "native_section": "BHab",
+      "rawcode": "B00N",
+      "target_art": [
+        "Abilities\\Spells\\Other\\GeneralAuraTarget\\GeneralAuraTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bcri",
+      "native_section": "Bcri",
+      "rawcode": "B00P",
+      "target_art": [
+        "Abilities\\Spells\\Other\\GeneralAuraTarget\\GeneralAuraTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bhea",
+      "native_section": "Bhea",
+      "rawcode": "B00Q",
+      "target_art": [
+        "Abilities\\Spells\\Undead\\Possession\\PossessionTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bcri",
+      "native_section": "Bcri",
+      "rawcode": "B00R",
+      "target_art": [
+        "Abilities\\Spells\\Undead\\Cripple\\CrippleTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BNpi",
+      "native_section": "BNpi",
+      "rawcode": "B00S",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bphx",
+      "native_section": "Bphx",
+      "rawcode": "B00T",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bapl",
+      "native_section": "Bapl",
+      "rawcode": "B00U",
+      "target_art": [
+        "Units\\Undead\\PlagueCloud\\PlagueCloudtarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": 2,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "head",
+          "source": "resolved"
+        },
+        {
+          "index": 1,
+          "point": "chest",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BEah",
+      "native_section": "BEah",
+      "rawcode": "B00V",
+      "target_art": [
+        "Abilities\\Spells\\Other\\GeneralAuraTarget\\GeneralAuraTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BHfs",
+      "native_section": "BHfs",
+      "rawcode": "B00W",
+      "target_art": [
+        "Abilities\\Spells\\NightElf\\FaerieDragonInvis\\FaerieDragon_Invis.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bens",
+      "native_section": "Bens",
+      "rawcode": "B00X",
+      "target_art": [
+        "Abilities\\Weapons\\ZigguratFrostMissile\\ZigguratFrostMissile.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BOae",
+      "native_section": "BOae",
+      "rawcode": "B00Y",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BOae",
+      "native_section": "BOae",
+      "rawcode": "B00Z",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BOae",
+      "native_section": "BOae",
+      "rawcode": "B010",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BHab",
+      "native_section": "BHab",
+      "rawcode": "B011",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BOwk",
+      "native_section": "BOwk",
+      "rawcode": "B012",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bcri",
+      "native_section": "Bcri",
+      "rawcode": "B014",
+      "target_art": [
+        "Abilities\\Spells\\Undead\\FrostArmor\\FrostArmorDamage.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bcri",
+      "native_section": "Bcri",
+      "rawcode": "B015",
+      "target_art": [
+        "Abilities\\Weapons\\ZigguratFrostMissile\\ZigguratFrostMissile.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bdef",
+      "native_section": "Bdef",
+      "rawcode": "B016",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bbar",
+      "native_section": "Bbar",
+      "rawcode": "B017",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BNcs",
+      "native_section": "BNcs",
+      "rawcode": "B018",
+      "target_art": [
+        "Abilities\\Spells\\Items\\PotionOfOmniscience\\CrystalBallCaster.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "head",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bphx",
+      "native_section": "Bphx",
+      "rawcode": "B019",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BHad",
+      "native_section": "BHad",
+      "rawcode": "B01B",
+      "target_art": [
+        "Abilities\\Spells\\Other\\GeneralAuraTarget\\GeneralAuraTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bdef",
+      "native_section": "Bdef",
+      "rawcode": "B01C",
+      "target_art": [
+        "Abilities\\Spells\\Items\\AIda\\AIdaTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "overhead",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bpxf",
+      "native_section": "Bpxf",
+      "rawcode": "B01D",
+      "target_art": [
+        "Abilities\\Spells\\Other\\BreathOfFire\\BreathOfFireDamage.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Basl",
+      "native_section": "Basl",
+      "rawcode": "B01E",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BHds",
+      "native_section": "BHds",
+      "rawcode": "B01F",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BHab",
+      "native_section": "BHab",
+      "rawcode": "B01H",
+      "target_art": [
+        "Abilities\\Spells\\Human\\ManaShield\\ManaShieldCaster.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BHab",
+      "native_section": "BHab",
+      "rawcode": "B01I",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BOac",
+      "native_section": "BOac",
+      "rawcode": "B01J",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BHab",
+      "native_section": "BHab",
+      "rawcode": "B01K",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bakb",
+      "native_section": "Bakb",
+      "rawcode": "B01L",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bpxf",
+      "native_section": "Bpxf",
+      "rawcode": "B01M",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bpxf",
+      "native_section": "Bpxf",
+      "rawcode": "B01N",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bpxf",
+      "native_section": "Bpxf",
+      "rawcode": "B01O",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bslo",
+      "native_section": "Bslo",
+      "rawcode": "B01P",
+      "target_art": [
+        "Abilities\\Spells\\Human\\slow\\slowtarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BIcb",
+      "native_section": "BIcb",
+      "rawcode": "B01Q",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BNht",
+      "native_section": "BNht",
+      "rawcode": "B01R",
+      "target_art": [
+        "Abilities\\Spells\\Other\\HowlOfTerror\\HowlTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BUim",
+      "native_section": "BUim",
+      "rawcode": "B01S",
+      "target_art": [
+        "Abilities\\Spells\\Human\\Thunderclap\\ThunderclapTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "overhead",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BNpa",
+      "native_section": "BNpa",
+      "rawcode": "B01T",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Basl",
+      "native_section": "Basl",
+      "rawcode": "B01U",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bphx",
+      "native_section": "Bphx",
+      "rawcode": "B01V",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BHtc",
+      "native_section": "BHtc",
+      "rawcode": "B01W",
+      "target_art": [
+        "Abilities\\Spells\\Orc\\StasisTrap\\StasisTotemTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "overhead",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bphx",
+      "native_section": "Bphx",
+      "rawcode": "B01X",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BHtc",
+      "native_section": "BHtc",
+      "rawcode": "B01Y",
+      "target_art": [
+        "Abilities\\Spells\\Orc\\StasisTrap\\StasisTotemTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "overhead",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BHab",
+      "native_section": "BHab",
+      "rawcode": "B020",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BOsf",
+      "native_section": "BOsf",
+      "rawcode": "B021",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BNpa",
+      "native_section": "BNpa",
+      "rawcode": "B022",
+      "target_art": [
+        "Abilities\\Weapons\\CryptFiendMissile\\CryptFiendMissile.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "overhead",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Basl",
+      "native_section": "Basl",
+      "rawcode": "B023",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BUau",
+      "native_section": "BUau",
+      "rawcode": "B024",
+      "target_art": [
+        "Abilities\\Spells\\Other\\GeneralAuraTarget\\GeneralAuraTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Binf",
+      "native_section": "Binf",
+      "rawcode": "B025",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": 0,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "overhead",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BOae",
+      "native_section": "BOae",
+      "rawcode": "B026",
+      "target_art": [
+        "Abilities\\Spells\\Other\\Tornado\\Tornado_Target.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BNcs",
+      "native_section": "BNcs",
+      "rawcode": "B028",
+      "target_art": [
+        "Abilities\\Spells\\Items\\AIlb\\AIlbSpecialArt.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "head",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bfro",
+      "native_section": "Bfro",
+      "rawcode": "B029",
+      "target_art": [
+        "Abilities\\Spells\\Other\\FrostDamage\\FrostDamage.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BHad",
+      "native_section": "BHad",
+      "rawcode": "B02A",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BHad",
+      "native_section": "BHad",
+      "rawcode": "B02B",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BHad",
+      "native_section": "BHad",
+      "rawcode": "B02C",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Basl",
+      "native_section": "Basl",
+      "rawcode": "B02D",
+      "target_art": [
+        "Abilities\\Spells\\Other\\Tornado\\Tornado_Target.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BOae",
+      "native_section": "BOae",
+      "rawcode": "B02E",
+      "target_art": [
+        "Abilities\\Spells\\Other\\GeneralAuraTarget\\GeneralAuraTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BOac",
+      "native_section": "BOac",
+      "rawcode": "B02F",
+      "target_art": [
+        "Abilities\\Spells\\Other\\GeneralAuraTarget\\GeneralAuraTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BHad",
+      "native_section": "BHad",
+      "rawcode": "B02G",
+      "target_art": [
+        "Abilities\\Spells\\Other\\GeneralAuraTarget\\GeneralAuraTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BNdh",
+      "native_section": "BNdh",
+      "rawcode": "B02O",
+      "target_art": [
+        "Abilities\\Spells\\Undead\\Possession\\PossessionTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "overhead",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BNab",
+      "native_section": "BNab",
+      "rawcode": "B02Q",
+      "target_art": [
+        "Abilities\\Spells\\Other\\AcidBomb\\BottleImpact.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bclf",
+      "native_section": "Bclf",
+      "rawcode": "B02R",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BUts",
+      "native_section": "BUts",
+      "rawcode": "B02S",
+      "target_art": [
+        "none.mdl",
+        "none.mdl",
+        "none.mdl",
+        "none.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": 4,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest,left",
+          "source": "resolved"
+        },
+        {
+          "index": 1,
+          "point": "chest,right",
+          "source": "resolved"
+        },
+        {
+          "index": 2,
+          "point": "chest,mount,left",
+          "source": "resolved"
+        },
+        {
+          "index": 3,
+          "point": "chest,mount,right",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bblo",
+      "native_section": "Bblo",
+      "rawcode": "B02T",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": 2,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "",
+          "source": "resolved"
+        },
+        {
+          "index": 1,
+          "point": "",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BOae",
+      "native_section": "BOae",
+      "rawcode": "B02U",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bcri",
+      "native_section": "Bcri",
+      "rawcode": "B02W",
+      "target_art": [],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "B031",
+      "native_section": null,
+      "rawcode": "B031",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BEah",
+      "native_section": "BEah",
+      "rawcode": "BEah",
+      "target_art": [
+        "Abilities\\Spells\\Other\\GeneralAuraTarget\\GeneralAuraTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BEer",
+      "native_section": "BEer",
+      "rawcode": "BEer",
+      "target_art": [
+        "Abilities\\Spells\\NightElf\\EntanglingRoots\\EntanglingRootsTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BEfn",
+      "native_section": "BEfn",
+      "rawcode": "BEfn",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BEsh",
+      "native_section": "BEsh",
+      "rawcode": "BEsh",
+      "target_art": [
+        "Abilities\\Spells\\NightElf\\shadowstrike\\shadowstrike.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "overhead",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BHab",
+      "native_section": "BHab",
+      "rawcode": "BHab",
+      "target_art": [
+        "Abilities\\Spells\\Other\\GeneralAuraTarget\\GeneralAuraTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BHad",
+      "native_section": "BHad",
+      "rawcode": "BHad",
+      "target_art": [
+        "Abilities\\Spells\\Other\\GeneralAuraTarget\\GeneralAuraTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BHbd",
+      "native_section": "BHbd",
+      "rawcode": "BHbd",
+      "target_art": [
+        "Abilities\\Spells\\Other\\FrostDamage\\FrostDamage.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BHbn",
+      "native_section": "BHbn",
+      "rawcode": "BHbn",
+      "target_art": [
+        "Abilities\\Spells\\Human\\Banish\\BanishTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BHbz",
+      "native_section": null,
+      "rawcode": "BHbz",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BHfs",
+      "native_section": "BHfs",
+      "rawcode": "BHfs",
+      "target_art": [
+        "Abilities\\Spells\\Human\\FlameStrike\\FlameStrikeDamageTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BHtc",
+      "native_section": "BHtc",
+      "rawcode": "BHtc",
+      "target_art": [
+        "Abilities\\Spells\\Orc\\StasisTrap\\StasisTotemTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "overhead",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BIcb",
+      "native_section": "BIcb",
+      "rawcode": "BIcb",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BIil",
+      "native_section": "BIil",
+      "rawcode": "BIil",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BNab",
+      "native_section": "BNab",
+      "rawcode": "BNab",
+      "target_art": [
+        "Abilities\\Spells\\Other\\AcidBomb\\BottleImpact.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BNbf",
+      "native_section": "BNbf",
+      "rawcode": "BNbf",
+      "target_art": [
+        "Abilities\\Spells\\Other\\BreathOfFire\\BreathOfFireDamage.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BNdh",
+      "native_section": "BNdh",
+      "rawcode": "BNdh",
+      "target_art": [
+        "Abilities\\Spells\\Other\\StrongDrink\\BrewmasterTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "overhead",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BNhs",
+      "native_section": "BNhs",
+      "rawcode": "BNhs",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BNic",
+      "native_section": "BNic",
+      "rawcode": "BNic",
+      "target_art": [
+        "Abilities\\Spells\\Other\\Incinerate\\IncinerateBuff.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest",
+          "source": "resolved"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BNlm",
+      "native_section": "BNlm",
+      "rawcode": "BNlm",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BNpi",
+      "native_section": "BNpi",
+      "rawcode": "BNpi",
+      "target_art": [],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BNrd",
+      "native_section": "BNrd",
+      "rawcode": "BNrd",
+      "target_art": [
+        "Abilities\\Spells\\Human\\FlameStrike\\FlameStrikeDamageTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BNrf",
+      "native_section": null,
+      "rawcode": "BNrf",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BNss",
+      "native_section": null,
+      "rawcode": "BNss",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BNto",
+      "native_section": "BNto",
+      "rawcode": "BNto",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BOac",
+      "native_section": "BOac",
+      "rawcode": "BOac",
+      "target_art": [
+        "Abilities\\Spells\\Other\\GeneralAuraTarget\\GeneralAuraTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BOae",
+      "native_section": "BOae",
+      "rawcode": "BOae",
+      "target_art": [
+        "Abilities\\Spells\\Other\\GeneralAuraTarget\\GeneralAuraTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BOhx",
+      "native_section": "BOhx",
+      "rawcode": "BOhx",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BOmi",
+      "native_section": "BOmi",
+      "rawcode": "BOmi",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BOsf",
+      "native_section": "BOsf",
+      "rawcode": "BOsf",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BOsh",
+      "native_section": null,
+      "rawcode": "BOsh",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BOwk",
+      "native_section": "BOwk",
+      "rawcode": "BOwk",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BPSE",
+      "native_section": "BPSE",
+      "rawcode": "BPSE",
+      "target_art": [
+        "Abilities\\Spells\\Human\\Thunderclap\\ThunderclapTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "overhead",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BUau",
+      "native_section": "BUau",
+      "rawcode": "BUau",
+      "target_art": [
+        "Abilities\\Spells\\Other\\GeneralAuraTarget\\GeneralAuraTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BUav",
+      "native_section": "BUav",
+      "rawcode": "BUav",
+      "target_art": [
+        "Abilities\\Spells\\Other\\GeneralAuraTarget\\GeneralAuraTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BUcs",
+      "native_section": null,
+      "rawcode": "BUcs",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BUdd",
+      "native_section": "BUdd",
+      "rawcode": "BUdd",
+      "target_art": [
+        "Abilities\\Spells\\Undead\\DeathandDecay\\DeathandDecayDamage.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BUfa",
+      "native_section": "BUfa",
+      "rawcode": "BUfa",
+      "target_art": [
+        "Abilities\\Spells\\Undead\\FrostArmor\\FrostArmorTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BUsl",
+      "native_section": "BUsl",
+      "rawcode": "BUsl",
+      "target_art": [
+        "Abilities\\Spells\\Undead\\Sleep\\SleepTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "overhead",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BUts",
+      "native_section": "BUts",
+      "rawcode": "BUts",
+      "target_art": [
+        "Abilities\\Spells\\Undead\\ThornyShield\\ThornyShieldTargetChestLeft.mdl",
+        "Abilities\\Spells\\Undead\\ThornyShield\\ThornyShieldTargetChestRight.mdl",
+        "Abilities\\Spells\\Undead\\ThornyShield\\ThornyShieldTargetChestMountLeft.mdl",
+        "Abilities\\Spells\\Undead\\ThornyShield\\ThornyShieldTargetChestMountRight.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": 4,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest,left",
+          "source": "native"
+        },
+        {
+          "index": 1,
+          "point": "chest,right",
+          "source": "native"
+        },
+        {
+          "index": 2,
+          "point": "chest,mount,left",
+          "source": "native"
+        },
+        {
+          "index": 3,
+          "point": "chest,mount,right",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "BUtt",
+      "native_section": "BUtt",
+      "rawcode": "BUtt",
+      "target_art": [
+        "Abilities\\Spells\\Other\\SpikedShell\\SpikedShellTargetChestLeft.mdl",
+        "Abilities\\Spells\\Other\\SpikedShell\\SpikedShellTargetChestRight.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": 2,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest,mount,left",
+          "source": "native"
+        },
+        {
+          "index": 1,
+          "point": "chest,mount,right",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bapl",
+      "native_section": "Bapl",
+      "rawcode": "Bapl",
+      "target_art": [
+        "Units\\Undead\\PlagueCloud\\PlagueCloudtarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "head",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Basl",
+      "native_section": "Basl",
+      "rawcode": "Basl",
+      "target_art": [
+        "Abilities\\Spells\\Other\\Tornado\\Tornado_Target.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bbof",
+      "native_section": "Bbof",
+      "rawcode": "Bbof",
+      "target_art": [
+        "Abilities\\Spells\\Human\\FlameStrike\\FlameStrikeDamageTarget.mdl"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bbsk",
+      "native_section": "Bbsk",
+      "rawcode": "Bbsk",
+      "target_art": [
+        "Abilities\\Spells\\Orc\\TrollBerserk\\HeadhunterWEAPONSLeft.mdl",
+        "Abilities\\Spells\\Orc\\TrollBerserk\\HeadhunterWEAPONSRight.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": 2,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "weapon,left",
+          "source": "native"
+        },
+        {
+          "index": 1,
+          "point": "weapon,right",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bclf",
+      "native_section": "Bclf",
+      "rawcode": "Bclf",
+      "target_art": [],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bcrs",
+      "native_section": "Bcrs",
+      "rawcode": "Bcrs",
+      "target_art": [
+        "Abilities\\Spells\\Undead\\Curse\\CurseTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "overhead",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bdbb",
+      "native_section": "Bdbb",
+      "rawcode": "Bdbb",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bdbl",
+      "native_section": "Bdbl",
+      "rawcode": "Bdbl",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bdbm",
+      "native_section": "Bdbm",
+      "rawcode": "Bdbm",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bdcb",
+      "native_section": "Bdcb",
+      "rawcode": "Bdcb",
+      "target_art": [
+        "Abilities\\Spells\\Other\\Drain\\DrainCaster.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bdcl",
+      "native_section": "Bdcl",
+      "rawcode": "Bdcl",
+      "target_art": [
+        "Abilities\\Spells\\Other\\Drain\\DrainCaster.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bdcm",
+      "native_section": "Bdcm",
+      "rawcode": "Bdcm",
+      "target_art": [
+        "Abilities\\Spells\\Other\\Drain\\ManaDrainCaster.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bdtb",
+      "native_section": "Bdtb",
+      "rawcode": "Bdtb",
+      "target_art": [
+        "Abilities\\Spells\\Other\\Drain\\DrainTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bdtl",
+      "native_section": "Bdtl",
+      "rawcode": "Bdtl",
+      "target_art": [
+        "Abilities\\Spells\\Other\\Drain\\DrainTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bdtm",
+      "native_section": "Bdtm",
+      "rawcode": "Bdtm",
+      "target_art": [
+        "Abilities\\Spells\\Other\\Drain\\ManaDrainTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bena",
+      "native_section": "Bena",
+      "rawcode": "Bena",
+      "target_art": [
+        "Abilities\\Spells\\Orc\\Ensnare\\ensnare_AirTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest,mount",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Beng",
+      "native_section": "Beng",
+      "rawcode": "Beng",
+      "target_art": [
+        "Abilities\\Spells\\Orc\\Ensnare\\ensnareTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bfae",
+      "native_section": "Bfae",
+      "rawcode": "Bfae",
+      "target_art": [
+        "Abilities\\Spells\\NightElf\\FaerieFire\\FaerieFireTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "head",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bfro",
+      "native_section": "Bfro",
+      "rawcode": "Bfro",
+      "target_art": [
+        "Abilities\\Spells\\Other\\FrostDamage\\FrostDamage.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bfrz",
+      "native_section": "Bfrz",
+      "rawcode": "Bfrz",
+      "target_art": [
+        "Abilities\\Spells\\Undead\\FreezingBreath\\FreezingBreathTargetArt.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bfzy",
+      "native_section": "Bfzy",
+      "rawcode": "Bfzy",
+      "target_art": [
+        "Abilities\\Spells\\Orc\\Bloodlust\\BloodlustTarget.mdl",
+        "Abilities\\Spells\\Orc\\Bloodlust\\BloodlustSpecial.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": 2,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "hand,left",
+          "source": "native"
+        },
+        {
+          "index": 1,
+          "point": "hand,right",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bgra",
+      "native_section": null,
+      "rawcode": "Bgra",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bhea",
+      "native_section": "Bhea",
+      "rawcode": "Bhea",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bhwd",
+      "native_section": "Bhwd",
+      "rawcode": "Bhwd",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bliq",
+      "native_section": "Bliq",
+      "rawcode": "Bliq",
+      "target_art": [
+        "Abilities\\Spells\\Orc\\LiquidFire\\Liquidfire.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Boar",
+      "native_section": "Boar",
+      "rawcode": "Boar",
+      "target_art": [
+        "Abilities\\Spells\\Other\\ANrm\\ANrmTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bpig",
+      "native_section": "Bpig",
+      "rawcode": "Bpig",
+      "target_art": [
+        "Abilities\\Spells\\Other\\ImmolationRed\\ImmolationRedTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bpoi",
+      "native_section": "Bpoi",
+      "rawcode": "Bpoi",
+      "target_art": [
+        "Abilities\\Weapons\\PoisonSting\\PoisonStingTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bprg",
+      "native_section": "Bprg",
+      "rawcode": "Bprg",
+      "target_art": [
+        "Abilities\\Spells\\Orc\\Purge\\PurgeBuffTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bpsd",
+      "native_section": "Bpsd",
+      "rawcode": "Bpsd",
+      "target_art": [
+        "Abilities\\Weapons\\PoisonSting\\PoisonStingTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bpsh",
+      "native_section": "Bpsh",
+      "rawcode": "Bpsh",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bpsi",
+      "native_section": null,
+      "rawcode": "Bpsi",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Brai",
+      "native_section": "Brai",
+      "rawcode": "Brai",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Brej",
+      "native_section": "Brej",
+      "rawcode": "Brej",
+      "target_art": [
+        "Abilities\\Spells\\NightElf\\Rejuvenation\\RejuvenationTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bslo",
+      "native_section": "Bslo",
+      "rawcode": "Bslo",
+      "target_art": [
+        "Abilities\\Spells\\Human\\slow\\slowtarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bspe",
+      "native_section": "Bspe",
+      "rawcode": "Bspe",
+      "target_art": [
+        "Abilities\\Spells\\Items\\AIsp\\SpeedTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bspo",
+      "native_section": "Bspo",
+      "rawcode": "Bspo",
+      "target_art": [
+        "Abilities\\Weapons\\PoisonSting\\PoisonStingTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bssd",
+      "native_section": "Bssd",
+      "rawcode": "Bssd",
+      "target_art": [
+        "Abilities\\Weapons\\PoisonSting\\PoisonStingTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bsta",
+      "native_section": "Bsta",
+      "rawcode": "Bsta",
+      "target_art": [
+        "Abilities\\Spells\\Human\\Thunderclap\\ThunderclapTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "overhead",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Btdg",
+      "native_section": null,
+      "rawcode": "Btdg",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Bwea",
+      "native_section": "Bwea",
+      "rawcode": "Bwea",
+      "target_art": [
+        "Abilities\\Spells\\Undead\\Web\\Web_AirTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "chest,mount",
+          "source": "native"
+        }
+      ]
+    },
+    {
+      "base_rawcode": "Bweb",
+      "native_section": "Bweb",
+      "rawcode": "Bweb",
+      "target_art": [
+        "mdx\\sfx\\Web.mdx"
+      ],
+      "target_art_source": "resolved",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "origin",
+          "source": "resolved"
+        }
+      ]
+    }
+  ],
+  "extraction_git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+  "map_version": "9.27",
+  "native_skin": {
+    "bytes": 202109,
+    "path": "base/units/abilityskin.txt",
+    "sha256": "0a8000f12fb761822e84c98026b3cdf16deab5a9d51f41971356747ef9ec7186"
+  },
+  "schema_version": 1,
+  "source_revision": "r1",
+  "sources": {
+    "base-data-manifest.json": "0b300249cd2eb57c2849439aea974666d2f44d88aacf087a93120348c696bcfe",
+    "object-fields.tsv": "01040f03e4a625ac1d960a0a2d43d0732d64b797e9357f4f40e8c2c0d6d9710d",
+    "summary.json": "26a5c7e6e4d79d5412c64891d716e713ab244052dfc0551df1e3de8488b7b062"
+  },
+  "warcraft_install_build": {
+    "build_key": "9a94ff7d25781db6c09190cd69d52458",
+    "product": "w3",
+    "version": "2.0.4.23745"
+  }
+}
