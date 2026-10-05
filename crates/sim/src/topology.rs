@@ -216,6 +216,40 @@ impl TopologyGrid {
         true
     }
 
+    /// Validate the entire swept collision circle, not just its destination. Tangency is legal.
+    pub(crate) fn circle_segment_is_traversable_in_component(
+        &self,
+        from: SimPoint,
+        to: SimPoint,
+        radius: i32,
+        component: u32,
+    ) -> bool {
+        if !self.circle_is_traversable_in_component(from, radius, component)
+            || !self.circle_is_traversable_in_component(to, radius, component)
+        {
+            return false;
+        }
+        let min = self.cell_of_point(SimPoint::new(
+            from.x.min(to.x).saturating_sub(radius),
+            from.y.min(to.y).saturating_sub(radius),
+        ));
+        let max = self.cell_of_point(SimPoint::new(
+            from.x.max(to.x).saturating_add(radius),
+            from.y.max(to.y).saturating_add(radius),
+        ));
+        for y in min.y..=max.y {
+            for x in min.x..=max.x {
+                let cell = NavCell::new(x, y);
+                if self.component_id(cell) != Some(component)
+                    && segment_overlaps_cell_circle(from, to, cell, self.cell_size, radius)
+                {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+
     pub(crate) fn objective_step_with_bias(
         &self,
         team: u8,
@@ -884,6 +918,62 @@ fn cell_rect_min_distance_sq(center: SimPoint, cell: NavCell, cell_size: i32) ->
     (dx * dx + dy * dy) as u64
 }
 
+fn segment_overlaps_cell_circle(
+    from: SimPoint,
+    to: SimPoint,
+    cell: NavCell,
+    cell_size: i32,
+    radius: i32,
+) -> bool {
+    let min_x = i64::from(cell.x) * i64::from(cell_size);
+    let min_y = i64::from(cell.y) * i64::from(cell_size);
+    let max_x = min_x + i64::from(cell_size);
+    let max_y = min_y + i64::from(cell_size);
+    let corners = [
+        (min_x, min_y),
+        (max_x, min_y),
+        (max_x, max_y),
+        (min_x, max_y),
+    ];
+    let dx = i128::from(to.x) - i128::from(from.x);
+    let dy = i128::from(to.y) - i128::from(from.y);
+    let crosses = corners.map(|(x, y)| {
+        dx * (i128::from(y) - i128::from(from.y)) - dy * (i128::from(x) - i128::from(from.x))
+    });
+    // Separating axes for a line segment and an axis-aligned rectangle.
+    let intersects = i64::from(from.x.max(to.x)) >= min_x
+        && i64::from(from.x.min(to.x)) <= max_x
+        && i64::from(from.y.max(to.y)) >= min_y
+        && i64::from(from.y.min(to.y)) <= max_y
+        && !crosses.iter().all(|cross| *cross > 0)
+        && !crosses.iter().all(|cross| *cross < 0);
+    if intersects {
+        return true;
+    }
+    let radius_sq = i128::from(radius) * i128::from(radius);
+    if i128::from(cell_rect_min_distance_sq(from, cell, cell_size)) < radius_sq
+        || i128::from(cell_rect_min_distance_sq(to, cell, cell_size)) < radius_sq
+    {
+        return true;
+    }
+    let length_sq = dx * dx + dy * dy;
+    if length_sq == 0 {
+        return false;
+    }
+    // Otherwise the closest pair includes a rectangle corner projected onto the segment.
+    corners.iter().zip(crosses).any(|(&(x, y), cross)| {
+        let projection =
+            (i128::from(x) - i128::from(from.x)) * dx + (i128::from(y) - i128::from(from.y)) * dy;
+        if projection <= 0 || projection >= length_sq {
+            return false;
+        }
+        let cross = cross.unsigned_abs();
+        cross
+            .checked_mul(cross)
+            .is_some_and(|square| square < (radius_sq as u128) * (length_sq as u128))
+    })
+}
+
 fn cell_distance_sq(a: NavCell, b: NavCell) -> i64 {
     let dx = i64::from(a.x - b.x);
     let dy = i64::from(a.y - b.y);
@@ -900,6 +990,37 @@ fn manhattan(a: NavCell, b: NavCell) -> u32 {
 mod tests {
     use super::*;
     use crate::math::SUBUNITS_PER_WORLD_UNIT;
+
+    #[test]
+    fn swept_collision_checks_corner_clearance_and_allows_tangency() {
+        let grid = TopologyGrid::build(
+            32,
+            NavCell::new(0, 0),
+            NavCell::new(6, 6),
+            [BuildingFootprint::new(2, 2, 2, 2)],
+            [SimPoint::new(16, 16), SimPoint::new(176, 176)],
+        );
+        let component = grid.component_id(NavCell::new(1, 1)).unwrap();
+        for (from, to, clear) in [
+            (SimPoint::new(80, 48), SimPoint::new(48, 80), false),
+            (SimPoint::new(48, 48), SimPoint::new(48, 144), true),
+            (SimPoint::new(49, 48), SimPoint::new(48, 80), false),
+            (SimPoint::new(48, 48), SimPoint::new(144, 48), true),
+            (SimPoint::new(52, 52), SimPoint::new(53, 51), true),
+            (SimPoint::new(48, 48), SimPoint::new(48, 48), true),
+        ] {
+            assert_eq!(
+                grid.circle_segment_is_traversable_in_component(from, to, 16, component),
+                clear,
+                "{from:?} -> {to:?}"
+            );
+            assert_eq!(
+                grid.circle_segment_is_traversable_in_component(to, from, 16, component),
+                clear,
+                "reverse segment"
+            );
+        }
+    }
 
     #[test]
     fn objective_step_uses_diagonal_when_both_axes_reduce_distance() {

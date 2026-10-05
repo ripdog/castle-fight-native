@@ -402,14 +402,25 @@ impl Simulation {
             source_cell,
             candidate,
             unit.collision_radius_override,
-        ) {
+        ) && unit.collision_radius_override.is_none_or(|radius| {
+            self.topology
+                .component_id(source_cell)
+                .is_some_and(|component| {
+                    self.topology.circle_segment_is_traversable_in_component(
+                        current,
+                        target_position,
+                        radius,
+                        component,
+                    )
+                })
+        }) {
             candidate
         } else {
             // A unit can be legally positioned off-center inside its nav cell while the straight
             // segment toward the next cell clips an expanded building corner. Repeating the same
             // rejected endpoint forever creates a local corner lock. Move back toward the current
-            // cell center first; this gives the radius-aware cell route a legal portal to leave
-            // through without adding sticky per-unit path state.
+            // cell center first; checking the whole waypoint segment keeps this alignment going
+            // even when a partial forward step would be legal and would undo the recovery.
             let recenter_target = self.topology.center_of_cell(source_cell);
             let recenter = current.step_towards(recenter_target, movement_speed);
             if recenter != current
@@ -1688,8 +1699,110 @@ fn building_attack_envelope_goal(
 }
 
 #[cfg(test)]
-mod reservation_memory_tests {
+mod tests {
     use super::*;
+
+    #[test]
+    fn slow_pursuers_clear_building_corners_from_off_center_positions() {
+        fn run(workers: usize) -> Vec<SimPoint> {
+            let mut finished = Vec::new();
+            let config = SimulationConfig {
+                navigation_cell_size: 32,
+                navigation_min: NavCell::new(0, 0),
+                navigation_max: NavCell::new(24, 24),
+                static_blockers: vec![BuildingFootprint::new(8, 8, 4, 4)],
+                ..SimulationConfig::default()
+            };
+            let mut sim = Simulation::new(config, workers);
+            let spawn = UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(400, 244),
+                health: 100,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    damage: 0,
+                    range: 28,
+                    acquisition_range: 600,
+                    cooldown_ticks: 20,
+                },
+                movement: MovementProfile { speed_per_tick: 3 },
+            };
+            let source = sim.spawn_unit_with_collision_radius(spawn, CollisionRadius(16));
+            let target = sim.spawn_unit_with_collision_radius(
+                UnitSpawn {
+                    team: Team(1),
+                    position: SimPoint::new(240, 320),
+                    ..spawn
+                },
+                CollisionRadius(16),
+            );
+            let mut units = sim.snapshot_units();
+            let source_index = find_unit_index(&units, source).unwrap();
+            units[source_index].target = Some(target);
+            units[1].movement.speed_per_tick = 0;
+            for speed in [3, 16, 24] {
+                for range in [32, 64, 90] {
+                    units[source_index].movement.speed_per_tick = speed;
+                    units[source_index].attack.range = range;
+                    for x in [400, 408] {
+                        for y in [224, 248, 304, 400] {
+                            for (flip_x, flip_y) in
+                                [(false, false), (true, false), (false, true), (true, true)]
+                            {
+                                let reflect = |p: SimPoint| {
+                                    SimPoint::new(
+                                        if flip_x { 640 - p.x } else { p.x },
+                                        if flip_y { 640 - p.y } else { p.y },
+                                    )
+                                };
+                                units[1].position = reflect(SimPoint::new(240, 320));
+                                let start = reflect(SimPoint::new(x, y));
+                                let cell = sim.topology.cell_of_point(start);
+                                if !sim.position_is_traversable_from(cell, start, Some(16)) {
+                                    continue;
+                                }
+                                units[source_index].position = start;
+                                units[source_index].navigation = NavigationState::default();
+                                for _ in 0..250 {
+                                    if units[source_index].position.distance_sq(units[1].position)
+                                        <= square_i32(range)
+                                    {
+                                        break;
+                                    }
+                                    let mut positions =
+                                        units.iter().map(|u| u.position).collect::<Vec<_>>();
+                                    let mut navigation =
+                                        units.iter().map(|u| u.navigation).collect::<Vec<_>>();
+                                    sim.resolve_movement(
+                                        &units,
+                                        &[],
+                                        &[100, 100],
+                                        &[],
+                                        &mut positions,
+                                        &mut navigation,
+                                    );
+                                    for (i, unit) in units.iter_mut().enumerate() {
+                                        unit.position = positions[i];
+                                        unit.navigation = navigation[i];
+                                    }
+                                }
+                                assert!(
+                                    units[source_index].position.distance_sq(units[1].position)
+                                        <= square_i32(range),
+                                    "pursuer with speed {speed}, range {range}, from {start:?} jittered at {:?} pursuing {:?}",
+                                    units[source_index].position,
+                                    units[1].position
+                                );
+                                finished.push(units[source_index].position);
+                            }
+                        }
+                    }
+                }
+            }
+            finished
+        }
+        assert_eq!(run(1), run(4), "worker count changed corner pursuit");
+    }
 
     #[test]
     fn tiny_collision_bodies_keep_reservation_storage_bounded_and_worker_independent() {
