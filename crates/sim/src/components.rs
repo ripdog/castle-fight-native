@@ -99,6 +99,34 @@ impl AttackDelivery {
     }
 }
 
+/// Native action animation duration (point plus backswing), rounded once to simulation ticks.
+#[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActionTimingProfile {
+    pub primary_attack_ticks: u16,
+    pub secondary_attack_ticks: u16,
+    pub cast_ticks: u16,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ActionAnimationKind {
+    Attack,
+    Cast,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActionAnimationState {
+    pub kind: ActionAnimationKind,
+    pub started_tick: u64,
+    pub until_tick: u64,
+}
+
+impl ActionAnimationState {
+    #[must_use]
+    pub const fn is_active(self, tick: u64) -> bool {
+        tick >= self.started_tick && tick < self.until_tick
+    }
+}
+
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AttackProfile {
     pub delivery: AttackDelivery,
@@ -600,6 +628,7 @@ impl Default for PassiveUnitEffects {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnitGameplayProperties {
+    pub action_timing: ActionTimingProfile,
     pub content: Option<ContentIdentity>,
     pub health_regen_per_second_per_10k: u32,
     pub corpse: Option<CorpseProfile>,
@@ -652,6 +681,9 @@ pub(crate) struct ProductionUnitRepairMetadata {
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProductionAttackTargets(pub AttackTargetMask);
+
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ProductionActionTiming(pub ActionTimingProfile);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct ProductionSecondaryAttack(pub SecondaryAttackProfile);
@@ -1196,6 +1228,7 @@ pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
 
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusState {
+    pub action_animation: Option<ActionAnimationState>,
     pub stunned_until_tick: u64,
     /// Independent script/order recovery, not a removable native stun buff.
     pub order_recovery_until_tick: u64,
@@ -1216,6 +1249,36 @@ pub struct StatusState {
 }
 
 impl StatusState {
+    #[must_use]
+    pub fn is_performing_action(&self, tick: u64) -> bool {
+        self.action_animation
+            .is_some_and(|action| action.is_active(tick))
+    }
+
+    #[must_use]
+    pub fn is_casting(&self, tick: u64) -> bool {
+        self.action_animation.is_some_and(|action| {
+            action.kind == ActionAnimationKind::Cast && action.is_active(tick)
+        })
+    }
+
+    pub(crate) fn begin_action_animation(
+        &mut self,
+        kind: ActionAnimationKind,
+        tick: u64,
+        duration_ticks: u16,
+    ) {
+        if duration_ticks > 0 {
+            self.action_animation = Some(ActionAnimationState {
+                kind,
+                started_tick: tick,
+                until_tick: tick
+                    .checked_add(u64::from(duration_ticks))
+                    .expect("action animation tick overflow"),
+            });
+        }
+    }
+
     #[must_use]
     pub fn is_revealed_to(&self, team: Team, tick: u64) -> bool {
         self.armor_modifiers[..usize::from(self.armor_modifier_count)]

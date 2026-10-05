@@ -61,6 +61,8 @@ impl Simulation {
                             stunned_until_tick: source.status.stunned_until_tick,
                             spellcasting: source.spellcasting.filter(|profile| {
                                 !source.abilities_disabled
+                                    && (!source.status.is_casting(self.next_tick)
+                                        || profile.ability.effect.ignores_order_interruptions())
                                     && (!source.orders_suspended
                                         || profile.ability.effect.ignores_order_interruptions())
                             }),
@@ -112,6 +114,8 @@ impl Simulation {
         for intent in intents {
             if let AbilitySourceIndex::Unit(index) = intent.source
                 && (units[index].abilities_disabled
+                    || (units[index].status.is_casting(self.next_tick)
+                        && !intent.ability.effect.ignores_order_interruptions())
                     || (units[index].orders_suspended
                         && !intent.ability.effect.ignores_order_interruptions()))
             {
@@ -644,6 +648,26 @@ impl Simulation {
             if let Some((count, radius, origin)) = resurrection {
                 metrics.effects +=
                     self.resurrect_friendly_corpses(source.team, origin, radius, count);
+            }
+            if let AbilitySourceIndex::Unit(index) = intent.source
+                && !intent.ability.effect.ignores_order_interruptions()
+            {
+                let source = &mut units[index];
+                let mut duration = source.action_timing.cast_ticks;
+                // An authored retreat order is the end of the visible cast interval. Fit the
+                // entire clip into that pause instead of delaying the map-script AI timeline.
+                if source.status.ability_retreat_start_tick > self.next_tick
+                    && source.status.ability_retreat_end_tick
+                        > source.status.ability_retreat_start_tick
+                {
+                    let pause = source.status.ability_retreat_start_tick - self.next_tick;
+                    duration = duration.min(u16::try_from(pause).unwrap_or(u16::MAX));
+                }
+                source.status.begin_action_animation(
+                    ActionAnimationKind::Cast,
+                    self.next_tick,
+                    duration,
+                );
             }
             self.last_ability_casts.push(AbilityCastEvent {
                 source: intent.source_id,

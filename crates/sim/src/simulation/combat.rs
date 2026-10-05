@@ -345,6 +345,30 @@ impl Simulation {
             }
             match intent.source {
                 AttackSourceIndex::Unit(index) => {
+                    let primary = match intent.target {
+                        TargetIndex::Unit(target) => units[index]
+                            .primary_attack_targets()
+                            .can_target_unit(units[target].movement_class),
+                        TargetIndex::Building(_) => {
+                            units[index].primary_attack_targets().can_target_buildings()
+                        }
+                    };
+                    let animation_ticks = if primary {
+                        units[index].action_timing.primary_attack_ticks
+                    } else {
+                        units[index].action_timing.secondary_attack_ticks
+                    };
+                    if animation_ticks > 0 {
+                        let duration = effective_attack_cooldown_ticks(
+                            animation_ticks.min(intent.attack.cooldown_ticks),
+                            units[index].status,
+                        );
+                        units[index].status.begin_action_animation(
+                            ActionAnimationKind::Attack,
+                            completed_tick,
+                            duration,
+                        );
+                    }
                     cooldowns[index] = effective_attack_cooldown_ticks(
                         intent.attack.cooldown_ticks,
                         units[index].status,
@@ -610,6 +634,7 @@ impl Simulation {
                 .filter_map(|(source_index, source)| {
                     if source.spawn_tick == self.next_tick
                         || source.cooldown_remaining != 0
+                        || source.status.is_performing_action(self.next_tick)
                         || self.next_tick < source.status.stunned_until_tick
                     {
                         return None;

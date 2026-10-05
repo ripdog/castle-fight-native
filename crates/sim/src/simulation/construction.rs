@@ -374,6 +374,7 @@ impl Simulation {
                     queued: 2,
                 },
                 ProductionMovementClass(properties.production_unit.movement_class),
+                ProductionActionTiming(properties.production_unit.action_timing),
                 ProductionUnitRepairMetadata {
                     mechanical: properties.production_unit.mechanical,
                     build_time_ticks: properties.production_unit.build_time_ticks,
@@ -472,6 +473,7 @@ impl Simulation {
         entity.remove::<ProductionUnitRepairMetadata>();
         entity.remove::<ProductionAttackTargets>();
         entity.remove::<ProductionSecondaryAttack>();
+        entity.remove::<ProductionActionTiming>();
         entity.remove::<ProductionHealthRegeneration>();
         entity.remove::<ProductionDamageType>();
         entity.remove::<ProductionArmorProfile>();

@@ -1,5 +1,3686 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
+  "simulation_hz": 30,
+  "action_timings": [
+    {
+      "rawcode": "X006",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "X00C",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "X00E",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "X00O",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "X00P",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "X017",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "X018",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "X019",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "X01A",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "X051",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "X06P",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "X075",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "X078",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "X07P",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "X089",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "X0Z0",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "e000",
+      "primary_attack_ticks": 39,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "e001",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "e002",
+      "primary_attack_ticks": 60,
+      "secondary_attack_ticks": 60,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "e003",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "e004",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "e005",
+      "primary_attack_ticks": 60,
+      "secondary_attack_ticks": 60,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "e006",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "e007",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 81
+    },
+    {
+      "rawcode": "e008",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 0
+    },
+    {
+      "rawcode": "e009",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "e00A",
+      "primary_attack_ticks": 21,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "e00B",
+      "primary_attack_ticks": 21,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "e00C",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "e00D",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "e00E",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 0
+    },
+    {
+      "rawcode": "e00F",
+      "primary_attack_ticks": 45,
+      "secondary_attack_ticks": 45,
+      "cast_ticks": 90
+    },
+    {
+      "rawcode": "e00G",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "e00I",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 0
+    },
+    {
+      "rawcode": "e00J",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 81
+    },
+    {
+      "rawcode": "e00M",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h000",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h001",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h002",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h003",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h004",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h005",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h006",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h007",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h008",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h009",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h00A",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h00B",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h00C",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h00D",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 12
+    },
+    {
+      "rawcode": "h00E",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h00F",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h00G",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h00I",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h00J",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h00K",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h00L",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h00M",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h00N",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h00O",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h00P",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h00Q",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h00R",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h00S",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h00T",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h00U",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h00V",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h00W",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 36
+    },
+    {
+      "rawcode": "h00X",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h00Y",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h00Z",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h010",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h011",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h012",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h013",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h014",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h015",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h016",
+      "primary_attack_ticks": 51,
+      "secondary_attack_ticks": 51,
+      "cast_ticks": 24
+    },
+    {
+      "rawcode": "h017",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h018",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h019",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h01A",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h01B",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h01C",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h01D",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h01E",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h01F",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h01G",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 36
+    },
+    {
+      "rawcode": "h01H",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h01I",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h01J",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h01K",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h01L",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h01M",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h01N",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h01O",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h01P",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h01Q",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h01R",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h01S",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h01T",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h01U",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h01V",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h01W",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h01X",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h01Y",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h01Z",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h020",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h021",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h022",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h023",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h024",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h025",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h026",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h027",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h028",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h029",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02A",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02B",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02C",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02D",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02E",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02F",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02G",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02H",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02I",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02J",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02K",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02L",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02M",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02N",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02O",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02P",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02Q",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02R",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02S",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02T",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02U",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02V",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h02W",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 36,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h02X",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 36,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h02Y",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 36,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h02Z",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h030",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h031",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h032",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h033",
+      "primary_attack_ticks": 33,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h034",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h035",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h036",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h037",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h038",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h039",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h03A",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h03B",
+      "primary_attack_ticks": 33,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h03C",
+      "primary_attack_ticks": 33,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h03D",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h03E",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h03F",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h03G",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h03H",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h03I",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h03J",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h03K",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h03L",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h03M",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h03N",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h03O",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h03P",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "h03Q",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h03R",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "h03S",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h03T",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h03U",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h03V",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 81
+    },
+    {
+      "rawcode": "h03W",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h03X",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h03Y",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h03Z",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h040",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h041",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h042",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h043",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h044",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h045",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h046",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h047",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 6
+    },
+    {
+      "rawcode": "h048",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h049",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04A",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04B",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04C",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04D",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04E",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04F",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04G",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 36
+    },
+    {
+      "rawcode": "h04H",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 36
+    },
+    {
+      "rawcode": "h04I",
+      "primary_attack_ticks": 27,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h04J",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04K",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04L",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04M",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04N",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04O",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04P",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04Q",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04R",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04S",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04T",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04U",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04V",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04W",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04X",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "h04Y",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h04Z",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h050",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h051",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h052",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h053",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h054",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h055",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h056",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h057",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h058",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h059",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05A",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 36
+    },
+    {
+      "rawcode": "h05B",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05C",
+      "primary_attack_ticks": 27,
+      "secondary_attack_ticks": 27,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h05D",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05E",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05F",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05G",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05H",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h05I",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05J",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05K",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05L",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05M",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05N",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05O",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05P",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05Q",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05R",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05S",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05T",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05U",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05V",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05W",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05X",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05Y",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h05Z",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h060",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h061",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h062",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h063",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h064",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h065",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h066",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h067",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h068",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h069",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h06A",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h06B",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h06C",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 36
+    },
+    {
+      "rawcode": "h06D",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h06E",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h06F",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h06G",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h06H",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h06I",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h06J",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h06L",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h06M",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h06N",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 36
+    },
+    {
+      "rawcode": "h06O",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h06P",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h06Q",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 40,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h06R",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 40,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h06S",
+      "primary_attack_ticks": 21,
+      "secondary_attack_ticks": 30,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h06T",
+      "primary_attack_ticks": 21,
+      "secondary_attack_ticks": 30,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h06U",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 30,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h06V",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 12
+    },
+    {
+      "rawcode": "h06W",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 12
+    },
+    {
+      "rawcode": "h06X",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 12
+    },
+    {
+      "rawcode": "h06Y",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h06Z",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h070",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h071",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h072",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h073",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h074",
+      "primary_attack_ticks": 33,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h075",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h076",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h077",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h078",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h079",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07A",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07B",
+      "primary_attack_ticks": 46,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 46
+    },
+    {
+      "rawcode": "h07C",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 36
+    },
+    {
+      "rawcode": "h07D",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07E",
+      "primary_attack_ticks": 60,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07F",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07G",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07H",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07I",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07J",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07K",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07L",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07M",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07N",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07O",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07P",
+      "primary_attack_ticks": 54,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07Q",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07R",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07S",
+      "primary_attack_ticks": 24,
+      "secondary_attack_ticks": 51,
+      "cast_ticks": 24
+    },
+    {
+      "rawcode": "h07T",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07U",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07V",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07W",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07X",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07Y",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h07Z",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h080",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h081",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h082",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h088",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h089",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h08A",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08B",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08C",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08D",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08E",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08F",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08G",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08H",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08I",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08J",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08K",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08L",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08M",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08N",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08O",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08P",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08Q",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08R",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08S",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08T",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08U",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 12
+    },
+    {
+      "rawcode": "h08V",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08W",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08X",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08Y",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h08Z",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h090",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h091",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h092",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h093",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h094",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h096",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h097",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h098",
+      "primary_attack_ticks": 21,
+      "secondary_attack_ticks": 30,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h099",
+      "primary_attack_ticks": 21,
+      "secondary_attack_ticks": 30,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h09A",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h09B",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h09C",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h09D",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h09E",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h09F",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h09G",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h09H",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h09I",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h09J",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h09K",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h09L",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h09M",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 36
+    },
+    {
+      "rawcode": "h09N",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h09O",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h09P",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h09Q",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 36
+    },
+    {
+      "rawcode": "h09R",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h09T",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h09U",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h09V",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h09W",
+      "primary_attack_ticks": 33,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h09X",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h09Y",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h09Z",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h0A0",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h0A1",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h0A2",
+      "primary_attack_ticks": 27,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "h0Z1",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h0Z2",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h0Z3",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h0Z4",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h0Z5",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h0Z6",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "h0Z7",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "hcas",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "hfoo",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "hmtm",
+      "primary_attack_ticks": 63,
+      "secondary_attack_ticks": 63,
+      "cast_ticks": 60
+    },
+    {
+      "rawcode": "hrif",
+      "primary_attack_ticks": 27,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n000",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n001",
+      "primary_attack_ticks": 45,
+      "secondary_attack_ticks": 45,
+      "cast_ticks": 46
+    },
+    {
+      "rawcode": "n002",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 32
+    },
+    {
+      "rawcode": "n003",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 30,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n004",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 32
+    },
+    {
+      "rawcode": "n005",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n006",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n007",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 30,
+      "cast_ticks": 38
+    },
+    {
+      "rawcode": "n008",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 24
+    },
+    {
+      "rawcode": "n009",
+      "primary_attack_ticks": 21,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n00A",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 51
+    },
+    {
+      "rawcode": "n00B",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n00C",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n00D",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n00E",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n00F",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n00G",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n00H",
+      "primary_attack_ticks": 40,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n00I",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 30,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n00J",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 30,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n00K",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 30,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n00L",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n00M",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n00N",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n00O",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n00P",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n00Q",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n00R",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n00S",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n00T",
+      "primary_attack_ticks": 24,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n00U",
+      "primary_attack_ticks": 24,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n00V",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n00W",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 32
+    },
+    {
+      "rawcode": "n00X",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 32
+    },
+    {
+      "rawcode": "n00Y",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n00Z",
+      "primary_attack_ticks": 21,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n010",
+      "primary_attack_ticks": 45,
+      "secondary_attack_ticks": 45,
+      "cast_ticks": 46
+    },
+    {
+      "rawcode": "n011",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n012",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 38
+    },
+    {
+      "rawcode": "n013",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 38
+    },
+    {
+      "rawcode": "n014",
+      "primary_attack_ticks": 29,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n015",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 15
+    },
+    {
+      "rawcode": "n016",
+      "primary_attack_ticks": 45,
+      "secondary_attack_ticks": 45,
+      "cast_ticks": 45
+    },
+    {
+      "rawcode": "n017",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n018",
+      "primary_attack_ticks": 39,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n019",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n01A",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n01B",
+      "primary_attack_ticks": 27,
+      "secondary_attack_ticks": 30,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n01C",
+      "primary_attack_ticks": 35,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n01D",
+      "primary_attack_ticks": 27,
+      "secondary_attack_ticks": 30,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n01E",
+      "primary_attack_ticks": 39,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 39
+    },
+    {
+      "rawcode": "n01F",
+      "primary_attack_ticks": 39,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 39
+    },
+    {
+      "rawcode": "n01G",
+      "primary_attack_ticks": 21,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 27
+    },
+    {
+      "rawcode": "n01H",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n01I",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n01J",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 30,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n01K",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n01L",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n01M",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n01N",
+      "primary_attack_ticks": 24,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n01O",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 19
+    },
+    {
+      "rawcode": "n01P",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 38
+    },
+    {
+      "rawcode": "n01Q",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 38
+    },
+    {
+      "rawcode": "n01R",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 38
+    },
+    {
+      "rawcode": "n01S",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 30
+    },
+    {
+      "rawcode": "n01T",
+      "primary_attack_ticks": 27,
+      "secondary_attack_ticks": 27,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n01U",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n01V",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 0
+    },
+    {
+      "rawcode": "n01W",
+      "primary_attack_ticks": 24,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n01X",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n01Y",
+      "primary_attack_ticks": 32,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 40
+    },
+    {
+      "rawcode": "n01Z",
+      "primary_attack_ticks": 27,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 6
+    },
+    {
+      "rawcode": "n020",
+      "primary_attack_ticks": 21,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 6
+    },
+    {
+      "rawcode": "n021",
+      "primary_attack_ticks": 35,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n022",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n023",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n024",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n025",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n026",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 30
+    },
+    {
+      "rawcode": "n027",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 19
+    },
+    {
+      "rawcode": "n028",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 30
+    },
+    {
+      "rawcode": "n029",
+      "primary_attack_ticks": 39,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n02A",
+      "primary_attack_ticks": 45,
+      "secondary_attack_ticks": 45,
+      "cast_ticks": 46
+    },
+    {
+      "rawcode": "n02B",
+      "primary_attack_ticks": 39,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n02D",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 30,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n02E",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n02F",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n02G",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 19
+    },
+    {
+      "rawcode": "n02H",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n02I",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n02J",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 18,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n02K",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 30,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n02L",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 30,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n02M",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 0
+    },
+    {
+      "rawcode": "n02N",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n02O",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n02P",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n02Q",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n02R",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n02S",
+      "primary_attack_ticks": 21,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n02T",
+      "primary_attack_ticks": 21,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n02U",
+      "primary_attack_ticks": 27,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n02V",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n02W",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 18,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n02X",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 33
+    },
+    {
+      "rawcode": "n02Y",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 33
+    },
+    {
+      "rawcode": "n02Z",
+      "primary_attack_ticks": 35,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 30
+    },
+    {
+      "rawcode": "n030",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n031",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n032",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n033",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n034",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n035",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n036",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n037",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n038",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n039",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n03A",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n03B",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n03C",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "n03D",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n03E",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n03F",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n03G",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 33
+    },
+    {
+      "rawcode": "n03H",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n03I",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n03J",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 33
+    },
+    {
+      "rawcode": "n03K",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n03L",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n03M",
+      "primary_attack_ticks": 26,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n03N",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n03O",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 33
+    },
+    {
+      "rawcode": "n03P",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n03Q",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n03R",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n03S",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n03T",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n03U",
+      "primary_attack_ticks": 40,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "n0Z1",
+      "primary_attack_ticks": 24,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 32
+    },
+    {
+      "rawcode": "n0Z2",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 32
+    },
+    {
+      "rawcode": "n0Z3",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n0Z4",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "n0Z7",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 32
+    },
+    {
+      "rawcode": "nalb",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "ncp2",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "ncrb",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "nder",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "ndog",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "ndwm",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "nech",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "necr",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "nfbr",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "nfro",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "nhmc",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "nmrk",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "npig",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "npng",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 27
+    },
+    {
+      "rawcode": "npnw",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "nrac",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "nrat",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "nsea",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "nshe",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "nshp",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "nskk",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "nsno",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "nvul",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "o000",
+      "primary_attack_ticks": 18,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "o001",
+      "primary_attack_ticks": 60,
+      "secondary_attack_ticks": 60,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "o002",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "o003",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 60
+    },
+    {
+      "rawcode": "o004",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "o005",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "o006",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 30
+    },
+    {
+      "rawcode": "o007",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 30
+    },
+    {
+      "rawcode": "o008",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 30
+    },
+    {
+      "rawcode": "o009",
+      "primary_attack_ticks": 35,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "o00A",
+      "primary_attack_ticks": 40,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 18
+    },
+    {
+      "rawcode": "o00B",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 30
+    },
+    {
+      "rawcode": "o00C",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "o00D",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "o00E",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "o00F",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 60
+    },
+    {
+      "rawcode": "o00G",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 60
+    },
+    {
+      "rawcode": "o00H",
+      "primary_attack_ticks": 60,
+      "secondary_attack_ticks": 60,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "otot",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "tec1",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 12
+    },
+    {
+      "rawcode": "tec2",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 12
+    },
+    {
+      "rawcode": "tec3",
+      "primary_attack_ticks": 36,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 12
+    },
+    {
+      "rawcode": "u000",
+      "primary_attack_ticks": 32,
+      "secondary_attack_ticks": 32,
+      "cast_ticks": 27
+    },
+    {
+      "rawcode": "u001",
+      "primary_attack_ticks": 33,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 40
+    },
+    {
+      "rawcode": "u002",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "u003",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "u004",
+      "primary_attack_ticks": 25,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "u005",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 30
+    },
+    {
+      "rawcode": "u006",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "u007",
+      "primary_attack_ticks": 51,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 25
+    },
+    {
+      "rawcode": "u008",
+      "primary_attack_ticks": 25,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "u009",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 30
+    },
+    {
+      "rawcode": "u00A",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "u00B",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 31
+    },
+    {
+      "rawcode": "u00C",
+      "primary_attack_ticks": 25,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "u00D",
+      "primary_attack_ticks": 30,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 30
+    },
+    {
+      "rawcode": "u00E",
+      "primary_attack_ticks": 25,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "u00F",
+      "primary_attack_ticks": 25,
+      "secondary_attack_ticks": 26,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "u00G",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 0
+    },
+    {
+      "rawcode": "x001",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 0
+    },
+    {
+      "rawcode": "x002",
+      "primary_attack_ticks": 9,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 0
+    },
+    {
+      "rawcode": "x003",
+      "primary_attack_ticks": 0,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 0
+    },
+    {
+      "rawcode": "z000",
+      "primary_attack_ticks": 24,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "z001",
+      "primary_attack_ticks": 27,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "z002",
+      "primary_attack_ticks": 27,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    },
+    {
+      "rawcode": "z003",
+      "primary_attack_ticks": 27,
+      "secondary_attack_ticks": 0,
+      "cast_ticks": 16
+    }
+  ],
   "bounce_weapons": [
     {
       "rawcode": "e002",

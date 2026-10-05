@@ -165,7 +165,10 @@ impl Simulation {
     ) -> MovementDecision {
         let current = unit.position;
         let movement_speed = effective_movement_speed(unit);
-        if unit_health[index] <= 0 || movement_speed == 0 {
+        if unit_health[index] <= 0
+            || movement_speed == 0
+            || unit.status.is_performing_action(self.next_tick)
+        {
             return MovementDecision::stationary(current);
         }
         if self.next_tick >= unit.status.ability_retreat_start_tick
@@ -880,7 +883,7 @@ impl Simulation {
                 .par_iter()
                 .enumerate()
                 .map(|(index, unit)| {
-                    if unit_health[index] <= 0 {
+                    if unit_health[index] <= 0 || unit.status.is_performing_action(self.next_tick) {
                         return desired_positions[index];
                     }
                     let desired = desired_positions[index];
@@ -1047,9 +1050,11 @@ impl Simulation {
         let mut fallback_max_ring = 0u32;
         let lateral = self.config.max_separation_per_tick.max(1);
 
+        // Acting units already reserve their committed position: intent and separation leave
+        // them anchored. Keep those reservations for every mover, independent of canonical ID.
         for index in (0..units.len()).rev() {
             let unit = &units[index];
-            if unit_health[index] <= 0 {
+            if unit_health[index] <= 0 || unit.status.is_performing_action(self.next_tick) {
                 continue;
             }
             let original_cell = self.topology.cell_of_point(unit.position);
@@ -1176,16 +1181,21 @@ impl Simulation {
             let chosen = match chosen {
                 Some(chosen) => chosen,
                 None if self.position_is_legal_for_unit(unit, original_cell, unit.position)
-                    && reservations.is_clear_with_radius_after_index(
+                    && reservations.is_clear_with_radius_matching(
                         unit.position,
                         unit.collision_radius,
-                        index,
+                        |other_index| {
+                            other_index > index
+                                || units[other_index]
+                                    .status
+                                    .is_performing_action(self.next_tick)
+                        },
                     ) =>
                 {
                     // Tentative separation slots belonging to units that have not been resolved
                     // yet are allowed to overlap this unit's last committed position. Those units
-                    // will see this committed reservation when their turn arrives. Only already
-                    // resolved units can make the old position genuinely unavailable.
+                    // will see this committed reservation when their turn arrives. Acting units
+                    // are anchored reservations regardless of where their ID appears in the order.
                     unit.position
                 }
                 None => {

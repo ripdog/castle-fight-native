@@ -336,17 +336,7 @@ impl SpatialReservationGrid {
         self.is_clear_with_radius_matching(position, radius, |_| true)
     }
 
-    #[must_use]
-    pub fn is_clear_with_radius_after_index(
-        &self,
-        position: SimPoint,
-        radius: i32,
-        index: usize,
-    ) -> bool {
-        self.is_clear_with_radius_matching(position, radius, |other_index| other_index > index)
-    }
-
-    fn is_clear_with_radius_matching(
+    pub fn is_clear_with_radius_matching(
         &self,
         position: SimPoint,
         radius: i32,

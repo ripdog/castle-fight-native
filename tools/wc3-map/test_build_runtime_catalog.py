@@ -14,6 +14,14 @@ SPEC.loader.exec_module(MODULE)
 
 
 class RuntimeCatalogTest(unittest.TestCase):
+    def test_action_timing_rounds_total_duration_once_and_preserves_zero(self) -> None:
+        self.assertEqual(MODULE._action_duration_ticks("0.014", "0.014", 30), 1)
+        self.assertEqual(MODULE._action_duration_ticks("0.016", "0.018", 30), 2)
+        self.assertEqual(MODULE._action_duration_ticks("-", "_", 30), 0)
+        for value in ("-0.1", "NaN", "Infinity", "4000"):
+            with self.assertRaises(SystemExit):
+                MODULE._action_duration_ticks(value, "0", 30)
+
     def test_line_projection_rejects_lossy_world_distances(self) -> None:
         for value in ("0", "37", "100.0"):
             self.assertEqual(MODULE._line_world_integer(value), int(float(value)))

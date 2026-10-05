@@ -8,8 +8,9 @@ import csv
 import hashlib
 import io
 import json
+import re
 import subprocess
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING
 from pathlib import Path
 from typing import Any, Callable
 
@@ -157,6 +158,16 @@ def _fnv64_write_bytes(value: int, data: bytes) -> int:
     return _fnv64_write_raw(value, data)
 
 
+def _action_duration_ticks(point: str, backswing: str, hz: int) -> int:
+    values = [Decimal(0) if value in {"", "-", "_"} else Decimal(value) for value in (point.strip(), backswing.strip())]
+    if any(not value.is_finite() or value < 0 for value in values):
+        raise SystemExit("action animation timing must be finite and nonnegative")
+    ticks = int((sum(values) * hz).to_integral_value(rounding=ROUND_CEILING))
+    if ticks > 65535:
+        raise SystemExit("action animation timing exceeds native tick capacity")
+    return ticks
+
+
 def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]:
     extraction = release["extraction"]
     if extraction.get("status") != "retained":
@@ -168,12 +179,22 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
         repo_root, git_tree, "resolved/object-fields.tsv"
     )
 
+    frequency = re.search(
+        r"^pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = ([0-9]+);$",
+        (repo_root / "crates/sim/src/content.rs").read_text(encoding="utf-8"), re.MULTILINE,
+    )
+    if frequency is None or int(frequency.group(1)) <= 0:
+        raise SystemExit("cannot resolve the engine's simulation frequency")
+    simulation_hz = int(frequency.group(1))
+    action_fields: dict[str, dict[str, str]] = {}
     bounce_fields: dict[str, dict[str, str]] = {}
     line_fields: dict[str, dict[str, str]] = {}
     objects: dict[str, dict[str, Any]] = {}
     with io.StringIO(object_fields_bytes.decode("utf-8"), newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
         for row in reader:
+            if row["category"] == "units" and row["field_id"] in {"udp1", "ubs1", "udp2", "ubs2", "ucpt", "ucbs"}:
+                action_fields.setdefault(row["rawcode"], {})[row["field_id"]] = row["recovered_value_json"].strip('"')
             if row["category"] == "units" and row["field_id"] in {
                 "usd1", "usr1", "udl1", "uamn", "ua1p"
             }:
@@ -250,7 +271,17 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
         bounce_weapons.append({"rawcode": unit["rawcode"], "maximum_targets": targets,
                                "damage_percent_per_bounce": int(retained_percent), "range_world": int(fields["ua1f"])})
     return {
-        "schema_version": 2,
+        "schema_version": 3,
+        "simulation_hz": simulation_hz,
+        "action_timings": [
+            {
+                "rawcode": rawcode,
+                "primary_attack_ticks": _action_duration_ticks(fields.get("udp1", "-"), fields.get("ubs1", "-"), simulation_hz),
+                "secondary_attack_ticks": _action_duration_ticks(fields.get("udp2", "-"), fields.get("ubs2", "-"), simulation_hz),
+                "cast_ticks": _action_duration_ticks(fields.get("ucpt", "-"), fields.get("ucbs", "-"), simulation_hz),
+            }
+            for rawcode, fields in sorted(action_fields.items())
+        ],
         "bounce_weapons": sorted(bounce_weapons, key=lambda weapon: weapon["rawcode"]),
         "line_weapons": sorted(line_weapons, key=lambda weapon: weapon["rawcode"]),
         "map_version": release["map_version"],

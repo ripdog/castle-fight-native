@@ -126,7 +126,7 @@ impl Simulation {
                     mana_current: unit.mana_current,
                     ability_state: unit.ability_state,
                 },
-                unit.orders_suspended,
+                unit.orders_suspended || unit.status.is_casting(self.next_tick),
             );
         }
         for (index, building) in buildings

@@ -292,3 +292,12 @@ python -m py_compile tools/wc3-map/decode_map.py tools/wc3-map/lua_index.py tool
 ```
 
 A full end-to-end validation is `tools/wc3-map/extract-base-data.sh` followed by `tools/wc3-map/extract.sh` and inspection of both `summary.json` and `resolved/summary.json`. The current resolved summary requires zero unresolved inheritance anchors, missing referenced pathing textures, or unknown placed doodad rawcodes.
+
+Native unit action timing is projected by `build_runtime_catalog.py` into the versioned
+catalog supplement. It reads recovered `udp1`/`ubs1`, `udp2`/`ubs2`, and `ucpt`/`ucbs`
+from the registered extraction tree's `resolved/object-fields.tsv`, sums point and
+backswing as exact decimals, and rounds each total upward once at the engine tick
+rate read from `CASTLE_FIGHT_SIMULATION_HZ`. The generated frequency is also
+validated by the runtime loader. Empty native fields remain zero. The supplement retains release, extraction
+tree, and object-fields digest identity, and its bytes participate in the runtime
+source manifest. `test_build_runtime_catalog.py` verifies reproducibility.

@@ -8,16 +8,17 @@ use serde::Deserialize;
 
 use crate::{
     components::{
-        AbilityEffect, AbilityId, AbilityTargetPolicy, AdditionalAutomaticAbilityDefinitions,
-        AreaDamageOrigin, AttackDelivery, AttackProfile, AttackTargetMask, AuraEffectProfile,
-        AutomaticAbilityProfile, BuilderConfiguration, BuilderLocomotion, BuilderProfile,
-        BuilderSpawn, BuildingFootprint, BuildingGameplayProperties, BuildingSpawn,
-        BurningOilEffectProfile, CleaveEffectProfile, CollisionRadius, ContentIdentity,
-        CorpseDefinitionId, CorpseProfile, GameplayBundleIdentity, ManaProfile, ModifierId,
-        MovementClass, MovementProfile, PassiveUnitEffect, PassiveUnitEffects, ProductionProfile,
-        ResolvedUnitDefinition, SecondaryAttackProfile, SpellResistanceEffectProfile,
-        SpellcastingProfile, SplashFalloffProfile, Team, TriggeredAttackEffect,
-        UnitClassifications, UnitGameplayProperties, UnitTemplate, compose_spellcasting_profiles,
+        AbilityEffect, AbilityId, AbilityTargetPolicy, ActionTimingProfile,
+        AdditionalAutomaticAbilityDefinitions, AreaDamageOrigin, AttackDelivery, AttackProfile,
+        AttackTargetMask, AuraEffectProfile, AutomaticAbilityProfile, BuilderConfiguration,
+        BuilderLocomotion, BuilderProfile, BuilderSpawn, BuildingFootprint,
+        BuildingGameplayProperties, BuildingSpawn, BurningOilEffectProfile, CleaveEffectProfile,
+        CollisionRadius, ContentIdentity, CorpseDefinitionId, CorpseProfile,
+        GameplayBundleIdentity, ManaProfile, ModifierId, MovementClass, MovementProfile,
+        PassiveUnitEffect, PassiveUnitEffects, ProductionProfile, ResolvedUnitDefinition,
+        SecondaryAttackProfile, SpellResistanceEffectProfile, SpellcastingProfile,
+        SplashFalloffProfile, Team, TriggeredAttackEffect, UnitClassifications,
+        UnitGameplayProperties, UnitTemplate, compose_spellcasting_profiles,
     },
     damage::{ArmorProfile, ArmorType, DamageRules, DamageType},
     economy::{BuildingEconomyProfile, EconomyRules, RESOURCE_FIXED_SCALE},
@@ -34,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r13";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r14";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -93,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 6;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 7;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1012,6 +1013,7 @@ impl CastleFightUnitKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CastleFightUnitDefinition {
+    pub action_timing: ActionTimingProfile,
     pub map_version: MapVersion,
     pub rawcode: u32,
     pub name: &'static str,
@@ -1071,6 +1073,7 @@ impl CastleFightUnitDefinition {
     #[must_use]
     pub const fn gameplay_properties(self) -> UnitGameplayProperties {
         UnitGameplayProperties {
+            action_timing: self.action_timing,
             content: Some(ContentIdentity {
                 map_version: self.map_version,
                 rawcode: self.rawcode,
@@ -1464,6 +1467,11 @@ impl CastleFightTowerDefinition {
             armor: self.armor,
             economy: Some(self.economy),
             production_unit: UnitGameplayProperties {
+                action_timing: ActionTimingProfile {
+                    primary_attack_ticks: 0,
+                    secondary_attack_ticks: 0,
+                    cast_ticks: 0,
+                },
                 content: None,
                 corpse: None,
                 collision_radius: None,
@@ -2002,6 +2010,9 @@ fn hash_unit_definition(hash: &mut ContentHash64, definition: CastleFightUnitDef
     hash.write_u32(definition.rawcode);
     hash.write_i32(definition.health);
     hash.write_u32(definition.health_regen_per_second_per_10k);
+    hash.write_u16(definition.action_timing.primary_attack_ticks);
+    hash.write_u16(definition.action_timing.secondary_attack_ticks);
+    hash.write_u16(definition.action_timing.cast_ticks);
     hash.write_u32(definition.build_time_ticks);
     hash.write_u32(definition.repair_time_ticks);
     hash.write_u8(definition.armor.armor_type.stable_tag());
@@ -2634,6 +2645,7 @@ struct ExtractedBuilding927 {
 
 #[derive(Debug, Clone, Copy)]
 struct ExtractedUnit927 {
+    action_timing: ActionTimingProfile,
     name: &'static str,
     basic_tooltip: &'static str,
     extended_tooltip: &'static str,
@@ -2740,13 +2752,22 @@ struct CatalogSourceManifest927 {
 #[derive(Debug, Deserialize)]
 struct CatalogSupplement927 {
     schema_version: u32,
+    simulation_hz: i32,
     map_version: String,
     release_revision: String,
     extraction_git_tree: String,
     source_object_fields_sha256: String,
     objects: Vec<CatalogSupplementObject927>,
+    action_timings: Vec<CatalogActionTiming927>,
     bounce_weapons: Vec<CatalogBounceWeapon927>,
     line_weapons: Vec<CatalogLineWeapon927>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CatalogActionTiming927 {
+    rawcode: String,
+    #[serde(flatten)]
+    timing: ActionTimingProfile,
 }
 
 #[derive(Debug, Deserialize)]
@@ -2853,6 +2874,11 @@ impl ExtractedContent927 {
         }
 
         let supplement = catalog_supplement_927()?;
+        let action_timings: BTreeMap<_, _> = supplement
+            .action_timings
+            .into_iter()
+            .map(|entry| (parse_rawcode(&entry.rawcode), entry.timing))
+            .collect();
         let line_weapons = supplement
             .line_weapons
             .into_iter()
@@ -3005,6 +3031,9 @@ impl ExtractedContent927 {
                 })
                 .collect::<Result<Vec<_>, String>>()?;
             let row = ExtractedUnit927 {
+                action_timing: action_timings.get(&rawcode).copied().ok_or_else(|| {
+                    format!("unit {rawcode:#010x} is missing native action timing")
+                })?,
                 name: columns[3],
                 basic_tooltip: columns[4],
                 extended_tooltip: columns[5],
@@ -3432,10 +3461,16 @@ impl ExtractedContent927 {
 fn catalog_supplement_927() -> Result<CatalogSupplement927, String> {
     let supplement: CatalogSupplement927 = serde_json::from_str(CATALOG_SUPPLEMENT_927_R1_JSON)
         .map_err(|error| format!("invalid 9.27 catalog supplement: {error}"))?;
-    if supplement.schema_version != 2 {
+    if supplement.schema_version != 3 {
         return Err(format!(
             "unsupported 9.27 catalog supplement schema {}",
             supplement.schema_version
+        ));
+    }
+    if supplement.simulation_hz != CASTLE_FIGHT_SIMULATION_HZ {
+        return Err(format!(
+            "9.27 native action timing uses {} Hz, engine uses {} Hz",
+            supplement.simulation_hz, CASTLE_FIGHT_SIMULATION_HZ
         ));
     }
     if supplement.map_version != "9.27" || supplement.release_revision != "r1" {
@@ -4284,6 +4319,7 @@ fn extracted_unit_definition_927(
     });
 
     CastleFightUnitDefinition {
+        action_timing: unit.action_timing,
         map_version: MapVersion::CASTLE_FIGHT_9_27,
         rawcode,
         name: unit.name,
@@ -4456,6 +4492,37 @@ mod tests {
             .trim_matches('"')
             .parse::<u8>()
             .expect("extracted button coordinate must be numeric")
+    }
+
+    #[test]
+    fn native_action_timing_is_source_owned_across_the_playable_catalog_and_hashed() {
+        let supplement = catalog_supplement_927().unwrap();
+        let timings: BTreeMap<_, _> = supplement
+            .action_timings
+            .into_iter()
+            .map(|entry| (parse_rawcode(&entry.rawcode), entry.timing))
+            .collect();
+        let bundle = castle_fight_content_bundle(MapVersion::CASTLE_FIGHT_9_27).unwrap();
+        for unit in bundle.unit_definitions().chain(
+            bundle
+                .production_buildings
+                .values()
+                .map(|production| production.produced_unit),
+        ) {
+            assert_eq!(
+                unit.action_timing, timings[&unit.rawcode],
+                "{:08x}",
+                unit.rawcode
+            );
+            assert_eq!(unit.gameplay_properties().action_timing, unit.action_timing);
+            let mut changed = unit;
+            changed.action_timing.primary_attack_ticks += 1;
+            let mut before = ContentHash64::new();
+            let mut after = ContentHash64::new();
+            hash_unit_definition(&mut before, unit);
+            hash_unit_definition(&mut after, changed);
+            assert_ne!(before.finish(), after.finish());
+        }
     }
 
     #[test]

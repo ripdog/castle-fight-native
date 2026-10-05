@@ -308,6 +308,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u32(unit.health_regeneration.per_second_per_10k);
                 hash.write_u32(unit.health_regeneration.remainder_per_10k_hz);
                 hash_attack_delivery(&mut hash, unit.attack.delivery);
+                hash_action_timing(&mut hash, unit.action_timing);
                 hash.write_u8(unit.attack_targets.bits());
                 hash.write_u8(unit.damage_type.stable_tag());
                 hash.write_u8(unit.armor.armor_type.stable_tag());
@@ -525,6 +526,12 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                             .bits(),
                     );
                     hash_secondary_attack(&mut hash, building.production_secondary_attack);
+                    hash_action_timing(
+                        &mut hash,
+                        building
+                            .production_action_timing
+                            .expect("production action timing missing"),
+                    );
                     hash.write_u32(
                         building
                             .production_health_regen_per_second_per_10k
@@ -1030,6 +1037,7 @@ pub(super) struct CanonicalUnit {
     pub(super) health: Health,
     pub(super) health_regeneration: HealthRegeneration,
     pub(super) attack: AttackProfile,
+    pub(super) action_timing: ActionTimingProfile,
     pub(super) secondary_attack: Option<SecondaryAttackProfile>,
     pub(super) attack_targets: AttackTargetMask,
     pub(super) damage_type: DamageType,
@@ -1084,6 +1092,7 @@ impl CanonicalUnit {
                 repair_time_ticks: self.repair_time_ticks,
                 attack_targets: self.attack_targets,
                 secondary_attack: self.secondary_attack,
+                action_timing: self.action_timing,
                 damage_type: self.damage_type,
                 armor: self.armor,
                 passive_effects: self.passive_effects,
@@ -1147,6 +1156,7 @@ pub(super) struct CanonicalBuilding {
     pub(super) production_repair_metadata: Option<ProductionUnitRepairMetadata>,
     pub(super) production_attack_targets: Option<AttackTargetMask>,
     pub(super) production_secondary_attack: Option<SecondaryAttackProfile>,
+    pub(super) production_action_timing: Option<ActionTimingProfile>,
     pub(super) production_health_regen_per_second_per_10k: Option<u32>,
     pub(super) production_damage_type: Option<DamageType>,
     pub(super) production_armor: Option<ArmorProfile>,
@@ -1331,6 +1341,7 @@ fn hash_resolved_unit_definition(hash: &mut Fnv64, definition: Option<ResolvedUn
     hash.write_i32(definition.template.movement.speed_per_tick);
     let properties = definition.properties;
     hash_content_identity(hash, properties.content);
+    hash_action_timing(hash, properties.action_timing);
     hash.write_u32(properties.health_regen_per_second_per_10k);
     hash.write_u8(u8::from(properties.corpse.is_some()));
     if let Some(profile) = properties.corpse {
@@ -1395,7 +1406,22 @@ fn hash_additional_abilities(hash: &mut Fnv64, abilities: Option<AdditionalAutom
     }
 }
 
+fn hash_action_timing(hash: &mut Fnv64, timing: ActionTimingProfile) {
+    hash.write_u16(timing.primary_attack_ticks);
+    hash.write_u16(timing.secondary_attack_ticks);
+    hash.write_u16(timing.cast_ticks);
+}
+
 fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
+    hash.write_u8(u8::from(status.action_animation.is_some()));
+    if let Some(action) = status.action_animation {
+        hash.write_u8(match action.kind {
+            ActionAnimationKind::Attack => 0,
+            ActionAnimationKind::Cast => 1,
+        });
+        hash.write_u64(action.started_tick);
+        hash.write_u64(action.until_tick);
+    }
     hash.write_u64(status.stunned_until_tick);
     hash.write_u64(status.order_recovery_until_tick);
     hash.write_u64(status.ability_retreat_start_tick);
@@ -1508,6 +1534,7 @@ fn hash_building_definition(
         hash.write_u8(unit.attack_targets.bits());
         hash_secondary_attack(hash, unit.secondary_attack);
         hash.write_u32(unit.health_regen_per_second_per_10k);
+        hash_action_timing(hash, unit.action_timing);
         hash.write_u8(unit.damage_type.stable_tag());
         hash.write_u8(unit.armor.armor_type.stable_tag());
         hash.write_i32(i32::from(unit.armor.armor_points));

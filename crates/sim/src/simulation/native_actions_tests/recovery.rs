@@ -137,6 +137,11 @@ fn primary_and_additional_native_fire_ignore_stun_recovery_and_script_orders_but
                 .unwrap();
         }
         let source_entity = entity(&original, source);
+        original
+            .world
+            .get_mut::<StatusState>(source_entity)
+            .unwrap()
+            .begin_action_animation(ActionAnimationKind::Cast, 0, 1000);
         {
             let mut status = original
                 .world

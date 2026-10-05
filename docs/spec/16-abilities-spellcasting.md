@@ -148,6 +148,8 @@ The current implementation makes cast commitment atomic in one ability-resolutio
 
 Whether resources are reserved at intent creation or charged at resolution MUST remain explicit for later activation modes; the verification rule above is the initial ordinary automatic-cast behavior.
 
+Successful ordered unit casts start the authoritative animation recovery defined in `15-targeting-combat.md` §15. The versioned unit cast point plus backswing supplies its duration, capped to an earlier authored post-cast retreat pause when present. An ordered spell may preempt an attack animation and replace it with cast recovery; movement remains anchored. The resolving tick is anchored, and no voluntary movement, collision steering, fresh ordered cast or ordinary attack may interrupt recovery. Failed target/resource validation starts no recovery. Recovery is independent of mana, spell cooldown, removable buffs, and script-specific order recovery; every applicable constraint must expire before the unit resumes the corresponding action. Autonomous Phoenix Fire does not issue a caster order and therefore neither starts nor interrupts animation recovery. Building casts have no unit locomotion recovery.
+
 ## 8. Common ability effects
 
 The constrained effect vocabulary should support at least:

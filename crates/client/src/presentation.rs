@@ -32,10 +32,10 @@ use bevy::{
     world_serialization::{WorldAsset, WorldInstance, WorldInstanceSpawner},
 };
 use castle_fight_sim::{
-    AbilityCastTarget, AbilityEffect, AttackDelivery, BuildingFootprint,
-    CASTLE_FIGHT_SIMULATION_HZ, CorpseView, MovementClass, PassiveUnitEffect, PlayerId,
-    ProjectileView, ProjectileViewKind, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, SimulationConfig,
-    Team,
+    AbilityCastTarget, AbilityEffect, ActionAnimationKind, ActionAnimationState, AttackDelivery,
+    BuildingFootprint, CASTLE_FIGHT_SIMULATION_HZ, CorpseView, MovementClass, PassiveUnitEffect,
+    PlayerId, ProjectileView, ProjectileViewKind, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint,
+    SimulationConfig, Team,
 };
 
 use crate::{
@@ -841,17 +841,16 @@ struct ImportedUnitAnimationController {
     model_root: Entity,
     stand: AnimationNodeIndex,
     walk: Option<AnimationNodeIndex>,
-    attack: Option<AnimationNodeIndex>,
+    attack: Option<UnitAnimationClip>,
     defend_stand: Option<AnimationNodeIndex>,
     defend_walk: Option<AnimationNodeIndex>,
-    defend_attack: Option<AnimationNodeIndex>,
-    cast: Option<AnimationNodeIndex>,
+    defend_attack: Option<UnitAnimationClip>,
+    cast: Option<UnitAnimationClip>,
     death: Option<UnitAnimationClip>,
     decay_flesh: Option<UnitAnimationClip>,
     decay_bone: Option<UnitAnimationClip>,
     state: ImportedUnitAnimationState,
-    last_attack_snapshot_tick: Option<u64>,
-    last_cast_snapshot_tick: Option<u64>,
+    action_animation: Option<ActionAnimationState>,
     defend_active: bool,
 }
 
@@ -1779,8 +1778,7 @@ fn setup_imported_unit_animation_players(
                 decay_flesh: animations.decay_flesh,
                 decay_bone: animations.decay_bone,
                 state: ImportedUnitAnimationState::Stand,
-                last_attack_snapshot_tick: None,
-                last_cast_snapshot_tick: None,
+                action_animation: None,
                 defend_active: false,
             },
         ));
@@ -2172,6 +2170,8 @@ fn update_imported_unit_animations(
     mut commands: Commands,
     unit_models: Res<UnitModelSet>,
     samples: Res<PresentationSamples>,
+    fixed_time: Res<Time<Fixed>>,
+    playback: Res<SimulationPlayback>,
     dying_roots: Query<(), With<ImportedDeathRemnant>>,
     mut players: Query<(
         &mut AnimationPlayer,
@@ -2202,6 +2202,7 @@ fn update_imported_unit_animations(
         if let Some(current) = samples.current.units.get(&controller.sim_id) {
             update_live_imported_unit_animation(
                 &samples,
+                interpolated_sim_tick(&samples, playback.interpolation_alpha(&fixed_time)),
                 current,
                 &mut player,
                 &mut transitions,
@@ -2302,61 +2303,56 @@ fn update_live_imported_builder_animation(
 
 fn update_live_imported_unit_animation(
     samples: &PresentationSamples,
+    rendered_tick: f64,
     current: &UnitSample,
     player: &mut AnimationPlayer,
     transitions: &mut AnimationTransitions,
     controller: &mut ImportedUnitAnimationController,
 ) {
-    let cast_this_snapshot = controller.last_cast_snapshot_tick != Some(samples.current.tick)
-        && samples
-            .current
-            .ability_casts
-            .iter()
-            .any(|cast| cast.source == controller.sim_id);
-    if cast_this_snapshot {
-        controller.last_cast_snapshot_tick = Some(samples.current.tick);
-        if let Some(cast) = controller.cast {
-            transitions.play(player, cast, Duration::from_millis(50));
-            controller.state = ImportedUnitAnimationState::Cast;
-            return;
-        }
-    }
-
     let defend_active = current.active_defend_ability.is_some();
-    let attack_this_snapshot = controller.last_attack_snapshot_tick != Some(samples.current.tick)
-        && samples
-            .current
-            .attacks
-            .iter()
-            .any(|attack| attack.source == controller.sim_id);
-    if attack_this_snapshot {
-        controller.last_attack_snapshot_tick = Some(samples.current.tick);
-        let attack = if defend_active {
-            controller.defend_attack.or(controller.attack)
-        } else {
-            controller.attack
+    let action = current.status.action_animation.or_else(|| {
+        samples
+            .previous
+            .units
+            .get(&controller.sim_id)
+            .and_then(|unit| unit.status.action_animation)
+    });
+    if let Some(action) = action
+        && let Some(phase) = action_animation_phase(action, rendered_tick)
+    {
+        let (state, clip) = match action.kind {
+            ActionAnimationKind::Attack => (
+                ImportedUnitAnimationState::Attack,
+                if defend_active {
+                    controller.defend_attack.or(controller.attack)
+                } else {
+                    controller.attack
+                },
+            ),
+            ActionAnimationKind::Cast => (ImportedUnitAnimationState::Cast, controller.cast),
         };
-        if let Some(attack) = attack {
-            transitions.play(player, attack, Duration::from_millis(50));
-            controller.state = ImportedUnitAnimationState::Attack;
+        if let Some(clip) = clip {
+            if controller.action_animation != Some(action)
+                || controller.state != state
+                || controller.defend_active != defend_active
+            {
+                // Timeline-driven clips are paused, so Bevy's transition helper would otherwise
+                // leave the previous paused action active at full weight.
+                player.stop_all();
+                transitions.play(player, clip.node, Duration::ZERO);
+            }
+            if let Some(animation) = player.animation_mut(clip.node) {
+                animation
+                    .set_seek_time(clip.duration_seconds * phase)
+                    .pause();
+            }
+            controller.action_animation = Some(action);
+            controller.state = state;
             controller.defend_active = defend_active;
             return;
         }
     }
-
-    let one_shot_still_playing = match controller.state {
-        ImportedUnitAnimationState::Attack if controller.defend_active => {
-            controller.defend_attack.or(controller.attack)
-        }
-        ImportedUnitAnimationState::Attack => controller.attack,
-        ImportedUnitAnimationState::Cast => controller.cast,
-        _ => None,
-    }
-    .and_then(|animation| player.animation(animation))
-    .is_some_and(|animation| !animation.is_finished());
-    if one_shot_still_playing {
-        return;
-    }
+    controller.action_animation = None;
 
     let previous = samples
         .previous
@@ -2389,11 +2385,29 @@ fn update_live_imported_unit_animation(
             unreachable!("one-shot/death animation is handled before locomotion")
         }
     };
-    transitions
-        .play(player, animation, Duration::from_millis(100))
-        .repeat();
+    let transition = if matches!(
+        controller.state,
+        ImportedUnitAnimationState::Attack | ImportedUnitAnimationState::Cast
+    ) {
+        player.stop_all();
+        Duration::ZERO
+    } else {
+        Duration::from_millis(100)
+    };
+    transitions.play(player, animation, transition).repeat();
     controller.state = desired;
     controller.defend_active = defend_active;
+}
+
+/// Snapshot ticks name the next simulation tick: interpolation from N to N+1 depicts
+/// the action/movement resolved on N. Playback ends before expiry-tick movement starts.
+fn action_animation_phase(action: ActionAnimationState, rendered_tick: f64) -> Option<f32> {
+    let tick = rendered_tick;
+    let duration = action.until_tick.checked_sub(action.started_tick)?;
+    if duration == 0 || tick < action.started_tick as f64 || tick >= action.until_tick as f64 {
+        return None;
+    }
+    Some(((tick - action.started_tick as f64) / duration as f64) as f32)
 }
 
 fn update_imported_death_remnant(
@@ -4492,13 +4506,8 @@ fn interpolate_render_transforms(
             continue;
         };
         let previous = samples.previous.units.get(id).unwrap_or(current);
-        let ground_position = unit_ground_position_lerp(
-            previous.position,
-            current.position,
-            current.movement_class,
-            alpha,
-            &terrain,
-        );
+        let ground_position =
+            unit_sample_ground_position_lerp(previous, current, &samples, alpha, &terrain);
         let moving = previous.position != current.position;
         let bob = if entry.imported_rawcode.is_some() {
             0.0
@@ -4549,13 +4558,9 @@ fn interpolate_render_transforms(
                 unit_motion_bob(current.id, current.movement_class, render_tick, moving)
             }
         });
-        let position = unit_ground_position_lerp(
-            previous.position,
-            current.position,
-            current.movement_class,
-            alpha,
-            &terrain,
-        ) + Vec3::Y * bob;
+        let position =
+            unit_sample_ground_position_lerp(previous, current, &samples, alpha, &terrain)
+                + Vec3::Y * bob;
         if let Ok(mut transform) = transforms.get_mut(effect.entity)
             && transform.translation != position
         {
@@ -4756,13 +4761,8 @@ fn unit_facing_rotation(
     terrain: &TerrainSurface,
     alpha: f32,
 ) -> Option<Quat> {
-    let current_position = unit_ground_position_lerp(
-        previous.position,
-        current.position,
-        current.movement_class,
-        alpha,
-        terrain,
-    );
+    let current_position =
+        unit_sample_ground_position_lerp(previous, current, samples, alpha, terrain);
     let direction = current
         .target
         .and_then(|target| entity_render_position(target, samples, metrics, terrain, alpha))
@@ -5078,12 +5078,8 @@ fn entity_render_position(
 ) -> Option<Vec3> {
     if let Some(current) = samples.current.units.get(&id) {
         let previous = samples.previous.units.get(&id).unwrap_or(current);
-        return Some(unit_ground_position_lerp(
-            previous.position,
-            current.position,
-            current.movement_class,
-            alpha,
-            terrain,
+        return Some(unit_sample_ground_position_lerp(
+            previous, current, samples, alpha, terrain,
         ));
     }
     samples.current.buildings.get(&id).map(|building| {
@@ -5368,13 +5364,8 @@ fn update_health_bar_batch(
                 continue;
             };
             let previous = samples.previous.units.get(id).unwrap_or(unit);
-            let ground_position = unit_ground_position_lerp(
-                previous.position,
-                unit.position,
-                unit.movement_class,
-                alpha,
-                &terrain,
-            );
+            let ground_position =
+                unit_sample_ground_position_lerp(previous, unit, &samples, alpha, &terrain);
             let overhead_height = unit_bar_overhead_height(unit, entry, &unit_models);
             let world_width = unit_health_bar_width(unit, entry, &unit_models);
             let anchor = ground_position + Vec3::Y * (overhead_height + HEALTH_BAR_VERTICAL_GAP);
@@ -6022,13 +6013,7 @@ fn draw_presentation_gizmos(
 
     for unit in samples.current.units.values() {
         let previous = samples.previous.units.get(&unit.id).unwrap_or(unit);
-        let rendered = unit_ground_position_lerp(
-            previous.position,
-            unit.position,
-            unit.movement_class,
-            alpha,
-            &terrain,
-        );
+        let rendered = unit_sample_ground_position_lerp(previous, unit, &samples, alpha, &terrain);
         let authoritative = unit_ground_position(unit.position, unit.movement_class, &terrain);
         gizmos.line(
             rendered + Vec3::Y * 0.2,
@@ -6323,11 +6308,8 @@ fn tracked_camera_focus(
     }
     if let Some(unit) = samples.current.units.get(&target) {
         let previous = samples.previous.units.get(&target).unwrap_or(unit);
-        return Some(sim_point_to_terrain_world_lerp(
-            previous.position,
-            unit.position,
-            alpha,
-            terrain,
+        return Some(unit_sample_ground_position_lerp(
+            previous, unit, samples, alpha, terrain,
         ));
     }
     samples.current.buildings.get(&target).map(|building| {
@@ -6445,6 +6427,53 @@ fn unit_ground_position(
     terrain: &TerrainSurface,
 ) -> Vec3 {
     sim_point_to_terrain_world(point, terrain) + Vec3::Y * unit_visual_altitude(movement_class)
+}
+
+fn action_movement_interpolation_alpha(
+    previous_tick: u64,
+    current_tick: u64,
+    previous_action: Option<ActionAnimationState>,
+    current_action: Option<ActionAnimationState>,
+    alpha: f32,
+) -> f32 {
+    if previous_action.is_none() && current_action.is_none() {
+        return alpha;
+    }
+    let start = previous_action.map_or(previous_tick, |action| {
+        action.until_tick.clamp(previous_tick, current_tick)
+    });
+    let end = current_action.map_or(current_tick, |action| {
+        action.started_tick.clamp(previous_tick, current_tick)
+    });
+    if end <= start {
+        return 1.0;
+    }
+    let tick =
+        previous_tick as f64 + current_tick.saturating_sub(previous_tick) as f64 * f64::from(alpha);
+    ((tick - start as f64) / (end - start) as f64).clamp(0.0, 1.0) as f32
+}
+
+fn unit_sample_ground_position_lerp(
+    previous: &UnitSample,
+    current: &UnitSample,
+    samples: &PresentationSamples,
+    alpha: f32,
+    terrain: &TerrainSurface,
+) -> Vec3 {
+    let alpha = action_movement_interpolation_alpha(
+        samples.previous.tick,
+        samples.current.tick,
+        previous.status.action_animation,
+        current.status.action_animation,
+        alpha,
+    );
+    unit_ground_position_lerp(
+        previous.position,
+        current.position,
+        current.movement_class,
+        alpha,
+        terrain,
+    )
 }
 
 fn unit_ground_position_lerp(
@@ -6613,7 +6642,7 @@ fn owner_color(owner: Option<PlayerId>) -> Color {
 
 #[cfg(test)]
 mod tests {
-    use castle_fight_sim::{CorpseDefinitionId, NavCell, Team, TerrainElevationMap};
+    use castle_fight_sim::{AttackProfile, CorpseDefinitionId, NavCell, Team, TerrainElevationMap};
 
     use super::*;
     use crate::bridge::PresentationSnapshot;
@@ -6625,6 +6654,171 @@ mod tests {
             ))
             .unwrap(),
         )
+    }
+
+    #[test]
+    fn authoritative_action_playback_seeks_full_clip_and_removes_paused_pose_before_walking() {
+        let mut sim = castle_fight_sim::Simulation::new(Default::default(), 1);
+        let id = sim.spawn_unit(castle_fight_sim::UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(20 * SUBUNITS_PER_WORLD_UNIT, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 1,
+                range: 1,
+                acquisition_range: 1,
+                cooldown_ticks: 10,
+            },
+            movement: castle_fight_sim::MovementProfile { speed_per_tick: 1 },
+        });
+        let snapshot = PresentationSnapshot::capture(&sim);
+        let stand = AnimationNodeIndex::new(0);
+        let attack = UnitAnimationClip {
+            node: AnimationNodeIndex::new(1),
+            duration_seconds: 2.0,
+        };
+        let cast = UnitAnimationClip {
+            node: AnimationNodeIndex::new(2),
+            duration_seconds: 3.0,
+        };
+        let walk = AnimationNodeIndex::new(3);
+        let mut controller = ImportedUnitAnimationController {
+            sim_id: id,
+            rawcode: 0,
+            presentation_root: Entity::PLACEHOLDER,
+            model_root: Entity::PLACEHOLDER,
+            stand,
+            walk: Some(walk),
+            attack: Some(attack),
+            defend_stand: None,
+            defend_walk: None,
+            defend_attack: None,
+            cast: Some(cast),
+            death: None,
+            decay_flesh: None,
+            decay_bone: None,
+            state: ImportedUnitAnimationState::Stand,
+            action_animation: None,
+            defend_active: false,
+        };
+        let mut player = AnimationPlayer::default();
+        let mut transitions = AnimationTransitions::new();
+        transitions
+            .play(&mut player, stand, Duration::ZERO)
+            .repeat();
+        let mut samples = PresentationSamples {
+            previous: snapshot.clone(),
+            current: snapshot,
+        };
+        for (kind, clip) in [
+            (ActionAnimationKind::Attack, attack),
+            (ActionAnimationKind::Cast, cast),
+        ] {
+            let mut current = samples.current.units[&id];
+            current.status.action_animation = Some(ActionAnimationState {
+                kind,
+                started_tick: 10,
+                until_tick: 14,
+            });
+            samples.current.units.insert(id, current);
+            update_live_imported_unit_animation(
+                &samples,
+                12.0,
+                &current,
+                &mut player,
+                &mut transitions,
+                &mut controller,
+            );
+            let playing = player.animation(clip.node).unwrap();
+            assert!(
+                playing.is_paused(),
+                "the simulation timeline owns the clip clock"
+            );
+            assert_eq!(playing.seek_time(), clip.duration_seconds / 2.0);
+            assert_eq!(
+                player.playing_animations().count(),
+                1,
+                "preemption must remove the old paused pose"
+            );
+        }
+        let mut current = samples.current.units[&id];
+        current.status.action_animation = None;
+        current.position.x += 1;
+        update_live_imported_unit_animation(
+            &samples,
+            14.0,
+            &current,
+            &mut player,
+            &mut transitions,
+            &mut controller,
+        );
+        assert!(player.animation(attack.node).is_none());
+        assert!(player.animation(cast.node).is_none());
+        assert!(!player.animation(walk).unwrap().is_paused());
+        assert_eq!(
+            player.playing_animations().count(),
+            1,
+            "walk cannot blend with a paused attack/cast"
+        );
+    }
+
+    #[test]
+    fn action_animation_finishes_before_expiry_interval_movement() {
+        for kind in [ActionAnimationKind::Attack, ActionAnimationKind::Cast] {
+            let action = ActionAnimationState {
+                kind,
+                started_tick: 10,
+                until_tick: 14,
+            };
+            assert_eq!(action_animation_phase(action, 9.5), None);
+            assert_eq!(action_animation_phase(action, 10.0), Some(0.0));
+            assert_eq!(action_animation_phase(action, 12.0), Some(0.5));
+            assert!(action_animation_phase(action, 13.99).is_some());
+            assert_eq!(action_animation_phase(action, 14.0), None);
+            assert_eq!(action_animation_phase(action, 14.5), None);
+        }
+    }
+
+    #[test]
+    fn skipped_snapshot_interpolation_holds_positions_during_action_playback() {
+        let old = ActionAnimationState {
+            kind: ActionAnimationKind::Attack,
+            started_tick: 8,
+            until_tick: 14,
+        };
+        let new = ActionAnimationState {
+            kind: ActionAnimationKind::Cast,
+            started_tick: 16,
+            until_tick: 20,
+        };
+        // Motion only occupies 14..16, even if snapshots bracket both action timelines.
+        for (tick, expected) in [
+            (12.0, 0.0),
+            (13.0, 0.0),
+            (14.0, 0.0),
+            (15.0, 0.5),
+            (16.0, 1.0),
+            (17.0, 1.0),
+            (18.0, 1.0),
+        ] {
+            let alpha = (tick - 12.0) / 6.0;
+            let actual = action_movement_interpolation_alpha(12, 18, Some(old), Some(new), alpha);
+            assert!(
+                (actual - expected).abs() < 1.0e-6,
+                "tick {tick}: {actual} != {expected}"
+            );
+        }
+        assert_eq!(
+            action_movement_interpolation_alpha(14, 15, Some(old), None, 0.5),
+            0.5,
+            "movement starts on expiry"
+        );
+        assert_eq!(
+            action_movement_interpolation_alpha(10, 11, None, Some(old), 0.5),
+            1.0,
+            "a locked snapshot anchors its current position"
+        );
     }
 
     #[test]

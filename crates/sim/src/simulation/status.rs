@@ -183,6 +183,12 @@ pub(super) fn apply_ability_effect_to_unit(
 }
 
 pub(super) fn purge_expired_status_modifiers(status: &mut StatusState, tick: u64) {
+    if status
+        .action_animation
+        .is_some_and(|action| tick >= action.until_tick)
+    {
+        status.action_animation = None;
+    }
     purge_expired_movement_modifiers(status, tick);
 
     let attack_speed_count = usize::from(status.attack_speed_modifier_count);

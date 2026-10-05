@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 21;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 22;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -32,6 +32,8 @@ mod building_spells_source_tests;
 mod building_spells_tests;
 use building_spells::{BuildingSpellControl, BuildingSpellTargetState};
 pub use building_spells::{BuildingSpellVisualEvent, BuildingSpellVisualKind, HexState};
+#[cfg(test)]
+mod action_animation_tests;
 mod canonical;
 mod combat;
 mod construction;
@@ -74,30 +76,31 @@ use crate::components::{DelayedShrineRevival, ShrineRevivalState};
 use crate::{
     components::{
         AbilityConfigurationError, AbilityEffect, AbilityId, AbilityTargetPolicy,
-        AdditionalAutomaticAbilities, AdditionalAutomaticAbilityDefinitions, AreaDamageOrigin,
-        AttackCooldown, AttackDelivery, AttackProfile, AttackSequence, AttackTargetMask,
-        AutomaticAbilityInstance, AutomaticAbilityProfile, AutomaticAbilityState,
-        BallisticProjectile, BounceProjectile, BuildTimeTicks, Builder, BuilderBuildOrder,
-        BuilderConfiguration, BuilderLocomotion, BuilderProfile, BuilderSpawn, BuilderState,
-        BuildingConstruction, BuildingFootprint, BuildingGameplayProperties, BuildingRuntimeState,
-        BuildingSpawn, BuildingUpgradeSource, BurningOilZone, ChainLightningState, CollisionRadius,
-        ContentIdentity, Corpse, CorpseDefinitionId, CorpseProducer, CorpseProfile,
-        DefendEffectProfile, GameplayBundleIdentity, GuaranteedHitProjectile, Health,
-        HealthRegeneration, LineProjectile, MAX_BOUNCE_HITS, MAX_TIMED_ARMOR_MODIFIERS,
+        ActionAnimationKind, ActionTimingProfile, AdditionalAutomaticAbilities,
+        AdditionalAutomaticAbilityDefinitions, AreaDamageOrigin, AttackCooldown, AttackDelivery,
+        AttackProfile, AttackSequence, AttackTargetMask, AutomaticAbilityInstance,
+        AutomaticAbilityProfile, AutomaticAbilityState, BallisticProjectile, BounceProjectile,
+        BuildTimeTicks, Builder, BuilderBuildOrder, BuilderConfiguration, BuilderLocomotion,
+        BuilderProfile, BuilderSpawn, BuilderState, BuildingConstruction, BuildingFootprint,
+        BuildingGameplayProperties, BuildingRuntimeState, BuildingSpawn, BuildingUpgradeSource,
+        BurningOilZone, ChainLightningState, CollisionRadius, ContentIdentity, Corpse,
+        CorpseDefinitionId, CorpseProducer, CorpseProfile, DefendEffectProfile,
+        GameplayBundleIdentity, GuaranteedHitProjectile, Health, HealthRegeneration,
+        LineProjectile, MAX_BOUNCE_HITS, MAX_TIMED_ARMOR_MODIFIERS,
         MAX_TIMED_ATTACK_SPEED_MODIFIERS, MAX_TIMED_DAMAGE_OVER_TIME, MAX_TIMED_MOVEMENT_MODIFIERS,
         ManaState, MechanicalUnit, ModifierId, MovementClass, MovementProfile, NavigationGoal,
         NavigationState, Owner, PassiveUnitEffect, PassiveUnitEffects, PendingAttackEffects,
-        PlayerId, Position, ProductionAdditionalAutomaticAbilities, ProductionArmorProfile,
-        ProductionAttackTargets, ProductionCollisionRadius, ProductionContentIdentity,
-        ProductionCorpseProfile, ProductionDamageType, ProductionHealthRegeneration,
-        ProductionMovementClass, ProductionPassiveEffects, ProductionProfile,
-        ProductionSecondaryAttack, ProductionSpellcastingProfile, ProductionState,
-        ProductionUnitClassifications, ProductionUnitRepairMetadata, ReflectedProjectile,
-        RepairTimeTicks, ResolvedUnitDefinition, ResurrectionProfile, RetaliationState,
-        SecondaryAttackProfile, SecondaryResurrectionState, SimId, SpawnTick, SpellcastingProfile,
-        StatusState, TargetState, Team, TimedArmorModifier, TimedAttackSpeedModifier,
-        TimedDamageOverTime, TriggeredAttackEffect, UnitClassifications, UnitGameplayProperties,
-        UnitSpawn,
+        PlayerId, Position, ProductionActionTiming, ProductionAdditionalAutomaticAbilities,
+        ProductionArmorProfile, ProductionAttackTargets, ProductionCollisionRadius,
+        ProductionContentIdentity, ProductionCorpseProfile, ProductionDamageType,
+        ProductionHealthRegeneration, ProductionMovementClass, ProductionPassiveEffects,
+        ProductionProfile, ProductionSecondaryAttack, ProductionSpellcastingProfile,
+        ProductionState, ProductionUnitClassifications, ProductionUnitRepairMetadata,
+        ReflectedProjectile, RepairTimeTicks, ResolvedUnitDefinition, ResurrectionProfile,
+        RetaliationState, SecondaryAttackProfile, SecondaryResurrectionState, SimId, SpawnTick,
+        SpellcastingProfile, StatusState, TargetState, Team, TimedArmorModifier,
+        TimedAttackSpeedModifier, TimedDamageOverTime, TriggeredAttackEffect, UnitClassifications,
+        UnitGameplayProperties, UnitSpawn,
     },
     content::CASTLE_FIGHT_SIMULATION_HZ,
     damage::{ArmorProfile, ArmorType, DamageRules, DamageType},
@@ -2323,7 +2326,7 @@ impl Simulation {
             unit.movement,
             SpawnTick(self.next_tick),
         ));
-        entity.insert(ResurrectionProfile(definition));
+        entity.insert((ResurrectionProfile(definition), properties.action_timing));
         if let Some(additional) = additional {
             entity.insert(additional);
         }
@@ -2653,6 +2656,10 @@ impl Simulation {
                         build_time_ticks: repair_metadata.build_time_ticks,
                         repair_time_ticks: repair_metadata.repair_time_ticks,
                         attack_targets: attack_targets.0,
+                        action_timing: entity_ref
+                            .get::<ProductionActionTiming>()
+                            .expect("production action timing missing")
+                            .0,
                         secondary_attack: entity_ref
                             .get::<ProductionSecondaryAttack>()
                             .map(|profile| profile.0),
@@ -2803,6 +2810,7 @@ impl Simulation {
                     repair_time_ticks: attempt.repair_time_ticks,
                     attack_targets: attempt.attack_targets,
                     secondary_attack: attempt.secondary_attack,
+                    action_timing: attempt.action_timing,
                     damage_type: attempt.damage_type,
                     armor: attempt.armor,
                     passive_effects: attempt.passive_effects,
@@ -2943,6 +2951,9 @@ impl Simulation {
                         health: health.current,
                         health_max: health.max,
                         attack: *attack,
+                        action_timing: *entity_ref
+                            .get::<ActionTimingProfile>()
+                            .expect("unit action timing missing"),
                         cooldown_remaining: cooldown.remaining,
                         attack_sequence,
                         target: target.current,
@@ -3077,6 +3088,7 @@ struct UnitSnapshot {
     health: i32,
     health_max: i32,
     attack: AttackProfile,
+    action_timing: ActionTimingProfile,
     cooldown_remaining: u16,
     attack_sequence: u64,
     target: Option<SimId>,
@@ -3196,6 +3208,7 @@ struct ProductionAttempt {
     repair_time_ticks: Option<u32>,
     attack_targets: AttackTargetMask,
     secondary_attack: Option<SecondaryAttackProfile>,
+    action_timing: ActionTimingProfile,
     health_regen_per_second_per_10k: u32,
     damage_type: DamageType,
     armor: ArmorProfile,
