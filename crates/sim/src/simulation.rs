@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 17;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 18;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -1725,9 +1725,9 @@ impl Simulation {
         let mut corpse_spawns = Vec::new();
         // Team contributions are phase-local derived state, never a stale persistent counter.
         // Scan buildings twice per resolution phase rather than once per individual fatality.
-        let shrine_chances = [
-            self.golden_shrine_revive_chance(Team(0)),
-            self.golden_shrine_revive_chance(Team(1)),
+        let shrine_support = [
+            self.golden_shrine_support(Team(0)),
+            self.golden_shrine_support(Team(1)),
         ];
         for (index, unit) in units.iter().enumerate() {
             if unit_health[index] <= 0 {
@@ -1744,7 +1744,7 @@ impl Simulation {
                         unit.team,
                         positions[index],
                         unit_health[index],
-                        shrine_chances[usize::from(unit.team.0)],
+                        shrine_support[usize::from(unit.team.0)],
                     )
                 } else {
                     self.world

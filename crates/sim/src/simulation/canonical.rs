@@ -794,6 +794,8 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
             CanonicalEntity::DelayedShrineRevival { id, revival } => {
                 hash.write_u8(11);
                 hash.write_u64(id.0);
+                hash.write_u16(revival.map_version.major);
+                hash.write_u16(revival.map_version.minor);
                 hash.write_u64(revival.source_unit.0);
                 hash.write_u8(revival.owner.0);
                 hash.write_u8(revival.team.0);

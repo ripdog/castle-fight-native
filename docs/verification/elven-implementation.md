@@ -44,9 +44,9 @@ traces, reusable verification and explicit remaining gates.
 Integrated recovery/cleansing checks now separate removable native stun from
 scripted order recovery and preserve callbacks/passive baselines. Primary and
 additional Phoenix Fire ignore ordinary order interruption but respect Hex at
-evaluation and live commitment. All 378 simulation tests, strict simulation
-Clippy and client all-target checks passed at this stage. This does not close
-runtime version consumers, classification/mask semantics, imported visual closure,
+evaluation and live commitment. Subsequent Shrine/native-activation source-version and standalone timer wire
+validation passed all 384 simulation tests, strict simulation Clippy and client
+all-target checks. This does not close classification/mask semantics, imported visual closure,
 final release/source publication, workspace validation, or native-oracle caveats.
 
 Before lobby exposure, finish reachable behavior coverage, consume authored build

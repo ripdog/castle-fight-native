@@ -29,6 +29,7 @@ A cache is not automatically derived. If retaining or clearing it can change a f
 | `defense_alerts` | Mutable authoritative | Store/hash the complete alert set: attacked tick, victim team/id/position, and attacker id. Order is canonicalized for hashing/serialization. |
 | `lifecycle` | Mutable authoritative | Store/hash `Running`, paused-for-disconnect team mask, or terminal outcome plus finished tick. A paused or finished match must restore without advancing ordinary gameplay. |
 | `team_objectives` | Mutable authoritative | Store/hash the optional stable `SimId` registered for each team objective. Victory evaluation depends on these exact identities, not a content-name search. |
+| `shrine_death_generation` | Mutable authoritative | Store/hash exactly. Delayed revival callbacks compare their retained generation before creating a replacement. |
 | `config` / `SimulationConfig` | Immutable match input | Compatibility identity covers every field listed in section 4. Step 3 replaces the temporary direct configuration identity with the resolved content/mode identity where appropriate. |
 | `combat_rules` / `CombatRules` | Immutable match input | Compatibility identity covers terrain elevation, uphill miss chance, armor factor, and the complete damage-type/armor-type table. |
 | `configuration_identity` | Rebuildable derived identity | Cached canonical hash of the immutable inputs above. It is not an independent gameplay value; restoration must recompute/validate it from selected compatible inputs. |
@@ -137,6 +138,8 @@ Directed on-hit state also retains any Feedback ability identity, mana-drain lim
 **Chain Lightning state:** `SimId`, source/team, complete profile, start tick, next jump index, current target, last position, next damage, hit count, and hit history.
 
 **Native Healing Wave action:** `SimId`, source/team, complete profile (including distinct trigger healing), start tick, next jump index, current target, last position, next healing, hit count, and hit history. Hop deadlines derive from the original cast rather than accumulated rounded intervals.
+
+**Delayed Shrine revival:** `SimId`, supporting script map version, source unit identity, owner/team, position, due tick, death generation, and the complete cold replacement definition. The script version is independent of that definition's optional content identity: generic/unlabelled bodies must not cause a default-version lookup or lose the originating script context after supporting buildings disappear. Wire decoding validates this version against the selected bundle even when the replacement has no content identity. Supporting buildings, the live unit and any retained original identity must agree on version; mixed source contexts are rejected before allocating a callback.
 
 **Native directed bolt action:** `SimId`, source/team, target, complete native effect profile, original launch position/tick, authoritative current homing position/update tick, and projected impact tick. Moving the target can change arrival; a presentation interpolation or an obsolete launch-time arrival estimate MUST NOT determine damage.
 

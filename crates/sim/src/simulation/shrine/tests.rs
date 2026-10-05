@@ -1,6 +1,7 @@
 use super::*;
 mod baseline;
 mod lifecycle;
+mod versioned;
 use crate::{CastleFightTowerKind, MapVersion, castle_fight_content_bundle};
 
 fn simulation(workers: usize, seed: u64) -> Simulation {
@@ -68,8 +69,8 @@ fn fatality(sim: &mut Simulation, id: SimId) {
     let entity = entity(sim, id);
     let position = sim.world.get::<Position>(entity).unwrap().0;
     sim.world.get_mut::<Health>(entity).unwrap().current = 0;
-    let chance = sim.golden_shrine_revive_chance(Team(0));
-    let state = sim.schedule_shrine_revival(entity, PlayerId(0), Team(0), position, 0, chance);
+    let support = sim.golden_shrine_support(Team(0));
+    let state = sim.schedule_shrine_revival(entity, PlayerId(0), Team(0), position, 0, support);
     let definition = sim.world.get::<ResurrectionProfile>(entity).unwrap().0;
     sim.world.despawn(entity);
     let corpse = sim.allocate_id();
@@ -134,11 +135,9 @@ fn restored(sim: &Simulation) -> Simulation {
 #[test]
 fn team_stacks_lifecycle_and_cap_are_derived_from_finished_canonical_buildings() {
     let mut sim = simulation(1, 0);
-    let per = sim.shrine_definition().parameters.chance_percent_per_shrine;
-    let cap = sim
-        .shrine_definition()
-        .parameters
-        .maximum_effective_chance_percent;
+    let parameters = &shrine_definition(MapVersion::CASTLE_FIGHT_9_27).parameters;
+    let per = parameters.chance_percent_per_shrine;
+    let cap = parameters.maximum_effective_chance_percent;
     let first = shrine(&mut sim, Team(0), 20);
     let second = shrine(&mut sim, Team(0), 30);
     let third = shrine(&mut sim, Team(0), 40);
@@ -160,8 +159,10 @@ fn team_stacks_lifecycle_and_cap_are_derived_from_finished_canonical_buildings()
 #[test]
 fn delayed_replacement_is_exact_fresh_one_time_and_wire_restorable() {
     let mut sim = ready_sim();
-    let delay =
-        sim.shrine_definition().parameters.revive_delay_seconds * CASTLE_FIGHT_SIMULATION_HZ as u64;
+    let delay = shrine_definition(MapVersion::CASTLE_FIGHT_9_27)
+        .parameters
+        .revive_delay_seconds
+        * CASTLE_FIGHT_SIMULATION_HZ as u64;
     let mut restored = restored(&sim);
     for tick in 0..=delay {
         sim.step();
@@ -185,7 +186,7 @@ fn delayed_replacement_is_exact_fresh_one_time_and_wire_restorable() {
     assert_eq!(sim.corpse_count(), 0);
     assert_eq!(
         sim.shrine_revivals_last_tick()[0].model_path,
-        sim.shrine_definition().resurrection_model
+        shrine_definition(MapVersion::CASTLE_FIGHT_9_27).resurrection_model
     );
     let id = replacement.id;
     assert!(
@@ -218,8 +219,10 @@ fn generation_is_round_wide_not_per_death_and_consumed_corpses_do_not_cancel_cal
     }
     let count = pending(&sim);
     let mut restored = restored(&sim);
-    let delay =
-        sim.shrine_definition().parameters.revive_delay_seconds * CASTLE_FIGHT_SIMULATION_HZ as u64;
+    let delay = shrine_definition(MapVersion::CASTLE_FIGHT_9_27)
+        .parameters
+        .revive_delay_seconds
+        * CASTLE_FIGHT_SIMULATION_HZ as u64;
     for _ in 0..=delay {
         sim.step();
         restored.step();

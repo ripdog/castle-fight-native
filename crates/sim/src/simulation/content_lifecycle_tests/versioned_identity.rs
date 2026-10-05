@@ -166,3 +166,96 @@ fn activation_and_restoration_retain_carrier_and_regeneration_source_versions() 
     }
     assert!(native_states > 0);
 }
+
+#[test]
+fn standalone_native_timer_and_control_versions_are_checked_without_source_identities() {
+    use crate::native_carriers::{NativeCarrierBolt, NativeCarrierState};
+    use crate::simulation::building_spells::{
+        BuildingSpellTargetState, ControlAction, ControlCallback,
+    };
+    let content = castle_fight_content_bundle(CASTLE_FIGHT_DEFAULT_MAP_VERSION).unwrap();
+    let foreign = MapVersion::new(99, 1);
+    for case in 0..5 {
+        let mut simulation = Simulation::new(SimulationConfig::default(), 1);
+        let id = simulation.allocate_id();
+        if case < 3 {
+            let state = match case {
+                0 => NativeCarrierState::Carrier {
+                    building: SimId(100),
+                    owner: None,
+                    team: Team(0),
+                    position: SimPoint::new(0, 0),
+                    map_version: foreign,
+                    ready_tick: 10,
+                    sequence: 0,
+                },
+                1 => NativeCarrierState::Regeneration {
+                    building: SimId(100),
+                    map_version: foreign,
+                    per_second_per_10k: 0,
+                    remainder: 0,
+                },
+                _ => NativeCarrierState::Bolt(NativeCarrierBolt {
+                    source: SimId(100),
+                    visual_source: SimId(100),
+                    source_team: Team(0),
+                    target: SimId(101),
+                    ability: AbilityId(1),
+                    map_version: foreign,
+                    damage: 1,
+                    attack_damage_type: None,
+                    launch_position: SimPoint::new(0, 0),
+                    launch_tick: 0,
+                    position: SimPoint::new(0, 0),
+                    position_tick: 0,
+                    impact_tick: 10,
+                }),
+            };
+            simulation.world.spawn((id, state));
+        } else {
+            let callbacks = if case == 4 {
+                let AbilityEffect::Hex { mut profile } =
+                    crate::building_mechanics::city_spellcasting_for_version(content.map_version)
+                        .ability
+                        .effect
+                else {
+                    unreachable!()
+                };
+                profile.map_version = foreign;
+                vec![ControlCallback {
+                    due_tick: 10,
+                    action: ControlAction::Attack,
+                    profile,
+                }]
+            } else {
+                Vec::new()
+            };
+            simulation.world.spawn((
+                id,
+                BuildingSpellTargetState {
+                    target: SimId(100),
+                    version: if case == 3 {
+                        foreign
+                    } else {
+                        content.map_version
+                    },
+                    shield_level: 0,
+                    shield_expires_tick: None,
+                    anti_negative: false,
+                    selector_excluded: false,
+                    overheat_level: 0,
+                    hex: None,
+                    defend_disabled: false,
+                    orders_suspended: false,
+                    callbacks,
+                },
+            ));
+        }
+        // Source handles may legitimately disappear before an autonomous action resolves.
+        // Their absence must not conceal a foreign script/native timer version.
+        let wire = simulation.capture_snapshot().encode_wire().unwrap();
+        assert!(matches!(SimulationSnapshot::decode_wire(&wire, content),
+            Err(SnapshotWireError::ContentVersionMismatch { expected, actual })
+                if expected == content.map_version && actual == foreign));
+    }
+}

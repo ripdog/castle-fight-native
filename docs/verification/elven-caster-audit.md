@@ -147,8 +147,8 @@ nearest-unvisited rule is distinct from Healing Wave's least-HP rule.
 profiles, native target history and healing falloff, original launch identity,
 current homing position/tick and live projected arrival. Native DOT final-pulse
 policy and new intrinsic classifications are also canonical/snapshotted.
-The integrated compatibility constants are bundle schema 5, checksum schema 17,
-snapshot schema 14. Independent post-cast order recovery is canonical status,
+The integrated compatibility constants are bundle schema 5, checksum schema 18,
+snapshot schema 15. Independent post-cast order recovery is canonical status,
 not removable native stun. Final content/release/source publication remains open.
 
 Presentation transport includes child ability IDs on staged healing-lightning

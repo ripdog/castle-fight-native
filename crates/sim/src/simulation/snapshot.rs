@@ -6,7 +6,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 14;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 15;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -87,6 +87,7 @@ impl SimulationSnapshot {
                     }
                 }
                 CanonicalEntity::DelayedShrineRevival { revival, .. } => {
+                    validate_content_version(revival.map_version, content)?;
                     rehydrate_optional_content(
                         &mut revival.definition.properties.content,
                         content,
@@ -114,16 +115,29 @@ impl SimulationSnapshot {
                         rehydrate_optional_content(&mut definition.properties.content, content)?;
                     }
                 }
+                CanonicalEntity::BuildingSpellTarget { state, .. } => {
+                    validate_content_version(state.version, content)?;
+                    for callback in &state.callbacks {
+                        validate_content_version(callback.profile.map_version, content)?;
+                    }
+                }
+                CanonicalEntity::NativeCarrier { state, .. } => {
+                    use crate::native_carriers::NativeCarrierState;
+                    let version = match state {
+                        NativeCarrierState::Carrier { map_version, .. }
+                        | NativeCarrierState::Regeneration { map_version, .. } => *map_version,
+                        NativeCarrierState::Bolt(bolt) => bolt.map_version,
+                    };
+                    validate_content_version(version, content)?;
+                }
                 CanonicalEntity::NativeAction { .. }
-                | CanonicalEntity::BuildingSpellTarget { .. }
                 | CanonicalEntity::Projectile(_)
                 | CanonicalEntity::ReflectedProjectile(_)
                 | CanonicalEntity::BallisticProjectile(_)
                 | CanonicalEntity::LineProjectile(_)
                 | CanonicalEntity::BounceProjectile(_)
                 | CanonicalEntity::BurningOil(_)
-                | CanonicalEntity::ChainLightning(_)
-                | CanonicalEntity::NativeCarrier { .. } => {}
+                | CanonicalEntity::ChainLightning(_) => {}
             }
         }
         Ok(())
@@ -152,15 +166,23 @@ fn resolve_content_identity(
     identity: ContentIdentity,
     content: &CastleFightContentBundle,
 ) -> Result<ContentIdentity, SnapshotWireError> {
-    if identity.map_version != content.map_version {
-        return Err(SnapshotWireError::ContentVersionMismatch {
-            expected: content.map_version,
-            actual: identity.map_version,
-        });
-    }
+    validate_content_version(identity.map_version, content)?;
     content
         .content_identity_for_rawcode(identity.rawcode)
         .ok_or(SnapshotWireError::UnknownContentRawcode(identity.rawcode))
+}
+
+fn validate_content_version(
+    actual: crate::MapVersion,
+    content: &CastleFightContentBundle,
+) -> Result<(), SnapshotWireError> {
+    if actual != content.map_version {
+        return Err(SnapshotWireError::ContentVersionMismatch {
+            expected: content.map_version,
+            actual,
+        });
+    }
+    Ok(())
 }
 
 #[derive(Debug)]

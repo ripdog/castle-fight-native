@@ -333,12 +333,14 @@ impl Simulation {
         building: BuildingSpawn,
         properties: BuildingGameplayProperties,
     ) {
-        if properties.content.is_some_and(|content| {
-            content.rawcode
-                == crate::content::CastleFightTowerKind::Gjallarhorn
-                    .definition()
-                    .rawcode
-        }) {
+        let tower_kind = properties.content.and_then(|content| {
+            crate::CastleFightTowerKind::from_rawcode_for_version(
+                content.rawcode,
+                content.map_version,
+            )
+            .expect("registered building activation version")
+        });
+        if tower_kind == Some(crate::CastleFightTowerKind::Gjallarhorn) {
             let count = &mut self.gjallarhorn_constructed_count[usize::from(building.team.0)];
             *count = count
                 .checked_add(1)
@@ -430,13 +432,13 @@ impl Simulation {
         if building.attack.is_some() || building.spellcasting.is_some() {
             entity.insert(StatusState::default());
         }
-        let shrine =
-            crate::golden_shrine_definition_for_version(crate::CASTLE_FIGHT_DEFAULT_MAP_VERSION)
+        if tower_kind == Some(crate::CastleFightTowerKind::GoldenShrineOfJustice) {
+            let version = properties
+                .content
+                .expect("retained shrine identity")
+                .map_version;
+            let shrine = crate::golden_shrine_definition_for_version(version)
                 .expect("registered shrine building baseline");
-        if properties
-            .content
-            .is_some_and(|content| content.rawcode == shrine.parameters.golden_shrine_unit_id)
-        {
             entity.insert(HealthRegeneration {
                 per_second_per_10k: shrine.building_health_regen_per_second_per_10k,
                 remainder_per_10k_hz: 0,

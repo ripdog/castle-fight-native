@@ -4,8 +4,8 @@
 
 - Entity: Golden Shrine of Justice, `h059`, inherited Warcraft base `hbla`.
 - Runtime identity: `CastleFightTowerKind::GoldenShrineOfJustice`, building ID
-  `0x3000000d`. This registers executable content only; Elf promotion, computer
-  availability, lobby/match setup, releases, and schema/revision numbers are not changed.
+  `0x3000000d`. This registers executable content only; Elf promotion and final
+  release/source publication remain separate gates.
 - Production source: Elf builder `X00P`, non-production utility building, authored
   registration `AK` / `Urb`. Command-card position, hotkey, legendary allocation,
   costs, construction/repair timing, health, armor and footprint use the existing
@@ -14,15 +14,19 @@
   `docs/original_map/extracted/resolved/{units,buildings,production-buildings,protected-unit-stats}.tsv`.
   The protected `jP` life override, not the poisoned static life field, is authoritative.
 - System evidence: `runtime-system-mechanics.tsv`, system `golden-shrine-revival`.
-- Actual retained Lua: `/tmp/elven-next-source.lua`. Reproducible projection:
+- Actual retained Lua: `script/war3map.lua` in the release-pinned extraction tree
+  selected by `docs/original_map/releases.json`. Reproducible projection:
   `crates/sim/data/castle-fight/9.27/shrine-system-r1.json`. Its source block retains
   script/table SHA-256 identities, function names and decoded protected-call evidence.
 
 Regenerate or audit without modifying shared native-effect recipes/bindings:
 
 ```sh
-python3 tools/wc3-map/project-shrine-system.py --source /tmp/elven-next-source.lua
-python3 tools/wc3-map/project-shrine-system.py --source /tmp/elven-next-source.lua --check
+# Materialize the selected release's script to a disk-backed workspace first.
+# <tree> is the extraction tree recorded in docs/original_map/releases.json.
+git show <tree>:script/war3map.lua > <disk-workspace>/shrine-source.lua
+python3 tools/wc3-map/project-shrine-system.py --source <disk-workspace>/shrine-source.lua
+python3 tools/wc3-map/project-shrine-system.py --source <disk-workspace>/shrine-source.lua --check
 ```
 
 ## Base data and complete inventory
@@ -93,7 +97,11 @@ Audited functions: `ME`, `onBuildingFinished`, `acquireElvenShrine`,
   kind tag **11**, leaving tag 10 for the coordinator's `NativeAction` component.
 - Callback fields, cold definition, round generation and handle flags on live
   units/corpses all participate in canonical checksums and snapshot wire transport.
-  Snapshot restore rehydrates captured content identity through the content bundle.
+  Supporting buildings supply explicit script-version context; live/original
+  content identities must agree before scheduling. The callback retains that
+  version independently of optional cold body identity, and uses it after source
+  removal. Wire decoding validates callback version even for an unlabelled body
+  before rehydrating any captured content identity.
 - Presentation-only `ShrineRevivalEvent` carries replacement identity, exact effect
   origin and the native model path extracted from the callback. The client bridge
   forwards it and the renderer uses the normal timed WC3 visual pool/lifetime.
@@ -127,5 +135,13 @@ Mechanic fixtures live under `crates/sim/src/simulation/shrine/tests*`:
 Additional asset/client tests verify projection-sourced catalog art, normalized
 model identity lookup and animation-driven (not gameplay-delay-driven) VFX lifetime.
 
-Validation commands and final results are recorded in the completed commit/final
-worker report. Schema/release promotion remains delegated to the coordinator.
+Source-context closure passed all 22 Shrine tests (including five reusable
+version cases), four earlier version lifecycle tests, all 384 integrated simulation
+tests, strict simulation all-target Clippy, and client all-target checking. Logs
+are disk-backed under `castle-fight-native-worktrees/elven-full/shrine-version-*.log`.
+The new cases cover version-only checksum/wire rejection without body identity,
+source removal and worker continuation, live/original mismatches before allocation,
+unsupported count/transfer identities, and activation before native counters/regen.
+A further lifecycle matrix checks standalone carrier/control/callback versions.
+Compatibility constants are bundle 5/checksum 18/snapshot 15; final publication,
+imported visual review and native-executable observations remain open.

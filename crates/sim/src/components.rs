@@ -495,6 +495,8 @@ pub(crate) struct ShrineRevivalState {
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct DelayedShrineRevival {
+    /// Supporting script version, independent of the replacement's optional content identity.
+    pub map_version: crate::MapVersion,
     pub source_unit: SimId,
     pub owner: PlayerId,
     pub team: Team,

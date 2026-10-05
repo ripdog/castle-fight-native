@@ -284,9 +284,8 @@ fn shrine_building_native_regeneration_keeps_fractional_state_across_wire_restor
         wire_restored.step();
         assert_eq!(sim.checksum(), wire_restored.checksum());
     }
-    let rate = sim
-        .shrine_definition()
-        .building_health_regen_per_second_per_10k;
+    let rate =
+        shrine_definition(MapVersion::CASTLE_FIGHT_9_27).building_health_regen_per_second_per_10k;
     assert_eq!(
         sim.world.get::<Health>(building).unwrap().current,
         max - 100 + (rate / 10_000) as i32
@@ -309,14 +308,14 @@ fn actual_death_guard_and_incomplete_construction_do_not_grant_revival() {
     let id = unit(&mut sim, definition());
     let caster = entity(&sim, id);
     let before = pending(&sim);
-    let chance = sim.golden_shrine_revive_chance(Team(0));
+    let support = sim.golden_shrine_support(Team(0));
     sim.schedule_shrine_revival(
         caster,
         PlayerId(0),
         Team(0),
         SimPoint::new(50, 11),
         1,
-        chance,
+        support,
     );
     assert_eq!(pending(&sim), before);
     let mut sim = simulation(1, 0);
@@ -339,7 +338,9 @@ fn actual_death_guard_and_incomplete_construction_do_not_grant_revival() {
     }
     assert_eq!(
         sim.golden_shrine_revive_chance(Team(1)),
-        sim.shrine_definition().parameters.chance_percent_per_shrine
+        shrine_definition(MapVersion::CASTLE_FIGHT_9_27)
+            .parameters
+            .chance_percent_per_shrine
     );
     assert_eq!(sim.golden_shrine_revive_chance(Team(0)), 0);
     assert!(sim.remove_building(id));
