@@ -468,12 +468,10 @@ fn populate_debug_building_lines(
         return (0, 0);
     }
 
-    let max_size = definitions
+    let sizes = definitions
         .iter()
         .map(|definition| definition.footprint_size(content))
-        .max()
-        .expect("non-empty debug building list");
-    let max_size_i32 = i32::from(max_size);
+        .collect::<Vec<_>>();
     let mut spawned = 0;
     let mut skipped = 0;
 
@@ -515,50 +513,13 @@ fn populate_debug_building_lines(
             continue;
         };
 
-        let castle_center_x2 = castle.footprint.min_x * 2 + i32::from(castle.footprint.width) - 1;
-        let region_center_x2 = region.min_x * 2 + i32::from(region.width) - 1;
-        let outer_side_is_left = castle_center_x2 < region_center_x2;
-        let minimum_y = region.min_y + DEBUG_BUILDING_LINE_MARGIN_CELLS;
-        let maximum_y = region.max_y() - DEBUG_BUILDING_LINE_MARGIN_CELLS;
-        let available_height = maximum_y - minimum_y + 1;
-        let total_building_height: i32 = definitions
-            .iter()
-            .map(|definition| i32::from(definition.footprint_size(content)))
-            .sum();
-        let gap_count = i32::try_from(definitions.len().saturating_sub(1))
-            .expect("debug building count must fit i32");
-        let preferred_gap = if gap_count == 0 {
-            0
-        } else {
-            ((available_height - total_building_height) / gap_count)
-                .clamp(0, DEBUG_BUILDING_LINE_GAP_CELLS)
-        };
-
-        let line_min_x = if outer_side_is_left {
-            region.min_x + DEBUG_BUILDING_LINE_MARGIN_CELLS
-        } else {
-            region.max_x() - DEBUG_BUILDING_LINE_MARGIN_CELLS - max_size_i32 + 1
-        };
-        let mut cursor_max_y = maximum_y;
-        let mut plan = Vec::with_capacity(definitions.len());
-        for &definition in &definitions {
-            let size = definition.footprint_size(content);
-            let size_i32 = i32::from(size);
-            let min_x = line_min_x + (max_size_i32 - size_i32) / 2;
-            let min_y = cursor_max_y - size_i32 + 1;
-            if min_y < minimum_y {
-                plan.clear();
-                break;
-            }
-            plan.push((definition, BuildingFootprint::new(min_x, min_y, size, size)));
-            cursor_max_y = min_y - preferred_gap - 1;
-        }
-        if plan.len() != definitions.len() {
+        let Some(footprints) = plan_debug_building_footprints(region, castle.footprint, &sizes)
+        else {
             skipped += definitions.len();
             continue;
-        }
+        };
 
-        for (definition, footprint) in plan {
+        for (&definition, footprint) in definitions.iter().zip(footprints) {
             match definition {
                 DebugBuildingKind::Production(kind) => {
                     let definition = content
@@ -586,6 +547,67 @@ fn populate_debug_building_lines(
     }
 
     (spawned, skipped)
+}
+
+/// Keep the complete catalog behind the castle, adding columns rather than
+/// silently abandoning it once one vertical line fills. Prefer gaps, then use a
+/// dense grid; reject insufficient space before spawning any partial roster.
+fn plan_debug_building_footprints(
+    region: BuildingFootprint,
+    castle: BuildingFootprint,
+    sizes: &[u16],
+) -> Option<Vec<BuildingFootprint>> {
+    let Some(&maximum) = sizes.iter().max() else {
+        return Some(Vec::new());
+    };
+    if sizes.contains(&0) {
+        return None;
+    }
+    let maximum = i32::from(maximum);
+    let left_side = castle.min_x * 2 + i32::from(castle.width) - 1
+        < region.min_x * 2 + i32::from(region.width) - 1;
+    let mut min_x = region.min_x + DEBUG_BUILDING_LINE_MARGIN_CELLS;
+    let mut max_x = region.max_x() - DEBUG_BUILDING_LINE_MARGIN_CELLS;
+    if left_side {
+        max_x = max_x.min(castle.min_x - 1);
+    } else {
+        min_x = min_x.max(castle.max_x() + 1);
+    }
+    let min_y = region.min_y + DEBUG_BUILDING_LINE_MARGIN_CELLS;
+    let max_y = region.max_y() - DEBUG_BUILDING_LINE_MARGIN_CELLS;
+    let width = max_x - min_x + 1;
+    let height = max_y - min_y + 1;
+    if width < maximum || height < maximum {
+        return None;
+    }
+    for gap in [DEBUG_BUILDING_LINE_GAP_CELLS, 0] {
+        let pitch = maximum + gap;
+        let rows = usize::try_from((height + gap) / pitch).ok()?;
+        let columns = usize::try_from((width + gap) / pitch).ok()?;
+        if sizes.len().div_ceil(rows) > columns {
+            continue;
+        }
+        return sizes
+            .iter()
+            .enumerate()
+            .map(|(index, &size)| {
+                let column = i32::try_from(index / rows).ok()?;
+                let row = i32::try_from(index % rows).ok()?;
+                let slot_min_x = if left_side {
+                    min_x + column * pitch
+                } else {
+                    max_x - maximum + 1 - column * pitch
+                };
+                Some(BuildingFootprint::new(
+                    slot_min_x + (maximum - i32::from(size)) / 2,
+                    max_y - row * pitch - i32::from(size) + 1,
+                    size,
+                    size,
+                ))
+            })
+            .collect();
+    }
+    None
 }
 
 const fn footprint_contains(region: BuildingFootprint, footprint: BuildingFootprint) -> bool {
@@ -759,6 +781,57 @@ impl DebugMenuState {
 mod tests {
     use super::*;
 
+    fn footprints_overlap(a: BuildingFootprint, b: BuildingFootprint) -> bool {
+        a.min_x <= b.max_x() && b.min_x <= a.max_x() && a.min_y <= b.max_y() && b.min_y <= a.max_y()
+    }
+
+    #[test]
+    fn debug_layout_adds_columns_deterministically_without_crossing_castle_or_region() {
+        let region = BuildingFootprint::new(0, 0, 64, 64);
+        let sizes = [3, 5, 6, 4, 6, 3, 4, 5, 6, 3, 5, 4];
+        for (castle_x, left_side) in [(20, true), (40, false)] {
+            let castle = BuildingFootprint::new(castle_x, 30, 4, 4);
+            let plan = plan_debug_building_footprints(region, castle, &sizes).unwrap();
+            assert_eq!(
+                plan,
+                plan_debug_building_footprints(region, castle, &sizes).unwrap()
+            );
+            assert_eq!(plan.len(), sizes.len());
+            assert_ne!(plan.first().unwrap().min_x, plan.last().unwrap().min_x);
+            for (index, (&size, footprint)) in sizes.iter().zip(&plan).enumerate() {
+                assert_eq!(footprint.width, size);
+                assert_eq!(footprint.height, size);
+                assert!(footprint_contains(region, *footprint));
+                assert!(if left_side {
+                    footprint.max_x() < castle.min_x
+                } else {
+                    footprint.min_x > castle.max_x()
+                });
+                assert!(
+                    plan[index + 1..]
+                        .iter()
+                        .all(|other| !footprints_overlap(*footprint, *other))
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn debug_layout_uses_dense_fallback_and_rejects_an_unplaceable_complete_catalog() {
+        let region = BuildingFootprint::new(0, 0, 40, 24);
+        let castle = BuildingFootprint::new(16, 10, 4, 4);
+        // Behind the castle: 12 x 16 cells. Gapped 6-cell slots hold 2,
+        // dense slots hold 4; do not skip all definitions just to preserve gaps.
+        let plan = plan_debug_building_footprints(region, castle, &[6; 4]).unwrap();
+        assert_eq!(plan.len(), 4);
+        assert!(plan_debug_building_footprints(region, castle, &[6; 5]).is_none());
+        assert!(plan_debug_building_footprints(region, castle, &[0]).is_none());
+        assert_eq!(
+            plan_debug_building_footprints(region, castle, &[]),
+            Some(Vec::new())
+        );
+    }
+
     fn assert_fixed_hz(fixed_time: &Time<Fixed>, expected_hz: f64) {
         assert_eq!(
             fixed_time.timestep(),
@@ -822,7 +895,7 @@ mod tests {
     }
 
     #[test]
-    fn debug_population_builds_complete_vertical_rosters_behind_both_castles() {
+    fn debug_population_builds_complete_bounded_rosters_behind_both_castles() {
         let mut demo = crate::demo::create_demo_world(1, None);
         let content = demo.content;
         let implemented_rawcodes = content
@@ -868,22 +941,34 @@ mod tests {
             line.sort_unstable_by_key(|building| std::cmp::Reverse(building.footprint.min_y));
             assert_eq!(line.len(), implemented_rawcodes.len());
 
-            let line_center_x2 =
-                line[0].footprint.min_x * 2 + i32::from(line[0].footprint.width) - 1;
-            assert!(line.iter().all(|building| {
+            for (index, building) in line.iter().enumerate() {
+                assert!(
+                    demo.simulation
+                        .team_build_regions(team)
+                        .iter()
+                        .any(|region| footprint_contains(*region, building.footprint))
+                );
                 let center_x2 =
                     building.footprint.min_x * 2 + i32::from(building.footprint.width) - 1;
-                (center_x2 - line_center_x2).abs() <= 1
-            }));
-            assert!(
-                line.windows(2)
-                    .all(|pair| { pair[0].footprint.min_y > pair[1].footprint.min_y })
-            );
-            if team == Team(0) {
-                assert!(line_center_x2 < castle_center_x2);
-            } else {
-                assert!(line_center_x2 > castle_center_x2);
+                assert!(if team == Team(0) {
+                    center_x2 < castle_center_x2
+                } else {
+                    center_x2 > castle_center_x2
+                });
+                assert!(
+                    line[index + 1..]
+                        .iter()
+                        .all(|other| !footprints_overlap(building.footprint, other.footprint))
+                );
             }
+            let mut actual_rawcodes = line
+                .iter()
+                .map(|building| building.content.unwrap().rawcode)
+                .collect::<Vec<_>>();
+            actual_rawcodes.sort_unstable();
+            let mut expected = implemented_rawcodes.clone();
+            expected.sort_unstable();
+            assert_eq!(actual_rawcodes, expected);
         }
     }
 }
