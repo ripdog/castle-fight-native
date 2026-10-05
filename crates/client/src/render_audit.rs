@@ -178,6 +178,9 @@ struct Measurements {
     stages: [StageTiming; STAGES.len()],
     transparent: Option<TransparentSample>,
     particles: Option<crate::particle_renderer::Wc3ParticleQueueStats>,
+    pending_particle_texture_frames: usize,
+    peak_pending_particle_texture_slots: usize,
+    peak_pending_texture_particles: usize,
     compact: Option<crate::compact_material::CompactMaterialStats>,
     skin_influences: Option<crate::skin_influences::SkinInfluenceStats>,
     scene_requests: BTreeMap<String, SceneRequestCounts>,
@@ -253,6 +256,8 @@ impl RenderAudit {
                 particles.texture_groups_created, particles.texture_groups_reused
             )
             .unwrap();
+            writeln!(output, "  particle pending textures: {} slots, {} particles omitted (latest frame, all views)", particles.pending_texture_slots, particles.pending_texture_particles).unwrap();
+            writeln!(output, "  particle texture availability capture: {} frames with pending particles, peak {} slots / {} omitted particles", measurements.pending_particle_texture_frames, measurements.peak_pending_particle_texture_slots, measurements.peak_pending_texture_particles).unwrap();
             writeln!(output, "  particle overlap audit: {} safe moves, {} overlap rejects, {} unknown barriers (latest frame)", particles.reorder_moves, particles.reorder_overlap_rejects, particles.reorder_barriers).unwrap();
             writeln!(
                 output,
@@ -448,6 +453,20 @@ fn sample_transparent_batches(
     mut last_sample: Local<Option<Instant>>,
 ) {
     let now = Instant::now();
+    {
+        // Availability gaps can last one frame; the expensive transparent census
+        // below samples once a second, but must not hide those transient gaps.
+        let mut measurements = audit.0.lock().expect("render audit mutex poisoned");
+        if measurements.started.is_some() && particles.pending_texture_particles > 0 {
+            measurements.pending_particle_texture_frames += 1;
+            measurements.peak_pending_particle_texture_slots = measurements
+                .peak_pending_particle_texture_slots
+                .max(particles.pending_texture_slots);
+            measurements.peak_pending_texture_particles = measurements
+                .peak_pending_texture_particles
+                .max(particles.pending_texture_particles);
+        }
+    }
     if last_sample.is_some_and(|last| now.duration_since(last) < Duration::from_secs(1)) {
         return;
     }

@@ -132,6 +132,7 @@ struct Wc3ParticleInstance {
 struct ExtractedWc3Particle {
     instance: Wc3ParticleInstance,
     slab_entity: Entity,
+    slab_index: u32,
     blend_mode: Wc3ParticleBlendMode,
 }
 
@@ -200,6 +201,7 @@ fn extract_wc3_particles(
                 _padding: [0; 3],
             },
             slab_entity,
+            slab_index: slab_index as u32,
             blend_mode,
         });
     }
@@ -268,6 +270,8 @@ pub(crate) struct Wc3ParticleQueueStats {
     pub(crate) bound_slots: usize,
     pub(crate) texture_groups_created: usize,
     pub(crate) texture_groups_reused: usize,
+    pub(crate) pending_texture_slots: usize,
+    pub(crate) pending_texture_particles: usize,
     pub(crate) reorder_moves: usize,
     pub(crate) reorder_overlap_rejects: usize,
     pub(crate) reorder_barriers: usize,
@@ -586,14 +590,29 @@ type Wc3ParticleQueuePipelines<'w> = (
 fn queue_wc3_particles(
     draw_functions: Res<DrawFunctions<Transparent3d>>,
     pipeline_state: Wc3ParticleQueuePipelines<'_>,
-    extracted: Res<ExtractedWc3Particles>,
+    textures: (
+        Res<ExtractedWc3Particles>,
+        Res<RenderAssets<GpuImage>>,
+        Local<Vec<u64>>,
+    ),
     mut phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
     view_keys: Res<ViewKeyCache>,
     views: Query<(&ExtractedView, &Msaa, Option<&Frustum>)>,
     mut stats: ResMut<Wc3ParticleQueueStats>,
 ) {
     let (pipeline_cache, pipeline, mut pipelines) = pipeline_state;
+    let (extracted, images, mut pending_slots) = textures;
+    // GPU images have been prepared before Queue. Resolve readiness once per slot,
+    // and reject only that slot's particles, never a slab containing ready effects.
+    pending_slots.clear();
+    pending_slots.extend(extracted.slab_textures.iter().map(|textures| {
+        pending_particle_texture_slots(textures, |texture| images.get(texture).is_some())
+    }));
     *stats = Wc3ParticleQueueStats {
+        pending_texture_slots: pending_slots
+            .iter()
+            .map(|mask| mask.count_ones() as usize)
+            .sum(),
         populated_slots: extracted.slab_textures.iter().map(Vec::len).sum(),
         bound_slots: extracted
             .slab_textures
@@ -641,6 +660,12 @@ fn queue_wc3_particles(
 
         for (index, particle) in extracted.particles.iter().enumerate() {
             stats.candidates += 1;
+            if pending_slots[particle.slab_index as usize] & (1 << particle.instance.texture_slot)
+                != 0
+            {
+                stats.pending_texture_particles += 1;
+                continue;
+            }
             if extracted.experiment == RenderExperiment::ParticleCull {
                 let [x, y, z, scale] = particle.instance.position_scale;
                 // A camera-facing square fits inside this sphere at any camera angle.
@@ -692,6 +717,23 @@ fn queue_wc3_particles(
             });
         }
     }
+}
+
+fn pending_particle_texture_slots(
+    textures: &[Option<AssetId<Image>>],
+    mut ready: impl FnMut(AssetId<Image>) -> bool,
+) -> u64 {
+    debug_assert!(textures.len() <= 64);
+    textures
+        .iter()
+        .enumerate()
+        .fold(0, |mask, (slot, texture)| {
+            if texture.is_some_and(|texture| !ready(texture)) {
+                mask | (1 << slot)
+            } else {
+                mask
+            }
+        })
 }
 
 #[derive(Resource, Default)]
@@ -1140,16 +1182,14 @@ fn prepare_wc3_particle_texture_bind_groups(
         let fallback = &fallback_image.d2;
         let resolved = textures
             .iter()
-            .map(|texture| match texture {
-                Some(texture) => images.get(*texture),
-                None => Some(fallback),
+            // Pending slots still need valid bindings, even though Queue omits
+            // their particles. The ready slots keep drawing throughout a reload.
+            .map(|texture| {
+                texture
+                    .and_then(|texture| images.get(texture))
+                    .unwrap_or(fallback)
             })
-            .collect::<Option<Vec<_>>>();
-        let Some(resolved) = resolved else {
-            // Never keep drawing a stale texture while its replacement is pending.
-            bind_groups.0.remove(&entity);
-            continue;
-        };
+            .collect::<Vec<_>>();
         let bound_count = pipeline.bound_texture_count(extracted.experiment, textures.len());
         if extracted.experiment != RenderExperiment::ParticleUncachedBindings
             && bind_groups.0.get(&entity).is_some_and(|cached| {
@@ -1305,6 +1345,33 @@ pub(crate) fn particle_draw_function_id(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pending_texture_slots_leave_ready_and_untextured_particles_drawable() {
+        let ready = Handle::<Image>::default().id();
+        let pending = AssetId::<Image>::Uuid {
+            uuid: bevy::asset::uuid::Uuid::from_u128(1),
+        };
+        let textures = [Some(ready), Some(pending), None, Some(ready)];
+        assert_eq!(
+            pending_particle_texture_slots(&textures, |id| id == ready),
+            0b0010
+        );
+        assert_eq!(pending_particle_texture_slots(&textures, |_| true), 0);
+        assert_eq!(pending_particle_texture_slots(&textures, |_| false), 0b1011);
+        // The highest slot must work on the 64-texture path, and the fallback
+        // single-texture path must make the same per-slot readiness decision.
+        let mut full_slab = [None; 64];
+        full_slab[63] = Some(pending);
+        assert_eq!(
+            pending_particle_texture_slots(&full_slab, |_| false),
+            1 << 63
+        );
+        assert_eq!(
+            pending_particle_texture_slots(&[Some(pending)], |_| false),
+            1
+        );
+    }
 
     #[test]
     fn particle_binding_cache_invalidates_replaced_resources_and_reordered_slots() {

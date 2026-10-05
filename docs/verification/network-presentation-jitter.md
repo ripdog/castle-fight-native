@@ -1,81 +1,104 @@
-# Network movement and effect flicker investigation
+# Network movement and effect flicker
 
-Date: 2026-10-06. Scope: investigate the reported movement jitter and brief disappearance of
-ambient doodad fire. No production movement/interpolation/particle changes are included in this
-investigation.
+Date: 2026-10-06. Investigation and authorized follow-up fixes.
 
-## Confirmed movement cause: render time can run backwards
+## Confirmed movement causes
 
-`SimulationPlayback::interpolation_alpha` uses the local `Time<Fixed>::overstep_fraction` for
-both offline and network matches. In offline play each unpaused fixed update advances a simulation
-tick. Network fixed updates instead drain whatever messages have arrived. A fixed update with no
-finalized server tick keeps the same previous/current samples but resets the interpolation alpha.
-A smoothly moving unit therefore interpolates backwards within its last interval. The same issue
-affects builders, projectile positions, and authoritative action/construction animation phases.
-A burst of multiple ticks also overwrites intermediate samples rather than pacing their display.
-This requires no pathfinding turn, collision, or change in authoritative speed.
-
-A temporary client test used the actual `process_network_events` path, a canonical forward builder
-move, and Bevy's fixed overstep clock. It first applied a finalized tick, then simulated another
-local fixed boundary with an empty network poll. Results:
+Before the fix, `SimulationPlayback::interpolation_alpha` used the local
+`Time<Fixed>::overstep_fraction` for both offline and network matches. Offline fixed updates
+advance a simulation tick; network fixed updates can receive no finalized tick. The local
+interpolation alpha then wrapped while the previous/current movement interval stayed unchanged.
+A reproduction through `process_network_events` recorded:
 
 ```text
 empty network poll: samples=0->1 alpha=0.900->0.080 position.x=-4335.500->-4350.533
 non-tick control: samples=1->1 authoritative tick=1
 ```
 
-The authoritative builder moved forward. Its rendered X moved backwards by about 15 world units
-while the simulation remained at tick 1. Unit transforms use the same interpolation factor.
-The test passed by asserting these observed defects; it was removed from the production test
-suite so the existing behavior is not enshrined as a contract. Its reproducible test body is
-retained in `network-presentation-reproduction.rs.txt` beside this report. Insert it into the
-`tests` module in `crates/client/src/main.rs` and run:
+The first line demonstrates backwards visual movement despite forward authoritative movement.
+The second demonstrates boundary records replacing the preceding movement endpoint without
+advancing gameplay. Those publications could also repeat last-tick cosmetics, and a multi-tick
+network burst replaced intermediate snapshots and their events. This affected units, builders,
+projectiles, and authoritative action/construction animation phases.
+
+The old defect-asserting reproduction is retained in commit `73565cb`; permanent regressions now
+assert the corrected behavior instead.
+
+## Movement changes applied
+
+`bridge/network_timeline.rs` owns a presentation-only queue and monotonic frame-driven clock.
+Canonical records, command execution, feedback, and checksum reporting still apply immediately.
+Offline interpolation keeps its fixed-update clock.
+
+- Normal network display buffers two confirmed snapshots, adding approximately one simulation
+  interval to ordinary presentation latency. Empty polls cannot reset progress. Missing state
+  holds the last confirmed endpoint; gameplay positions are never extrapolated.
+- After starvation, display buffers again. A lone final snapshot is released after a bounded
+  two-interval wait so a stopped server does not leave the last state invisible.
+- Larger bursts drain with bounded cosmetic catch-up (up to twice the selected server rate),
+  returning to ordinary pacing as the backlog shrinks. Every crossed tick's event lists are
+  concatenated in chronological order for consumption in that display frame.
+- The queue is capped at 64 snapshots. Overflow logs a warning and explicitly rebases to recent
+  confirmed state without replaying historical effects. This is severe-stall recovery.
+- Boundary controls patch the latest queued state while preserving its pending tick events.
+  Already displayed boundaries preserve the previous endpoint and interpolation progress,
+  publish their persistent mutations, clear stale event lists, and do not restart attack poses.
+- Queue and alpha changes bypass Bevy resource change detection. Only a published display state
+  marks the samples changed, so empty polls and ordinary interpolation cannot replay cosmetics.
+- Pause flushes confirmed state; a paused single-step appears immediately. Server speed presets
+  scale the display clock. Disconnect freezes display progress and discards queued cosmetics;
+  verified reconnect/snapshot handoff resets the queue and clock.
+- Rendering, health bars, selection/picking, and portrait tracking use the same network alpha.
+  Selection runs after the frame's presentation-clock update.
+
+The normative presentation contract is in `docs/spec/30-client-presentation.md`. No deterministic
+simulation, protocol, map tuning, command timing, or gameplay checksum schema changed.
+
+## Fire suppression path fixed; reported frame remains unconfirmed
+
+Ambient doodad emitters advance from frame `Time` in `emit_wc3_particles` /
+`update_wc3_particles`. They do not use the network interpolation clock, so backwards movement
+interpolation does not directly explain a stationary fire disappearing.
+
+A concrete suppression path existed in `prepare_wc3_particle_texture_bind_groups`: a single
+missing `GpuImage` removed its entire shared texture slab's bind group. The draw command then
+skipped ready ambient particles sharing that slab with a loading/reloading combat texture.
+
+The renderer now checks readiness once per texture slot during Queue and omits only that slot's
+particles. Every slab retains valid bindings: a pending slot binds Bevy's safe fallback until its
+image is ready. Its particles stay omitted during that time, preventing placeholder rectangles.
+Ready textures keep drawing, including during another slot's hot reload. GPU resource/sampler
+identity still invalidates the binding cache when the replacement is ready. This applies to both
+texture arrays and the single-texture device fallback.
+
+The opt-in render audit reports pending slots and omitted particles. It also counts affected
+frames and capture peaks every frame, independently of the once-per-second transparent census,
+so a one-frame loading gap cannot vanish between census samples.
+
+No visible network session or GPU/frame capture was performed. The isolated GUI workspace tools
+and a local Xvfb runtime were unavailable in this session. The fix removes the identified shared-
+slab suppression path; it does not establish that the user's specific fire dropout took that
+path. Authored emitter gaps and transparent ordering remain unconfirmed possibilities.
+
+## Verification
+
+Permanent mechanic regressions cover empty polls through the actual network event and Bevy
+change-detection path, monotonic starvation/rebuffering, lone final ticks, burst catch-up while
+new ticks continue, chronological event consumption, persistent boundary mutations, pause and
+single-step, speed changes, disconnect/reset, and bounded overflow. The integration regression
+also confirms replica and source checksums remain equal with different worker counts.
+
+Particle tests cover readiness isolation, untextured slots, highest array slot, single-texture
+fallback, and existing cache invalidation for image/sampler replacement and slot reordering.
+
+Validation passed: 238 client tests, 3 existing asset-pack tests ignored; workspace/all-target
+Clippy with warnings denied; formatting and diff checks; debug client executable build.
+
+Validation commands:
 
 ```text
-tools/cargo-interactive test -p castle-fight-client investigate_network_presentation_clock_and_control_publication -- --nocapture
+cargo fmt --all -- --check
+tools/cargo-interactive test -p castle-fight-client
+tools/cargo-interactive clippy --workspace --all-targets -- -D warnings
+tools/cargo-interactive build -p castle-fight-client
 ```
-
-## Confirmed second cause: non-tick records replace movement history
-
-The live `ServerMessage::StreamRecord` branch publishes a presentation snapshot even when
-`MatchDriver::apply_stream_record` returns no tick result (a boundary control). Publishing the
-same tick replaces the previous movement sample with the current sample. The reproduction above
-also applies a no-op connection control and demonstrates the 0->1 sample interval collapsing to
-1->1 without advancing gameplay. That produces a forward snap and can repeat last-tick cosmetic
-events because presentation event lists are still present. Host debug controls now also expose
-this existing boundary-publication problem, but it predates that change.
-
-## Fire flicker: separate renderer candidate, not yet tied to the reported frame
-
-Ambient doodad emitters are created by `DoodadPresentationPlugin` and advanced from frame `Time`
-in `emit_wc3_particles` / `update_wc3_particles`. They do not depend on canonical network ticks,
-`PresentationSamples`, or `SimulationPlayback::interpolation_alpha`. The backwards interpolation
-clock does not directly explain stationary doodad particles disappearing.
-
-A concrete suppression path exists in `prepare_wc3_particle_texture_bind_groups` in
-`crates/client/src/particle_renderer.rs`. Particle textures are packed into shared slabs, including
-ambient and combat effects together. Texture preparation collects all `GpuImage` lookups into
-`Option<Vec<_>>`. If one texture is not ready (initial load or reload), it removes the entire slab's
-bind group. `DrawWc3BillboardParticleCommand` then skips every batch using that slab, including
-otherwise-ready fire particles. When the texture arrives, those particles can reappear. This is
-a plausible brief-flicker cause when new combat-effect textures enter the same slab; it is not
-proof that the user's particular disappearing frame took this branch.
-
-No visual network session or GPU capture was performed. Additional possibilities include authored
-emitter/atlas visibility gaps and frame-to-frame transparent ordering; this investigation has not
-established those as causes.
-
-## Recommended follow-up
-
-- Pace network presentation from a monotonic render clock and a bounded queue of finalized
-  snapshots. Do not reset display progress when a local fixed update receives no server tick;
-  handle bursts, late arrivals, pause/speed, and reconnect explicitly. Consume cosmetic events
-  once per displayed tick.
-- Apply boundary state changes without discarding the last movement interval or replaying
-  its events. Merely skipping every boundary snapshot would hide legitimate host mutations.
-- Record missing texture/slab draw skips during a visible fire dropout. Isolate not-ready
-  particle textures from ready slabs, or use a safe per-slot placeholder, then verify against
-  a GPU/frame capture before claiming the reported fire issue fixed.
-
-The requested attack and debug fixes are verified separately. This report deliberately keeps
-movement diagnosis distinct from an unverified rendering symptom.
