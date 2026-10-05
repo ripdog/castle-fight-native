@@ -277,8 +277,8 @@ impl Simulation {
             return false;
         };
         let committed = entity
-            .get::<BuilderBuildOrder>()
-            .and_then(|order| order.properties.economy);
+            .get::<BuilderOrderQueue>()
+            .map(BuilderOrderQueue::committed_cost);
         let available_gold = resources
             .gold
             .saturating_add(committed.map_or(0, |old| old.gold_cost));
@@ -325,6 +325,7 @@ impl Simulation {
             return Err(BuilderSpawnError::PlayerTeamMismatch);
         }
         assert!(builder.profile.speed_per_tick >= 0);
+        assert!(builder.profile.order_queue_capacity > 0);
         assert!(builder.profile.build_range >= 0);
         assert!(builder.profile.repair_range >= 0);
         assert!(builder.profile.repair_autocast_range >= builder.profile.repair_range);
@@ -366,6 +367,7 @@ impl Simulation {
         configuration: BuilderConfiguration,
     ) -> Result<(), BuilderCommandError> {
         assert!(profile.speed_per_tick >= 0);
+        assert!(profile.order_queue_capacity > 0);
         assert!(profile.build_range >= 0);
         assert!(profile.repair_range >= 0);
         assert!(profile.repair_autocast_range >= profile.repair_range);
@@ -416,7 +418,7 @@ impl Simulation {
             return Err(BuilderCommandError::OutsideBuildRegion);
         }
 
-        self.cancel_builder_build_order_internal(entity);
+        self.cancel_builder_order_queue(entity);
         let mut entity = self.world.entity_mut(entity);
         let mut state = entity
             .get_mut::<BuilderState>()
@@ -446,7 +448,7 @@ impl Simulation {
             return Err(BuilderCommandError::FollowTargetNotFound);
         }
 
-        self.cancel_builder_build_order_internal(builder_entity);
+        self.cancel_builder_order_queue(builder_entity);
         let mut entity = self.world.entity_mut(builder_entity);
         let mut state = entity
             .get_mut::<BuilderState>()
@@ -491,7 +493,7 @@ impl Simulation {
             .clamp_builder_blink_destination(team, destination, profile.blink_boundary_inset)
             .expect("spawned builder team must have a legal movement region");
 
-        self.cancel_builder_build_order_internal(entity);
+        self.cancel_builder_order_queue(entity);
         let mut builder = self.world.entity_mut(entity);
         builder
             .get_mut::<Position>()
@@ -551,7 +553,7 @@ impl Simulation {
             return Err(BuilderCommandError::RepairTargetNotRepairable);
         }
 
-        self.cancel_builder_build_order_internal(builder_entity);
+        self.cancel_builder_order_queue(builder_entity);
         let mut entity = self.world.entity_mut(builder_entity);
         let mut state = entity
             .get_mut::<BuilderState>()
@@ -595,7 +597,7 @@ impl Simulation {
                 .then_some(entity.id())
             })
             .ok_or(BuilderCommandError::BuilderNotFound)?;
-        self.cancel_builder_build_order_internal(entity);
+        self.cancel_builder_order_queue(entity);
         let mut builder = self.world.entity_mut(entity);
         let mut state = builder
             .get_mut::<BuilderState>()
@@ -682,13 +684,18 @@ impl Simulation {
         builder: SimId,
         building: BuildingSpawn,
         properties: BuildingGameplayProperties,
+        queued: bool,
     ) -> Result<(), BuilderBuildError> {
         if !self.can_player_control_builder(controller, builder) {
             return Err(BuilderBuildError::Builder(
                 BuilderCommandError::NotAuthorized,
             ));
         }
-        self.order_builder_purchase_building_with_properties(builder, building, properties)
+        if queued {
+            self.order_builder_purchase_building_internal(builder, building, properties, true)
+        } else {
+            self.order_builder_purchase_building_with_properties(builder, building, properties)
+        }
     }
 
     pub(crate) fn order_builder_purchase_building_with_properties(
@@ -697,11 +704,24 @@ impl Simulation {
         building: BuildingSpawn,
         properties: BuildingGameplayProperties,
     ) -> Result<(), BuilderBuildError> {
+        self.order_builder_purchase_building_internal(builder, building, properties, false)
+    }
+
+    fn order_builder_purchase_building_internal(
+        &mut self,
+        builder: SimId,
+        building: BuildingSpawn,
+        properties: BuildingGameplayProperties,
+        queued: bool,
+    ) -> Result<(), BuilderBuildError> {
         let (builder_entity, owner) =
             self.validate_builder_summon(builder, building, properties)?;
         self.validate_building_placement(building.team, building.footprint)
             .map_err(BuilderBuildError::Placement)?;
-        if self.footprint_overlaps_pending_build_order(building.footprint, Some(builder_entity)) {
+        if self.footprint_overlaps_pending_build_order(
+            building.footprint,
+            (!queued).then_some(builder_entity),
+        ) {
             return Err(BuilderBuildError::Placement(
                 BuildingPlacementError::BuildingReserved,
             ));
@@ -709,12 +729,18 @@ impl Simulation {
         let economy = properties
             .economy
             .ok_or(BuilderBuildError::MissingEconomyProfile)?;
-        let current_order = self
-            .world
-            .entity(builder_entity)
-            .get::<BuilderBuildOrder>()
-            .copied();
-        let current_economy = current_order.and_then(|order| order.properties.economy);
+        let current_economy = (!queued)
+            .then(|| {
+                self.world
+                    .entity(builder_entity)
+                    .get::<BuilderOrderQueue>()
+                    .map(BuilderOrderQueue::committed_cost)
+            })
+            .flatten();
+        if queued {
+            self.validate_builder_queue_capacity(builder_entity)
+                .map_err(BuilderBuildError::Builder)?;
+        }
         let resources = self
             .player_resources_for(owner)
             .expect("builder owner must have player resources");
@@ -754,7 +780,9 @@ impl Simulation {
             ));
         }
 
-        self.cancel_builder_build_order_internal(builder_entity);
+        if !queued {
+            self.cancel_builder_order_queue(builder_entity);
+        }
         let resources = &mut self
             .player_state_mut(owner)
             .expect("builder owner must exist")
@@ -762,12 +790,16 @@ impl Simulation {
         resources.gold -= economy.gold_cost;
         resources.lumber -= economy.lumber_cost;
         resources.legendary_points_used += economy.legendary_points_cost;
-        self.world
-            .entity_mut(builder_entity)
-            .insert(BuilderBuildOrder {
+        self.append_builder_order(
+            builder_entity,
+            BuilderOrder::Build(Box::new(BuilderBuildOrder {
                 building,
                 properties,
-            });
+            })),
+        );
+        if queued {
+            return Ok(());
+        }
         let mut builder_entity_mut = self.world.entity_mut(builder_entity);
         let mut builder_state = builder_entity_mut
             .get_mut::<BuilderState>()
@@ -779,41 +811,182 @@ impl Simulation {
         Ok(())
     }
 
-    fn cancel_builder_build_order_internal(&mut self, builder_entity: Entity) -> bool {
-        let order = self
+    fn cancel_builder_order_queue(&mut self, builder_entity: Entity) -> bool {
+        let queue = self
             .world
-            .entity(builder_entity)
-            .get::<BuilderBuildOrder>()
-            .copied();
-        let Some(order) = order else {
+            .entity_mut(builder_entity)
+            .take::<BuilderOrderQueue>();
+        let Some(queue) = queue else {
             return false;
         };
-        self.world
-            .entity_mut(builder_entity)
-            .remove::<BuilderBuildOrder>();
-        if let Some(economy) = order.properties.economy {
-            let owner = self
-                .world
-                .entity(builder_entity)
-                .get::<Owner>()
-                .copied()
-                .expect("builder missing owner")
-                .0;
-            let resources = &mut self
-                .player_state_mut(owner)
-                .expect("builder owner must exist")
-                .resources;
-            resources.gold = resources
-                .gold
-                .checked_add(economy.gold_cost)
-                .expect("player gold refund overflow");
-            resources.lumber = resources
-                .lumber
-                .checked_add(economy.lumber_cost)
-                .expect("player lumber refund overflow");
-            resources.legendary_points_used -= economy.legendary_points_cost;
-        }
+        self.refund_builder_order_cost(builder_entity, queue.committed_cost());
         true
+    }
+
+    fn refund_builder_order_cost(
+        &mut self,
+        builder_entity: Entity,
+        economy: BuildingEconomyProfile,
+    ) {
+        let owner = self
+            .world
+            .entity(builder_entity)
+            .get::<Owner>()
+            .copied()
+            .expect("builder missing owner")
+            .0;
+        let resources = &mut self
+            .player_state_mut(owner)
+            .expect("builder owner must exist")
+            .resources;
+        resources.gold = resources
+            .gold
+            .checked_add(economy.gold_cost)
+            .expect("player gold refund overflow");
+        resources.lumber = resources
+            .lumber
+            .checked_add(economy.lumber_cost)
+            .expect("player lumber refund overflow");
+        resources.legendary_points_used -= economy.legendary_points_cost;
+    }
+
+    fn append_builder_order(&mut self, entity: Entity, order: BuilderOrder) {
+        let mut entity = self.world.entity_mut(entity);
+        if let Some(mut queue) = entity.get_mut::<BuilderOrderQueue>() {
+            queue.0.push_back(order);
+        } else {
+            entity.insert(BuilderOrderQueue(std::collections::VecDeque::from([order])));
+        }
+    }
+
+    fn validate_builder_queue_capacity(&self, entity: Entity) -> Result<(), BuilderCommandError> {
+        let entity = self.world.entity(entity);
+        let capacity = entity
+            .get::<BuilderProfile>()
+            .expect("builder missing profile")
+            .order_queue_capacity;
+        if entity
+            .get::<BuilderOrderQueue>()
+            .map_or(0, |queue| queue.0.len())
+            >= usize::from(capacity)
+        {
+            Err(BuilderCommandError::OrderQueueFull)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn pop_builder_order(&mut self, entity: Entity, refund: bool) {
+        let mut entity_mut = self.world.entity_mut(entity);
+        let mut queue = entity_mut
+            .get_mut::<BuilderOrderQueue>()
+            .expect("builder missing queue");
+        let order = queue.0.pop_front().expect("builder queue must have a head");
+        let empty = queue.0.is_empty();
+        if empty {
+            entity_mut.remove::<BuilderOrderQueue>();
+        }
+        if refund && let Some(economy) = order.build().and_then(|build| build.properties.economy) {
+            self.refund_builder_order_cost(entity, economy);
+        }
+    }
+
+    pub(crate) fn queue_builder_command_as(
+        &mut self,
+        controller: PlayerId,
+        builder: SimId,
+        command: crate::BuilderQueuedCommand,
+    ) -> Result<(), BuilderCommandError> {
+        if !self.can_player_control_builder(controller, builder) {
+            return Err(BuilderCommandError::NotAuthorized);
+        }
+        let view = self
+            .builder(builder)
+            .ok_or(BuilderCommandError::BuilderNotFound)?;
+        let entity = self
+            .world
+            .iter_entities()
+            .find(|entity| entity.get::<SimId>() == Some(&builder))
+            .expect("validated builder disappeared")
+            .id();
+        self.validate_builder_queue_capacity(entity)?;
+        let order = match command {
+            crate::BuilderQueuedCommand::Move { destination }
+            | crate::BuilderQueuedCommand::Blink { destination } => {
+                if !self.point_inside_team_build_region(view.team, destination) {
+                    return Err(BuilderCommandError::OutsideBuildRegion);
+                }
+                if matches!(command, crate::BuilderQueuedCommand::Move { .. }) {
+                    BuilderOrder::Move(destination)
+                } else {
+                    BuilderOrder::Blink(destination)
+                }
+            }
+            crate::BuilderQueuedCommand::Follow { target } => {
+                if target == builder || self.builder_follow_target(target).is_none() {
+                    return Err(BuilderCommandError::FollowTargetNotFound);
+                }
+                BuilderOrder::Follow(target)
+            }
+            crate::BuilderQueuedCommand::Repair { target } => {
+                let target_view = self
+                    .builder_repair_target(target)
+                    .ok_or(BuilderCommandError::RepairTargetNotFound)?;
+                if target_view.team != view.team {
+                    return Err(BuilderCommandError::NotFriendlyRepairTarget);
+                }
+                // Mechanical units and structures are the same supported repair targets as the immediate order.
+                let repairable = self
+                    .world
+                    .iter_entities()
+                    .find(|entity| entity.get::<SimId>() == Some(&target))
+                    .is_some_and(|entity| {
+                        entity.get::<BuildingFootprint>().is_some()
+                            || entity.get::<MechanicalUnit>().is_some()
+                    });
+                if !repairable {
+                    return Err(BuilderCommandError::RepairTargetNotRepairable);
+                }
+                BuilderOrder::Repair(target)
+            }
+            crate::BuilderQueuedCommand::Stop => BuilderOrder::Stop,
+            crate::BuilderQueuedCommand::Build { .. } => {
+                unreachable!("queued buildings require resolved content and resource reservation")
+            }
+        };
+        self.append_builder_order(entity, order);
+        Ok(())
+    }
+
+    fn start_queued_builder_command(&mut self, entity: Entity, builder: SimId) {
+        // Temporarily own the tail so the ordinary order handlers cannot clear/refund it.
+        // No canonical command or snapshot observes this phase-local transition.
+        let mut queue = self
+            .world
+            .entity_mut(entity)
+            .take::<BuilderOrderQueue>()
+            .expect("builder missing queue");
+        match queue.0.pop_front().expect("builder queue missing head") {
+            BuilderOrder::Move(point) => {
+                let _ = self.order_builder_move(builder, point);
+            }
+            BuilderOrder::Follow(target) => {
+                let _ = self.order_builder_follow(builder, target);
+            }
+            BuilderOrder::Repair(target) => {
+                let _ = self.order_builder_repair(builder, target);
+            }
+            BuilderOrder::Blink(point) => {
+                let _ = self.order_builder_blink(builder, point);
+            }
+            BuilderOrder::Stop => {
+                let _ = self.stop_builder(builder);
+            }
+            BuilderOrder::Build(_) => unreachable!("construction is advanced separately"),
+        }
+        if !queue.0.is_empty() {
+            self.world.entity_mut(entity).insert(queue);
+        }
     }
 
     fn validate_builder_summon(
@@ -908,6 +1081,9 @@ impl Simulation {
             .iter_entities()
             .filter_map(|entity| {
                 entity.get::<Builder>()?;
+                let head = entity
+                    .get::<BuilderOrderQueue>()
+                    .and_then(|queue| queue.0.front());
                 Some((
                     *entity.get::<SimId>()?,
                     entity.id(),
@@ -916,17 +1092,36 @@ impl Simulation {
                     entity.get::<Position>()?.0,
                     *entity.get::<BuilderProfile>()?,
                     *entity.get::<BuilderState>()?,
-                    entity.get::<BuilderBuildOrder>().copied(),
+                    head.and_then(BuilderOrder::build).copied(),
+                    head.is_some_and(|order| order.build().is_none()),
                 ))
             })
             .collect();
         builders.sort_unstable_by_key(|(id, ..)| *id);
 
-        for (_, builder_entity, owner, team, position, profile, mut state, build_order) in builders
+        for (
+            builder_id,
+            builder_entity,
+            owner,
+            team,
+            position,
+            profile,
+            mut state,
+            build,
+            queued_command,
+        ) in builders
         {
             let mut next_position = position;
 
-            if let Some(order) = build_order {
+            let idle = state.destination.is_none()
+                && state.follow_target.is_none()
+                && state.repair_target.is_none();
+            if idle && queued_command {
+                self.start_queued_builder_command(builder_entity, builder_id);
+                continue;
+            }
+            if let Some(order) = build.filter(|_| idle) {
+                let mut cancelled = false;
                 let mut distance_sq = point_to_footprint_distance_sq(
                     next_position,
                     order.building.footprint,
@@ -948,17 +1143,12 @@ impl Simulation {
                             self.config.navigation_cell_size,
                         );
                     } else {
-                        self.cancel_builder_build_order_internal(builder_entity);
+                        self.pop_builder_order(builder_entity, true);
+                        cancelled = true;
                     }
                 }
 
-                if self
-                    .world
-                    .entity(builder_entity)
-                    .get::<BuilderBuildOrder>()
-                    .is_some()
-                    && distance_sq <= square_i32(profile.build_range)
-                {
+                if !cancelled && distance_sq <= square_i32(profile.build_range) {
                     let starts_construction = order.properties.construction_time_ticks.is_some();
                     let result = if starts_construction {
                         self.try_start_building_construction(
@@ -975,9 +1165,7 @@ impl Simulation {
                     };
                     match result {
                         Ok(_) => {
-                            self.world
-                                .entity_mut(builder_entity)
-                                .remove::<BuilderBuildOrder>();
+                            self.pop_builder_order(builder_entity, false);
                             if !starts_construction && let Some(economy) = order.properties.economy
                             {
                                 let resources = &mut self
@@ -993,7 +1181,7 @@ impl Simulation {
                         Err(_) => {
                             // Construction has not begun yet, so Castle Fight's
                             // ConstructionRefundRate=1 returns the full committed cost.
-                            self.cancel_builder_build_order_internal(builder_entity);
+                            self.pop_builder_order(builder_entity, true);
                         }
                     }
                 }

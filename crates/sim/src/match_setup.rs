@@ -1421,6 +1421,7 @@ mod tests {
                 builder.id,
                 barracks.spawn(Team(0), footprint),
                 barracks.gameplay_properties(),
+                false,
             )
             .unwrap();
         assert_eq!(

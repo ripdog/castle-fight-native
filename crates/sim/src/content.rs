@@ -1522,6 +1522,9 @@ pub fn castle_fight_builder_profile_for_version(
 fn builder_profile(speed_per_tick: i32) -> BuilderProfile {
     BuilderProfile {
         speed_per_tick,
+        // Stock Warcraft order/waypoint capacity, exposed through this versioned profile.
+        // https://classic.battle.net/war3/basics/specialcommands.shtml
+        order_queue_capacity: 35,
         build_range: world(CASTLE_FIGHT_BUILDER_BUILD_RANGE_WORLD_UNITS),
         repair_range: world(CASTLE_FIGHT_BUILDER_REPAIR_RANGE_WORLD_UNITS),
         repair_autocast_range: world(CASTLE_FIGHT_BUILDER_REPAIR_AUTOCAST_RANGE_WORLD_UNITS),
@@ -5029,6 +5032,7 @@ mod tests {
             castle_fight_builder_profile(),
             BuilderProfile {
                 speed_per_tick: 550 * SUBUNITS_PER_WORLD_UNIT / CASTLE_FIGHT_SIMULATION_HZ,
+                order_queue_capacity: castle_fight_builder_profile().order_queue_capacity,
                 build_range: 50 * SUBUNITS_PER_WORLD_UNIT,
                 repair_range: 50 * SUBUNITS_PER_WORLD_UNIT,
                 repair_autocast_range: 500 * SUBUNITS_PER_WORLD_UNIT,

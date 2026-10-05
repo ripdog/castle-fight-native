@@ -21,8 +21,8 @@ mod topology;
 mod version;
 
 pub use commands::{
-    BuildPosition, CommandAdmissionError, CommandExecutionResult, CommandOutcome,
-    CommandRejectReason, PlayerCommand, admit_player_command,
+    BuildPosition, BuilderQueuedCommand, CommandAdmissionError, CommandExecutionResult,
+    CommandOutcome, CommandRejectReason, PlayerCommand, admit_player_command,
 };
 pub use components::{
     AbilityConfigurationError, AbilityEffect, AbilityId, AbilityTargetPolicy, ActionAnimationKind,
@@ -90,14 +90,15 @@ pub use native_effects::{
 };
 pub use simulation::{
     AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION, AbilityCastEvent, AbilityCastTarget, AttackEvent,
-    BuilderBuildError, BuilderCommandError, BuilderSpawnError, BuilderView, BuildingCommandError,
-    BuildingConstructionCancelError, BuildingConstructionCancelOutcome, BuildingPlacementError,
-    BuildingSpellVisualEvent, BuildingSpellVisualKind, BuildingUpgradeError, BuildingView,
-    CANONICAL_CHECKSUM_SCHEMA_VERSION, ChainLightningEvent, CombatRules, CorpseView, HexState,
-    MatchLifecycle, MatchOutcome, PlayerConfig, PlayerConnectionStatus, PlayerView, ProjectileView,
-    ProjectileViewKind, ShrineRevivalEvent, Simulation, SimulationConfig, SimulationSnapshot,
-    SnapshotRestoreError, SnapshotWireError, TargetlessLane, TeamObjectiveError, TickResult,
-    TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
+    BuilderBuildError, BuilderCommandError, BuilderOrderView, BuilderSpawnError, BuilderView,
+    BuildingCommandError, BuildingConstructionCancelError, BuildingConstructionCancelOutcome,
+    BuildingPlacementError, BuildingSpellVisualEvent, BuildingSpellVisualKind,
+    BuildingUpgradeError, BuildingView, CANONICAL_CHECKSUM_SCHEMA_VERSION, ChainLightningEvent,
+    CombatRules, CorpseView, HexState, MatchLifecycle, MatchOutcome, PlayerConfig,
+    PlayerConnectionStatus, PlayerView, ProjectileView, ProjectileViewKind, ShrineRevivalEvent,
+    Simulation, SimulationConfig, SimulationSnapshot, SnapshotRestoreError, SnapshotWireError,
+    TargetlessLane, TeamObjectiveError, TickResult, TickTimings, UPHILL_MISS_CHANCE_SCALE,
+    UnitView,
 };
 pub use terrain::{
     TerrainElevationMap, TerrainElevationSample, TerrainLoadError, WC3_TERRAIN_TILE_WORLD_UNITS,
@@ -5168,6 +5169,7 @@ mod tests {
             position: SimPoint::new(2 * cell, 5 * cell),
             profile: BuilderProfile {
                 speed_per_tick: cell,
+                order_queue_capacity: 8,
                 build_range: cell,
                 repair_range: cell,
                 repair_autocast_range: cell,
@@ -5235,6 +5237,7 @@ mod tests {
             position: SimPoint::new(cell, 5 * cell),
             profile: BuilderProfile {
                 speed_per_tick: cell,
+                order_queue_capacity: 8,
                 build_range: cell,
                 repair_range: cell,
                 repair_autocast_range: cell,
@@ -5287,6 +5290,7 @@ mod tests {
             position: SimPoint::new(5 * cell, 5 * cell),
             profile: BuilderProfile {
                 speed_per_tick: cell,
+                order_queue_capacity: 8,
                 build_range: cell,
                 repair_range: cell,
                 repair_autocast_range: 10 * cell,
@@ -5338,6 +5342,7 @@ mod tests {
             position: SimPoint::new(2 * cell, 2 * cell),
             profile: BuilderProfile {
                 speed_per_tick: cell,
+                order_queue_capacity: 8,
                 build_range: cell,
                 repair_range: cell,
                 repair_autocast_range: cell,
@@ -6081,6 +6086,7 @@ mod tests {
             position: SimPoint::new(cell, 4 * cell),
             profile: BuilderProfile {
                 speed_per_tick: 2 * cell,
+                order_queue_capacity: 8,
                 build_range: 2 * cell,
                 repair_range: 2 * cell,
                 repair_autocast_range: 2 * cell,
@@ -6170,6 +6176,7 @@ mod tests {
             position: SimPoint::new(cell, 4 * cell),
             profile: BuilderProfile {
                 speed_per_tick: 0,
+                order_queue_capacity: 8,
                 build_range: 10 * cell,
                 repair_range: 10 * cell,
                 repair_autocast_range: 20 * cell,
@@ -6270,6 +6277,7 @@ mod tests {
             position: SimPoint::new(cell, 4 * cell),
             profile: BuilderProfile {
                 speed_per_tick: cell,
+                order_queue_capacity: 8,
                 build_range: 2 * cell,
                 repair_range: 2 * cell,
                 repair_autocast_range: 10 * cell,
@@ -8944,6 +8952,298 @@ mod tests {
                 Some(checksum) => assert_eq!(sim.checksum(), checksum, "workers={workers}"),
                 None => expected = Some(sim.checksum()),
             }
+        }
+    }
+
+    mod builder_queue {
+        use super::*;
+
+        fn fixture(
+            workers: usize,
+            capacity: u16,
+        ) -> (Simulation, SimId, BuildingGameplayProperties) {
+            let cell = SUBUNITS_PER_WORLD_UNIT;
+            let mut sim = Simulation::new(
+                SimulationConfig {
+                    navigation_min: NavCell::new(0, 0),
+                    navigation_max: NavCell::new(29, 9),
+                    navigation_cell_size: cell,
+                    team_build_regions: [
+                        vec![BuildingFootprint::new(0, 0, 15, 10)],
+                        vec![BuildingFootprint::new(15, 0, 15, 10)],
+                    ],
+                    economy: EconomyRules {
+                        starting_gold: 200,
+                        starting_lumber: 150,
+                        starting_legendary_points: 5,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                },
+                workers,
+            );
+            let rawcode = u32::from_be_bytes(*b"QUEU");
+            let builder = sim.spawn_builder(BuilderSpawn {
+                team: Team(0),
+                position: SimPoint::new(cell, 2 * cell),
+                profile: BuilderProfile {
+                    speed_per_tick: cell,
+                    order_queue_capacity: capacity,
+                    build_range: 0,
+                    repair_range: cell,
+                    repair_autocast_range: cell,
+                    repair_time_ratio_numerator: 1,
+                    repair_time_ratio_denominator: 1,
+                    full_repair_duration_ticks: 10,
+                    blink_range: 20 * cell,
+                    blink_boundary_inset: 0,
+                },
+                configuration: test_builder_configuration(vec![rawcode]),
+                repair_autocast_enabled: false,
+            });
+            let properties = BuildingGameplayProperties {
+                economy: Some(BuildingEconomyProfile {
+                    gold_cost: 20,
+                    lumber_cost: 10,
+                    legendary_points_cost: 1,
+                    ..Default::default()
+                }),
+                construction_time_ticks: Some(50),
+                ..test_building_properties(rawcode)
+            };
+            (sim, builder, properties)
+        }
+
+        fn build(
+            sim: &mut Simulation,
+            builder: SimId,
+            properties: BuildingGameplayProperties,
+            x: i32,
+            queued: bool,
+        ) -> Result<(), BuilderBuildError> {
+            sim.order_builder_purchase_building_with_properties_as(
+                PlayerId(0),
+                builder,
+                passive_building(0, BuildingFootprint::new(x, 2, 1, 1)),
+                properties,
+                queued,
+            )
+        }
+
+        #[test]
+        fn builds_and_follow_up_move_execute_fifo_and_charge_each_site_once() {
+            let (mut sim, builder, properties) = fixture(1, 5);
+            let cell = SUBUNITS_PER_WORLD_UNIT;
+            sim.order_builder_move(builder, SimPoint::new(3 * cell, 2 * cell))
+                .unwrap();
+            build(&mut sim, builder, properties, 4, true).unwrap();
+            build(&mut sim, builder, properties, 8, true).unwrap();
+            let destination = SimPoint::new(2 * cell, 5 * cell);
+            sim.queue_builder_command_as(
+                PlayerId(0),
+                builder,
+                BuilderQueuedCommand::Move { destination },
+            )
+            .unwrap();
+            let reserved = sim.player_resources_for(PlayerId(0)).unwrap();
+            assert_eq!(
+                (
+                    reserved.gold,
+                    reserved.lumber,
+                    reserved.legendary_points_used
+                ),
+                (160, 130, 2)
+            );
+            assert_eq!(
+                sim.builder(builder).unwrap().destination,
+                Some(SimPoint::new(3 * cell, 2 * cell))
+            );
+            sim.step();
+            assert!(
+                sim.buildings().is_empty(),
+                "queued construction must wait for the current move"
+            );
+            for _ in 0..30 {
+                sim.step();
+                if sim.buildings().len() == 1 {
+                    assert_eq!(sim.buildings()[0].footprint.min_x, 4);
+                }
+                if sim.builder(builder).unwrap().position == destination {
+                    break;
+                }
+            }
+            let buildings = sim.buildings();
+            assert_eq!(buildings.len(), 2);
+            assert!(
+                buildings
+                    .iter()
+                    .all(|site| site.construction_complete_tick.is_some()),
+                "builder advances without waiting for autonomous construction completion"
+            );
+            assert_eq!(sim.builder(builder).unwrap().position, destination);
+            assert!(sim.builder(builder).unwrap().orders.is_empty());
+            assert_eq!(sim.player_resources_for(PlayerId(0)).unwrap(), reserved);
+        }
+
+        #[test]
+        fn every_queued_footprint_is_reserved_and_rejected_appends_are_atomic() {
+            let (mut sim, builder, properties) = fixture(1, 3);
+            build(&mut sim, builder, properties, 4, true).unwrap();
+            build(&mut sim, builder, properties, 8, true).unwrap();
+            for x in [4, 8] {
+                let footprint = BuildingFootprint::new(x, 2, 1, 1);
+                assert!(!sim.can_place_building_for_team(Team(0), footprint));
+                assert!(!sim.can_place_building_cell_for_team(Team(0), NavCell::new(x, 2)));
+                assert!(sim.can_place_building_for_builder(builder, footprint, false));
+                assert!(!sim.can_place_building_for_builder(builder, footprint, true));
+            }
+            let checksum = sim.checksum();
+            assert_eq!(
+                build(&mut sim, builder, properties, 8, true),
+                Err(BuilderBuildError::Placement(
+                    BuildingPlacementError::BuildingReserved
+                ))
+            );
+            assert_eq!(sim.checksum(), checksum);
+            let expensive = BuildingGameplayProperties {
+                economy: Some(BuildingEconomyProfile {
+                    gold_cost: 999,
+                    ..properties.economy.unwrap()
+                }),
+                ..properties
+            };
+            assert!(matches!(
+                build(&mut sim, builder, expensive, 10, true),
+                Err(BuilderBuildError::Resources(_))
+            ));
+            assert_eq!(sim.checksum(), checksum);
+            sim.queue_builder_command_as(PlayerId(0), builder, BuilderQueuedCommand::Stop)
+                .unwrap();
+            let checksum = sim.checksum();
+            assert_eq!(
+                build(&mut sim, builder, properties, 10, true),
+                Err(BuilderBuildError::Builder(
+                    BuilderCommandError::OrderQueueFull
+                ))
+            );
+            assert_eq!(
+                sim.queue_builder_command_as(PlayerId(0), builder, BuilderQueuedCommand::Stop),
+                Err(BuilderCommandError::OrderQueueFull)
+            );
+            assert_eq!(sim.checksum(), checksum);
+        }
+
+        #[test]
+        fn normal_replacement_refunds_whole_queue_and_stop_preserves_started_sites() {
+            let (mut sim, builder, properties) = fixture(1, 4);
+            let initial = sim.player_resources_for(PlayerId(0)).unwrap();
+            build(&mut sim, builder, properties, 4, true).unwrap();
+            build(&mut sim, builder, properties, 8, true).unwrap();
+            let checksum = sim.checksum();
+            let expensive = BuildingGameplayProperties {
+                economy: Some(BuildingEconomyProfile {
+                    gold_cost: 999,
+                    ..properties.economy.unwrap()
+                }),
+                ..properties
+            };
+            assert!(matches!(
+                build(&mut sim, builder, expensive, 10, false),
+                Err(BuilderBuildError::Resources(_))
+            ));
+            assert_eq!(
+                sim.checksum(),
+                checksum,
+                "rejected replacement preserves all prior orders and costs"
+            );
+            build(&mut sim, builder, properties, 8, false).unwrap();
+            assert_eq!(sim.builder(builder).unwrap().orders.len(), 1);
+            let reserved = sim.player_resources_for(PlayerId(0)).unwrap();
+            assert_eq!(
+                reserved.gold,
+                initial.gold - properties.economy.unwrap().gold_cost
+            );
+            build(&mut sim, builder, properties, 4, true).unwrap();
+            sim.stop_builder(builder).unwrap();
+            assert_eq!(sim.player_resources_for(PlayerId(0)).unwrap(), initial);
+            assert!(sim.builder(builder).unwrap().orders.is_empty());
+            build(&mut sim, builder, properties, 4, true).unwrap();
+            build(&mut sim, builder, properties, 8, true).unwrap();
+            while sim.buildings().is_empty() {
+                sim.step();
+            }
+            sim.order_builder_move(
+                builder,
+                SimPoint::new(SUBUNITS_PER_WORLD_UNIT, 5 * SUBUNITS_PER_WORLD_UNIT),
+            )
+            .unwrap();
+            assert_eq!(sim.buildings().len(), 1);
+            assert_eq!(sim.player_resources_for(PlayerId(0)).unwrap(), reserved);
+            assert!(sim.builder(builder).unwrap().orders.is_empty());
+        }
+
+        #[test]
+        fn invalid_head_refunds_only_that_site_and_continues_with_tail() {
+            let (mut sim, builder, properties) = fixture(1, 4);
+            build(&mut sim, builder, properties, 4, true).unwrap();
+            build(&mut sim, builder, properties, 8, true).unwrap();
+            sim.spawn_building(passive_building(0, BuildingFootprint::new(4, 2, 1, 1)));
+            for _ in 0..20 {
+                sim.step();
+            }
+            assert_eq!(sim.buildings().len(), 2);
+            assert!(sim.builder(builder).unwrap().orders.is_empty());
+            let resources = sim.player_resources_for(PlayerId(0)).unwrap();
+            assert_eq!(
+                (
+                    resources.gold,
+                    resources.lumber,
+                    resources.legendary_points_used
+                ),
+                (180, 140, 1)
+            );
+        }
+
+        #[test]
+        fn queue_snapshots_preserve_order_and_execute_identically_across_worker_counts() {
+            let (mut original, builder, properties) = fixture(1, 4);
+            build(&mut original, builder, properties, 4, true).unwrap();
+            build(&mut original, builder, properties, 8, true).unwrap();
+            original
+                .queue_builder_command_as(
+                    PlayerId(0),
+                    builder,
+                    BuilderQueuedCommand::Move {
+                        destination: SimPoint::new(
+                            SUBUNITS_PER_WORLD_UNIT,
+                            5 * SUBUNITS_PER_WORLD_UNIT,
+                        ),
+                    },
+                )
+                .unwrap();
+            let (mut restored, _, _) = fixture(3, 4);
+            restored
+                .restore_snapshot(&original.capture_snapshot())
+                .unwrap();
+            assert_eq!(
+                original.builder(builder).unwrap().orders,
+                restored.builder(builder).unwrap().orders
+            );
+            for _ in 0..70 {
+                assert_eq!(original.checksum(), restored.checksum());
+                assert_eq!(original.step().checksum, restored.step().checksum);
+            }
+            let (mut forward, builder, properties) = fixture(1, 4);
+            let (mut reverse, _, _) = fixture(1, 4);
+            build(&mut forward, builder, properties, 4, true).unwrap();
+            build(&mut forward, builder, properties, 8, true).unwrap();
+            build(&mut reverse, builder, properties, 8, true).unwrap();
+            build(&mut reverse, builder, properties, 4, true).unwrap();
+            assert_ne!(
+                forward.checksum(),
+                reverse.checksum(),
+                "FIFO order is authoritative"
+            );
         }
     }
 }

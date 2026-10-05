@@ -254,6 +254,7 @@ struct BuildPlacementGhostAnimationController;
 
 #[derive(SystemParam)]
 struct BuildPreviewResources<'w> {
+    keys: Res<'w, ButtonInput<KeyCode>>,
     metrics: Res<'w, WorldMetrics>,
     terrain: Res<'w, TerrainSurface>,
     authoritative: Res<'w, AuthoritativeSimulation>,
@@ -1327,6 +1328,7 @@ fn action_layout(
 }
 
 fn handle_action_panel_buttons(
+    keys: Res<ButtonInput<KeyCode>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     selected_match: Res<SelectedMatch>,
     debug_menu: Res<DebugMenuState>,
@@ -1396,7 +1398,13 @@ fn handle_action_panel_buttons(
                 false,
             ),
             PanelAction::Target(TargetingAction::Build(kind)) => {
-                try_arm_build_target(&authoritative, &mut state, kind, selected_match.content);
+                try_arm_build_target(
+                    &authoritative,
+                    &mut state,
+                    kind,
+                    selected_match.content,
+                    crate::build_orders::shift_pressed(&keys),
+                );
             }
             PanelAction::Target(action) => {
                 state.mode = ActionPanelMode::Targeting(action);
@@ -1606,6 +1614,7 @@ fn animate_autocast_particles(
 }
 
 fn style_action_panel_buttons(
+    keys: Res<ButtonInput<KeyCode>>,
     state: Res<ActionPanelState>,
     authoritative: Res<AuthoritativeSimulation>,
     selected_match: Res<SelectedMatch>,
@@ -1622,9 +1631,13 @@ fn style_action_panel_buttons(
     let mut disabled_slots = [false; SLOT_COUNT];
     for (slot, action, interaction, mut background, mut border) in &mut buttons {
         let disabled = action.0.is_some_and(|action| match action {
-            PanelAction::Target(TargetingAction::Build(kind)) => {
-                !can_afford_build_kind(&authoritative, &state, kind, selected_match.content)
-            }
+            PanelAction::Target(TargetingAction::Build(kind)) => !can_afford_build_kind(
+                &authoritative,
+                &state,
+                kind,
+                selected_match.content,
+                crate::build_orders::shift_pressed(&keys),
+            ),
             PanelAction::Building(BuildingPanelAction::Upgrade(target)) => {
                 !building_upgrade_queue_is_clear(&state, &authoritative)
                     || !can_afford_building_upgrade(
@@ -1822,16 +1835,14 @@ fn update_build_preview(
         resources.selected_match.content,
         resources.grid_snap.enabled,
     );
-    let valid = resources
-        .authoritative
-        .simulation
-        .can_place_building_for_team(resources.state.team, footprint)
-        && can_afford_build_kind(
-            &resources.authoritative,
-            &resources.state,
-            kind,
-            resources.selected_match.content,
-        );
+    let valid = can_place_build_kind(
+        &resources.authoritative,
+        &resources.state,
+        kind,
+        footprint,
+        resources.selected_match.content,
+        crate::build_orders::shift_pressed(&resources.keys),
+    );
 
     for y in footprint.min_y..=footprint.max_y() {
         for x in footprint.min_x..=footprint.max_x() {
@@ -1968,6 +1979,7 @@ fn placed_build_sites(
     let mut sites: Vec<_> = projection
         .orders
         .values()
+        .flatten()
         .map(|order| (order.owner, order.content.rawcode, order.footprint))
         .collect();
     // Network presentation deliberately buffers ticks. Keep the shell visible between builder
@@ -2115,11 +2127,12 @@ pub(crate) fn placement_footprint(
     }
 }
 
-fn can_afford_build_kind(
+pub(crate) fn can_afford_build_kind(
     authoritative: &AuthoritativeSimulation,
     state: &ActionPanelState,
     kind: BuildKind,
     content: &CastleFightContentBundle,
+    queued: bool,
 ) -> bool {
     let Some(actor) = state.actor else {
         return false;
@@ -2130,7 +2143,32 @@ fn can_afford_build_kind(
     authoritative
         .pending_build_commands
         .project(&authoritative.simulation, content)
-        .can_afford(actor, builder.owner, kind.economy(content))
+        .can_afford(actor, builder.owner, kind.economy(content), queued)
+}
+
+pub(crate) fn can_place_build_kind(
+    authoritative: &AuthoritativeSimulation,
+    state: &ActionPanelState,
+    kind: BuildKind,
+    footprint: BuildingFootprint,
+    content: &CastleFightContentBundle,
+    queued: bool,
+) -> bool {
+    let Some(actor) = state.actor else {
+        return false;
+    };
+    let Some(builder) = authoritative.simulation.builder(actor) else {
+        return false;
+    };
+    let projection = authoritative
+        .pending_build_commands
+        .project(&authoritative.simulation, content);
+    // The projection includes this builder's submitted replacements as well as authoritative sites.
+    authoritative
+        .simulation
+        .can_place_building_for_builder(actor, footprint, false)
+        && projection.footprint_available(actor, footprint, queued)
+        && projection.can_afford(actor, builder.owner, kind.economy(content), queued)
 }
 
 pub(crate) fn try_arm_build_target(
@@ -2138,14 +2176,26 @@ pub(crate) fn try_arm_build_target(
     state: &mut ActionPanelState,
     kind: BuildKind,
     content: &CastleFightContentBundle,
+    queued: bool,
 ) -> bool {
-    if !can_afford_build_kind(authoritative, state, kind, content) {
+    if queued
+        && state.actor.is_some_and(|actor| {
+            !authoritative
+                .pending_build_commands
+                .project(&authoritative.simulation, content)
+                .queue_has_room(actor)
+        })
+    {
+        state.status = "Builder order queue is full.".into();
+        return false;
+    }
+    if !can_afford_build_kind(authoritative, state, kind, content, queued) {
         state.status = insufficient_resources_status(authoritative, state, kind, content);
         return false;
     }
     state.mode = ActionPanelMode::Targeting(TargetingAction::Build(kind));
     state.status = format!(
-        "{} selected — {} gold / {} lumber. Left-click a build site; Esc cancels this building.",
+        "{} selected — {} gold / {} lumber. Left-click a build site; hold Shift to queue more; Esc cancels placement.",
         kind.label(content),
         kind.gold_cost(content),
         kind.lumber_cost(content),
@@ -3224,5 +3274,79 @@ mod tests {
         state.mode = ActionPanelMode::Targeting(TargetingAction::Repair);
         state.cancel_modal();
         assert_eq!(state.mode, ActionPanelMode::Actions);
+    }
+    #[test]
+    fn queued_build_target_reports_capacity_and_preview_rejects_own_reserved_site() {
+        let demo = create_demo_world(1, None);
+        let builder = demo.simulation.builder_for_player(PlayerId(0)).unwrap();
+        let kind = BuildKind::Production(ProductionKind::Barracks);
+        let mut authoritative = AuthoritativeSimulation::new(demo.simulation, demo.content);
+        authoritative
+            .simulation
+            .configure_builder(
+                builder.id,
+                castle_fight_sim::BuilderProfile {
+                    order_queue_capacity: 1,
+                    ..builder.profile
+                },
+                builder.configuration,
+            )
+            .unwrap();
+        let position = crate::build_orders::tests::legal_position(
+            &authoritative.simulation,
+            demo.content,
+            builder.team,
+            kind.shared(),
+        );
+        authoritative.submit_local_command(
+            builder.owner,
+            PlayerCommand::QueueBuilderCommand {
+                builder: builder.id,
+                command: castle_fight_sim::BuilderQueuedCommand::Build {
+                    building: kind.shared().stable_id(),
+                    position,
+                },
+            },
+        );
+        let mut state = ActionPanelState {
+            actor: Some(builder.id),
+            team: builder.team,
+            mode: ActionPanelMode::BuildMenu,
+            ..Default::default()
+        };
+        assert!(!try_arm_build_target(
+            &authoritative,
+            &mut state,
+            kind,
+            demo.content,
+            true
+        ));
+        assert_eq!(state.status, "Builder order queue is full.");
+        assert_eq!(state.mode, ActionPanelMode::BuildMenu);
+        assert!(try_arm_build_target(
+            &authoritative,
+            &mut state,
+            kind,
+            demo.content,
+            false
+        ));
+        let size = kind.shared().footprint_size_cells(demo.content).unwrap();
+        let footprint = BuildingFootprint::new(position.min_x, position.min_y, size, size);
+        assert!(can_place_build_kind(
+            &authoritative,
+            &state,
+            kind,
+            footprint,
+            demo.content,
+            false
+        ));
+        assert!(!can_place_build_kind(
+            &authoritative,
+            &state,
+            kind,
+            footprint,
+            demo.content,
+            true
+        ));
     }
 }

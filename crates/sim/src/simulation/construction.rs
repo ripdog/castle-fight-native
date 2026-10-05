@@ -991,6 +991,35 @@ impl Simulation {
             && self.footprint_inside_team_build_region(team, footprint)
     }
 
+    /// Validates placement while allowing a replacement order to reuse its builder's reservations.
+    #[must_use]
+    pub fn can_place_building_for_builder(
+        &self,
+        builder: SimId,
+        footprint: BuildingFootprint,
+        queued: bool,
+    ) -> bool {
+        let Some(entity) = self
+            .world
+            .iter_entities()
+            .find(|entity| entity.get::<SimId>().copied() == Some(builder))
+        else {
+            return false;
+        };
+        let id = entity.id();
+        if entity.get::<Builder>().is_none() {
+            return false;
+        }
+        let Some(team) = entity.get::<Team>().copied() else {
+            return false;
+        };
+        self.validate_building_placement(team, footprint).is_ok()
+            && !self.footprint_overlaps_pending_build_order(
+                footprint,
+                if queued { None } else { Some(id) },
+            )
+    }
+
     /// Returns whether one navigation cell is individually legal for building placement.
     ///
     /// This is presentation-facing diagnostic data for footprint previews. Whole-building
@@ -1016,7 +1045,8 @@ impl Simulation {
             && !self
                 .world
                 .iter_entities()
-                .filter_map(|entity| entity.get::<BuilderBuildOrder>())
+                .filter_map(|entity| entity.get::<BuilderOrderQueue>())
+                .flat_map(|queue| queue.0.iter().filter_map(|order| order.build()))
                 .any(|order| footprint_contains_cell(order.building.footprint, cell))
             && !self.footprint_contains_live_unit(footprint)
     }

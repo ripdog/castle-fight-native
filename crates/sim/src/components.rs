@@ -1,4 +1,5 @@
 use bevy_ecs::prelude::Component;
+use std::collections::VecDeque;
 
 mod native_actions;
 pub use native_actions::{HealingWaveProfile, NativeBoltProfile};
@@ -773,6 +774,7 @@ pub struct MovementProfile {
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BuilderProfile {
     pub speed_per_tick: i32,
+    pub order_queue_capacity: u16,
     pub build_range: i32,
     pub repair_range: i32,
     pub repair_autocast_range: i32,
@@ -824,10 +826,56 @@ pub(crate) struct BuilderState {
     pub repair_autocast_enabled: bool,
 }
 
-#[derive(Component, Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub(crate) struct BuilderBuildOrder {
     pub building: BuildingSpawn,
     pub properties: BuildingGameplayProperties,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) enum BuilderOrder {
+    Build(Box<BuilderBuildOrder>),
+    Move(SimPoint),
+    Follow(SimId),
+    Repair(SimId),
+    Blink(SimPoint),
+    Stop,
+}
+
+impl BuilderOrder {
+    pub(crate) fn build(&self) -> Option<&BuilderBuildOrder> {
+        if let Self::Build(build) = self {
+            Some(build)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Component, Debug, Clone, Default, Serialize, Deserialize)]
+pub(crate) struct BuilderOrderQueue(pub(crate) VecDeque<BuilderOrder>);
+
+impl BuilderOrderQueue {
+    pub(crate) fn committed_cost(&self) -> BuildingEconomyProfile {
+        self.0
+            .iter()
+            .filter_map(|order| order.build().and_then(|build| build.properties.economy))
+            .fold(BuildingEconomyProfile::default(), |mut total, cost| {
+                total.gold_cost = total
+                    .gold_cost
+                    .checked_add(cost.gold_cost)
+                    .expect("queued gold cost overflow");
+                total.lumber_cost = total
+                    .lumber_cost
+                    .checked_add(cost.lumber_cost)
+                    .expect("queued lumber cost overflow");
+                total.legendary_points_cost = total
+                    .legendary_points_cost
+                    .checked_add(cost.legendary_points_cost)
+                    .expect("queued legendary cost overflow");
+                total
+            })
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]

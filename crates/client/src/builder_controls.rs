@@ -1,14 +1,17 @@
 use bevy::{ecs::system::SystemParam, prelude::*, time::Fixed, window::PrimaryWindow};
 
-use castle_fight_sim::{BuildPosition, BuilderConfiguration, CommandSubmission, PlayerCommand};
+use castle_fight_sim::{
+    BuildPosition, BuilderConfiguration, CommandSubmission, PlayerCommand, SimId,
+};
 
 use crate::{
     AuthoritativeSimulation, ClientCommandSubmission, SelectedMatch, SimulationPlayback,
     bridge::{PresentationSamples, PresentationSnapshot},
+    build_orders::{shift_pressed, with_queue_modifier},
     build_ui::{
         ActionPanelMode, ActionPanelState, TargetingAction, building_upgrade_hotkey_target,
-        cursor_over_action_panel, hotkey_just_pressed, placement_footprint, queue_building_upgrade,
-        try_arm_build_target,
+        can_place_build_kind, cursor_over_action_panel, hotkey_just_pressed, placement_footprint,
+        queue_building_upgrade, try_arm_build_target,
     },
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
     demo::BuildKind,
@@ -57,10 +60,17 @@ fn handle_selection_commands(
     window: Single<&Window, With<PrimaryWindow>>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
     mut resources: SelectionCommandResources<'_>,
+    mut repeated_build: Local<Option<(SimId, BuildKind)>>,
 ) {
     let Some(actor) = resources.action_panel.actor else {
         return;
     };
+
+    finish_repeated_placement(
+        &mut repeated_build,
+        &mut resources.action_panel,
+        shift_pressed(&resources.keys),
+    );
 
     let command_card = resources.selected_match.content.command_card;
 
@@ -85,6 +95,7 @@ fn handle_selection_commands(
             &mut resources.action_panel,
             kind,
             resources.selected_match.content,
+            shift_pressed(&resources.keys),
         );
     }
 
@@ -158,12 +169,28 @@ fn handle_selection_commands(
     }
 
     if resources.mouse_buttons.just_pressed(MouseButton::Left) {
-        handle_modal_left_click(*window, *camera, &mut resources);
+        handle_modal_left_click(*window, *camera, &mut resources, &mut repeated_build);
         return;
     }
 
     if resources.mouse_buttons.just_pressed(MouseButton::Right) {
         handle_smart_right_click(*window, *camera, &mut resources);
+    }
+}
+
+fn finish_repeated_placement(
+    repeated: &mut Option<(SimId, BuildKind)>,
+    state: &mut ActionPanelState,
+    queued: bool,
+) {
+    if repeated.is_some_and(|(actor, kind)| {
+        state.actor != Some(actor) || state.targeting() != Some(TargetingAction::Build(kind))
+    }) {
+        *repeated = None;
+    }
+    if repeated.is_some() && !queued {
+        state.mode = ActionPanelMode::BuildMenu;
+        *repeated = None;
     }
 }
 
@@ -182,6 +209,7 @@ fn handle_modal_left_click(
     window: &Window,
     camera: (&Camera, &GlobalTransform),
     resources: &mut SelectionCommandResources<'_>,
+    repeated_build: &mut Option<(SimId, BuildKind)>,
 ) {
     let Some(action) = resources.action_panel.targeting() else {
         return;
@@ -221,10 +249,13 @@ fn handle_modal_left_click(
             );
             let submission = resources.authoritative.submit_local_command(
                 controller,
-                PlayerCommand::MoveBuilder {
-                    builder: actor,
-                    destination,
-                },
+                with_queue_modifier(
+                    PlayerCommand::MoveBuilder {
+                        builder: actor,
+                        destination,
+                    },
+                    shift_pressed(&resources.keys),
+                ),
             );
             match command_submission_status(
                 submission,
@@ -248,10 +279,13 @@ fn handle_modal_left_click(
             );
             let submission = resources.authoritative.submit_local_command(
                 controller,
-                PlayerCommand::BlinkBuilder {
-                    builder: actor,
-                    destination,
-                },
+                with_queue_modifier(
+                    PlayerCommand::BlinkBuilder {
+                        builder: actor,
+                        destination,
+                    },
+                    shift_pressed(&resources.keys),
+                ),
             );
             match command_submission_status(
                 submission,
@@ -313,10 +347,13 @@ fn handle_modal_left_click(
             );
             let submission = resources.authoritative.submit_local_command(
                 controller,
-                PlayerCommand::RepairWithBuilder {
-                    builder: actor,
-                    target,
-                },
+                with_queue_modifier(
+                    PlayerCommand::RepairWithBuilder {
+                        builder: actor,
+                        target,
+                    },
+                    shift_pressed(&resources.keys),
+                ),
             );
             match command_submission_status(
                 submission,
@@ -411,14 +448,16 @@ fn handle_modal_left_click(
                 resources.selected_match.content,
                 resources.grid_snap.enabled,
             );
-            if !resources
-                .authoritative
-                .simulation
-                .can_place_building_for_team(resources.action_panel.team, footprint)
-            {
-                resources.action_panel.status =
-                    "Placement rejected: outside this side's build region, blocked, or occupied."
-                        .into();
+            let queued = shift_pressed(&resources.keys);
+            if !can_place_build_kind(
+                &resources.authoritative,
+                &resources.action_panel,
+                kind,
+                footprint,
+                resources.selected_match.content,
+                queued,
+            ) {
+                resources.action_panel.status = "Placement rejected: blocked site, insufficient resources, or full order queue.".into();
                 return;
             }
             let controller = resources.debug_menu.controller_for_actor(
@@ -428,11 +467,14 @@ fn handle_modal_left_click(
             );
             let submission = resources.authoritative.submit_local_command(
                 controller,
-                PlayerCommand::PlaceBuilding {
-                    builder: actor,
-                    building: kind.shared().stable_id(),
-                    position: BuildPosition::new(footprint.min_x, footprint.min_y),
-                },
+                with_queue_modifier(
+                    PlayerCommand::PlaceBuilding {
+                        builder: actor,
+                        building: kind.shared().stable_id(),
+                        position: BuildPosition::new(footprint.min_x, footprint.min_y),
+                    },
+                    shift_pressed(&resources.keys),
+                ),
             );
             match command_submission_status(
                 submission,
@@ -443,7 +485,12 @@ fn handle_modal_left_click(
                 "Build order rejected",
             ) {
                 Ok(status) => {
-                    resources.action_panel.mode = ActionPanelMode::BuildMenu;
+                    if queued {
+                        *repeated_build = Some((actor, kind));
+                    } else {
+                        resources.action_panel.mode = ActionPanelMode::BuildMenu;
+                        *repeated_build = None;
+                    }
                     resources.action_panel.status = status;
                 }
                 Err(status) => resources.action_panel.status = status,
@@ -578,9 +625,10 @@ fn handle_smart_right_click(
         resources.selected_match.local_player,
         actor,
     );
-    let submission = resources
-        .authoritative
-        .submit_local_command(controller, command);
+    let submission = resources.authoritative.submit_local_command(
+        controller,
+        with_queue_modifier(command, shift_pressed(&resources.keys)),
+    );
     resources.action_panel.status =
         match command_submission_status(submission, accepted, rejected_prefix) {
             Ok(status) | Err(status) => status,
@@ -834,6 +882,36 @@ mod tests {
         assert_eq!(
             resolve_smart_right_click(Some(SmartActor::Tower { team: Team(0) }), destination, None,),
             SmartRightClickAction::None
+        );
+    }
+    #[test]
+    fn releasing_shift_after_repeated_builds_returns_to_menu_without_canceling_new_target() {
+        let actor = SimId(1);
+        let kind = BuildKind::Production(crate::demo::ProductionKind::Barracks);
+        let mut state = ActionPanelState {
+            actor: Some(actor),
+            mode: ActionPanelMode::Targeting(TargetingAction::Build(kind)),
+            ..Default::default()
+        };
+        let mut repeated = Some((actor, kind));
+        finish_repeated_placement(&mut repeated, &mut state, true);
+        assert_eq!(state.targeting(), Some(TargetingAction::Build(kind)));
+        finish_repeated_placement(&mut repeated, &mut state, false);
+        assert_eq!(state.mode, ActionPanelMode::BuildMenu);
+        assert!(repeated.is_none());
+        state.mode = ActionPanelMode::Targeting(TargetingAction::Build(kind));
+        finish_repeated_placement(&mut repeated, &mut state, false);
+        assert_eq!(
+            state.targeting(),
+            Some(TargetingAction::Build(kind)),
+            "initially armed placement remains active without Shift"
+        );
+        repeated = Some((SimId(2), kind));
+        finish_repeated_placement(&mut repeated, &mut state, false);
+        assert_eq!(
+            state.targeting(),
+            Some(TargetingAction::Build(kind)),
+            "selecting another builder clears the old repetition state"
         );
     }
 }

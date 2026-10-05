@@ -1,7 +1,10 @@
 use crate::{
     AuthoritativeSimulation, SelectedMatch,
     bridge::PresentationSamples,
-    build_ui::{ActionPanelState, TargetingAction, cursor_over_action_panel, placement_footprint},
+    build_ui::{
+        ActionPanelState, TargetingAction, can_place_build_kind, cursor_over_action_panel,
+        placement_footprint,
+    },
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
     inspection::cursor_over_inspector_panel,
     presentation::{
@@ -76,6 +79,7 @@ pub(crate) struct CursorPresentationPlugin;
 
 #[derive(SystemParam)]
 struct CursorPresentationResources<'w> {
+    keys: Res<'w, ButtonInput<KeyCode>>,
     action_panel: Res<'w, ActionPanelState>,
     debug_menu: Res<'w, DebugMenuState>,
     builder_shortcuts: Res<'w, BuilderShortcutState>,
@@ -220,18 +224,14 @@ fn desired_cursor_state(
         resources.selected_match.content,
         resources.grid_snap.enabled,
     );
-    let affordable = resources.action_panel.actor.is_some_and(|actor| {
-        resources
-            .authoritative
-            .simulation
-            .can_builder_afford_building(actor, kind.economy(resources.selected_match.content))
-    });
-    if affordable
-        && resources
-            .authoritative
-            .simulation
-            .can_place_building_for_team(resources.action_panel.team, footprint)
-    {
+    if can_place_build_kind(
+        &resources.authoritative,
+        &resources.action_panel,
+        kind,
+        footprint,
+        resources.selected_match.content,
+        crate::build_orders::shift_pressed(&resources.keys),
+    ) {
         Wc3CursorState::Target
     } else {
         Wc3CursorState::InvalidTarget

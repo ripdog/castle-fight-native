@@ -5,16 +5,17 @@ use std::{
 
 use castle_fight_sim::{
     BoundaryControlRecord, BuildPosition, BuilderBuildError, BuilderCommandError,
-    BuildingCommandError, BuildingConstructionCancelError, BuildingConstructionCancelOutcome,
-    BuildingPlacementError, BuildingUpgradeError, CanonicalStreamRecord, CastleFightBuildingId,
-    ClientCommandSequence, CommandAdmissionError, CommandExecution, CommandExecutionResult,
-    CommandOrder, CommandOutcome, CommandSubmission, FinalizedTickInputs, InputStreamPosition,
-    MapVersion, MatchControlEvent, MatchOutcome, PlayerCommand, PlayerConnectionStatus, PlayerId,
-    ResourcePurchaseError, ScheduledCommand, SimId, SimPoint, Team,
+    BuilderQueuedCommand, BuildingCommandError, BuildingConstructionCancelError,
+    BuildingConstructionCancelOutcome, BuildingPlacementError, BuildingUpgradeError,
+    CanonicalStreamRecord, CastleFightBuildingId, ClientCommandSequence, CommandAdmissionError,
+    CommandExecution, CommandExecutionResult, CommandOrder, CommandOutcome, CommandSubmission,
+    FinalizedTickInputs, InputStreamPosition, MapVersion, MatchControlEvent, MatchOutcome,
+    PlayerCommand, PlayerConnectionStatus, PlayerId, ResourcePurchaseError, ScheduledCommand,
+    SimId, SimPoint, Team,
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-pub const PROTOCOL_SCHEMA_VERSION: u32 = 8;
+pub const PROTOCOL_SCHEMA_VERSION: u32 = 9;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub const MAX_RELEASE_REVISION_BYTES: usize = 64;
 pub const RECONNECT_TOKEN_BYTES: usize = 32;
@@ -692,7 +693,77 @@ impl From<WireBuildPosition> for BuildPosition {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum WireBuilderQueuedCommand {
+    Build {
+        building: u32,
+        position: WireBuildPosition,
+    },
+    Move {
+        destination: WirePoint,
+    },
+    Follow {
+        target: u64,
+    },
+    Repair {
+        target: u64,
+    },
+    Blink {
+        destination: WirePoint,
+    },
+    Stop,
+}
+
+impl From<BuilderQueuedCommand> for WireBuilderQueuedCommand {
+    fn from(value: BuilderQueuedCommand) -> Self {
+        match value {
+            BuilderQueuedCommand::Build { building, position } => Self::Build {
+                building: building.0,
+                position: position.into(),
+            },
+            BuilderQueuedCommand::Move { destination } => Self::Move {
+                destination: destination.into(),
+            },
+            BuilderQueuedCommand::Follow { target } => Self::Follow { target: target.0 },
+            BuilderQueuedCommand::Repair { target } => Self::Repair { target: target.0 },
+            BuilderQueuedCommand::Blink { destination } => Self::Blink {
+                destination: destination.into(),
+            },
+            BuilderQueuedCommand::Stop => Self::Stop,
+        }
+    }
+}
+
+impl From<WireBuilderQueuedCommand> for BuilderQueuedCommand {
+    fn from(value: WireBuilderQueuedCommand) -> Self {
+        match value {
+            WireBuilderQueuedCommand::Build { building, position } => Self::Build {
+                building: CastleFightBuildingId(building),
+                position: position.into(),
+            },
+            WireBuilderQueuedCommand::Move { destination } => Self::Move {
+                destination: destination.into(),
+            },
+            WireBuilderQueuedCommand::Follow { target } => Self::Follow {
+                target: SimId(target),
+            },
+            WireBuilderQueuedCommand::Repair { target } => Self::Repair {
+                target: SimId(target),
+            },
+            WireBuilderQueuedCommand::Blink { destination } => Self::Blink {
+                destination: destination.into(),
+            },
+            WireBuilderQueuedCommand::Stop => Self::Stop,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum WirePlayerCommand {
+    QueueBuilderCommand {
+        builder: u64,
+        command: WireBuilderQueuedCommand,
+    },
     MoveBuilder {
         builder: u64,
         destination: WirePoint,
@@ -750,6 +821,10 @@ pub enum WirePlayerCommand {
 impl From<PlayerCommand> for WirePlayerCommand {
     fn from(value: PlayerCommand) -> Self {
         match value {
+            PlayerCommand::QueueBuilderCommand { builder, command } => Self::QueueBuilderCommand {
+                builder: builder.0,
+                command: command.into(),
+            },
             PlayerCommand::MoveBuilder {
                 builder,
                 destination,
@@ -823,6 +898,12 @@ impl From<PlayerCommand> for WirePlayerCommand {
 impl From<WirePlayerCommand> for PlayerCommand {
     fn from(value: WirePlayerCommand) -> Self {
         match value {
+            WirePlayerCommand::QueueBuilderCommand { builder, command } => {
+                Self::QueueBuilderCommand {
+                    builder: SimId(builder),
+                    command: command.into(),
+                }
+            }
             WirePlayerCommand::MoveBuilder {
                 builder,
                 destination,
@@ -1226,6 +1307,7 @@ impl From<castle_fight_sim::CommandRejectReason> for WireRejectReason {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum WireBuilderCommandError {
+    OrderQueueFull,
     BuilderNotFound,
     NotAuthorized,
     OutsideBuildRegion,
@@ -1239,6 +1321,7 @@ pub enum WireBuilderCommandError {
 impl From<BuilderCommandError> for WireBuilderCommandError {
     fn from(value: BuilderCommandError) -> Self {
         match value {
+            BuilderCommandError::OrderQueueFull => Self::OrderQueueFull,
             BuilderCommandError::BuilderNotFound => Self::BuilderNotFound,
             BuilderCommandError::NotAuthorized => Self::NotAuthorized,
             BuilderCommandError::OutsideBuildRegion => Self::OutsideBuildRegion,
@@ -1565,6 +1648,37 @@ mod tests {
                 builder: SimId(1),
                 building: CastleFightBuildingId(12),
                 position: BuildPosition::new(7, 8),
+            },
+            PlayerCommand::QueueBuilderCommand {
+                builder: SimId(1),
+                command: BuilderQueuedCommand::Build {
+                    building: CastleFightBuildingId(12),
+                    position: BuildPosition::new(7, 8),
+                },
+            },
+            PlayerCommand::QueueBuilderCommand {
+                builder: SimId(1),
+                command: BuilderQueuedCommand::Move {
+                    destination: SimPoint::new(4, 5),
+                },
+            },
+            PlayerCommand::QueueBuilderCommand {
+                builder: SimId(1),
+                command: BuilderQueuedCommand::Follow { target: SimId(2) },
+            },
+            PlayerCommand::QueueBuilderCommand {
+                builder: SimId(1),
+                command: BuilderQueuedCommand::Repair { target: SimId(3) },
+            },
+            PlayerCommand::QueueBuilderCommand {
+                builder: SimId(1),
+                command: BuilderQueuedCommand::Blink {
+                    destination: SimPoint::new(4, 5),
+                },
+            },
+            PlayerCommand::QueueBuilderCommand {
+                builder: SimId(1),
+                command: BuilderQueuedCommand::Stop,
             },
             PlayerCommand::CancelBuildingConstruction { building: SimId(9) },
             PlayerCommand::QueueProductionUnit { building: SimId(9) },

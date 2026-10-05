@@ -2013,6 +2013,7 @@ fn local_command_feedback_text(execution: CommandExecution) -> String {
         PlayerCommand::RepairWithBuilder { .. } => "Repair",
         PlayerCommand::SetBuilderRepairAutocast { .. } => "Repair autocast",
         PlayerCommand::PlaceBuilding { .. } => "Build",
+        PlayerCommand::QueueBuilderCommand { .. } => "Queued builder order",
         PlayerCommand::CancelBuildingConstruction { .. } => "Cancel construction",
         PlayerCommand::QueueProductionUnit { .. } => "Train unit",
         PlayerCommand::CancelProductionUnit { .. } => "Cancel training",

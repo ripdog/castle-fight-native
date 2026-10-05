@@ -24,7 +24,56 @@ impl BuildPosition {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuilderQueuedCommand {
+    Build {
+        building: CastleFightBuildingId,
+        position: BuildPosition,
+    },
+    Move {
+        destination: SimPoint,
+    },
+    Follow {
+        target: SimId,
+    },
+    Repair {
+        target: SimId,
+    },
+    Blink {
+        destination: SimPoint,
+    },
+    Stop,
+}
+
+impl BuilderQueuedCommand {
+    #[must_use]
+    pub const fn immediate(self, builder: SimId) -> PlayerCommand {
+        match self {
+            Self::Build { building, position } => PlayerCommand::PlaceBuilding {
+                builder,
+                building,
+                position,
+            },
+            Self::Move { destination } => PlayerCommand::MoveBuilder {
+                builder,
+                destination,
+            },
+            Self::Follow { target } => PlayerCommand::FollowWithBuilder { builder, target },
+            Self::Repair { target } => PlayerCommand::RepairWithBuilder { builder, target },
+            Self::Blink { destination } => PlayerCommand::BlinkBuilder {
+                builder,
+                destination,
+            },
+            Self::Stop => PlayerCommand::StopBuilder { builder },
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlayerCommand {
+    QueueBuilderCommand {
+        builder: SimId,
+        command: BuilderQueuedCommand,
+    },
     MoveBuilder {
         builder: SimId,
         destination: SimPoint,
@@ -148,6 +197,9 @@ pub fn admit_player_command(
                 Err(CommandAdmissionError::BuilderNotControllable(builder))
             }
         }
+        PlayerCommand::QueueBuilderCommand { builder, command } => {
+            admit_player_command(simulation, content, player, command.immediate(builder))
+        }
         PlayerCommand::PlaceBuilding {
             builder,
             building,
@@ -254,11 +306,22 @@ pub(crate) fn execute_player_command(
             .set_builder_repair_autocast_as(player, builder, enabled)
             .map(|()| CommandExecutionResult::Applied)
             .map_err(CommandRejectReason::Builder),
+        PlayerCommand::QueueBuilderCommand { builder, command } => match command {
+            BuilderQueuedCommand::Build { building, position } => execute_place_building(
+                simulation, content, player, builder, building, position, true,
+            ),
+            _ => simulation
+                .queue_builder_command_as(player, builder, command)
+                .map(|()| CommandExecutionResult::Applied)
+                .map_err(CommandRejectReason::Builder),
+        },
         PlayerCommand::PlaceBuilding {
             builder,
             building,
             position,
-        } => execute_place_building(simulation, content, player, builder, building, position),
+        } => execute_place_building(
+            simulation, content, player, builder, building, position, false,
+        ),
         PlayerCommand::CancelBuildingConstruction { building } => simulation
             .cancel_building_construction_for_player(player, building)
             .map(CommandExecutionResult::BuildingConstructionCancelled)
@@ -301,6 +364,7 @@ fn execute_place_building(
     builder: SimId,
     building: CastleFightBuildingId,
     position: BuildPosition,
+    queued: bool,
 ) -> Result<CommandExecutionResult, CommandRejectReason> {
     let builder_view = simulation
         .builder(builder)
@@ -323,6 +387,7 @@ fn execute_place_building(
                 builder,
                 definition.spawn(team, footprint),
                 definition.gameplay_properties(),
+                queued,
             )
         }
         CastleFightBuildingKind::Tower(kind) => {
@@ -334,6 +399,7 @@ fn execute_place_building(
                 builder,
                 definition.spawn(team, footprint),
                 definition.gameplay_properties(),
+                queued,
             )
         }
     };

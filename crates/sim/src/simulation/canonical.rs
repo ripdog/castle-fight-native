@@ -895,6 +895,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_i32(builder.position.x);
                 hash.write_i32(builder.position.y);
                 hash.write_i32(builder.profile.speed_per_tick);
+                hash.write_u16(builder.profile.order_queue_capacity);
                 hash.write_i32(builder.profile.build_range);
                 hash.write_i32(builder.profile.repair_range);
                 hash.write_i32(builder.profile.repair_autocast_range);
@@ -926,11 +927,33 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash_optional_sim_id(&mut hash, builder.state.repair_target);
                 hash.write_u64(u64::from(builder.state.repair_progress_remainder));
                 hash.write_u8(u8::from(builder.state.repair_autocast_enabled));
-                if let Some(order) = builder.build_order {
-                    hash.write_u8(1);
-                    hash_building_definition(&mut hash, order.building, order.properties);
-                } else {
-                    hash.write_u8(0);
+                hash.write_u64(builder.orders.0.len() as u64);
+                for order in builder.orders.0 {
+                    match order {
+                        BuilderOrder::Build(build) => {
+                            hash.write_u8(0);
+                            hash_building_definition(&mut hash, build.building, build.properties);
+                        }
+                        BuilderOrder::Move(point) => {
+                            hash.write_u8(1);
+                            hash.write_i32(point.x);
+                            hash.write_i32(point.y);
+                        }
+                        BuilderOrder::Follow(id) => {
+                            hash.write_u8(2);
+                            hash.write_u64(id.0);
+                        }
+                        BuilderOrder::Repair(id) => {
+                            hash.write_u8(3);
+                            hash.write_u64(id.0);
+                        }
+                        BuilderOrder::Blink(point) => {
+                            hash.write_u8(4);
+                            hash.write_i32(point.x);
+                            hash.write_i32(point.y);
+                        }
+                        BuilderOrder::Stop => hash.write_u8(5),
+                    }
                 }
             }
         }
@@ -1027,7 +1050,7 @@ pub(super) struct CanonicalBuilder {
     pub(super) profile: BuilderProfile,
     pub(super) configuration: BuilderConfiguration,
     pub(super) state: BuilderState,
-    pub(super) build_order: Option<BuilderBuildOrder>,
+    pub(super) orders: BuilderOrderQueue,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

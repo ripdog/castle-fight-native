@@ -879,6 +879,7 @@ mod tests {
         let mut simulation = Simulation::new(SimulationConfig::default(), 1);
         let profile = BuilderProfile {
             speed_per_tick: 0,
+            order_queue_capacity: 4,
             build_range: 0,
             repair_range: 0,
             repair_autocast_range: 0,

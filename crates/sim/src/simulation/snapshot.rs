@@ -6,7 +6,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 19;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 20;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -107,8 +107,10 @@ impl SimulationSnapshot {
                 CanonicalEntity::Builder(builder) => {
                     builder.configuration.appearance =
                         resolve_content_identity(builder.configuration.appearance, content)?;
-                    if let Some(build_order) = &mut builder.build_order {
-                        rehydrate_building_properties(&mut build_order.properties, content)?;
+                    for order in &mut builder.orders.0 {
+                        if let BuilderOrder::Build(build) = order {
+                            rehydrate_building_properties(&mut build.properties, content)?;
+                        }
                     }
                 }
                 CanonicalEntity::Corpse(corpse) => {
@@ -457,7 +459,10 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
                     profile: *entity.get::<BuilderProfile>()?,
                     configuration: entity.get::<BuilderConfiguration>()?.clone(),
                     state: *entity.get::<BuilderState>()?,
-                    build_order: entity.get::<BuilderBuildOrder>().copied(),
+                    orders: entity
+                        .get::<BuilderOrderQueue>()
+                        .cloned()
+                        .unwrap_or_default(),
                 }));
             }
             let team = *entity.get::<Team>()?;
@@ -840,8 +845,8 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                     builder.configuration.clone(),
                     builder.state,
                 ));
-                if let Some(order) = builder.build_order {
-                    entity.insert(order);
+                if !builder.orders.0.is_empty() {
+                    entity.insert(builder.orders.clone());
                 }
             }
         }
@@ -1125,6 +1130,7 @@ mod tests {
             position: SimPoint::new(4 * SUBUNITS_PER_WORLD_UNIT, 0),
             profile: BuilderProfile {
                 speed_per_tick: SUBUNITS_PER_WORLD_UNIT / 8,
+                order_queue_capacity: 4,
                 build_range: 2 * SUBUNITS_PER_WORLD_UNIT,
                 repair_range: 2 * SUBUNITS_PER_WORLD_UNIT,
                 repair_autocast_range: 4 * SUBUNITS_PER_WORLD_UNIT,

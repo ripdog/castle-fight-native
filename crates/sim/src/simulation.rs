@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 24;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 25;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -81,12 +81,12 @@ use crate::{
         AttackProfile, AttackSequence, AttackTargetMask, AutomaticAbilityInstance,
         AutomaticAbilityProfile, AutomaticAbilityState, BallisticProjectile, BounceProjectile,
         BuildTimeTicks, Builder, BuilderBuildOrder, BuilderConfiguration, BuilderLocomotion,
-        BuilderProfile, BuilderSpawn, BuilderState, BuildingConstruction, BuildingFootprint,
-        BuildingGameplayProperties, BuildingRuntimeState, BuildingSpawn, BuildingUpgradeSource,
-        BurningOilZone, ChainLightningState, CollisionRadius, ContentIdentity, Corpse,
-        CorpseDefinitionId, CorpseProducer, CorpseProfile, DefendEffectProfile,
-        GameplayBundleIdentity, GuaranteedHitProjectile, Health, HealthRegeneration,
-        LineProjectile, MAX_BOUNCE_HITS, MAX_TIMED_ARMOR_MODIFIERS,
+        BuilderOrder, BuilderOrderQueue, BuilderProfile, BuilderSpawn, BuilderState,
+        BuildingConstruction, BuildingFootprint, BuildingGameplayProperties, BuildingRuntimeState,
+        BuildingSpawn, BuildingUpgradeSource, BurningOilZone, ChainLightningState, CollisionRadius,
+        ContentIdentity, Corpse, CorpseDefinitionId, CorpseProducer, CorpseProfile,
+        DefendEffectProfile, GameplayBundleIdentity, GuaranteedHitProjectile, Health,
+        HealthRegeneration, LineProjectile, MAX_BOUNCE_HITS, MAX_TIMED_ARMOR_MODIFIERS,
         MAX_TIMED_ATTACK_SPEED_MODIFIERS, MAX_TIMED_DAMAGE_OVER_TIME, MAX_TIMED_MOVEMENT_MODIFIERS,
         ManaState, MechanicalUnit, ModifierId, MovementClass, MovementProfile, NavigationGoal,
         NavigationState, Owner, PassiveUnitEffect, PassiveUnitEffects, PendingAttackEffects,
@@ -473,7 +473,22 @@ pub struct BuilderView {
     pub repair_target: Option<SimId>,
     pub build_footprint: Option<BuildingFootprint>,
     pub build_content: Option<ContentIdentity>,
+    pub orders: Vec<BuilderOrderView>,
     pub repair_autocast_enabled: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuilderOrderView {
+    Build {
+        content: Option<ContentIdentity>,
+        footprint: BuildingFootprint,
+        economy: Option<BuildingEconomyProfile>,
+    },
+    Move(SimPoint),
+    Follow(SimId),
+    Repair(SimId),
+    Blink(SimPoint),
+    Stop,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -530,6 +545,7 @@ pub enum BuilderSpawnError {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BuilderCommandError {
+    OrderQueueFull,
     BuilderNotFound,
     NotAuthorized,
     OutsideBuildRegion,
@@ -1310,9 +1326,13 @@ impl Simulation {
             if ignore_builder_entity == Some(entity.id()) {
                 return false;
             }
-            entity
-                .get::<BuilderBuildOrder>()
-                .is_some_and(|order| footprints_overlap(order.building.footprint, footprint))
+            entity.get::<BuilderOrderQueue>().is_some_and(|queue| {
+                queue
+                    .0
+                    .iter()
+                    .filter_map(|order| order.build())
+                    .any(|order| footprints_overlap(order.building.footprint, footprint))
+            })
         })
     }
 
@@ -4141,6 +4161,10 @@ fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option
 fn builder_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<BuilderView> {
     entity.get::<Builder>()?;
     let state = *entity.get::<BuilderState>()?;
+    let queue = entity.get::<BuilderOrderQueue>();
+    let build = queue
+        .and_then(|queue| queue.0.front())
+        .and_then(|order| order.build());
     Some(BuilderView {
         id: *entity.get::<SimId>()?,
         owner: entity.get::<Owner>()?.0,
@@ -4151,12 +4175,28 @@ fn builder_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<Bu
         destination: state.destination,
         follow_target: state.follow_target,
         repair_target: state.repair_target,
-        build_footprint: entity
-            .get::<BuilderBuildOrder>()
-            .map(|order| order.building.footprint),
-        build_content: entity
-            .get::<BuilderBuildOrder>()
-            .and_then(|order| order.properties.content),
+        build_footprint: build.map(|order| order.building.footprint),
+        build_content: build.and_then(|order| order.properties.content),
+        orders: queue
+            .map(|queue| {
+                queue
+                    .0
+                    .iter()
+                    .map(|order| match order {
+                        BuilderOrder::Build(build) => BuilderOrderView::Build {
+                            content: build.properties.content,
+                            footprint: build.building.footprint,
+                            economy: build.properties.economy,
+                        },
+                        BuilderOrder::Move(point) => BuilderOrderView::Move(*point),
+                        BuilderOrder::Follow(target) => BuilderOrderView::Follow(*target),
+                        BuilderOrder::Repair(target) => BuilderOrderView::Repair(*target),
+                        BuilderOrder::Blink(point) => BuilderOrderView::Blink(*point),
+                        BuilderOrder::Stop => BuilderOrderView::Stop,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default(),
         repair_autocast_enabled: state.repair_autocast_enabled,
     })
 }
