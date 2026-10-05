@@ -6,6 +6,34 @@ command-card ordering, hotkeys, models, portraits, attachment points,
 missile/buff/cast art and lightning identities are generated from retained
 evidence, not a copied UI table.
 
+## Integrated attachment and local loading closure
+
+The client now requires effects schema 6 and consumes retained attachment/count
+metadata. Single-art status models bind to their authored animated nodes;
+unattached art follows the imported model root. Render entries retain the exact
+model root, including roots created in the same frame, so morphs and building
+reconstruction cannot bind a status to an obsolete scene. Attached effects keep
+local transforms during interpolation. Status scenes detach before actor teardown
+and pool reuse removes old parent/binding state. Synthetic tests cover delayed
+node availability, animated-node motion, attachment-slot deduplication, removal,
+unready/nonpoolable destruction and reuse on a different actor.
+
+The schema-6 staging pack is installed at `assets/wc3/effects`; the previous local
+pack is preserved at `assets/wc3/effects-schema5-before-elven`. The installed
+Elven audit reports 26 source-owned entities, 61 model/dependency bindings and
+zero findings (`target/elven-installed-pack-audit.json`). Actual client loader
+checks passed for units, buildings and effects. That loading check exposed the
+signed native drain-lightning texture scale; validation now preserves finite
+signed scales instead of rejecting the entire effects pack. No installation art
+is committed.
+
+The Elven status models have unambiguous single-art attachment metadata. Global
+multi-art buffs remain at the model root: exported rows are sorted by path and do
+not preserve native art-list order, and native model-to-point association has not
+been established. This limitation is explicit rather than a guessed positional
+mapping. Loading and synthetic hierarchy tests do not establish Warcraft rendered
+conformance; native comparison caveats remain below.
+
 ## Ownership and transport
 
 Lobby participants carry their canonical builder race through the existing protocol setup. Server validation and match setup reject unsupported source-owned races; participant builder catalogs restrict command admission to that builder's retained direct roots and valid upgrades. Race is included in configuration identity. The mixed-race fixture uses authoritative simulation snapshot JSON/wire round-trip rather than inventing serialization for the local `CastleFightMatchConfig` object.

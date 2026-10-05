@@ -553,6 +553,7 @@ impl PresentationAssets {
 #[derive(Debug, Clone, Copy)]
 struct PresentedEntry {
     entity: Entity,
+    model_root: Option<Entity>,
     weapon: Option<Entity>,
     imported_rawcode: Option<u32>,
     constructing: bool,
@@ -572,6 +573,7 @@ struct StatusEffectKey {
     ability_rawcode: u32,
     kind: Wc3StatusVisualKind,
     slot: u16,
+    attachment_slot: u8,
 }
 
 #[derive(Resource, Default)]
@@ -675,6 +677,7 @@ impl Wc3EffectPlayback {
 #[derive(Debug, Clone, Copy)]
 struct PresentedStatusEffect {
     entity: Entity,
+    attached_to_model: bool,
     pooled_scene: Option<Wc3EffectPoolKey>,
 }
 
@@ -3333,6 +3336,7 @@ fn spawn_or_reuse_wc3_visual(
     if pooling_enabled && let Some(entity) = pool.scenes.get_mut(&pool_key).and_then(Vec::pop) {
         commands
             .entity(entity)
+            .remove::<(ChildOf, Wc3AttachToNode)>()
             .remove_recursive::<Children, Disabled>()
             .remove_recursive::<Children, Wc3EffectWarmup>()
             .insert((transform, Visibility::Inherited, Wc3EffectReusePending));
@@ -3408,6 +3412,13 @@ fn sync_render_entities(
         .filter(|id| !samples.current.units.contains_key(id))
         .collect();
     for id in stale_units {
+        retire_target_status_visuals(
+            &mut commands,
+            &mut render_map,
+            &mut effect_pool,
+            id,
+            &world_instances,
+        );
         let entry = render_map
             .units
             .remove(&id)
@@ -3453,6 +3464,13 @@ fn sync_render_entities(
         .filter(|id| !samples.current.buildings.contains_key(id))
         .collect();
     for id in stale_buildings {
+        retire_target_status_visuals(
+            &mut commands,
+            &mut render_map,
+            &mut effect_pool,
+            id,
+            &world_instances,
+        );
         let entry = render_map
             .buildings
             .remove(&id)
@@ -3520,6 +3538,13 @@ fn sync_render_entities(
         })
         .collect();
     for id in building_presentations_to_rebuild {
+        retire_target_status_visuals(
+            &mut commands,
+            &mut render_map,
+            &mut effect_pool,
+            id,
+            &world_instances,
+        );
         if let Some(entry) = render_map.buildings.remove(&id) {
             commands.entity(entry.entity).despawn();
         }
@@ -3910,7 +3935,7 @@ fn sync_render_entities(
         let position = sim_point_to_terrain_world(builder.position, &terrain)
             + Vec3::Y * (BUILDER_HEIGHT * 0.5);
         let imported_model = unit_models.get(builder.appearance.rawcode);
-        let (entity, imported_rawcode) = if let Some(model) = imported_model {
+        let (entity, model_root, imported_rawcode) = if let Some(model) = imported_model {
             let entity = commands
                 .spawn((Transform::from_translation(position), Visibility::default()))
                 .id();
@@ -3943,7 +3968,7 @@ fn sync_render_entities(
                         "wc3/units",
                     ));
             }
-            (entity, Some(builder.appearance.rawcode))
+            (entity, Some(model_root), Some(builder.appearance.rawcode))
         } else {
             let entity = commands
                 .spawn((
@@ -3956,12 +3981,13 @@ fn sync_render_entities(
                     },
                 ))
                 .id();
-            (entity, None)
+            (entity, None, None)
         };
         render_map.builders.insert(
             builder.id,
             PresentedEntry {
                 entity,
+                model_root,
                 weapon: None,
                 imported_rawcode,
                 constructing: false,
@@ -3979,6 +4005,13 @@ fn sync_render_entities(
             if entry.imported_rawcode == desired_imported {
                 continue;
             }
+            retire_target_status_visuals(
+                &mut commands,
+                &mut render_map,
+                &mut effect_pool,
+                unit.id,
+                &world_instances,
+            );
             let entry = render_map
                 .units
                 .remove(&unit.id)
@@ -3989,149 +4022,69 @@ fn sync_render_entities(
             + Vec3::Y * (unit_height(unit) * 0.5);
         let imported_model = visual_rawcode
             .and_then(|rawcode| unit_models.get(rawcode).map(|model| (rawcode, model)));
-        let (entity, weapon, imported_rawcode) = if let Some((rawcode, model)) = imported_model {
-            let entity = commands
-                .spawn((Transform::from_translation(position), Visibility::default()))
-                .id();
-            let model_root = commands
-                .spawn((
-                    WorldAssetRoot(model.scene.clone()),
-                    ImportedUnitModelRoot {
-                        sim_id: unit.id,
-                        rawcode,
-                        presentation_root: entity,
-                    },
-                    Wc3AttachmentOwner,
-                    Wc3TeamTint::new(unit.owner.0, player_color(unit.owner), "wc3/units"),
-                    Transform {
-                        translation: Vec3::NEG_Y * unit_height(unit) * 0.5,
-                        rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
-                        scale: Vec3::splat(model.scale),
-                    },
-                ))
-                .id();
-            commands.entity(entity).add_child(model_root);
-            if let Some(tint) = model.tint_rgb {
-                commands.entity(model_root).insert(Wc3VertexTint(tint));
-            }
-            if !model.ribbon_emitters.is_empty() {
-                commands
-                    .entity(model_root)
-                    .insert(Wc3RibbonSource::with_asset_prefix(
-                        &model.ribbon_emitters,
-                        "wc3/units",
-                    ));
-            }
-            spawn_persistent_unit_attachments(&mut commands, model_root, model, &wc3_visuals);
-            (entity, None, Some(rawcode))
-        } else {
-            let entity = commands
-                .spawn((
-                    Mesh3d(assets.unit_mesh(unit.visual_kind)),
-                    MeshMaterial3d(assets.unit_material(unit.owner)),
-                    Transform {
-                        translation: position,
-                        scale: Vec3::splat(unit_render_scale(unit)),
-                        ..default()
-                    },
-                ))
-                .id();
-            let weapon =
-                spawn_unit_weapon(&mut commands, &assets, entity, unit.owner, unit.visual_kind);
-            spawn_air_wings(&mut commands, &assets, entity, unit);
-            (entity, Some(weapon), None)
-        };
+        let (entity, model_root, weapon, imported_rawcode) =
+            if let Some((rawcode, model)) = imported_model {
+                let entity = commands
+                    .spawn((Transform::from_translation(position), Visibility::default()))
+                    .id();
+                let model_root = commands
+                    .spawn((
+                        WorldAssetRoot(model.scene.clone()),
+                        ImportedUnitModelRoot {
+                            sim_id: unit.id,
+                            rawcode,
+                            presentation_root: entity,
+                        },
+                        Wc3AttachmentOwner,
+                        Wc3TeamTint::new(unit.owner.0, player_color(unit.owner), "wc3/units"),
+                        Transform {
+                            translation: Vec3::NEG_Y * unit_height(unit) * 0.5,
+                            rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
+                            scale: Vec3::splat(model.scale),
+                        },
+                    ))
+                    .id();
+                commands.entity(entity).add_child(model_root);
+                if let Some(tint) = model.tint_rgb {
+                    commands.entity(model_root).insert(Wc3VertexTint(tint));
+                }
+                if !model.ribbon_emitters.is_empty() {
+                    commands
+                        .entity(model_root)
+                        .insert(Wc3RibbonSource::with_asset_prefix(
+                            &model.ribbon_emitters,
+                            "wc3/units",
+                        ));
+                }
+                spawn_persistent_unit_attachments(&mut commands, model_root, model, &wc3_visuals);
+                (entity, Some(model_root), None, Some(rawcode))
+            } else {
+                let entity = commands
+                    .spawn((
+                        Mesh3d(assets.unit_mesh(unit.visual_kind)),
+                        MeshMaterial3d(assets.unit_material(unit.owner)),
+                        Transform {
+                            translation: position,
+                            scale: Vec3::splat(unit_render_scale(unit)),
+                            ..default()
+                        },
+                    ))
+                    .id();
+                let weapon =
+                    spawn_unit_weapon(&mut commands, &assets, entity, unit.owner, unit.visual_kind);
+                spawn_air_wings(&mut commands, &assets, entity, unit);
+                (entity, None, Some(weapon), None)
+            };
         render_map.units.insert(
             unit.id,
             PresentedEntry {
                 entity,
+                model_root,
                 weapon,
                 imported_rawcode,
                 constructing: false,
             },
         );
-    }
-
-    let stale_status_effects: Vec<_> = render_map
-        .status_effects
-        .keys()
-        .copied()
-        .filter(|key| {
-            !entity_status_visual_is_active(
-                key.target,
-                &samples.current,
-                key.ability_rawcode,
-                key.kind,
-            )
-        })
-        .collect();
-    for key in stale_status_effects {
-        if let Some(effect) = render_map.status_effects.remove(&key) {
-            if let Some(pool_key) = effect.pooled_scene
-                && world_instances.contains(effect.entity)
-            {
-                commands
-                    .entity(effect.entity)
-                    .insert_recursive::<Children>(Disabled);
-                effect_pool
-                    .scenes
-                    .entry(pool_key)
-                    .or_default()
-                    .push(effect.entity);
-            } else {
-                commands.entity(effect.entity).despawn();
-            }
-        }
-    }
-    for unit in samples
-        .current
-        .units
-        .values()
-        .filter(|unit| unit.health > 0)
-    {
-        let target = (
-            unit.id,
-            unit_ground_position(unit.position, unit.movement_class, &terrain),
-        );
-        if unit.negative_building_shield_level > 0 && unit.hex.is_none() {
-            spawn_status_visuals(
-                &mut commands,
-                &mut render_map,
-                (&wc3_visuals, &mut effect_pool, !legacy_effect_pooling),
-                target,
-                u32::from_be_bytes(*b"A09L"),
-                Wc3StatusVisualKind::Armor,
-            );
-        }
-        for (ability, kind) in status_visual_sources(&unit.status, samples.current.tick) {
-            spawn_status_visuals(
-                &mut commands,
-                &mut render_map,
-                (&wc3_visuals, &mut effect_pool, !legacy_effect_pooling),
-                target,
-                ability,
-                kind,
-            );
-        }
-    }
-    for building in samples
-        .current
-        .buildings
-        .values()
-        .filter(|building| building.health > 0)
-    {
-        let (mut position, _) = metrics.footprint_center_size(building.footprint);
-        position.y = building_terrain_height(&metrics, &terrain, building.footprint);
-        for (ability, kind) in status_visual_sources(&building.status, samples.current.tick) {
-            spawn_status_visuals(
-                &mut commands,
-                &mut render_map,
-                (&wc3_visuals, &mut effect_pool, !legacy_effect_pooling),
-                (building.id, position),
-                ability,
-                kind,
-            );
-        }
     }
 
     let stale_stun_effects: Vec<_> = render_map
@@ -4204,7 +4157,7 @@ fn sync_render_entities(
                 .get(content.rawcode)
                 .map(|model| (content.rawcode, model))
         });
-        let imported_rawcode = if let Some((rawcode, model)) = imported_model {
+        let (model_root, imported_rawcode) = if let Some((rawcode, model)) = imported_model {
             let constructing = building.construction_complete_tick.is_some();
             let lifecycle_sequence = if constructing && model.lifecycle_animations.birth.is_some() {
                 model.lifecycle_animations.birth.as_deref()
@@ -4250,7 +4203,7 @@ fn sync_render_entities(
                     ));
             }
             commands.entity(entity).add_child(model_root);
-            Some(rawcode)
+            (Some(model_root), Some(rawcode))
         } else {
             spawn_building_visual(
                 &mut commands,
@@ -4260,17 +4213,100 @@ fn sync_render_entities(
                 size,
                 visual_height,
             );
-            None
+            (None, None)
         };
         render_map.buildings.insert(
             building.id,
             PresentedEntry {
                 entity,
+                model_root,
                 weapon: None,
                 imported_rawcode,
                 constructing: building.construction_complete_tick.is_some(),
             },
         );
+    }
+
+    let stale_status_effects: Vec<_> = render_map
+        .status_effects
+        .keys()
+        .copied()
+        .filter(|key| {
+            !entity_status_visual_is_active(
+                key.target,
+                &samples.current,
+                key.ability_rawcode,
+                key.kind,
+            )
+        })
+        .collect();
+    for key in stale_status_effects {
+        if let Some(effect) = render_map.status_effects.remove(&key) {
+            release_status_visual(
+                &mut commands,
+                &mut effect_pool,
+                effect,
+                world_instances.contains(effect.entity),
+            );
+        }
+    }
+    for unit in samples
+        .current
+        .units
+        .values()
+        .filter(|unit| unit.health > 0)
+    {
+        let target = (
+            unit.id,
+            unit_ground_position(unit.position, unit.movement_class, &terrain),
+            render_map
+                .units
+                .get(&unit.id)
+                .and_then(|entry| entry.model_root),
+        );
+        if unit.negative_building_shield_level > 0 && unit.hex.is_none() {
+            spawn_status_visuals(
+                &mut commands,
+                &mut render_map,
+                (&wc3_visuals, &mut effect_pool, !legacy_effect_pooling),
+                target,
+                u32::from_be_bytes(*b"A09L"),
+                Wc3StatusVisualKind::Armor,
+            );
+        }
+        for (ability, kind) in status_visual_sources(&unit.status, samples.current.tick) {
+            spawn_status_visuals(
+                &mut commands,
+                &mut render_map,
+                (&wc3_visuals, &mut effect_pool, !legacy_effect_pooling),
+                target,
+                ability,
+                kind,
+            );
+        }
+    }
+    for building in samples
+        .current
+        .buildings
+        .values()
+        .filter(|building| building.health > 0)
+    {
+        let (mut position, _) = metrics.footprint_center_size(building.footprint);
+        position.y = building_terrain_height(&metrics, &terrain, building.footprint);
+        let model_root = render_map
+            .buildings
+            .get(&building.id)
+            .and_then(|entry| entry.model_root);
+        for (ability, kind) in status_visual_sources(&building.status, samples.current.tick) {
+            spawn_status_visuals(
+                &mut commands,
+                &mut render_map,
+                (&wc3_visuals, &mut effect_pool, !legacy_effect_pooling),
+                (building.id, position, model_root),
+                ability,
+                kind,
+            );
+        }
     }
 
     for corpse in samples.current.corpses.values() {
@@ -4465,6 +4501,9 @@ fn interpolate_render_transforms(
     }
 
     for (key, effect) in &render_map.status_effects {
+        if effect.attached_to_model {
+            continue;
+        }
         let Some(current) = samples.current.units.get(&key.target) else {
             if let Some(building) = samples.current.buildings.get(&key.target) {
                 let (mut position, _) = metrics.footprint_center_size(building.footprint);
@@ -4833,44 +4872,103 @@ fn status_visual_is_active(
     }
 }
 
+/// Queue detachment before any actor-root teardown, including same-ID morphs
+/// and building reconstruction. A pooled scene must not remain a descendant of
+/// a root that is about to be recursively destroyed.
+fn retire_target_status_visuals(
+    commands: &mut Commands,
+    render_map: &mut RenderMap,
+    pool: &mut TimedWc3EffectPool,
+    target: SimId,
+    ready: &Query<(), With<WorldInstance>>,
+) {
+    let keys = render_map
+        .status_effects
+        .keys()
+        .copied()
+        .filter(|key| key.target == target)
+        .collect::<Vec<_>>();
+    for key in keys {
+        let effect = render_map
+            .status_effects
+            .remove(&key)
+            .expect("retiring status effect exists");
+        release_status_visual(commands, pool, effect, ready.contains(effect.entity));
+    }
+}
+
+fn release_status_visual(
+    commands: &mut Commands,
+    pool: &mut TimedWc3EffectPool,
+    effect: PresentedStatusEffect,
+    ready: bool,
+) {
+    if let Some(key) = effect.pooled_scene.filter(|_| ready) {
+        commands
+            .entity(effect.entity)
+            .remove::<(ChildOf, Wc3AttachToNode)>()
+            .insert_recursive::<Children>(Disabled);
+        pool.scenes.entry(key).or_default().push(effect.entity);
+    } else {
+        commands.entity(effect.entity).try_despawn();
+    }
+}
+
 fn spawn_status_visuals(
     commands: &mut Commands,
     render_map: &mut RenderMap,
     visuals: (&Wc3VisualSet, &mut TimedWc3EffectPool, bool),
-    target: (SimId, Vec3),
+    target: (SimId, Vec3, Option<Entity>),
     ability_rawcode: u32,
     kind: Wc3StatusVisualKind,
 ) {
     let (wc3_visuals, pool, pooling_enabled) = visuals;
-    let (target, position) = target;
+    let (target, position, model_root) = target;
     for (slot, visual) in wc3_visuals.status(ability_rawcode).iter().enumerate() {
         if visual.kind != kind {
             continue;
         }
-        let key = StatusEffectKey {
-            target,
-            ability_rawcode,
-            kind,
-            slot: u16::try_from(slot).expect("WC3 status visual slot exceeds u16"),
-        };
-        if render_map.status_effects.contains_key(&key) {
-            continue;
+        for attachment_slot in 0..visual.attachment_points.len().max(1) {
+            let key = StatusEffectKey {
+                target,
+                ability_rawcode,
+                kind,
+                slot: u16::try_from(slot).expect("WC3 status visual slot exceeds u16"),
+                attachment_slot: u8::try_from(attachment_slot)
+                    .expect("WC3 status attachment slot exceeds u8"),
+            };
+            if render_map.status_effects.contains_key(&key) {
+                continue;
+            }
+            let (entity, pooled_scene) = spawn_or_reuse_wc3_visual(
+                commands,
+                pool,
+                &visual.model,
+                model_root.map_or_else(
+                    || Transform::from_translation(position),
+                    |_| Transform::IDENTITY,
+                ),
+                pooling_enabled,
+                Wc3EffectPlayback::Looping,
+            );
+            if let Some(root) = model_root {
+                commands.entity(root).add_child(entity);
+                if let Some(point) = visual.attachment_points.get(attachment_slot) {
+                    commands.entity(entity).insert(Wc3AttachToNode {
+                        owner_root: root,
+                        attachment_point: point.clone(),
+                    });
+                }
+            }
+            render_map.status_effects.insert(
+                key,
+                PresentedStatusEffect {
+                    entity,
+                    attached_to_model: model_root.is_some(),
+                    pooled_scene,
+                },
+            );
         }
-        let (entity, pooled_scene) = spawn_or_reuse_wc3_visual(
-            commands,
-            pool,
-            &visual.model,
-            Transform::from_translation(position),
-            pooling_enabled,
-            Wc3EffectPlayback::Looping,
-        );
-        render_map.status_effects.insert(
-            key,
-            PresentedStatusEffect {
-                entity,
-                pooled_scene,
-            },
-        );
     }
 }
 
@@ -5124,7 +5222,7 @@ fn build_wc3_lightning_mesh(
         ]);
         normals.extend_from_slice(&[[0.0, 1.0, 0.0]; 4]);
         // Native LightningData controls repeat length; HealBeam and Lightning differ.
-        let repeats = (to - from).length() / (visual.width / visual.texcoord_scale);
+        let repeats = (to - from).length() * visual.texcoord_scale / visual.width;
         uvs.extend_from_slice(&[[0.0, 1.0], [0.0, 0.0], [repeats, 1.0], [repeats, 0.0]]);
         indices.extend_from_slice(&[base, base + 2, base + 1, base + 1, base + 2, base + 3]);
     }
@@ -6839,6 +6937,168 @@ mod tests {
         assert_eq!(lane.y, terrain.height_at_world(Vec2::ZERO));
         assert_eq!(outside.xz(), terrain.world_max());
         assert_eq!(outside.y, terrain.height_at_world(terrain.world_max()));
+    }
+
+    #[test]
+    fn status_spawning_deduplicates_attachment_slots_and_reuses_detached_scenes() {
+        let mut world = World::new();
+        let ability = u32::from_be_bytes(*b"CAST");
+        let visuals = Wc3VisualSet::synthetic_status(
+            ability,
+            Wc3StatusVisualKind::Armor,
+            &["head", "hand,left"],
+        );
+        let mut map = RenderMap::default();
+        let mut pool = TimedWc3EffectPool::default();
+        let first_root = world.spawn_empty().id();
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let mut commands = Commands::new(&mut queue, &world);
+        for _ in 0..2 {
+            spawn_status_visuals(
+                &mut commands,
+                &mut map,
+                (&visuals, &mut pool, true),
+                (SimId(1), Vec3::splat(100.0), Some(first_root)),
+                ability,
+                Wc3StatusVisualKind::Armor,
+            );
+        }
+        queue.apply(&mut world);
+        assert_eq!(map.status_effects.len(), 2);
+        let original = map
+            .status_effects
+            .values()
+            .map(|effect| effect.entity)
+            .collect::<Vec<_>>();
+        for (key, effect) in &map.status_effects {
+            assert!(effect.attached_to_model);
+            assert_eq!(
+                world.get::<Transform>(effect.entity).unwrap().translation,
+                Vec3::ZERO
+            );
+            assert_eq!(
+                world.get::<ChildOf>(effect.entity).unwrap().parent(),
+                first_root
+            );
+            assert_eq!(
+                world
+                    .get::<Wc3AttachToNode>(effect.entity)
+                    .unwrap()
+                    .attachment_point,
+                visuals.status(ability)[0].attachment_points[usize::from(key.attachment_slot)]
+            );
+        }
+        let mut commands = Commands::new(&mut queue, &world);
+        for (_, effect) in map.status_effects.drain() {
+            release_status_visual(&mut commands, &mut pool, effect, true);
+        }
+        commands.entity(first_root).despawn();
+        queue.apply(&mut world);
+        let new_root = world.spawn_empty().id();
+        let mut commands = Commands::new(&mut queue, &world);
+        spawn_status_visuals(
+            &mut commands,
+            &mut map,
+            (&visuals, &mut pool, true),
+            (SimId(2), Vec3::splat(200.0), Some(new_root)),
+            ability,
+            Wc3StatusVisualKind::Armor,
+        );
+        queue.apply(&mut world);
+        assert_eq!(map.status_effects.len(), 2);
+        for effect in map.status_effects.values() {
+            assert!(original.contains(&effect.entity));
+            assert!(world.get::<Disabled>(effect.entity).is_none());
+            assert_eq!(
+                world.get::<ChildOf>(effect.entity).unwrap().parent(),
+                new_root
+            );
+            assert_eq!(
+                world
+                    .get::<Wc3AttachToNode>(effect.entity)
+                    .unwrap()
+                    .owner_root,
+                new_root
+            );
+            assert_eq!(
+                world.get::<Transform>(effect.entity).unwrap().translation,
+                Vec3::ZERO
+            );
+        }
+    }
+
+    #[test]
+    fn pooled_status_detaches_before_actor_teardown_and_can_bind_to_a_new_root() {
+        let mut world = World::new();
+        let mut pool = TimedWc3EffectPool::default();
+        let key = Wc3EffectPoolKey {
+            scene: Handle::<WorldAsset>::default().id(),
+            playback: Wc3EffectPlayback::Looping,
+        };
+        let effect = world.spawn_empty().id();
+        for _ in 0..2 {
+            let owner = world.spawn_empty().id();
+            let node = world.spawn_empty().id();
+            world.entity_mut(owner).add_child(node);
+            world.entity_mut(node).add_child(effect);
+            world.entity_mut(effect).insert(Wc3AttachToNode {
+                owner_root: owner,
+                attachment_point: "head".to_owned(),
+            });
+            let mut queue = bevy::ecs::world::CommandQueue::default();
+            let mut commands = Commands::new(&mut queue, &world);
+            release_status_visual(
+                &mut commands,
+                &mut pool,
+                PresentedStatusEffect {
+                    entity: effect,
+                    attached_to_model: true,
+                    pooled_scene: Some(key),
+                },
+                true,
+            );
+            commands.entity(owner).despawn();
+            queue.apply(&mut world);
+            assert!(world.get_entity(owner).is_err());
+            assert!(world.get_entity(node).is_err());
+            assert!(world.get_entity(effect).is_ok());
+            assert!(world.get::<ChildOf>(effect).is_none());
+            assert!(world.get::<Wc3AttachToNode>(effect).is_none());
+            assert!(world.get::<Disabled>(effect).is_some());
+            assert_eq!(pool.scenes.get_mut(&key).unwrap().pop(), Some(effect));
+            world.entity_mut(effect).remove::<Disabled>();
+        }
+    }
+
+    #[test]
+    fn unready_or_nonpoolable_status_is_destroyed_before_actor_teardown() {
+        for (poolable, ready) in [(true, false), (false, true), (false, false)] {
+            let mut world = World::new();
+            let mut pool = TimedWc3EffectPool::default();
+            let owner = world.spawn_empty().id();
+            let effect = world.spawn_empty().id();
+            world.entity_mut(owner).add_child(effect);
+            let mut queue = bevy::ecs::world::CommandQueue::default();
+            let mut commands = Commands::new(&mut queue, &world);
+            release_status_visual(
+                &mut commands,
+                &mut pool,
+                PresentedStatusEffect {
+                    entity: effect,
+                    attached_to_model: true,
+                    pooled_scene: poolable.then_some(Wc3EffectPoolKey {
+                        scene: Handle::<WorldAsset>::default().id(),
+                        playback: Wc3EffectPlayback::Looping,
+                    }),
+                },
+                ready,
+            );
+            commands.entity(owner).despawn();
+            queue.apply(&mut world);
+            assert!(world.get_entity(effect).is_err());
+            assert!(world.get_entity(owner).is_err());
+            assert!(pool.scenes.is_empty());
+        }
     }
 
     #[test]

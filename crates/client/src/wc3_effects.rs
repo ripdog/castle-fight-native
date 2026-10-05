@@ -216,6 +216,7 @@ pub enum Wc3StatusVisualKind {
 pub struct Wc3StatusVisual {
     pub model: Wc3VisualModel,
     pub kind: Wc3StatusVisualKind,
+    pub attachment_points: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -413,6 +414,15 @@ struct StatusVisualBinding {
     ability_rawcode: String,
     status_kind: String,
     gltf: Option<String>,
+    buff_rawcode: String,
+    target_attachment_count: Option<u8>,
+    target_attachments: Vec<StatusVisualAttachment>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct StatusVisualAttachment {
+    index: u8,
+    point: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -2950,6 +2960,34 @@ impl Wc3ConvertedModelRegistry {
 }
 
 impl Wc3VisualSet {
+    #[cfg(test)]
+    pub(crate) fn synthetic_status(
+        ability: u32,
+        kind: Wc3StatusVisualKind,
+        points: &[&str],
+    ) -> Self {
+        Self {
+            status_by_rawcode: BTreeMap::from([(
+                ability,
+                vec![Wc3StatusVisual {
+                    model: Wc3VisualModel {
+                        scene: Handle::default(),
+                        gltf: Handle::default(),
+                        animation_name: None,
+                        animation_duration_seconds: None,
+                        stand_animation_name: None,
+                        poolable_instance: true,
+                        emitters: Vec::new(),
+                        ribbons: Vec::new(),
+                    },
+                    kind,
+                    attachment_points: points.iter().map(|point| (*point).to_owned()).collect(),
+                }],
+            )]),
+            ..default()
+        }
+    }
+
     #[must_use]
     pub fn load_default(asset_server: &AssetServer) -> Self {
         let asset_root = client_asset_root();
@@ -5829,7 +5867,7 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
         .map_err(|error| format!("failed reading {}: {error}", path.display()))?;
     let manifest: VisualManifest =
         serde_json::from_str(&json).map_err(|error| format!("invalid visual manifest: {error}"))?;
-    if manifest.schema_version != 5 {
+    if manifest.schema_version != 6 {
         return Err(format!(
             "unsupported visual asset manifest schema {}",
             manifest.schema_version
@@ -5932,6 +5970,7 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
             .push(Wc3StatusVisual {
                 model: resolve_status_visual_model(gltf, model, asset_server)?,
                 kind: parse_status_visual_kind(&binding.status_kind)?,
+                attachment_points: status_attachment_points(binding, &manifest.status_visuals),
             });
     }
 
@@ -5956,17 +5995,7 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
                 .into_iter()
                 .map(|effect| {
                     validate_relative_asset_path(&effect.png)?;
-                    if !effect.width.is_finite()
-                        || effect.width <= 0.0
-                        || !effect.segment_length.is_finite()
-                        || effect.segment_length <= 0.0
-                        || !effect.noise_scale.is_finite()
-                        || effect.noise_scale < 0.0
-                        || !effect.texcoord_scale.is_finite()
-                        || effect.texcoord_scale <= 0.0
-                    {
-                        return Err(format!("invalid native lightning definition {}", effect.id));
-                    }
+                    validate_native_lightning(&effect)?;
                     let color = effect.color.map(|channel| f32::from(channel) / 255.0);
                     Ok((
                         effect.id,
@@ -6022,6 +6051,59 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
         stun,
         system_models,
     })
+}
+
+fn validate_native_lightning(effect: &NativeLightningEffect) -> Result<(), String> {
+    if !effect.width.is_finite()
+        || effect.width <= 0.0
+        || !effect.segment_length.is_finite()
+        || effect.segment_length <= 0.0
+        || !effect.noise_scale.is_finite()
+        || effect.noise_scale < 0.0
+        || !effect.texcoord_scale.is_finite()
+    {
+        return Err(format!("invalid native lightning definition {}", effect.id));
+    }
+    // Native LightningData includes signed texture scales (e.g. drain beams).
+    // Their sign controls UV direction; zero is also a finite constant UV.
+    Ok(())
+}
+
+fn status_attachment_points(
+    binding: &StatusVisualBinding,
+    bindings: &[StatusVisualBinding],
+) -> Vec<String> {
+    // Exported model rows are sorted by path, not by native art-list position.
+    // Only a single-art buff has an unambiguous association with its authored
+    // attachment points. Keep multi-art buffs at the model root until native
+    // association semantics and source list positions are retained together.
+    if bindings
+        .iter()
+        .filter(|other| {
+            other.ability_rawcode == binding.ability_rawcode
+                && other.status_kind == binding.status_kind
+                && other.buff_rawcode == binding.buff_rawcode
+        })
+        .count()
+        != 1
+    {
+        return Vec::new();
+    }
+    let mut points = binding
+        .target_attachments
+        .iter()
+        .filter(|attachment| {
+            binding
+                .target_attachment_count
+                .is_none_or(|count| attachment.index < count)
+        })
+        .filter(|attachment| !attachment.point.is_empty())
+        .collect::<Vec<_>>();
+    points.sort_by_key(|attachment| attachment.index);
+    points
+        .into_iter()
+        .map(|attachment| attachment.point.clone())
+        .collect()
 }
 
 fn parse_status_visual_kind(value: &str) -> Result<Wc3StatusVisualKind, String> {
@@ -6346,6 +6428,139 @@ mod tests {
     }
 
     #[test]
+    fn native_lightning_accepts_signed_texture_scales_and_rejects_invalid_geometry() {
+        let mut effect = NativeLightningEffect {
+            id: "BEAM".to_owned(),
+            png: "textures/beam.png".to_owned(),
+            width: 12.0,
+            segment_length: 30.0,
+            noise_scale: 0.0,
+            texcoord_scale: -0.7,
+            color: [255; 4],
+        };
+        assert!(validate_native_lightning(&effect).is_ok());
+        effect.texcoord_scale = 0.0;
+        assert!(validate_native_lightning(&effect).is_ok());
+        effect.texcoord_scale = f32::NAN;
+        assert!(validate_native_lightning(&effect).is_err());
+        effect.texcoord_scale = 0.7;
+        effect.width = 0.0;
+        assert!(validate_native_lightning(&effect).is_err());
+    }
+
+    #[test]
+    fn status_metadata_preserves_single_art_points_and_count_without_guessing_multi_art_order() {
+        let mut binding = StatusVisualBinding {
+            ability_rawcode: "CAST".to_owned(),
+            status_kind: "armor".to_owned(),
+            gltf: Some("models/one.gltf".to_owned()),
+            buff_rawcode: "BUFF".to_owned(),
+            target_attachment_count: None,
+            target_attachments: vec![
+                StatusVisualAttachment {
+                    index: 1,
+                    point: "hand,right".to_owned(),
+                },
+                StatusVisualAttachment {
+                    index: 0,
+                    point: "head".to_owned(),
+                },
+            ],
+        };
+        assert_eq!(
+            status_attachment_points(&binding, &[binding.clone()]),
+            ["head", "hand,right"]
+        );
+        binding.target_attachment_count = Some(1);
+        assert_eq!(
+            status_attachment_points(&binding, &[binding.clone()]),
+            ["head"]
+        );
+        binding.target_attachment_count = Some(0);
+        assert!(status_attachment_points(&binding, &[binding.clone()]).is_empty());
+        binding.target_attachment_count = None;
+        let mut second = binding.clone();
+        second.gltf = Some("models/two.gltf".to_owned());
+        assert!(status_attachment_points(&binding, &[binding.clone(), second.clone()]).is_empty());
+        second.buff_rawcode = "ELSE".to_owned();
+        assert_eq!(
+            status_attachment_points(&binding, &[binding.clone(), second]),
+            ["head", "hand,right"]
+        );
+    }
+
+    #[test]
+    fn status_attachment_waits_for_owner_index_and_follows_the_animated_node() {
+        let mut app = App::new();
+        app.add_plugins(TransformPlugin)
+            .add_systems(Update, resolve_wc3_visual_attachments);
+        let owner = app
+            .world_mut()
+            .spawn((
+                Transform::from_xyz(100.0, 20.0, 30.0),
+                GlobalTransform::default(),
+            ))
+            .id();
+        let head = app
+            .world_mut()
+            .spawn((
+                Transform::from_xyz(0.0, 15.0, 0.0),
+                GlobalTransform::default(),
+            ))
+            .id();
+        let effect = app
+            .world_mut()
+            .spawn((
+                Transform::IDENTITY,
+                GlobalTransform::default(),
+                Wc3AttachToNode {
+                    owner_root: owner,
+                    attachment_point: "head".to_owned(),
+                },
+            ))
+            .id();
+        app.world_mut()
+            .entity_mut(owner)
+            .add_children(&[head, effect]);
+        app.update();
+        assert_eq!(app.world().get::<ChildOf>(effect).unwrap().parent(), owner);
+        assert!(app.world().get::<Wc3AttachToNode>(effect).is_some());
+        app.world_mut()
+            .entity_mut(owner)
+            .insert(Wc3AttachmentIndex {
+                nodes: vec![("headref".to_owned(), head)],
+                resolved: HashMap::new(),
+            });
+        app.update();
+        assert_eq!(app.world().get::<ChildOf>(effect).unwrap().parent(), head);
+        assert!(app.world().get::<Wc3AttachToNode>(effect).is_none());
+        assert_eq!(
+            app.world().get::<Transform>(effect).unwrap().translation,
+            Vec3::ZERO
+        );
+        assert_eq!(
+            app.world()
+                .get::<GlobalTransform>(effect)
+                .unwrap()
+                .translation(),
+            Vec3::new(100.0, 35.0, 30.0)
+        );
+        app.world_mut()
+            .get_mut::<Transform>(head)
+            .unwrap()
+            .translation
+            .y = 25.0;
+        app.update();
+        assert_eq!(
+            app.world()
+                .get::<GlobalTransform>(effect)
+                .unwrap()
+                .translation(),
+            Vec3::new(100.0, 45.0, 30.0)
+        );
+    }
+
+    #[test]
     fn geoset_visibility_uses_exported_binary_scale() {
         let extras = serde_json::from_str::<Wc3NodeExtras>(r#"{"wc3Geoset":3}"#).unwrap();
         assert_eq!(extras.wc3_geoset, Some(3));
@@ -6639,6 +6854,19 @@ mod tests {
             serde_json::from_str(&fs::read_to_string(&path).unwrap()).unwrap();
         let visuals =
             load_manifest(&path, server).expect("real client manifest loader must resolve pack");
+        for binding in &manifest.status_visuals {
+            if binding.gltf.is_some() {
+                let ability = parse_rawcode(&binding.ability_rawcode).unwrap();
+                let kind = parse_status_visual_kind(&binding.status_kind).unwrap();
+                let points = status_attachment_points(binding, &manifest.status_visuals);
+                assert!(
+                    visuals
+                        .status(ability)
+                        .iter()
+                        .any(|visual| visual.kind == kind && visual.attachment_points == points)
+                );
+            }
+        }
         for binding in &manifest.assets {
             if binding.owner_kind == "abilities"
                 && binding.role == "missile"
