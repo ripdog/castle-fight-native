@@ -8,9 +8,9 @@
   coordinator integration.
 - Base objects: `e005` inherits `ebal`; `h070` inherits `hbla`.
 - Stable IDs: unit `0x10000014`, production building `0x20000014`.
-- Elven remains unselectable. No lobby, race setup, release registry, content
-  revision, or schema-number change is part of this branch. Coordinator must
-  perform the global compatibility/schema bump before releasing the combined work.
+- This branch originally kept Elven unselectable. Integrated r13 completion now
+  enables ordinary race selection and publishes the retained runtime source; see
+  [the current checklist](elven-implementation.md).
 
 Authoritative evidence under `docs/original_map/extracted/`:
 

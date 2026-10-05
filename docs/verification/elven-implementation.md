@@ -6,6 +6,25 @@ This file tracks promotion work, not a second encoding of map tuning. Resolve ev
 row against the selected retained release using the shared
 [unit/building checklist](unit-implementation-checklist.md).
 
+## Integrated completion
+
+Elven is selectable through ordinary local/lobby/server setup for retained 9.27
+r1. The mixed-race regression uses public setup, checks source-owned command
+admission, and restores canonical state with a different worker count. Runtime
+content is `cf-native-dev-slice-r13`; authoritative compatibility remains content
+bundle schema 6, checksum schema 21 and snapshot schema 16. Release publication
+pins the exact integrated source commit and current generated tuning/binding
+hashes. This work changes selection and presentation, not authoritative state
+shape.
+
+Native buff attachment/loading closure is recorded in
+[the presentation audit](elven-presentation-integration.md). Remaining native
+Warcraft oracle caveats concern frame/AI ordering, the sub-tick Parasite corner,
+and exact visual comparison. Fog-of-war consumers remain an engine-wide future
+system. The global multi-art buff association caveat does not affect Elven's
+single-art status models. These limits are not claims that those observations
+have been completed.
+
 ## Source references
 
 For the retained 9.27 release, use `docs/original_map/releases.json` for revision

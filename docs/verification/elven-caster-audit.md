@@ -261,4 +261,5 @@ added units outside legal collision bounds.
 The caster engine work is ready for merge. This is not a claim that the Hex,
 consolidated mana API, rendered frontend VFX, or native-observation gates listed
 above have passed. The coordinator must close those gates on the integrated tree
-before full entity fidelity sign-off. Elven race exposure remains disabled.
+before full entity fidelity sign-off. Elven exposure is now enabled by the
+integrated r13 completion; see [the current checklist](elven-implementation.md).
