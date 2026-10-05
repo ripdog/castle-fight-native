@@ -25,7 +25,9 @@ zero findings (`target/elven-installed-pack-audit.json`). Actual client loader
 checks passed for units, buildings and effects. That loading check exposed the
 signed native drain-lightning texture scale; validation now preserves finite
 signed scales instead of rejecting the entire effects pack. No installation art
-is committed.
+is committed. An isolated Wayland smoke run loaded the pack and rendered the
+Elven fixture successfully (`target/lobby-render-qa/elven.png`); this is a client
+render check, not a Warcraft comparison.
 
 The Elven status models have unambiguous single-art attachment metadata. Global
 multi-art buffs remain at the model root: exported rows are sorted by path and do
@@ -36,7 +38,7 @@ conformance; native comparison caveats remain below.
 
 ## Ownership and transport
 
-Lobby participants carry their canonical builder race through the existing protocol setup. Server validation and match setup reject unsupported source-owned races; participant builder catalogs restrict command admission to that builder's retained direct roots and valid upgrades. Race is included in configuration identity. The mixed-race fixture uses authoritative simulation snapshot JSON/wire round-trip rather than inventing serialization for the local `CastleFightMatchConfig` object.
+Protocol revision 7 carries source builder rawcodes in the authoritative lobby roster. Each authenticated player can select its own supported race before the host starts; server validation rejects unavailable races and later changes. Both clients rebuild the accepted canonical initial state before processing the first tick. Participant builder catalogs restrict command admission to retained direct roots and valid upgrades. Race changes the canonical entity checksum; the immutable handshake configuration identity is shared across race choices. Mixed-race fixtures cover snapshot JSON/wire round-trip and matching client/server checksums across worker counts.
 
 Model lookup is catalog-aware for the full Elven set instead of Human-only enum matches. Model source identity and map version remain in authoritative unit/building content even before activation, independently of render assets. Native projectile art lookup accepts child ability identity as well as ordinary weapon source identity; the integrated projectile view and frontend selection preserve that distinction.
 
@@ -84,8 +86,9 @@ all-target Clippy, regeneration and the stricter Elven staging audit passed.
 The four ownership findings became zero
 (`native-child-ownership-{tests,clippy,export}.log`,
 `current-pack-native-ownership-{before,after}.json`).
-Native structure-buff lifetime/attachment visuals and loading still need
-integrated review. Script City/Shield/Overheat art is now present in the
+At this earlier staging boundary, native structure-buff lifetime/attachment
+visuals and loading still needed integrated review; the closure above supersedes
+that staging status. Script City/Shield/Overheat art is now present in the
 regenerated pack, but appearance/lifecycle is not established by delivery.
 
 ## Native buff source closure and required delivery
@@ -112,10 +115,10 @@ The required Elven audit now checks 26 source-owned entities, 61 model/dependenc
 bindings and both persistent status bindings with **zero findings**
 (`native-buff-{export,audit-after}.log`, `current-pack-native-buff-after.json`).
 The two unrelated global unresolved paths remain `.mdx` and `sandshield.mdx`;
-this is not a globally failure-free pack. Staging is still separate from the
-repository pack loaded by the client. Requiring delivered
-attachment metadata does not prove that the client applies it to the correct
-animated node; source attachment placement and rendered inspection remain open.
+this is not a globally failure-free pack. At this staging boundary the generated
+pack was separate from the repository pack; it is now installed as recorded
+above. Delivery alone did not prove animated-node placement. The integrated
+hierarchy tests and client render check provide the subsequent evidence.
 
 The asset generator now consumes that version-scoped projection instead of an
 authored stock-buff fallback. Status recipes include Faerie Fire armor and native
@@ -125,13 +128,14 @@ attachment/count metadata. The client recognizes the DOT category and uses live
 status identity/expiry to create/remove looping unit and structure-root effects,
 including zero-damage native buffs. It does not require the launch source to
 remain alive. The reusable status iterator is allocation-free; death/removal,
-wrong identity/category, expiry and read-only state are tested. Authored node
-placement is still pending, so these status roots are not evidence of correct
-Faerie Fire head attachment. All **73 asset tests** (one ignored), **219 client
+wrong identity/category, expiry and read-only state are tested. At this earlier
+lifecycle boundary authored node placement was pending. The integrated attachment work above now covers Faerie
+Fire's retained head binding; native rendered comparison remains open. All **73
+asset tests** (one ignored), **219 client
 tests** (three ignored), strict asset/client all-target Clippy, formatting and
 diff checks passed (`native-buff-{assets-tests,client-tests,clippy}.log`).
 
-## Integrated structure-status readback
+## Earlier integrated structure-status readback
 
 The presentation bridge copies the authoritative `StatusState` for every
 building, including passive structures without attack or spellcasting state.
@@ -146,7 +150,7 @@ simulation/client all-target Clippy passed, including the passive-structure
 badge lifetime/nonmutation regression. This transport/UI work does **not** establish persistent model spawning,
 source-authored attachment placement, current-pack loading or rendered fidelity.
 No authoritative state or schema changed: compatibility remains bundle 6,
-checksum 21, snapshot 16. Elven is still unpromoted.
+checksum 21, snapshot 16. Elven was unpromoted at this earlier boundary; r13 enables it.
 
 The expanded debug catalog also outgrew the historical single-column planner.
 Both debug-menu failures reproduced without status changes. The separate bounded

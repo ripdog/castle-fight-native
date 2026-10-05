@@ -17,6 +17,20 @@ pins the exact integrated source commit and current generated tuning/binding
 hashes. This work changes selection and presentation, not authoritative state
 shape.
 
+Network lobby selection uses protocol revision 7: each authenticated player can
+select its own supported builder before the host starts. Both peers rebuild the
+accepted tick-zero roster before processing canonical ticks. The lobby displays
+both teams in equal-width cards, and builder models refresh after a race change.
+The installed schema-6 effects pack passes the Elven presentation audit with no
+findings; local real-pack loading and an isolated rendered smoke check passed.
+
+Final integrated validation: **724 workspace tests passed** (four optional local
+asset tests ignored by default), strict workspace all-target Clippy passed,
+formatting and diff checks passed, and both retained release manifests verify.
+The three local client pack-loading tests were also run explicitly and passed.
+Client and standalone server binaries were rebuilt. Isolated 1v1 and 3v3 lobby
+previews verified team alignment, race labels and the guest waiting state.
+
 Native buff attachment/loading closure is recorded in
 [the presentation audit](elven-presentation-integration.md). Remaining native
 Warcraft oracle caveats concern frame/AI ordering, the sub-tick Parasite corner,

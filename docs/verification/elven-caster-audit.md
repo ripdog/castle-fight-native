@@ -185,7 +185,9 @@ loading/attachment/rendered verification remain open.
    selection calls `wc3_visuals.projectile_for(source_rawcode, ability_rawcode)`
    with independent child identity rather than weapon fallback. Parent/impact
    visuals, Healing Wave lightning endpoints, and unit/structure native buff
-   visuals still need the final asset-loading/attachment and rendered review.
+   visuals now pass local asset loading and attachment/lifecycle checks, with an
+   isolated client render smoke run. Exact native rendered comparison remains
+   open; see the presentation integration audit.
 4. **Sub-tick Parasite carrier corner:** the parent's retained Parasite buff has a
    sub-tick lifetime and an inherited `nfbr` death summon. Native proxy missiles
    cannot normally hit during that window, but same-native-frame unrelated death
@@ -194,7 +196,8 @@ loading/attachment/rendered verification remain open.
 5. **AI/native frame fidelity:** current healing target selection/recovery is
    deterministic and tested; native frame-level order cadence, visibility and
    simultaneous native-event ordering still need an in-game comparison. Full
-   rendered VFX fidelity cannot be signed off until the frontend merge is tested.
+   rendered VFX fidelity remains a native comparison task after the integrated
+   frontend loading, hierarchy and render smoke checks.
 
 ## Reusable behavioral verification
 
