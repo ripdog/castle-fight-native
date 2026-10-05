@@ -178,6 +178,7 @@ impl Simulation {
                     && unit.id != intent.target_id
                     && unit.team != intent.source_team
                     && unit.visible_to(intent.source_team, tick)
+                    && !unit.classifications.invulnerable
                     && profile.targets.can_target_unit(unit.movement_class)
                     && intent.source_position.distance_sq(unit.position)
                         <= square_i32(profile.range)
@@ -283,6 +284,7 @@ impl Simulation {
                                 && unit.team != team
                                 && unit.visible_to(team, completed_tick)
                                 && !unit.classifications.spell_immune
+                                && !unit.classifications.invulnerable
                                 && profile.targets.can_target_unit(unit.movement_class)
                                 && !unit.status.damage_over_time
                                     [..usize::from(unit.status.damage_over_time_count)]
@@ -378,6 +380,11 @@ impl Simulation {
                     }
                     self.world.despawn(entity);
                     result.impacts += 1;
+                    // Avul acquired during flight blocks both ordinary arrows and native
+                    // damage/buff/cleanse; spell immunity blocks only the spell family below.
+                    if units[index].classifications.invulnerable {
+                        continue;
+                    }
                     if let Some(damage_type) = bolt.attack_damage_type {
                         // Independent arrows are ordinary attack damage, not spell damage.
                         let evaded = units[index].passive_effects.iter().any(|effect| {

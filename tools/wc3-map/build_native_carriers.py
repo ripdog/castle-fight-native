@@ -21,6 +21,22 @@ FIELDS = {
 }
 
 
+def validate_hostile_target_mask(mask):
+    """Reject evidence whose relation/class qualifiers the runtime would otherwise discard."""
+    if not isinstance(mask, str):
+        raise ValueError("hostile native target mask must be a string")
+    seen = set()
+    for token in map(str.strip, mask.split(",")):
+        token = "enemy" if token == "enemies" else token
+        if token not in {"ground", "air", "structure", "enemy"}:
+            raise ValueError(f"unsupported hostile native target qualifier {token!r}")
+        if token in seen:
+            raise ValueError(f"duplicate hostile native target qualifier {token!r}")
+        seen.add(token)
+    if "enemy" not in seen or not seen.intersection({"ground", "air", "structure"}):
+        raise ValueError("hostile native targeting requires enemy relation and a physical class")
+
+
 def build(map_version="9.27", revision="r1", repo_root=ROOT, releases=None):
     releases = releases or repo_root / "docs/original_map/releases.json"
     release = _load_release(releases, map_version, revision)
@@ -40,6 +56,8 @@ def build(map_version="9.27", revision="r1", repo_root=ROOT, releases=None):
             fields.setdefault(row["rawcode"], {})[row["field_id"]] = json.loads(
                 row["recovered_value_json"]
             )
+    for object_id in ("A015", "A000"):
+        validate_hostile_target_mask(fields[object_id]["atar"])
     runtime = next(
         row for row in csv.DictReader(io.StringIO(sources[paths[1]].decode()), delimiter="\t")
         if row["system_id"] == "obelisk-of-light-cleansing-light"

@@ -170,7 +170,13 @@ The constrained effect vocabulary should support at least:
 
 Effects reuse the deterministic resolution rules in `15-targeting-combat.md`. The executable `AreaDamage` primitive requires a selected enemy unit, captures that unit's authoritative position at cast resolution as the area center, and damages every live enemy combat unit whose authoritative point lies within the authored radius, including the selected unit itself. The affected set is traversed in stable `SimId` order; the primitive does not implicitly damage buildings and does not generate ordinary attack retaliation/ally-defense events. `AreaDamage` is therefore not valid with `AllEnemyUnits`, which has no single center. Corpse-targeted abilities operate on authoritative corpse entities rather than presentation objects. They MUST revalidate corpse existence/eligibility at resolution, use canonical ordering/tie-breaking when selecting among multiple corpses, and atomically consume a corpse when the effect definition says it is spent so one corpse cannot satisfy multiple competing casts nondeterministically.
 
-### 8.1 Native projections and removal
+### 8.1 Native target qualifiers
+
+Script selection and native effect eligibility are distinct. A script's combat-sapper or marker restriction MUST be checked at evaluation and live commitment without imposing it on unrelated autonomous native firing. Physical target classes do not replace relation, hero/organic or vulnerability qualifiers; consumers MUST implement retained qualifiers or reject unsupported evidence explicitly rather than discarding tokens.
+
+Native spell carriers honor spell immunity; independent Barrage arrows remain ordinary weapon damage and do not inherit that spell-only restriction. Both families exclude invulnerable targets at launch and revalidate invulnerability at impact, before any damage, buff or cleanse mutation. A committed missile does not rerun launch visibility selection during flight.
+
+### 8.2 Native projections and removal
 
 A temporary morph or ability-disable projection MUST NOT overwrite the logical unit's persistent movement/armor/passive baseline or its cold resurrection definition. Removing explicitly listed permanent grants operates on the live baseline, not on a snapshot whose passives may currently be suppressed. After native morph removal, the current baseline is projected again; unrelated grants remain intact.
 

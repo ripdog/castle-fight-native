@@ -56,7 +56,7 @@ was introduced. Production and direct spawning share resolved definitions.
 The source `sapper` flag is now available as authoritative `combat_sapper`, and
 `Avul` is represented separately from spell immunity. Synthetic entities must
 explicitly opt into the sapper class; not every flying entity is a combat sapper.
-The integrated Shrine/caster content shares one authoritative classification field; runtime mask consumers still require the negative-case audit below.
+The integrated Shrine/caster content shares one authoritative classification field; Hex and native tower consumers now have reusable class/Avul negative cases. Native Phoenix visibility and unit/structure DOT live-immunity/structure-classification transport still need closure.
 
 ### Dragonhawk Rider
 
@@ -147,7 +147,7 @@ nearest-unvisited rule is distinct from Healing Wave's least-HP rule.
 profiles, native target history and healing falloff, original launch identity,
 current homing position/tick and live projected arrival. Native DOT final-pulse
 policy and new intrinsic classifications are also canonical/snapshotted.
-The integrated compatibility constants are bundle schema 5, checksum schema 18,
+The integrated compatibility constants are bundle schema 5, checksum schema 19,
 snapshot schema 15. Independent post-cast order recovery is canonical status,
 not removable native stun. Final content/release/source publication remains open.
 

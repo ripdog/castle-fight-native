@@ -267,6 +267,9 @@ impl Simulation {
     }
 
     pub(super) fn hex_trigger_eligible(&self, unit: &UnitSnapshot, version: MapVersion) -> bool {
+        if !unit.classifications.combat_sapper || unit.classifications.invulnerable {
+            return false;
+        }
         let code = self
             .world
             .entity(unit.entity)

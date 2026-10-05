@@ -98,19 +98,28 @@ fn retained_control_deadlines_are_separate_from_native_duration_and_mana_cadence
 fn retained_mana_gate_casts_on_exact_seconds_not_rounded_per_tick_rates() {
     let spell = city_spellcasting_for_version(MapVersion::CASTLE_FIGHT_9_27);
     let mut sim = Simulation::new(control_test_config(), 1);
-    sim.spawn_unit(UnitSpawn {
-        team: Team(1),
-        position: SimPoint::new(20 * SUBUNITS_PER_WORLD_UNIT, 0),
-        health: 1000,
-        attack: AttackProfile {
-            damage: 0,
-            range: 0,
-            acquisition_range: 0,
-            cooldown_ticks: 1,
-            delivery: AttackDelivery::Melee,
+    sim.spawn_unit_with_properties(
+        UnitSpawn {
+            team: Team(1),
+            position: SimPoint::new(20 * SUBUNITS_PER_WORLD_UNIT, 0),
+            health: 1000,
+            attack: AttackProfile {
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 1,
+                delivery: AttackDelivery::Melee,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
         },
-        movement: MovementProfile { speed_per_tick: 0 },
-    });
+        UnitGameplayProperties {
+            classifications: UnitClassifications {
+                combat_sapper: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    );
     let source = sim.spawn_building(BuildingSpawn {
         team: Team(0),
         footprint: BuildingFootprint::new(0, 10, 1, 1),

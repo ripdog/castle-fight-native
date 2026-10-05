@@ -93,17 +93,36 @@ impl Projection {
             .unwrap_or_else(|| value.as_str().unwrap().parse().unwrap())
     }
     fn targets(&self, object: &str) -> AttackTargetMask {
-        let tokens: Vec<_> = self.fields[object]["atar"]
-            .as_str()
-            .unwrap()
-            .split(',')
-            .collect();
-        AttackTargetMask::from_capabilities(
-            tokens.contains(&"ground"),
-            tokens.contains(&"air"),
-            tokens.contains(&"structure"),
-        )
+        hostile_native_targets(self.fields[object]["atar"].as_str().unwrap())
+            .expect("native target qualifiers must be supported explicitly")
     }
+}
+
+/// This implementation supports hostile relation plus explicit physical target classes only.
+/// Do not silently erase qualifiers (hero, organic, vulnerability, etc.) from future evidence.
+fn hostile_native_targets(mask: &str) -> Result<AttackTargetMask, &'static str> {
+    let mut seen = 0_u8;
+    for token in mask.split(',').map(str::trim) {
+        let bit = match token {
+            "ground" => 1,
+            "air" => 2,
+            "structure" => 4,
+            "enemy" | "enemies" => 8,
+            _ => return Err("unsupported hostile native target qualifier"),
+        };
+        if seen & bit != 0 {
+            return Err("duplicate hostile native target qualifier");
+        }
+        seen |= bit;
+    }
+    if seen & 8 == 0 || seen & 7 == 0 {
+        return Err("hostile native targeting requires enemy relation and a physical class");
+    }
+    Ok(AttackTargetMask::from_capabilities(
+        seen & 1 != 0,
+        seen & 2 != 0,
+        seen & 4 != 0,
+    ))
 }
 
 fn projection(

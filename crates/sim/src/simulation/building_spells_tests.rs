@@ -21,6 +21,16 @@ fn spawn(team: u8) -> UnitSpawn {
         movement: MovementProfile { speed_per_tick: 6 },
     }
 }
+fn combat_properties() -> UnitGameplayProperties {
+    UnitGameplayProperties {
+        classifications: UnitClassifications {
+            combat_sapper: true,
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
 fn profile() -> HexEffectProfile {
     let form = |rawcode, speed_per_tick, collision_radius| HexFormProfile {
         rawcode,
@@ -101,7 +111,7 @@ fn defender_properties() -> UnitGameplayProperties {
             armor_type: ArmorType::Large,
         },
         collision_radius: Some(CollisionRadius(7)),
-        ..Default::default()
+        ..combat_properties()
     }
 }
 fn caster(
@@ -134,7 +144,7 @@ fn caster(
 #[test]
 fn shields_intercept_after_spending_and_heal_only_the_first_greater_charge() {
     let mut sim = simulation(1);
-    let target = sim.spawn_unit(spawn(1));
+    let target = sim.spawn_unit_with_properties(spawn(1), combat_properties());
     sim.world
         .entity_mut(entity(&sim, target))
         .get_mut::<Health>()
@@ -341,6 +351,88 @@ fn early_dispel_does_not_cancel_defender_callbacks_and_failed_hex_is_not_undefen
 }
 
 #[test]
+fn hex_selector_requires_combat_sapper_and_excludes_avul_without_flattening_native_failure() {
+    for (classifications, selected) in [
+        (UnitClassifications::default(), false),
+        (
+            UnitClassifications {
+                combat_sapper: true,
+                invulnerable: true,
+                ..Default::default()
+            },
+            false,
+        ),
+        (
+            UnitClassifications {
+                combat_sapper: true,
+                spell_immune: true,
+                ..Default::default()
+            },
+            true,
+        ),
+        (
+            UnitClassifications {
+                combat_sapper: true,
+                hero: true,
+                ..Default::default()
+            },
+            true,
+        ),
+    ] {
+        let mut sim = simulation(1);
+        let target = sim.spawn_unit_with_properties(
+            spawn(1),
+            UnitGameplayProperties {
+                classifications,
+                ..Default::default()
+            },
+        );
+        let source = caster(
+            &mut sim,
+            0,
+            AbilityEffect::Hex { profile: profile() },
+            ManaProfile::per_second(1, 1, 0),
+            1,
+        );
+        assert_eq!(sim.step().ability_casts, usize::from(selected));
+        assert_eq!(
+            sim.building(source).unwrap().mana_current,
+            Some(i32::from(!selected))
+        );
+        if selected {
+            assert_eq!(state(&sim, target).callbacks.len(), 1);
+            assert_eq!(
+                state(&sim, target).hex.is_some(),
+                !classifications.spell_immune
+            );
+        } else {
+            assert!(!sim.world.iter_entities().any(|entity| {
+                entity
+                    .get::<BuildingSpellTargetState>()
+                    .is_some_and(|state| state.target == target)
+            }));
+        }
+        // The same predicate used by live commitment must reject a class change
+        // even if an earlier evaluation observed a valid combat sapper.
+        let mut snapshot = sim
+            .snapshot_units()
+            .into_iter()
+            .find(|unit| unit.id == target)
+            .unwrap();
+        snapshot.classifications = UnitClassifications {
+            combat_sapper: true,
+            ..Default::default()
+        };
+        assert!(sim.hex_trigger_eligible(&snapshot, profile().map_version));
+        snapshot.classifications.invulnerable = true;
+        assert!(!sim.hex_trigger_eligible(&snapshot, profile().map_version));
+        snapshot.classifications.invulnerable = false;
+        snapshot.classifications.combat_sapper = false;
+        assert!(!sim.hex_trigger_eligible(&snapshot, profile().map_version));
+    }
+}
+
+#[test]
 fn hex_selection_excludes_hidden_markers_but_not_air_mechanical_or_native_immunity() {
     let mut sim = simulation(1);
     let target = sim.spawn_unit_with_properties(
@@ -350,13 +442,14 @@ fn hex_selection_excludes_hidden_markers_but_not_air_mechanical_or_native_immuni
             mechanical: true,
             build_time_ticks: Some(30),
             classifications: UnitClassifications {
+                combat_sapper: true,
                 spell_immune: true,
                 ..Default::default()
             },
             ..Default::default()
         },
     );
-    let ally = sim.spawn_unit(spawn(0));
+    let ally = sim.spawn_unit_with_properties(spawn(0), combat_properties());
     sim.set_negative_building_markers(target, false, true);
     let source = caster(
         &mut sim,
