@@ -501,6 +501,8 @@ pub struct BuildingView {
     pub ability_cast_sequence: Option<u64>,
     pub ability_autocast_enabled: Option<bool>,
     pub stunned_until_tick: Option<u64>,
+    /// Presentation readback of authoritative status, including passive structure buffs.
+    pub status: StatusState,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -4234,6 +4236,7 @@ fn building_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<B
         footprint: *entity.get::<BuildingFootprint>()?,
         health: entity.get::<Health>()?.current,
         health_max: entity.get::<Health>()?.max,
+        status: entity.get::<StatusState>().copied().unwrap_or_default(),
         construction_started_tick: construction.map(|state| state.started_tick),
         construction_complete_tick: construction.map(|state| state.complete_tick),
         production,

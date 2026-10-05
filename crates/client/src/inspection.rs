@@ -2130,6 +2130,7 @@ fn active_effect_badges(
                 beneficial: false,
             });
         }
+        append_damage_over_time_badges(&mut effects, &building.status, tick);
         return effects;
     }
     let Some(unit) = samples.current.units.get(&id) else {
@@ -2217,7 +2218,16 @@ fn active_effect_badges(
             beneficial: modifier.armor_bonus_per_100 >= 0,
         });
     }
-    for modifier in unit.status.damage_over_time[..usize::from(unit.status.damage_over_time_count)]
+    append_damage_over_time_badges(&mut effects, &unit.status, tick);
+    effects
+}
+
+fn append_damage_over_time_badges(
+    effects: &mut Vec<ActiveEffectBadgeData>,
+    status: &castle_fight_sim::StatusState,
+    tick: u64,
+) {
+    for modifier in status.damage_over_time[..usize::from(status.damage_over_time_count)]
         .iter()
         .filter(|modifier| modifier.expires_tick > tick)
     {
@@ -2229,12 +2239,14 @@ fn active_effect_badges(
             description: format!(
                 "{} damage/pulse ({}s)",
                 modifier.damage_per_pulse,
-                remaining(modifier.expires_tick)
+                modifier
+                    .expires_tick
+                    .saturating_sub(tick)
+                    .div_ceil(CASTLE_FIGHT_SIMULATION_HZ as u64)
             ),
             beneficial: false,
         });
     }
-    effects
 }
 
 fn update_active_effect_icons(
@@ -3467,6 +3479,46 @@ mod tests {
     }
 
     #[test]
+    fn passive_structure_burn_badges_read_status_without_mutation_and_expire() {
+        let mut simulation = castle_fight_sim::Simulation::new(SimulationConfig::default(), 1);
+        let id = simulation.spawn_building(castle_fight_sim::BuildingSpawn {
+            team: Team(1),
+            footprint: BuildingFootprint::new(5, 0, 1, 1),
+            health: 100,
+            production: None,
+            attack: None,
+            spellcasting: None,
+        });
+        let mut samples = empty_samples();
+        samples.current = PresentationSnapshot::capture(&simulation);
+        samples.current.tick = 10;
+        let status = &mut samples.current.buildings.get_mut(&id).unwrap().status;
+        status.damage_over_time_count = 1;
+        status.damage_over_time[0].id = castle_fight_sim::ModifierId(123);
+        status.damage_over_time[0].damage_per_pulse = 4;
+        status.damage_over_time[0].expires_tick = 20;
+        let before = *status;
+        let catalog = crate::ui_icons::CastleFightPresentationCatalog::for_version(
+            castle_fight_sim::CASTLE_FIGHT_DEFAULT_MAP_VERSION,
+        )
+        .unwrap();
+        let effects = active_effect_badges(id, &samples, catalog);
+        assert_eq!(effects.len(), 1);
+        assert_eq!(
+            effects[0].icon,
+            UiIconKey::StatusEffect {
+                ability: 123,
+                role: UiStatusIconRole::Primary
+            }
+        );
+        assert_eq!(effects[0].description, "4 damage/pulse (1s)");
+        assert!(!effects[0].beneficial);
+        assert_eq!(samples.current.buildings[&id].status, before);
+        samples.current.tick = 20;
+        assert!(active_effect_badges(id, &samples, catalog).is_empty());
+    }
+
+    #[test]
     fn picking_building_uses_authoritative_footprint() {
         let mut samples = empty_samples();
         samples.current.buildings.insert(
@@ -3498,6 +3550,7 @@ mod tests {
                 ability_ready_tick: None,
                 ability_autocast_enabled: None,
                 stunned_until_tick: None,
+                status: castle_fight_sim::StatusState::default(),
                 visual_kind: BuildingVisualKind::Production,
             },
         );

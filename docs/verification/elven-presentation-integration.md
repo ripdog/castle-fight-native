@@ -56,6 +56,32 @@ Native structure-buff lifetime/attachment visuals and loading still need
 integrated review. Script City/Shield/Overheat art is now present in the
 regenerated pack, but appearance/lifecycle is not established by delivery.
 
+## Integrated structure-status readback
+
+The presentation bridge copies the authoritative `StatusState` for every
+building, including passive structures without attack or spellcasting state.
+The existing damage-over-time badge reader is shared by units and structures;
+it uses the retained modifier identity, damage and expiry rather than a copied
+Phoenix tuning table. Badge inspection is read-only and hides expired entries.
+
+Synthetic regressions cover passive-structure burn status, wire restoration,
+one/four-worker continuation, expiry and unchanged simulation checksums during
+capture. All 396 simulation tests, 218 client tests (three ignored), and strict
+simulation/client all-target Clippy passed, including the passive-structure
+badge lifetime/nonmutation regression. This transport/UI work does **not** establish persistent model spawning,
+source-authored attachment placement, current-pack loading or rendered fidelity.
+No authoritative state or schema changed: compatibility remains bundle 6,
+checksum 21, snapshot 16. Elven is still unpromoted.
+
+The expanded debug catalog also outgrew the historical single-column planner.
+Both debug-menu failures reproduced without status changes. The separate bounded
+column planner preserves source footprints, ownership, definition order and
+behind-castle placement, with a dense fallback and pre-mutation rejection when
+space is genuinely insufficient. All six focused layout tests and 216 client
+tests passed (three ignored), as did strict client Clippy after separate immutable
+render-input grouping. This developer fixture does not bypass normal race
+selection or imply Elven promotion.
+
 ## Historical branch validation
 
 Standalone client tests: **212 passed, 3 ignored**; protocol **9 passed**. Workspace all-target Clippy with `-D warnings`: passed (`/tmp/presentation-completion-clippy.log`). Presentation projection tests: **5 passed**. Workspace test run reached the existing TCP timing failure `tcp_duplicate_command_is_acknowledged_once_and_finalized_once` after client/protocol success; combined integration must rerun serially and report the result honestly. No native game/screenshot comparison is claimed by this branch.

@@ -160,6 +160,7 @@ pub struct BuildingSample {
     pub ability_ready_tick: Option<u64>,
     pub ability_autocast_enabled: Option<bool>,
     pub stunned_until_tick: Option<u64>,
+    pub status: StatusState,
     pub visual_kind: BuildingVisualKind,
 }
 
@@ -284,6 +285,7 @@ impl PresentationSnapshot {
                         ability_ready_tick: building.ability_ready_tick,
                         ability_autocast_enabled: building.ability_autocast_enabled,
                         stunned_until_tick: building.stunned_until_tick,
+                        status: building.status,
                         visual_kind,
                     },
                 )
@@ -460,6 +462,99 @@ mod tests {
         assert!(sample.repair_autocast_enabled);
         assert_eq!(sample.blink_range, human.profile.blink_range);
         assert_eq!(sample.build_catalog_len, expected_build_catalog_len);
+    }
+
+    #[test]
+    fn capture_preserves_passive_structure_status_through_wire_and_expiry_without_mutation() {
+        use castle_fight_sim::{
+            AbilityEffect, AbilityTargetPolicy, AttackTargetMask, AutomaticAbilityProfile,
+            BuildingSpawn, ManaProfile, NativeBoltProfile, SpellcastingProfile,
+        };
+        let mut original = Simulation::new(SimulationConfig::default(), 1);
+        original.spawn_unit_with_spellcasting(
+            UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(0, 0),
+                health: 100,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::Melee,
+                    damage: 0,
+                    range: 0,
+                    acquisition_range: 0,
+                    cooldown_ticks: 1,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            SpellcastingProfile {
+                mana: ManaProfile::per_second(0, 0, 0),
+                ability: AutomaticAbilityProfile {
+                    id: AbilityId(2),
+                    mana_cost: 0,
+                    cooldown_ticks: 500,
+                    range: 10 * SUBUNITS_PER_WORLD_UNIT,
+                    target_policy: AbilityTargetPolicy::RandomEnemyUnitOrBuilding,
+                    effect: AbilityEffect::PhoenixFire(NativeBoltProfile {
+                        ability: AbilityId(3),
+                        damage: 1,
+                        stun_ticks: 0,
+                        hero_stun_ticks: 0,
+                        damage_per_second: 1,
+                        duration_ticks: 90,
+                        speed_per_tick: SUBUNITS_PER_WORLD_UNIT,
+                        cleanse: false,
+                        targets: AttackTargetMask::ALL,
+                    }),
+                },
+            },
+        );
+        let target = original.spawn_building(BuildingSpawn {
+            team: Team(1),
+            footprint: BuildingFootprint::new(5, 0, 1, 1),
+            health: 100,
+            production: None,
+            attack: None,
+            spellcasting: None,
+        });
+        assert_eq!(
+            PresentationSnapshot::capture(&original).buildings[&target].status,
+            StatusState::default()
+        );
+        original.step();
+        let impact = original.projectiles()[0].impact_tick;
+        while original.tick() <= impact {
+            original.step();
+        }
+        let status = original.building(target).unwrap().status;
+        assert_eq!(status.damage_over_time_count, 1);
+        let content = castle_fight_sim::castle_fight_content_bundle(
+            castle_fight_sim::CASTLE_FIGHT_DEFAULT_MAP_VERSION,
+        )
+        .unwrap();
+        let wire = original.capture_snapshot().encode_wire().unwrap();
+        let decoded = castle_fight_sim::SimulationSnapshot::decode_wire(&wire, content).unwrap();
+        let mut restored = Simulation::new(SimulationConfig::default(), 4);
+        restored.restore_snapshot(&decoded).unwrap();
+        let expiry = status.damage_over_time[0].expires_tick;
+        while original.tick() <= expiry {
+            let before = original.checksum();
+            let sample = PresentationSnapshot::capture(&original);
+            assert_eq!(
+                sample.buildings[&target].status,
+                original.building(target).unwrap().status
+            );
+            assert_eq!(
+                sample.buildings[&target].status,
+                PresentationSnapshot::capture(&restored).buildings[&target].status
+            );
+            assert_eq!(original.checksum(), before);
+            assert_eq!(original.step().checksum, restored.step().checksum);
+        }
+        assert_eq!(
+            PresentationSnapshot::capture(&original).buildings[&target]
+                .status
+                .damage_over_time_count,
+            0
+        );
     }
 
     #[test]

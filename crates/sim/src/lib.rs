@@ -32,12 +32,12 @@ pub use components::{
     BurningOilEffectProfile, ChainLightningEffectProfile, CollisionRadius, ContentIdentity,
     CorpseDefinitionId, CorpseProfile, CriticalStrikeEffectProfile, DefendEffectProfile,
     EntanglingRootsEffectProfile, EvasionEffectProfile, FeedbackEffectProfile,
-    GameplayBundleIdentity, MAX_AUTOMATIC_ABILITIES, ManaProfile, ManaRegeneration, ModifierId,
-    MovementClass, MovementProfile, Owner, PassiveUnitEffect, PassiveUnitEffects, PlayerId,
-    ProductionProfile, ResolvedUnitDefinition, SecondaryAttackProfile, SecondaryResurrectionState,
-    SimId, SpellcastingProfile, SplashFalloffProfile, StatusState, Team, TriggeredAttackEffect,
-    TriggeredSpellProcProfile, UnitClassifications, UnitGameplayProperties, UnitSpawn,
-    UnitTemplate,
+    GameplayBundleIdentity, HealingWaveProfile, MAX_AUTOMATIC_ABILITIES, ManaProfile,
+    ManaRegeneration, ModifierId, MovementClass, MovementProfile, NativeBoltProfile, Owner,
+    PassiveUnitEffect, PassiveUnitEffects, PlayerId, ProductionProfile, ResolvedUnitDefinition,
+    SecondaryAttackProfile, SecondaryResurrectionState, SimId, SpellcastingProfile,
+    SplashFalloffProfile, StatusState, Team, TriggeredAttackEffect, TriggeredSpellProcProfile,
+    UnitClassifications, UnitGameplayProperties, UnitSpawn, UnitTemplate,
 };
 pub use content::{
     CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION, CASTLE_FIGHT_CONTENT_REVISION_927,

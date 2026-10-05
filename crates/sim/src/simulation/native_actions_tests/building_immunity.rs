@@ -55,6 +55,11 @@ fn burnt_structure() -> (Simulation, SimId, TimedDamageOverTime) {
     assert_eq!(original.building(target).unwrap().health, 93);
     let status = status(&original, target);
     assert_eq!(status.damage_over_time_count, 1);
+    assert_eq!(original.building(target).unwrap().status, status);
+    assert_eq!(
+        wire_restore(&original).building(target).unwrap().status,
+        status
+    );
     (original, target, status.damage_over_time[0])
 }
 
