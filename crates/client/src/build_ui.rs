@@ -243,6 +243,12 @@ struct BuildPlacementGhost {
     rawcode: u32,
 }
 
+#[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
+struct PlacedBuildGhost {
+    owner: PlayerId,
+    footprint: BuildingFootprint,
+}
+
 #[derive(Component)]
 struct BuildPlacementGhostAnimationController;
 
@@ -263,6 +269,16 @@ struct BuildPreviewResources<'w> {
 struct BuildPreviewMaterialResources<'w> {
     materials: ResMut<'w, Assets<StandardMaterial>>,
     preview_materials: ResMut<'w, BuildPreviewMaterials>,
+}
+
+#[derive(SystemParam)]
+struct PlacedBuildResources<'w> {
+    authoritative: Res<'w, AuthoritativeSimulation>,
+    selected_match: Res<'w, SelectedMatch>,
+    samples: Res<'w, PresentationSamples>,
+    metrics: Res<'w, WorldMetrics>,
+    terrain: Res<'w, TerrainSurface>,
+    models: Res<'w, BuildingModelSet>,
 }
 
 type ActionInteractions<'w, 's> = Query<
@@ -300,6 +316,18 @@ type BuildPlacementGhosts<'w, 's> = Query<
         &'static mut Transform,
         &'static mut Visibility,
     ),
+    Without<PlacedBuildGhost>,
+>;
+
+type PlacedBuildGhosts<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static BuildPlacementGhost,
+        &'static mut PlacedBuildGhost,
+        &'static mut Transform,
+        &'static mut Visibility,
+    ),
 >;
 
 type BuildGhostMeshMaterials<'w, 's> = Query<
@@ -333,11 +361,13 @@ impl Plugin for BuildUiPlugin {
                     handle_production_train_hotkey,
                     populate_action_panel,
                     handle_action_panel_buttons,
-                    handle_action_panel_right_click,
-                    style_action_panel_buttons,
+                    handle_action_panel_right_click
+                        .before(crate::builder_controls::BuilderCommandInput),
+                    style_action_panel_buttons.after(crate::builder_controls::BuilderCommandInput),
                     animate_autocast_particles,
                     update_build_tooltip,
                     update_build_preview,
+                    sync_placed_build_ghosts,
                 )
                     .chain(),
             )
@@ -345,9 +375,9 @@ impl Plugin for BuildUiPlugin {
                 Update,
                 (
                     sync_build_preview_ghost_materials
-                        .after(update_build_preview)
+                        .after(sync_placed_build_ghosts)
                         .after(fix_wc3_scene_materials),
-                    setup_build_preview_ghost_animation_players.after(update_build_preview),
+                    setup_build_preview_ghost_animation_players.after(sync_placed_build_ghosts),
                 ),
             );
     }
@@ -1871,6 +1901,90 @@ fn update_build_preview(
     }
 }
 
+fn sync_placed_build_ghosts(
+    mut commands: Commands,
+    resources: PlacedBuildResources<'_>,
+    mut ghosts: PlacedBuildGhosts<'_, '_>,
+) {
+    let PlacedBuildResources {
+        authoritative,
+        selected_match,
+        samples,
+        metrics,
+        terrain,
+        models,
+    } = resources;
+    let sites = placed_build_sites(&authoritative, selected_match.content, &samples);
+    for (_, _, _, mut visibility) in &mut ghosts {
+        *visibility = Visibility::Hidden;
+    }
+    for (owner, rawcode, footprint) in sites {
+        let site = PlacedBuildGhost { owner, footprint };
+        let Some(model) = models.get(rawcode) else {
+            continue;
+        };
+        let (mut center, _) = metrics.footprint_center_size(footprint);
+        center.y = building_terrain_height(&metrics, &terrain, footprint);
+        let transform = Transform {
+            translation: center,
+            rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
+            scale: Vec3::splat(model.scale),
+        };
+        if let Some((_, mut placed, mut ghost_transform, mut visibility)) =
+            ghosts.iter_mut().find(|(ghost, placed, _, visibility)| {
+                ghost.rawcode == rawcode
+                    && placed.owner == owner
+                    && **visibility == Visibility::Hidden
+            })
+        {
+            *placed = site;
+            *ghost_transform = transform;
+            *visibility = Visibility::Visible;
+            continue;
+        }
+        commands.spawn((
+            Name::new(format!(
+                "WC3 ordered building ghost {}",
+                String::from_utf8_lossy(&rawcode.to_be_bytes())
+            )),
+            WorldAssetRoot(model.scene.clone()),
+            Wc3TeamTint::new(owner.0, player_color(owner), "wc3/buildings"),
+            transform,
+            Visibility::Visible,
+            BuildPlacementGhost { rawcode },
+            site,
+        ));
+    }
+}
+
+fn placed_build_sites(
+    authoritative: &AuthoritativeSimulation,
+    content: &CastleFightContentBundle,
+    samples: &PresentationSamples,
+) -> Vec<(PlayerId, u32, BuildingFootprint)> {
+    let projection = authoritative
+        .pending_build_commands
+        .project(&authoritative.simulation, content);
+    let mut sites: Vec<_> = projection
+        .orders
+        .values()
+        .map(|order| (order.owner, order.content.rawcode, order.footprint))
+        .collect();
+    // Network presentation deliberately buffers ticks. Keep the shell visible between builder
+    // arrival in the latest boundary and the construction model appearing in the render sample.
+    if samples.current.tick < authoritative.simulation.tick() {
+        for building in authoritative.simulation.buildings() {
+            if building.construction_complete_tick.is_some()
+                && !samples.current.buildings.contains_key(&building.id)
+                && let (Some(owner), Some(content)) = (building.owner, building.content)
+            {
+                sites.push((owner, content.rawcode, building.footprint));
+            }
+        }
+    }
+    sites
+}
+
 fn setup_build_preview_ghost_animation_players(
     mut commands: Commands,
     building_models: Res<BuildingModelSet>,
@@ -2010,9 +2124,13 @@ fn can_afford_build_kind(
     let Some(actor) = state.actor else {
         return false;
     };
+    let Some(builder) = authoritative.simulation.builder(actor) else {
+        return false;
+    };
     authoritative
-        .simulation
-        .can_builder_afford_building(actor, kind.economy(content))
+        .pending_build_commands
+        .project(&authoritative.simulation, content)
+        .can_afford(actor, builder.owner, kind.economy(content))
 }
 
 pub(crate) fn try_arm_build_target(
@@ -2169,8 +2287,11 @@ fn insufficient_resources_status(
         .map(|builder| builder.owner)
         .expect("build action requires an owned builder");
     let resources = authoritative
-        .simulation
-        .player_resources_for(owner)
+        .pending_build_commands
+        .project(&authoritative.simulation, content)
+        .resources
+        .get(&owner)
+        .copied()
         .expect("controllable builder owner must have economy state");
     format!(
         "Cannot afford {}: need {} gold / {} lumber; currently {} / {} committed/free.",
@@ -2995,6 +3116,87 @@ mod tests {
         assert_eq!(world.get::<Visibility>(root), Some(&Visibility::Hidden));
         assert!(world.get::<BuildPlacementGhost>(root).is_some());
         assert!(world.get::<BuildGhostMaterial>(mesh).is_some());
+    }
+
+    #[test]
+    fn placed_ghost_hands_off_to_construction_without_a_gap() {
+        let demo = create_demo_world(1, None);
+        let builder = demo.simulation.builder_for_player(PlayerId(0)).unwrap();
+        let kind = CastleFightBuildingKind::Production(ProductionKind::Barracks);
+        let position = crate::build_orders::tests::legal_position(
+            &demo.simulation,
+            demo.content,
+            builder.team,
+            kind,
+        );
+        let initial = crate::bridge::PresentationSnapshot::capture(&demo.simulation);
+        let mut display = PresentationSamples::new(initial.clone());
+        let mut latest = PresentationSamples::new(initial);
+        let mut authoritative = AuthoritativeSimulation::new(demo.simulation, demo.content);
+        authoritative.submit_local_command(
+            builder.owner,
+            PlayerCommand::PlaceBuilding {
+                builder: builder.id,
+                building: kind.stable_id(),
+                position,
+            },
+        );
+        let ordered = placed_build_sites(&authoritative, demo.content, &display);
+        assert_eq!(ordered.len(), 1);
+        let mut steps = 0;
+        loop {
+            crate::advance_authoritative_simulation_once(&mut authoritative, &mut latest).unwrap();
+            assert_eq!(
+                placed_build_sites(&authoritative, demo.content, &display),
+                ordered
+            );
+            if authoritative
+                .simulation
+                .builder(builder.id)
+                .unwrap()
+                .build_footprint
+                .is_none()
+            {
+                break;
+            }
+            steps += 1;
+            assert!(
+                steps < 1_000,
+                "builder must eventually reach the fixture site"
+            );
+        }
+        display.publish(crate::bridge::PresentationSnapshot::capture(
+            &authoritative.simulation,
+        ));
+        assert!(placed_build_sites(&authoritative, demo.content, &display).is_empty());
+    }
+
+    #[test]
+    fn cursor_preview_cancellation_preserves_ordered_ghost() {
+        let mut world = World::new();
+        let cursor = world
+            .spawn((
+                BuildPlacementGhost { rawcode: 1 },
+                Transform::default(),
+                Visibility::Visible,
+            ))
+            .id();
+        let ordered = world
+            .spawn((
+                BuildPlacementGhost { rawcode: 1 },
+                PlacedBuildGhost {
+                    owner: PlayerId(0),
+                    footprint: BuildingFootprint::new(0, 0, 1, 1),
+                },
+                Transform::default(),
+                Visibility::Visible,
+            ))
+            .id();
+        let mut state =
+            bevy::ecs::system::SystemState::<BuildPlacementGhosts<'_, '_>>::new(&mut world);
+        hide_build_preview_ghosts(&mut state.get_mut(&mut world).unwrap());
+        assert_eq!(world.get::<Visibility>(cursor), Some(&Visibility::Hidden));
+        assert_eq!(world.get::<Visibility>(ordered), Some(&Visibility::Visible));
     }
 
     #[test]

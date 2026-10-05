@@ -115,15 +115,13 @@ An accepted pending builder construction order reserves its canonical footprint 
 
 ## 8. Prediction and reconciliation
 
-For low latency, the client MAY show a speculative building immediately after sending placement.
+Submitting a building placement immediately displays a ghost of that building at the requested footprint and updates the resource bar and build affordability to include its reserved cost. The ghost remains while the builder approaches construction range, then gives way to the authoritative construction model. Replacing or cancelling an order releases its ghost and reserved cost; rejected commands restore the authoritative display. This immediate feedback is client-local projection and MUST NOT advance simulation, spend authoritative resources, or change canonical command ordering. Ghosts consume the pending order's versioned content identity and the resolved presentation catalog.
 
 Speculative presentation MUST be visibly/reliably reconcilable:
 
-- acceptance: convert/bind to authoritative `SimId` once command is applied;
+- acceptance: retain the ghost from the authoritative builder order, then hand off to the construction site's `SimId` once the builder reaches construction range;
 - rejection: remove speculative object and display reason;
 - altered schedule: keep visual feedback without assuming production/resources begin before authoritative tick.
-
-An early implementation MAY simply wait for acceptance to reduce complexity.
 
 ## 9. Command identity
 

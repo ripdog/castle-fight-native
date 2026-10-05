@@ -22,11 +22,16 @@ use crate::{
 
 pub(crate) struct BuilderControlPlugin;
 
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct BuilderCommandInput;
+
 impl Plugin for BuilderControlPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            handle_selection_commands.after(crate::inspection::handle_world_selection),
+            handle_selection_commands
+                .in_set(BuilderCommandInput)
+                .after(crate::inspection::handle_world_selection),
         );
     }
 }

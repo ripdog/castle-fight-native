@@ -119,7 +119,7 @@ impl Plugin for ResourceUiPlugin {
             .add_systems(
                 Update,
                 (
-                    update_resource_bar,
+                    update_resource_bar.after(crate::builder_controls::BuilderCommandInput),
                     sync_builder_shortcuts,
                     handle_builder_shortcut_click,
                     update_builder_shortcut_visuals,
@@ -650,6 +650,7 @@ type ResourceTextQuery<'w, 's> = Query<
 >;
 
 fn update_resource_bar(
+    authoritative: Res<AuthoritativeSimulation>,
     selected_match: Res<SelectedMatch>,
     inspection: Res<InspectionSelection>,
     presentation: Res<PresentationSamples>,
@@ -692,7 +693,13 @@ fn update_resource_bar(
                 .get(&selected_match.local_player)
         })
         .expect("local player must have presentation economy state");
-    let resources = economy.resources;
+    let resources = authoritative
+        .pending_build_commands
+        .project(&authoritative.simulation, selected_match.content)
+        .resources
+        .get(&selected_player)
+        .copied()
+        .unwrap_or(economy.resources);
 
     progress.width = percent(f32::from(economy.income_progress_per_10k) / 100.0);
 
@@ -791,6 +798,80 @@ mod tests {
             .query_filtered::<&Text, With<PerformanceText>>();
         let text = performance.single(app.world()).expect("performance text");
         assert_eq!(text.0, "FPS --\nTICK 0");
+
+        let kind = castle_fight_sim::CastleFightBuildingKind::Production(
+            castle_fight_sim::CastleFightProductionKind::Barracks,
+        );
+        let builder = app
+            .world()
+            .resource::<AuthoritativeSimulation>()
+            .simulation
+            .builder_for_player(PlayerId(0))
+            .unwrap();
+        let before = app
+            .world()
+            .resource::<AuthoritativeSimulation>()
+            .simulation
+            .player_resources_for(builder.owner)
+            .unwrap();
+        let position = crate::build_orders::tests::legal_position(
+            &app.world().resource::<AuthoritativeSimulation>().simulation,
+            demo.content,
+            builder.team,
+            kind,
+        );
+        let cost = kind.economy(demo.content).unwrap();
+        app.world_mut()
+            .resource_mut::<AuthoritativeSimulation>()
+            .submit_local_command(
+                builder.owner,
+                castle_fight_sim::PlayerCommand::PlaceBuilding {
+                    builder: builder.id,
+                    building: kind.stable_id(),
+                    position,
+                },
+            );
+        app.update();
+        let gold = app
+            .world_mut()
+            .query_filtered::<&Text, With<GoldText>>()
+            .single(app.world())
+            .unwrap()
+            .0
+            .clone();
+        let lumber = app
+            .world_mut()
+            .query_filtered::<&Text, With<LumberText>>()
+            .single(app.world())
+            .unwrap()
+            .0
+            .clone();
+        assert_eq!(gold, (before.gold - cost.gold_cost).to_string());
+        assert_eq!(lumber, (before.lumber - cost.lumber_cost).to_string());
+        app.world_mut()
+            .resource_mut::<AuthoritativeSimulation>()
+            .submit_local_command(
+                builder.owner,
+                castle_fight_sim::PlayerCommand::StopBuilder {
+                    builder: builder.id,
+                },
+            );
+        app.update();
+        assert_eq!(
+            app.world_mut()
+                .query_filtered::<&Text, With<GoldText>>()
+                .single(app.world())
+                .unwrap()
+                .0,
+            before.gold.to_string()
+        );
+        assert_eq!(
+            app.world()
+                .resource::<AuthoritativeSimulation>()
+                .simulation
+                .tick(),
+            0
+        );
     }
 
     #[test]

@@ -1,4 +1,5 @@
 mod bridge;
+mod build_orders;
 mod build_ui;
 mod builder_controls;
 mod building_models;
@@ -114,6 +115,7 @@ pub(crate) struct AuthoritativeSimulation {
     simulation: Simulation,
     driver: MatchDriver,
     pending_feedback: Vec<CommandExecution>,
+    pending_build_commands: build_orders::PendingBuildCommands,
     pending_status: Vec<String>,
     expected_execution_batch: Option<(u64, Vec<WireCommandExecution>)>,
     catch_up: Option<SnapshotCatchUp>,
@@ -130,6 +132,7 @@ impl AuthoritativeSimulation {
             simulation,
             driver,
             pending_feedback: Vec::new(),
+            pending_build_commands: default(),
             pending_status: Vec::new(),
             expected_execution_batch: None,
             catch_up: None,
@@ -153,6 +156,7 @@ impl AuthoritativeSimulation {
             simulation,
             driver,
             pending_feedback: Vec::new(),
+            pending_build_commands: default(),
             pending_status: Vec::new(),
             expected_execution_batch: None,
             catch_up: None,
@@ -276,7 +280,7 @@ impl AuthoritativeSimulation {
                 }
             };
         }
-        match &mut self.authority {
+        let submission = match &mut self.authority {
             AuthorityMode::Local => ClientCommandSubmission::Local(
                 self.driver
                     .submit_local_command(&self.simulation, player, command),
@@ -310,13 +314,17 @@ impl AuthoritativeSimulation {
                     }
                     Err(error) => {
                         *connected = false;
+                        self.pending_build_commands.clear();
                         self.pending_status
                             .push(format!("Command not sent: {error}."));
                         ClientCommandSubmission::Failed
                     }
                 }
             }
-        }
+        };
+        self.pending_build_commands
+            .record(player, command, submission);
+        submission
     }
 }
 
@@ -1242,6 +1250,7 @@ fn handle_quicksave_hotkeys(
         authoritative.pending_feedback.clear();
         authoritative.expected_execution_batch = None;
         authoritative.catch_up = None;
+        authoritative.pending_build_commands.clear();
         *presentation =
             PresentationSamples::new(PresentationSnapshot::capture(&authoritative.simulation));
         Ok(completed_tick)
@@ -1385,9 +1394,16 @@ pub(crate) fn advance_authoritative_simulation_once(
         simulation,
         driver,
         pending_feedback,
+        pending_build_commands,
         ..
     } = authoritative;
     let result = driver.advance_local_tick(simulation)?;
+    for execution in &result.executions {
+        pending_build_commands.resolve(
+            execution.scheduled.player,
+            execution.scheduled.client_sequence.0,
+        );
+    }
     pending_feedback.extend(result.executions.iter().copied());
     presentation.publish(PresentationSnapshot::capture(simulation));
     Ok(result)
@@ -1410,6 +1426,7 @@ fn process_network_events(
     for event in events {
         match event {
             NetworkEvent::Disconnected(reason) => {
+                authoritative.pending_build_commands.clear();
                 presentation.freeze_network_timeline();
                 authoritative.catch_up = None;
                 authoritative.expected_execution_batch = None;
@@ -1534,6 +1551,14 @@ fn process_network_events(
                             reason,
                             duplicate,
                         } => {
+                            if let AuthorityMode::Network {
+                                assigned_player, ..
+                            } = authoritative.authority
+                            {
+                                authoritative
+                                    .pending_build_commands
+                                    .resolve(assigned_player, client_sequence);
+                            }
                             let duplicate = if duplicate { " duplicate" } else { "" };
                             format!(
                                 "Command #{client_sequence}{duplicate} rejected by server: {reason:?}."
@@ -1613,6 +1638,12 @@ fn process_network_events(
                             authoritative
                                 .pending_feedback
                                 .extend(result.executions.iter().copied());
+                            for execution in &result.executions {
+                                authoritative.pending_build_commands.resolve(
+                                    execution.scheduled.player,
+                                    execution.scheduled.client_sequence.0,
+                                );
+                            }
                             presentation.enqueue_network_tick(PresentationSnapshot::capture(
                                 &authoritative.simulation,
                             ));
@@ -1760,6 +1791,7 @@ fn begin_snapshot_catch_up(
     authoritative: &mut AuthoritativeSimulation,
     begin: SnapshotTransferBegin,
 ) -> Result<(), String> {
+    authoritative.pending_build_commands.clear();
     if authoritative.catch_up.is_some() {
         return Err(
             "server started a second snapshot transfer before the first completed".to_owned(),
@@ -2137,6 +2169,73 @@ mod tests {
             "the queued command must begin affecting gameplay only when its canonical tick executes"
         );
         assert_eq!(authoritative.simulation.tick(), 1);
+    }
+
+    #[test]
+    fn network_admission_rejection_rolls_back_construction_feedback() {
+        let demo = crate::demo::create_demo_world(1, None);
+        let builder = demo.simulation.builder_for_player(PlayerId(0)).unwrap();
+        let kind = castle_fight_sim::CastleFightBuildingKind::Production(
+            castle_fight_sim::CastleFightProductionKind::Barracks,
+        );
+        let position = crate::build_orders::tests::legal_position(
+            &demo.simulation,
+            demo.content,
+            builder.team,
+            kind,
+        );
+        let snapshot = PresentationSnapshot::capture(&demo.simulation);
+        let client = NetworkClient::connected_test_fixture(compatibility_identity_for_demo(&demo));
+        let mut authoritative = AuthoritativeSimulation::new_networked(
+            demo.simulation,
+            demo.content,
+            demo.match_config,
+            client,
+            builder.owner,
+            0,
+        );
+        let before = authoritative
+            .simulation
+            .player_resources_for(builder.owner)
+            .unwrap();
+        authoritative.pending_build_commands.record(
+            builder.owner,
+            PlayerCommand::PlaceBuilding {
+                builder: builder.id,
+                building: kind.stable_id(),
+                position,
+            },
+            ClientCommandSubmission::Submitted { client_sequence: 7 },
+        );
+        assert!(
+            authoritative
+                .pending_build_commands
+                .project(&authoritative.simulation, demo.content)
+                .orders
+                .contains_key(&builder.id)
+        );
+        let AuthorityMode::Network { client, .. } = &authoritative.authority else {
+            unreachable!();
+        };
+        client.inject_server_message_for_test(ServerMessage::CommandAcknowledged {
+            acknowledgement: CommandAcknowledgement::Rejected {
+                client_sequence: 7,
+                reason: castle_fight_protocol::WireAdmissionError::MatchNotRunning,
+                duplicate: false,
+            },
+        });
+        let mut presentation = PresentationSamples::new(snapshot);
+        let mut selected = SelectedMatch {
+            content: demo.content,
+            direct_buildings: demo.direct_buildings,
+            local_player: builder.owner,
+        };
+        process_network_events(&mut authoritative, &mut presentation, &mut selected, None).unwrap();
+        let rejected = authoritative
+            .pending_build_commands
+            .project(&authoritative.simulation, demo.content);
+        assert!(rejected.orders.is_empty());
+        assert_eq!(rejected.resources[&builder.owner], before);
     }
 
     #[test]

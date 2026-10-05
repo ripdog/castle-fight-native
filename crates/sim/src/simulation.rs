@@ -472,6 +472,7 @@ pub struct BuilderView {
     pub follow_target: Option<SimId>,
     pub repair_target: Option<SimId>,
     pub build_footprint: Option<BuildingFootprint>,
+    pub build_content: Option<ContentIdentity>,
     pub repair_autocast_enabled: bool,
 }
 
@@ -4153,6 +4154,9 @@ fn builder_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<Bu
         build_footprint: entity
             .get::<BuilderBuildOrder>()
             .map(|order| order.building.footprint),
+        build_content: entity
+            .get::<BuilderBuildOrder>()
+            .and_then(|order| order.properties.content),
         repair_autocast_enabled: state.repair_autocast_enabled,
     })
 }
