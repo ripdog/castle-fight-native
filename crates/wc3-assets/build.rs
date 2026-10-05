@@ -7,7 +7,7 @@ use std::{
 };
 
 use csv::StringRecord;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Serialize)]
 struct UnitAssetSpec {
@@ -62,6 +62,31 @@ struct StatusVisualSpec {
     ability_rawcode: String,
     status_kind: String,
     model_path: String,
+    buff_rawcode: String,
+    target_attachment_count: Option<u8>,
+    target_attachments: Vec<NativeBuffAttachment>,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+struct NativeBuffAttachment {
+    index: u8,
+    point: String,
+    source: String,
+}
+
+#[derive(Deserialize)]
+struct NativeBuffVisual {
+    rawcode: String,
+    target_art: Vec<String>,
+    target_attachment_count: Option<u8>,
+    target_attachments: Vec<NativeBuffAttachment>,
+}
+
+#[derive(Deserialize)]
+struct NativeBuffProjection {
+    schema_version: u32,
+    map_version: String,
+    buffs: Vec<NativeBuffVisual>,
 }
 
 #[derive(Serialize)]
@@ -141,7 +166,20 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
     let units = load_unit_assets(&units_path, &object_fields_path)?;
     let buildings = load_buildings(&buildings_path, &object_fields_path)?;
     let doodads = load_placed_doodads(&placed_doodads_path, &object_fields_path)?;
-    let mut visuals = load_visual_assets(&object_fields_path, &unit_spell_semantics_path)?;
+    let buff_visuals_path = manifest_dir.join(format!(
+        "data/castle-fight/{catalog_version}/native-buff-visuals-r1.json"
+    ));
+    println!("cargo:rerun-if-changed={}", buff_visuals_path.display());
+    let buff_projection: NativeBuffProjection =
+        serde_json::from_slice(&fs::read(&buff_visuals_path)?)?;
+    if buff_projection.schema_version != 1 || buff_projection.map_version != catalog_version {
+        return Err("native buff projection schema/version mismatch".into());
+    }
+    let mut visuals = load_visual_assets(
+        &object_fields_path,
+        &unit_spell_semantics_path,
+        &buff_projection,
+    )?;
     let building_mechanics_path =
         manifest_dir.join("../sim/data/castle-fight/9.27/building-mechanics-r1.json");
     println!(
@@ -518,6 +556,7 @@ fn load_placed_doodads(
 fn load_visual_assets(
     object_fields_path: &std::path::Path,
     unit_spell_semantics_path: &std::path::Path,
+    buff_projection: &NativeBuffProjection,
 ) -> Result<VisualAssetCatalog, Box<dyn Error>> {
     let mut fields = csv::ReaderBuilder::new()
         .delimiter(b'\t')
@@ -535,7 +574,12 @@ fn load_visual_assets(
     let mut missile_arcs = BTreeMap::<(String, String), f32>::new();
     let mut ability_base_rawcodes = BTreeMap::<String, String>::new();
     let mut ability_buff_ids = BTreeMap::<String, Vec<String>>::new();
-    let mut buff_target_art = BTreeMap::<String, Vec<String>>::new();
+    let mut buff_visuals = BTreeMap::new();
+    for buff in &buff_projection.buffs {
+        if buff_visuals.insert(buff.rawcode.as_str(), buff).is_some() {
+            return Err("duplicate projected native buff identity".into());
+        }
+    }
     let mut chain_lightning_abilities = BTreeMap::<String, ()>::new();
     let mut unit_abilities = BTreeMap::<String, Vec<String>>::new();
     let mut ability_references = BTreeMap::<String, BTreeSet<String>>::new();
@@ -578,15 +622,6 @@ fn load_visual_assets(
                     rawcode.to_owned(),
                     parse_json_comma_list(row.get(recovered).unwrap_or_default()),
                 );
-            }
-        }
-        if kind == "buffs" && field == "ftat" {
-            let paths = parse_json_model_paths(row.get(recovered).unwrap_or_default())
-                .into_iter()
-                .filter(|path| is_renderable_model_path(path))
-                .collect::<Vec<_>>();
-            if !paths.is_empty() {
-                buff_target_art.insert(rawcode.to_owned(), paths);
             }
         }
 
@@ -819,25 +854,28 @@ fn load_visual_assets(
             // Frost Armor applies one persistent shield buff and one reactive slow buff.
             "ACf2" => &["armor", "movement"],
             // Inner Fire, Prayer, and Devotion Aura use a persistent target buff model.
-            "Ainf" | "AIrr" | "AHad" => &["armor"],
+            "Ainf" | "AIrr" | "AHad" | "ACff" | "Afae" => &["armor"],
+            // Persistent native fire/carrier buffs use their authoritative DOT entry.
+            "Apxf" => &["damage_over_time"],
             // Bloodlust-family effects persist for the attack-speed buff lifetime.
             "Ablo" => &["attack_speed"],
             _ => continue,
         };
         for (buff_rawcode, status_kind) in buffs.iter().zip(status_kinds.iter().copied()) {
-            if let Some(model_paths) = buff_target_art.get(buff_rawcode) {
-                for model_path in model_paths {
-                    status_visuals.push(StatusVisualSpec {
-                        ability_rawcode: ability_rawcode.clone(),
-                        status_kind: status_kind.to_owned(),
-                        model_path: model_path.clone(),
-                    });
+            let buff = buff_visuals
+                .get(buff_rawcode.as_str())
+                .ok_or_else(|| format!("missing projected status buff {buff_rawcode}"))?;
+            for model_path in &buff.target_art {
+                if !is_renderable_model_path(model_path) {
+                    return Err(format!("unsupported projected buff model {model_path}").into());
                 }
-            } else if let Some(model_path) = stock_buff_target_art(buff_rawcode) {
                 status_visuals.push(StatusVisualSpec {
                     ability_rawcode: ability_rawcode.clone(),
                     status_kind: status_kind.to_owned(),
-                    model_path,
+                    model_path: model_path.clone(),
+                    buff_rawcode: buff_rawcode.clone(),
+                    target_attachment_count: buff.target_attachment_count,
+                    target_attachments: buff.target_attachments.clone(),
                 });
             }
         }
@@ -1221,18 +1259,6 @@ fn load_ui_assets(
             )
             .collect(),
     })
-}
-
-fn stock_buff_target_art(rawcode: &str) -> Option<String> {
-    let path = match rawcode {
-        // These are stock Warcraft III buff objects referenced by Frost Armor's inherited
-        // BUfa/Bfro buff list. They do not appear as standalone rows in Castle Fight's custom
-        // object-data delta, so retain the stock presentation lookup alongside the extractor.
-        "BUfa" => r"Abilities\Spells\Undead\FrostArmor\FrostArmorTarget.mdl",
-        "Bfro" => r"Abilities\Spells\Other\FrostDamage\FrostDamage.mdl",
-        _ => return None,
-    };
-    Some(path.to_owned())
 }
 
 fn parse_catalog_version(readme: &str) -> Result<String, Box<dyn Error>> {

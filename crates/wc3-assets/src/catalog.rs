@@ -47,6 +47,16 @@ pub struct StatusVisualSpec {
     pub ability_rawcode: String,
     pub status_kind: String,
     pub model_path: String,
+    pub buff_rawcode: String,
+    pub target_attachment_count: Option<u8>,
+    pub target_attachments: Vec<NativeBuffAttachment>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct NativeBuffAttachment {
+    pub index: u8,
+    pub point: String,
+    pub source: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -714,6 +724,80 @@ mod tests {
                     .all(|effect| definitions.contains(effect.as_str()))
             );
         }
+    }
+
+    #[test]
+    fn status_art_keeps_projected_buff_attachments_and_new_native_families() {
+        let catalog = load_embedded_visuals().unwrap();
+        let projection: serde_json::Value = serde_json::from_str(include_str!(
+            "../data/castle-fight/9.27/native-buff-visuals-r1.json"
+        ))
+        .unwrap();
+        assert_eq!(projection["map_version"], CATALOG_VERSION);
+        let buffs = projection["buffs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|buff| (buff["rawcode"].as_str().unwrap(), buff))
+            .collect::<std::collections::BTreeMap<_, _>>();
+        for visual in &catalog.status_visuals {
+            let buff = buffs[visual.buff_rawcode.as_str()];
+            assert!(
+                buff["target_art"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|path| path.as_str() == Some(visual.model_path.as_str()))
+            );
+            assert_eq!(
+                serde_json::to_value(&visual.target_attachments).unwrap(),
+                buff["target_attachments"]
+            );
+            assert_eq!(
+                serde_json::to_value(visual.target_attachment_count).unwrap(),
+                buff["target_attachment_count"]
+            );
+        }
+        let mut fields = csv::ReaderBuilder::new().delimiter(b'\t').from_reader(
+            include_str!("../../../docs/original_map/extracted/resolved/object-fields.tsv")
+                .as_bytes(),
+        );
+        let headers = fields.headers().unwrap().clone();
+        let column = |name| headers.iter().position(|header| header == name).unwrap();
+        let mut checked = 0;
+        for row in fields.records() {
+            let row = row.unwrap();
+            if &row[column("category")] != "abilities" || &row[column("field_id")] != "abuf" {
+                continue;
+            }
+            let kind = match &row[column("base_rawcode")] {
+                "ACff" | "Afae" => "armor",
+                "Apxf" => "damage_over_time",
+                _ => continue,
+            };
+            let references: String =
+                serde_json::from_str(&row[column("recovered_value_json")]).unwrap();
+            for buff in references.split(',').filter(|code| !code.is_empty()) {
+                for path in buffs[buff]["target_art"].as_array().unwrap() {
+                    assert!(catalog.status_visuals.iter().any(|visual| {
+                        visual.ability_rawcode == row[column("rawcode")]
+                            && visual.buff_rawcode == buff
+                            && visual.status_kind == kind
+                            && Some(visual.model_path.as_str()) == path.as_str()
+                    }));
+                }
+                if buffs[buff]["target_art"].as_array().unwrap().is_empty() {
+                    assert!(
+                        !catalog
+                            .status_visuals
+                            .iter()
+                            .any(|visual| visual.buff_rawcode == buff)
+                    );
+                }
+            }
+            checked += 1;
+        }
+        assert!(checked > 0);
     }
 
     #[test]

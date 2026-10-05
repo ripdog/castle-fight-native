@@ -608,6 +608,9 @@ pub struct StatusVisualBindingManifest {
     pub status_kind: String,
     pub source_model: String,
     pub gltf: Option<String>,
+    pub buff_rawcode: String,
+    pub target_attachment_count: Option<u8>,
+    pub target_attachments: Vec<crate::catalog::NativeBuffAttachment>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -1034,6 +1037,9 @@ impl Exporter {
                 ability_rawcode: visual.ability_rawcode.clone(),
                 status_kind: visual.status_kind.clone(),
                 model_path: normalize_model_path(&visual.model_path),
+                buff_rawcode: visual.buff_rawcode.clone(),
+                target_attachment_count: visual.target_attachment_count,
+                target_attachments: visual.target_attachments.clone(),
             })
             .collect();
         let stun_source = catalog.stun_model_path.as_deref().map(normalize_model_path);
@@ -1106,6 +1112,9 @@ impl Exporter {
                     .get(&visual.model_path.to_ascii_lowercase())
                     .cloned(),
                 source_model: visual.model_path,
+                buff_rawcode: visual.buff_rawcode,
+                target_attachment_count: visual.target_attachment_count,
+                target_attachments: visual.target_attachments,
             })
             .collect();
         let stun = stun_source.map(|source_model| VisualBindingManifest {
@@ -1142,7 +1151,7 @@ impl Exporter {
         };
 
         Ok(VisualAssetManifest {
-            schema_version: 5,
+            schema_version: 6,
             castle_fight_catalog_version: CATALOG_VERSION,
             wc3_version: self.wc3_version.clone(),
             art_mode: "sd",

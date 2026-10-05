@@ -209,6 +209,7 @@ pub enum Wc3StatusVisualKind {
     Movement,
     Armor,
     AttackSpeed,
+    DamageOverTime,
 }
 
 #[derive(Clone)]
@@ -6028,6 +6029,7 @@ fn parse_status_visual_kind(value: &str) -> Result<Wc3StatusVisualKind, String> 
         "movement" => Ok(Wc3StatusVisualKind::Movement),
         "armor" => Ok(Wc3StatusVisualKind::Armor),
         "attack_speed" => Ok(Wc3StatusVisualKind::AttackSpeed),
+        "damage_over_time" => Ok(Wc3StatusVisualKind::DamageOverTime),
         other => Err(format!("unsupported WC3 status visual kind {other:?}")),
     }
 }
@@ -7792,6 +7794,10 @@ mod tests {
         assert_eq!(
             parse_status_visual_kind("armor").unwrap(),
             Wc3StatusVisualKind::Armor
+        );
+        assert_eq!(
+            parse_status_visual_kind("damage_over_time").unwrap(),
+            Wc3StatusVisualKind::DamageOverTime
         );
         assert!(parse_status_visual_kind("unknown").is_err());
     }

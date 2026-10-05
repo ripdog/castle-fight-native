@@ -4057,14 +4057,12 @@ fn sync_render_entities(
         .keys()
         .copied()
         .filter(|key| {
-            !samples.current.units.get(&key.target).is_some_and(|unit| {
-                unit_status_visual_is_active(
-                    unit,
-                    samples.current.tick,
-                    key.ability_rawcode,
-                    key.kind,
-                )
-            })
+            !entity_status_visual_is_active(
+                key.target,
+                &samples.current,
+                key.ability_rawcode,
+                key.kind,
+            )
         })
         .collect();
     for key in stale_status_effects {
@@ -4085,61 +4083,53 @@ fn sync_render_entities(
             }
         }
     }
-    for unit in samples.current.units.values() {
+    for unit in samples
+        .current
+        .units
+        .values()
+        .filter(|unit| unit.health > 0)
+    {
+        let target = (
+            unit.id,
+            unit_ground_position(unit.position, unit.movement_class, &terrain),
+        );
         if unit.negative_building_shield_level > 0 && unit.hex.is_none() {
-            spawn_unit_status_visuals(
+            spawn_status_visuals(
                 &mut commands,
                 &mut render_map,
                 (&wc3_visuals, &mut effect_pool, !legacy_effect_pooling),
-                unit,
+                target,
                 u32::from_be_bytes(*b"A09L"),
                 Wc3StatusVisualKind::Armor,
-                &terrain,
             );
         }
-        let movement_count = usize::from(unit.status.movement_modifier_count);
-        for modifier in unit.status.movement_modifiers[..movement_count]
-            .iter()
-            .filter(|modifier| modifier.expires_tick > samples.current.tick)
-        {
-            spawn_unit_status_visuals(
+        for (ability, kind) in status_visual_sources(&unit.status, samples.current.tick) {
+            spawn_status_visuals(
                 &mut commands,
                 &mut render_map,
                 (&wc3_visuals, &mut effect_pool, !legacy_effect_pooling),
-                unit,
-                modifier.id.0,
-                Wc3StatusVisualKind::Movement,
-                &terrain,
+                target,
+                ability,
+                kind,
             );
         }
-        let armor_count = usize::from(unit.status.armor_modifier_count);
-        for modifier in unit.status.armor_modifiers[..armor_count]
-            .iter()
-            .filter(|modifier| modifier.expires_tick > samples.current.tick)
-        {
-            spawn_unit_status_visuals(
+    }
+    for building in samples
+        .current
+        .buildings
+        .values()
+        .filter(|building| building.health > 0)
+    {
+        let (mut position, _) = metrics.footprint_center_size(building.footprint);
+        position.y = building_terrain_height(&metrics, &terrain, building.footprint);
+        for (ability, kind) in status_visual_sources(&building.status, samples.current.tick) {
+            spawn_status_visuals(
                 &mut commands,
                 &mut render_map,
                 (&wc3_visuals, &mut effect_pool, !legacy_effect_pooling),
-                unit,
-                modifier.id.0,
-                Wc3StatusVisualKind::Armor,
-                &terrain,
-            );
-        }
-        let attack_speed_count = usize::from(unit.status.attack_speed_modifier_count);
-        for modifier in unit.status.attack_speed_modifiers[..attack_speed_count]
-            .iter()
-            .filter(|modifier| modifier.expires_tick > samples.current.tick)
-        {
-            spawn_unit_status_visuals(
-                &mut commands,
-                &mut render_map,
-                (&wc3_visuals, &mut effect_pool, !legacy_effect_pooling),
-                unit,
-                modifier.id.0,
-                Wc3StatusVisualKind::AttackSpeed,
-                &terrain,
+                (building.id, position),
+                ability,
+                kind,
             );
         }
     }
@@ -4476,6 +4466,15 @@ fn interpolate_render_transforms(
 
     for (key, effect) in &render_map.status_effects {
         let Some(current) = samples.current.units.get(&key.target) else {
+            if let Some(building) = samples.current.buildings.get(&key.target) {
+                let (mut position, _) = metrics.footprint_center_size(building.footprint);
+                position.y = building_terrain_height(&metrics, &terrain, building.footprint);
+                if let Ok(mut transform) = transforms.get_mut(effect.entity)
+                    && transform.translation != position
+                {
+                    transform.translation = position;
+                }
+            }
             continue;
         };
         let previous = samples.previous.units.get(&key.target).unwrap_or(current);
@@ -4752,57 +4751,104 @@ fn walk_bob(id: SimId, render_tick: f32, moving: bool) -> f32 {
     phase.sin().abs() * UNIT_WALK_BOB_HEIGHT
 }
 
-fn unit_status_visual_is_active(
-    unit: &UnitSample,
+fn entity_status_visual_is_active(
+    target: SimId,
+    snapshot: &crate::bridge::PresentationSnapshot,
+    ability_rawcode: u32,
+    kind: Wc3StatusVisualKind,
+) -> bool {
+    if let Some(unit) = snapshot.units.get(&target) {
+        return unit.health > 0
+            && ((kind == Wc3StatusVisualKind::Armor
+                && ability_rawcode == u32::from_be_bytes(*b"A09L")
+                && unit.negative_building_shield_level > 0
+                && unit.hex.is_none())
+                || status_visual_is_active(&unit.status, snapshot.tick, ability_rawcode, kind));
+    }
+    snapshot.buildings.get(&target).is_some_and(|building| {
+        building.health > 0
+            && status_visual_is_active(&building.status, snapshot.tick, ability_rawcode, kind)
+    })
+}
+
+fn status_visual_sources(
+    status: &castle_fight_sim::StatusState,
+    tick: u64,
+) -> impl Iterator<Item = (u32, Wc3StatusVisualKind)> + '_ {
+    status.movement_modifiers[..usize::from(status.movement_modifier_count)]
+        .iter()
+        .filter(move |modifier| modifier.expires_tick > tick)
+        .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::Movement))
+        .chain(
+            status.armor_modifiers[..usize::from(status.armor_modifier_count)]
+                .iter()
+                .filter(move |modifier| modifier.expires_tick > tick)
+                .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::Armor)),
+        )
+        .chain(
+            status.attack_speed_modifiers[..usize::from(status.attack_speed_modifier_count)]
+                .iter()
+                .filter(move |modifier| modifier.expires_tick > tick)
+                .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::AttackSpeed)),
+        )
+        .chain(
+            status.damage_over_time[..usize::from(status.damage_over_time_count)]
+                .iter()
+                .filter(move |modifier| modifier.expires_tick > tick)
+                .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::DamageOverTime)),
+        )
+}
+
+fn status_visual_is_active(
+    status: &castle_fight_sim::StatusState,
     tick: u64,
     ability_rawcode: u32,
     kind: Wc3StatusVisualKind,
 ) -> bool {
     match kind {
         Wc3StatusVisualKind::Movement => {
-            let count = usize::from(unit.status.movement_modifier_count);
-            unit.status.movement_modifiers[..count]
+            let count = usize::from(status.movement_modifier_count);
+            status.movement_modifiers[..count]
                 .iter()
                 .any(|modifier| modifier.id.0 == ability_rawcode && modifier.expires_tick > tick)
         }
         Wc3StatusVisualKind::Armor => {
-            if ability_rawcode == u32::from_be_bytes(*b"A09L")
-                && unit.negative_building_shield_level > 0
-                && unit.hex.is_none()
-            {
-                return true;
-            }
-            let count = usize::from(unit.status.armor_modifier_count);
-            unit.status.armor_modifiers[..count]
+            let count = usize::from(status.armor_modifier_count);
+            status.armor_modifiers[..count]
                 .iter()
                 .any(|modifier| modifier.id.0 == ability_rawcode && modifier.expires_tick > tick)
         }
         Wc3StatusVisualKind::AttackSpeed => {
-            let count = usize::from(unit.status.attack_speed_modifier_count);
-            unit.status.attack_speed_modifiers[..count]
+            let count = usize::from(status.attack_speed_modifier_count);
+            status.attack_speed_modifiers[..count]
+                .iter()
+                .any(|modifier| modifier.id.0 == ability_rawcode && modifier.expires_tick > tick)
+        }
+        Wc3StatusVisualKind::DamageOverTime => {
+            let count = usize::from(status.damage_over_time_count);
+            status.damage_over_time[..count]
                 .iter()
                 .any(|modifier| modifier.id.0 == ability_rawcode && modifier.expires_tick > tick)
         }
     }
 }
 
-fn spawn_unit_status_visuals(
+fn spawn_status_visuals(
     commands: &mut Commands,
     render_map: &mut RenderMap,
     visuals: (&Wc3VisualSet, &mut TimedWc3EffectPool, bool),
-    unit: &UnitSample,
+    target: (SimId, Vec3),
     ability_rawcode: u32,
     kind: Wc3StatusVisualKind,
-    terrain: &TerrainSurface,
 ) {
     let (wc3_visuals, pool, pooling_enabled) = visuals;
-    let position = unit_ground_position(unit.position, unit.movement_class, terrain);
+    let (target, position) = target;
     for (slot, visual) in wc3_visuals.status(ability_rawcode).iter().enumerate() {
         if visual.kind != kind {
             continue;
         }
         let key = StatusEffectKey {
-            target: unit.id,
+            target,
             ability_rawcode,
             kind,
             slot: u16::try_from(slot).expect("WC3 status visual slot exceeds u16"),
@@ -6793,6 +6839,79 @@ mod tests {
         assert_eq!(lane.y, terrain.height_at_world(Vec2::ZERO));
         assert_eq!(outside.xz(), terrain.world_max());
         assert_eq!(outside.y, terrain.height_at_world(terrain.world_max()));
+    }
+
+    #[test]
+    fn passive_structure_visual_lifetime_uses_live_status_not_damage_or_source_presence() {
+        let mut simulation =
+            castle_fight_sim::Simulation::new(castle_fight_sim::SimulationConfig::default(), 1);
+        let id = simulation.spawn_building(castle_fight_sim::BuildingSpawn {
+            team: castle_fight_sim::Team(1),
+            footprint: castle_fight_sim::BuildingFootprint::new(5, 0, 1, 1),
+            health: 100,
+            production: None,
+            attack: None,
+            spellcasting: None,
+        });
+        let mut snapshot = crate::bridge::PresentationSnapshot::capture(&simulation);
+        let ability = 123;
+        let kind = Wc3StatusVisualKind::DamageOverTime;
+        assert!(!entity_status_visual_is_active(
+            id, &snapshot, ability, kind
+        ));
+        let status = &mut snapshot.buildings.get_mut(&id).unwrap().status;
+        status.damage_over_time_count = 1;
+        status.damage_over_time[0].id = castle_fight_sim::ModifierId(ability);
+        status.damage_over_time[0].damage_per_pulse = 0;
+        status.damage_over_time[0].expires_tick = 20;
+        let before = *status;
+        snapshot.tick = 19;
+        assert!(entity_status_visual_is_active(id, &snapshot, ability, kind));
+        assert!(!entity_status_visual_is_active(
+            id,
+            &snapshot,
+            ability + 1,
+            kind
+        ));
+        assert!(!entity_status_visual_is_active(
+            id,
+            &snapshot,
+            ability,
+            Wc3StatusVisualKind::Armor
+        ));
+        assert_eq!(
+            status_visual_sources(&before, snapshot.tick).collect::<Vec<_>>(),
+            [(ability, kind)]
+        );
+        assert_eq!(snapshot.buildings[&id].status, before);
+        snapshot.tick = 20;
+        assert!(!entity_status_visual_is_active(
+            id, &snapshot, ability, kind
+        ));
+        assert!(
+            status_visual_sources(&before, snapshot.tick)
+                .next()
+                .is_none()
+        );
+        snapshot.tick = 19;
+        snapshot.buildings.get_mut(&id).unwrap().health = 0;
+        assert!(!entity_status_visual_is_active(
+            id, &snapshot, ability, kind
+        ));
+        snapshot.buildings.get_mut(&id).unwrap().health = 100;
+        snapshot
+            .buildings
+            .get_mut(&id)
+            .unwrap()
+            .status
+            .damage_over_time_count = 0;
+        assert!(!entity_status_visual_is_active(
+            id, &snapshot, ability, kind
+        ));
+        snapshot.buildings.remove(&id);
+        assert!(!entity_status_visual_is_active(
+            id, &snapshot, ability, kind
+        ));
     }
 
     #[test]

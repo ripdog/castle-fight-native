@@ -79,6 +79,20 @@ regeneration and the post-regeneration audit remain pending. Requiring delivered
 attachment metadata does not prove that the client applies it to the correct
 animated node; source attachment placement and rendered inspection remain open.
 
+The asset generator now consumes that version-scoped projection instead of an
+authored stock-buff fallback. Status recipes include Faerie Fire armor and native
+fire/carrier DOT families; empty carrier art produces no status model. The
+exported effects manifest is schema **6**, retaining buff identity and authored
+attachment/count metadata. The client recognizes the DOT category and uses live
+status identity/expiry to create/remove looping unit and structure-root effects,
+including zero-damage native buffs. It does not require the launch source to
+remain alive. The reusable status iterator is allocation-free; death/removal,
+wrong identity/category, expiry and read-only state are tested. Authored node
+placement is still pending, so these status roots are not evidence of correct
+Faerie Fire head attachment. All **73 asset tests** (one ignored), **219 client
+tests** (three ignored), strict asset/client all-target Clippy, formatting and
+diff checks passed (`native-buff-{assets-tests,client-tests,clippy}.log`).
+
 ## Integrated structure-status readback
 
 The presentation bridge copies the authoritative `StatusState` for every
