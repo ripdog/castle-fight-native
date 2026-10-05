@@ -74,8 +74,14 @@ unrelated ordinary target-art row or a model already on disk. All 13 presentatio
 audit tests passed, including missing/duplicate/unresolved status art, attachment
 drift and forbidden fallback from an explicit empty carrier buff. The previously
 zero-finding staged pack correctly reports **two native-status findings** for
-Faerie Fire and Phoenix (`current-pack-native-buff-before.json`). Effects-pack
-regeneration and the post-regeneration audit remain pending. Requiring delivered
+Faerie Fire and Phoenix (`current-pack-native-buff-before.json`). Schema-6 effects
+regeneration completed with 241 unique models and 33 persistent status rows.
+The required Elven audit now checks 26 source-owned entities, 61 model/dependency
+bindings and both persistent status bindings with **zero findings**
+(`native-buff-{export,audit-after}.log`, `current-pack-native-buff-after.json`).
+The two unrelated global unresolved paths remain `.mdx` and `sandshield.mdx`;
+this is not a globally failure-free pack. Staging is still separate from the
+repository pack loaded by the client. Requiring delivered
 attachment metadata does not prove that the client applies it to the correct
 animated node; source attachment placement and rendered inspection remain open.
 
