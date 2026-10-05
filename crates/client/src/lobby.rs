@@ -92,17 +92,18 @@ impl LobbyState {
     }
 
     fn player_label(&self, player: PlayerId) -> String {
-        let Some(index) = self
-            .connected_players
-            .iter()
-            .position(|connected| *connected == player)
-        else {
+        if player != self.local_player && !self.connected_players.contains(&player) {
             return "Empty".to_owned();
+        }
+        let number = if player.0 < 6 {
+            usize::from(player.0) + 1
+        } else {
+            usize::from(player.0 - 6) + self.team_size + 1
         };
         if player == self.local_player {
-            format!("Player {} (You)", index + 1)
+            format!("Player {number} (You)")
         } else {
-            format!("Player {}", index + 1)
+            format!("Player {number}")
         }
     }
 
@@ -158,8 +159,6 @@ fn spawn_lobby(commands: &mut Commands, lobby: &LobbyState) {
             LobbyRoot,
             Node {
                 position_type: PositionType::Absolute,
-                left: percent(0.0),
-                top: percent(0.0),
                 width: percent(100.0),
                 height: percent(100.0),
                 align_items: AlignItems::Center,
@@ -172,77 +171,92 @@ fn spawn_lobby(commands: &mut Commands, lobby: &LobbyState) {
         .with_children(|root| {
             root.spawn((
                 Node {
-                    width: px(620.0),
-                    max_width: percent(92.0),
+                    width: px(800.0),
+                    max_width: percent(94.0),
                     flex_direction: FlexDirection::Column,
-                    padding: UiRect::all(px(16.0)),
-                    row_gap: px(6.0),
+                    padding: UiRect::all(px(20.0)),
+                    row_gap: px(18.0),
                     border: UiRect::all(px(1.0)),
+                    border_radius: BorderRadius::all(px(10.0)),
                     ..default()
                 },
                 BackgroundColor(PANEL),
                 BorderColor::all(Color::srgb(0.28, 0.36, 0.45)),
             ))
             .with_children(|panel| {
-                label(panel, "CASTLE FIGHT", 28.0, TEXT);
-                label(
-                    panel,
-                    "GAME SETUP  |  ALL PICK",
-                    15.0,
-                    Color::srgb(0.45, 0.79, 0.89),
-                );
-                label(
-                    panel,
-                    format!(
-                        "Map {} / {}",
-                        lobby.options.map_version, lobby.options.release_revision
-                    ),
-                    14.0,
-                    MUTED,
-                );
-
-                label(panel, "PLAYERS PER TEAM", 17.0, TEXT);
                 panel
-                    .spawn((Node {
-                        flex_direction: FlexDirection::Row,
-                        column_gap: px(8.0),
+                    .spawn(Node {
+                        flex_direction: FlexDirection::Column,
+                        row_gap: px(6.0),
                         ..default()
-                    },))
-                    .with_children(|row| {
-                        for size in 1..=3 {
-                            button(
-                                row,
-                                format!("{}v{}", size, size),
-                                LobbyAction::TeamSize(size),
-                                size == lobby.team_size,
-                                lobby.networked,
-                            );
-                        }
+                    })
+                    .with_children(|header| {
+                        label(header, "Castle Fight", 28.0, TEXT);
+                        label(
+                            header,
+                            format!(
+                                "All Pick  |  Map {} / {}",
+                                lobby.options.map_version, lobby.options.release_revision
+                            ),
+                            13.0,
+                            MUTED,
+                        );
                     });
-
-                label(panel, "POSITIONS AND RACES", 17.0, TEXT);
                 panel
-                    .spawn((Node {
-                        width: percent(100.0),
-                        flex_direction: FlexDirection::Row,
+                    .spawn(Node {
+                        align_items: AlignItems::Center,
+                        justify_content: JustifyContent::SpaceBetween,
                         column_gap: px(12.0),
                         ..default()
-                    },))
+                    })
+                    .with_children(|row| {
+                        label(row, "Players per team", 14.0, MUTED);
+                        row.spawn(Node {
+                            column_gap: px(6.0),
+                            ..default()
+                        })
+                        .with_children(|sizes| {
+                            for size in 1..=3 {
+                                button(
+                                    sizes,
+                                    format!("{size}v{size}"),
+                                    LobbyAction::TeamSize(size),
+                                    size == lobby.team_size,
+                                    lobby.networked,
+                                );
+                            }
+                        });
+                    });
+                panel
+                    .spawn(Node {
+                        width: percent(100.0),
+                        column_gap: px(16.0),
+                        ..default()
+                    })
                     .with_children(|sides| {
                         for team in 0..=1 {
                             sides
-                                .spawn((Node {
-                                    width: percent(50.0),
-                                    flex_direction: FlexDirection::Column,
-                                    row_gap: px(6.0),
-                                    ..default()
-                                },))
+                                .spawn((
+                                    Node {
+                                        flex_basis: px(0.0),
+                                        flex_grow: 1.0,
+                                        min_width: px(0.0),
+                                        flex_direction: FlexDirection::Column,
+                                        padding: UiRect::all(px(14.0)),
+                                        row_gap: px(12.0),
+                                        border: UiRect::all(px(1.0)),
+                                        border_radius: BorderRadius::all(px(6.0)),
+                                        ..default()
+                                    },
+                                    BackgroundColor(Color::srgb(0.095, 0.12, 0.16)),
+                                    BorderColor::all(Color::srgb(0.20, 0.26, 0.33)),
+                                ))
                                 .with_children(|column| {
                                     label(
                                         column,
-                                        if team == 0 { "WEST" } else { "EAST" },
-                                        13.0,
-                                        MUTED,
+                                        if team == 0 { "WEST TEAM" } else { "EAST TEAM" },
+                                        14.0,
+                                        Color::srgb(0.45, 0.79, 0.89),
                                     );
                                     for slot in 0..lobby.team_size {
                                         let player =
@@ -252,42 +266,52 @@ fn spawn_lobby(commands: &mut Commands, lobby: &LobbyState) {
                                 });
                         }
                     });
-
-                if lobby.networked {
-                    label(
-                        panel,
-                        format!(
-                            "Connected players: {} / {}",
-                            lobby.connected_players.len(),
-                            lobby.required_players
-                        ),
-                        13.0,
-                        MUTED,
-                    );
-                    label(
-                        panel,
-                        if lobby.host_player == Some(lobby.local_player()) {
-                            "You are the host. Start when every slot is connected."
+                panel
+                    .spawn(Node {
+                        flex_direction: FlexDirection::Column,
+                        row_gap: px(10.0),
+                        ..default()
+                    })
+                    .with_children(|footer| {
+                        if lobby.networked {
+                            label(
+                                footer,
+                                format!(
+                                    "{} / {} players connected  |  Choose your race",
+                                    lobby.connected_players.len(),
+                                    lobby.required_players
+                                ),
+                                13.0,
+                                MUTED,
+                            );
                         } else {
-                            "Waiting for the host to start the match."
-                        },
-                        13.0,
-                        MUTED,
-                    );
-                }
-                if let Some(error) = &lobby.error {
-                    label(panel, error.clone(), 14.0, Color::srgb(1.0, 0.45, 0.4));
-                }
-                let start_disabled = lobby.networked
-                    && (lobby.host_player != Some(lobby.local_player())
-                        || lobby.connected_players.len() < lobby.required_players);
-                button(
-                    panel,
-                    "START GAME",
-                    LobbyAction::Start,
-                    true,
-                    start_disabled,
-                );
+                            label(
+                                footer,
+                                "Choose your position and each player's race.",
+                                13.0,
+                                MUTED,
+                            );
+                        }
+                        if let Some(error) = &lobby.error {
+                            label(footer, error.clone(), 13.0, Color::srgb(1.0, 0.45, 0.4));
+                        }
+                        let start_disabled = lobby.action_disabled(LobbyAction::Start);
+                        let start_label =
+                            if lobby.networked && lobby.host_player != Some(lobby.local_player()) {
+                                "Waiting for host"
+                            } else if start_disabled {
+                                "Waiting for players"
+                            } else {
+                                "Start match"
+                            };
+                        button(
+                            footer,
+                            start_label,
+                            LobbyAction::Start,
+                            true,
+                            start_disabled,
+                        );
+                    });
             });
         });
 }
@@ -299,52 +323,83 @@ fn spawn_position_row(
     slot: usize,
 ) {
     parent
-        .spawn((Node {
+        .spawn(Node {
             width: percent(100.0),
-            min_height: px(34.0),
-            flex_direction: FlexDirection::Row,
-            align_items: AlignItems::Center,
-            column_gap: px(7.0),
+            min_width: px(0.0),
+            flex_direction: FlexDirection::Column,
+            row_gap: px(8.0),
             ..default()
-        },))
+        })
         .with_children(|row| {
-            label(row, format!("{}", slot + 1), 13.0, MUTED);
-            button(
-                row,
-                lobby.player_label(player),
-                LobbyAction::Position(player),
-                player == lobby.local_player(),
-                lobby.networked,
-            );
-            row.spawn((Node {
-                width: px(112.0),
-                height: px(32.0),
-                ..default()
-            },))
-                .with_children(|race| {
-                    button(
-                        race,
-                        format!(
-                            "{}  v",
-                            lobby
-                                .content()
-                                .builder(lobby.race(player.0))
-                                .expect("selected builder")
-                                .name
-                        ),
-                        LobbyAction::RaceDropdown(player.0),
-                        false,
-                        lobby.action_disabled(LobbyAction::RaceDropdown(player.0)),
+            if lobby.networked {
+                row.spawn(Node {
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::SpaceBetween,
+                    column_gap: px(8.0),
+                    ..default()
+                })
+                .with_children(|identity| {
+                    label(
+                        identity,
+                        lobby.player_label(player),
+                        15.0,
+                        if player == lobby.local_player() {
+                            TEXT
+                        } else {
+                            MUTED
+                        },
                     );
-                    if lobby.open_race == Some(player.0) {
-                        race.spawn((
+                    if lobby.host_player == Some(player) {
+                        label(identity, "Host", 12.0, Color::srgb(0.45, 0.79, 0.89));
+                    }
+                });
+            } else {
+                button(
+                    row,
+                    format!("Slot {} / {}", slot + 1, lobby.player_label(player)),
+                    LobbyAction::Position(player),
+                    player == lobby.local_player(),
+                    false,
+                );
+            }
+            row.spawn(Node {
+                width: percent(100.0),
+                min_width: px(0.0),
+                height: px(40.0),
+                ..default()
+            })
+            .with_children(|selector| {
+                let builder = lobby
+                    .content()
+                    .builder(lobby.race(player.0))
+                    .expect("selected builder");
+                let action = LobbyAction::RaceDropdown(player.0);
+                let disabled = lobby.action_disabled(action);
+                let name = builder.name.trim_end_matches(" Builder");
+                button(
+                    selector,
+                    if disabled {
+                        name.to_owned()
+                    } else {
+                        format!("{name}   v")
+                    },
+                    action,
+                    lobby.open_race == Some(player.0),
+                    disabled,
+                );
+                if lobby.open_race == Some(player.0) {
+                    selector
+                        .spawn((
                             Node {
                                 position_type: PositionType::Absolute,
-                                top: px(34.0),
+                                top: px(44.0),
                                 left: px(0.0),
-                                width: px(112.0),
-                                padding: UiRect::all(px(2.0)),
+                                width: percent(100.0),
+                                flex_direction: FlexDirection::Column,
+                                padding: UiRect::all(px(4.0)),
+                                row_gap: px(4.0),
                                 border: UiRect::all(px(1.0)),
+                                border_radius: BorderRadius::all(px(4.0)),
                                 ..default()
                             },
                             BackgroundColor(PANEL),
@@ -355,17 +410,18 @@ fn spawn_position_row(
                             for &race in lobby.content().supported_builder_races() {
                                 let builder =
                                     lobby.content().builder(race).expect("supported builder");
+                                let action = LobbyAction::Race(player.0, race);
                                 button(
                                     menu,
-                                    builder.name,
-                                    LobbyAction::Race(player.0, race),
+                                    builder.name.trim_end_matches(" Builder"),
+                                    action,
                                     lobby.race(player.0) == race,
-                                    lobby.action_disabled(LobbyAction::Race(player.0, race)),
+                                    lobby.action_disabled(action),
                                 );
                             }
                         });
-                    }
-                });
+                }
+            });
         });
 }
 
@@ -375,6 +431,16 @@ fn label(parent: &mut ChildSpawnerCommands, value: impl Into<String>, size: f32,
         TextFont::from_font_size(size),
         TextColor(color),
     ));
+}
+
+fn button_color(action: LobbyAction, selected: bool, disabled: bool) -> Color {
+    if disabled && !matches!(action, LobbyAction::TeamSize(_)) {
+        Color::srgb(0.10, 0.13, 0.17)
+    } else if selected {
+        BUTTON_SELECTED
+    } else {
+        BUTTON
+    }
 }
 
 fn button(
@@ -389,15 +455,21 @@ fn button(
             Button,
             action,
             Node {
-                min_width: px(112.0),
-                min_height: px(32.0),
-                padding: UiRect::axes(px(14.0), px(6.0)),
+                width: if matches!(action, LobbyAction::TeamSize(_)) {
+                    px(64.0)
+                } else {
+                    percent(100.0)
+                },
+                min_width: px(0.0),
+                min_height: px(40.0),
+                padding: UiRect::axes(px(10.0), px(8.0)),
+                border_radius: BorderRadius::all(px(4.0)),
                 align_items: AlignItems::Center,
                 justify_content: JustifyContent::Center,
                 border: UiRect::all(px(1.0)),
                 ..default()
             },
-            BackgroundColor(if selected { BUTTON_SELECTED } else { BUTTON }),
+            BackgroundColor(button_color(action, selected, disabled)),
             BorderColor::all(if disabled {
                 Color::srgb(0.19, 0.23, 0.27)
             } else {
@@ -407,6 +479,7 @@ fn button(
         .with_child((
             Text::new(value),
             TextFont::from_font_size(15.0),
+            TextLayout::no_wrap(),
             TextColor(if disabled { MUTED } else { TEXT }),
         ));
 }
@@ -496,11 +569,7 @@ fn handle_lobby_buttons(
                 }
             }
             Interaction::None => {
-                background.0 = if lobby.selected(*action) {
-                    BUTTON_SELECTED
-                } else {
-                    BUTTON
-                };
+                background.0 = button_color(*action, lobby.selected(*action), disabled);
             }
             Interaction::Pressed if disabled => {}
             Interaction::Pressed => match *action {
