@@ -42,8 +42,19 @@ ordinary target-art rows separately. All nine tests passed again. The staged
 Elven race audit checks 26 source-owned entities, 60 model/dependency bindings,
 all four caster beam bindings, and reports zero findings
 (`current-pack-race-audit.json`). This is delivery evidence only, not a
-loading/attachment test, rendered inspection or Warcraft comparison. Native structure-buff visuals, direct/orb child ownership, script
-City/Shield/Overheat art and loading still need integrated review.
+loading/attachment test, rendered inspection or Warcraft comparison. A stricter native-inventory ownership audit then exposed four missing orb-child
+missile/beam-target aliases despite successful ordinary delivery. The exporter
+now follows typed ability references transitively per visible inventory user;
+there is no Elven orb/rawcode table. A catalog-wide Rust test checks native
+referenced art ownership, and the Python audit independently requires these
+aliases. All ten Python tests, 72 asset tests (one ignored), strict asset
+all-target Clippy, regeneration and the stricter Elven staging audit passed.
+The four ownership findings became zero
+(`native-child-ownership-{tests,clippy,export}.log`,
+`current-pack-native-ownership-{before,after}.json`).
+Native structure-buff lifetime/attachment visuals and loading still need
+integrated review. Script City/Shield/Overheat art is now present in the
+regenerated pack, but appearance/lifecycle is not established by delivery.
 
 ## Historical branch validation
 

@@ -174,6 +174,25 @@ def audit_proxy_ownership(proxy_links, relevant, native_abilities):
     return sorted(set(findings))
 
 
+def audit_native_inventory_ownership(inventories, relevant, native_abilities):
+    findings = []
+    for unit, abilities in inventories.items():
+        for entry in relevant:
+            if (entry["owner_kind"] != "abilities" or entry["owner_rawcode"] not in abilities
+                    or entry.get("source_unit_rawcode") is not None
+                    or not (entry["role"] == "missile"
+                            or (entry["role"] == "target" and entry["owner_rawcode"] in native_abilities))):
+                continue
+            if not any(alias["owner_kind"] == entry["owner_kind"]
+                       and alias["owner_rawcode"] == entry["owner_rawcode"]
+                       and alias.get("source_unit_rawcode") == unit
+                       and alias["role"] == entry["role"] and alias.get("gltf")
+                       and model_identity(alias["source_model"]) == model_identity(entry["source_model"])
+                       for alias in relevant):
+                findings.append(f"missing native inventory ownership {unit}/{entry['owner_rawcode']}/{entry['role']}: {entry['source_model']}")
+    return sorted(set(findings))
+
+
 def audit(evidence, assets, builder, lightning_projection=None):
     roster = [row for row in table(evidence / "script/race-buildings.tsv")
               if row["builder_rawcode"] == builder]
@@ -305,6 +324,10 @@ def audit(evidence, assets, builder, lightning_projection=None):
                                            assets / "effects"))
     native_abilities = {row["rawcode"] for row in lightning_projection["abilities"]}
     findings.extend(audit_proxy_ownership(proxy_links, relevant, native_abilities))
+    inventories = {owner: ability_dependency_closure(fields, {
+        code for code in str(objects.get(("units", owner), {}).get("uabi", "")).split(",")
+        if code}) for owner in owners}
+    findings.extend(audit_native_inventory_ownership(inventories, relevant, native_abilities))
     return {"builder": builder, "map_version": manifests["units"]["castle_fight_catalog_version"],
             "source_sha256": {str(path.relative_to(evidence)): hashlib.sha256(path.read_bytes()).hexdigest()
                               for path in (fields_path, evidence / "script/race-buildings.tsv",

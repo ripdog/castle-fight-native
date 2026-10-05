@@ -573,6 +573,88 @@ mod tests {
     }
 
     #[test]
+    fn native_referenced_missiles_and_beam_targets_retain_visible_inventory_ownership() {
+        let catalog = load_embedded_visuals().unwrap();
+        let native = load_embedded_lightnings().unwrap();
+        let mut fields = csv::ReaderBuilder::new().delimiter(b'\t').from_reader(
+            include_bytes!("../../../docs/original_map/extracted/resolved/object-fields.tsv")
+                .as_slice(),
+        );
+        let headers = fields.headers().unwrap().clone();
+        let category = header_index(&headers, "category").unwrap();
+        let code = header_index(&headers, "rawcode").unwrap();
+        let field = header_index(&headers, "field_id").unwrap();
+        let kind = header_index(&headers, "value_type").unwrap();
+        let value = header_index(&headers, "recovered_value_json").unwrap();
+        let mut inventories = BTreeMap::new();
+        let mut children = BTreeMap::<String, Vec<String>>::new();
+        for row in fields.records() {
+            let row = row.unwrap();
+            let Some(data) = serde_json::from_str::<serde_json::Value>(row.get(value).unwrap())
+                .unwrap()
+                .as_str()
+                .map(str::to_owned)
+            else {
+                continue;
+            };
+            let codes = data
+                .split(',')
+                .map(str::trim)
+                .filter(|code| !matches!(*code, "" | "_" | "-" | "0"))
+                .map(str::to_owned)
+                .collect::<Vec<_>>();
+            if row.get(category) == Some("units") && row.get(field) == Some("uabi") {
+                inventories.insert(row.get(code).unwrap().to_owned(), codes);
+            } else if row.get(category) == Some("abilities")
+                && matches!(row.get(kind), Some("abilCode" | "abilList"))
+            {
+                children
+                    .entry(row.get(code).unwrap().to_owned())
+                    .or_default()
+                    .extend(codes);
+            }
+        }
+        let mut checked = 0;
+        for (unit, inventory) in inventories {
+            for effect in inventory
+                .iter()
+                .filter_map(|parent| children.get(parent))
+                .flatten()
+            {
+                for art in catalog.assets.iter().filter(|art| {
+                    art.owner_kind == "abilities"
+                        && art.owner_rawcode == *effect
+                        && art.source_unit_rawcode.is_none()
+                        && (art.role == "missile"
+                            || (art.role == "target"
+                                && native
+                                    .abilities
+                                    .iter()
+                                    .any(|ability| ability.rawcode == *effect)))
+                }) {
+                    checked += 1;
+                    assert!(
+                        catalog
+                            .assets
+                            .iter()
+                            .any(|alias| alias.owner_kind == art.owner_kind
+                                && alias.owner_rawcode == art.owner_rawcode
+                                && alias.source_unit_rawcode.as_deref() == Some(unit.as_str())
+                                && alias.role == art.role
+                                && alias.model_path == art.model_path),
+                        "missing native inventory alias {unit}/{effect}/{}",
+                        art.role
+                    );
+                }
+            }
+        }
+        assert!(
+            checked > 0,
+            "retained catalog must exercise native child ownership"
+        );
+    }
+
+    #[test]
     fn native_proxy_art_keeps_effect_identity_and_source_inventory() {
         let catalog = load_embedded_visuals().unwrap();
         let native = load_embedded_lightnings().unwrap();

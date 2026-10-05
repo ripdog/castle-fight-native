@@ -538,6 +538,7 @@ fn load_visual_assets(
     let mut buff_target_art = BTreeMap::<String, Vec<String>>::new();
     let mut chain_lightning_abilities = BTreeMap::<String, ()>::new();
     let mut unit_abilities = BTreeMap::<String, Vec<String>>::new();
+    let mut ability_references = BTreeMap::<String, BTreeSet<String>>::new();
     let mut stun_model_path = None;
     for row in fields.records() {
         let row = row?;
@@ -559,6 +560,16 @@ fn load_visual_assets(
             );
         }
         if kind == "abilities" {
+            if matches!(row.get(value_type), Some("abilCode" | "abilList")) {
+                ability_references
+                    .entry(rawcode.to_owned())
+                    .or_default()
+                    .extend(
+                        parse_json_comma_list(row.get(recovered).unwrap_or_default())
+                            .into_iter()
+                            .filter(|code| !matches!(code.as_str(), "" | "_" | "-" | "0")),
+                    );
+            }
             ability_base_rawcodes
                 .entry(rawcode.to_owned())
                 .or_insert_with(|| base_rawcode.to_owned());
@@ -718,14 +729,27 @@ fn load_visual_assets(
         }
     }
 
-    // Direct/autonomous native missiles (e.g. Phoenix Fire) do not have a parent
-    // dummy-cast semantic row. Preserve their unit inventory ownership as well.
+    // Autonomous missiles and native referenced effects (e.g. orb children) have
+    // no dummy-cast semantic row. Follow typed object references transitively and
+    // keep missile/native beam-target art owned by every visible inventory user.
     for (unit, abilities) in unit_abilities {
+        let mut closure = BTreeSet::new();
+        let mut pending = abilities.iter().map(String::as_str).collect::<Vec<_>>();
+        while let Some(ability) = pending.pop() {
+            if closure.insert(ability)
+                && let Some(children) = ability_references.get(ability)
+            {
+                pending.extend(children.iter().map(String::as_str));
+            }
+        }
         bundled_art.extend(
             assets
                 .iter()
                 .filter(|(kind, rawcode, role, _)| {
-                    kind == "abilities" && role == "missile" && abilities.contains(rawcode)
+                    kind == "abilities"
+                        && closure.contains(rawcode.as_str())
+                        && (role == "missile"
+                            || (role == "target" && native_lightning_rawcodes.contains(rawcode)))
                 })
                 .map(|(kind, rawcode, role, path)| {
                     (

@@ -131,6 +131,16 @@ class NativeDeliveryAuditTests(unittest.TestCase):
             self.assertIn("duplicate native lightning binding CHLD",
                           audit.audit_native_lightnings(projection, manifest, {"CHLD"}, root))
 
+    def test_native_inventory_ownership_requires_child_beam_and_missile_aliases(self):
+        rows = [{"owner_kind": "abilities", "owner_rawcode": "CHLD", "role": role,
+                 "source_unit_rawcode": None, "source_model": role + ".mdl", "gltf": role + ".gltf"}
+                for role in ("missile", "target", "caster")]
+        inventories = {"UNIT": {"PARN", "CHLD"}}
+        self.assertEqual(len(audit.audit_native_inventory_ownership(inventories, rows, {"CHLD"})), 2)
+        aliases = [dict(row, source_unit_rawcode="UNIT") for row in rows[:2]]
+        self.assertEqual(audit.audit_native_inventory_ownership(inventories, rows + aliases, {"CHLD"}), [])
+        self.assertEqual(audit.audit_native_inventory_ownership({"UNIT": {"OTHER"}}, rows, {"CHLD"}), [])
+
     def test_proxy_ownership_keeps_child_missile_and_beam_target_but_parent_cast(self):
         links = [{"unit": "UNIT", "parent": "PARN", "children": ["CHLD"]}]
         rows = [{"owner_kind": "abilities", "owner_rawcode": "CHLD",
