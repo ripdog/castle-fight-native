@@ -1,6 +1,10 @@
 # Elven race-owned presentation integration — 9.27 r1
 
-This branch supplies the presentation and authoritative race-selection boundary, **not** independent promotion. The release gate remains off until combined roster/mechanic closure. Roster, builder command-card ordering, hotkeys, models, portraits, attachment points, missile/buff/cast art and lightning identities are generated from retained evidence, not a copied UI table.
+Elven selection is enabled for retained 9.27 r1 at the user's request. Remaining
+fidelity caveats below are verification work, not selection gates. Roster, builder
+command-card ordering, hotkeys, models, portraits, attachment points,
+missile/buff/cast art and lightning identities are generated from retained
+evidence, not a copied UI table.
 
 ## Ownership and transport
 

@@ -95,8 +95,8 @@ impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
 pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 6;
 
-// Coordinator promotion switch; object/menu registration alone is not fidelity closure.
-const ELVEN_RACE_PROMOTED_927: bool = false;
+// Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
+const ELVEN_RACE_PROMOTED_927: bool = true;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CastleFightUnitId(pub u32);
@@ -336,8 +336,7 @@ impl CastleFightContentBundle {
             .collect()
     }
 
-    /// Race promotion is independent of object-data/menu coverage. Keep Elf closed until
-    /// its complete scripted/native fidelity and presentation audit has been signed off.
+    /// Race availability is version-scoped and independent of object-data/menu coverage.
     #[must_use]
     pub fn supported_builder_races(&self) -> &'static [CastleFightBuilderRace] {
         match self.map_version {

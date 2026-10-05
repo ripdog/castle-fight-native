@@ -1,6 +1,6 @@
 # Elven implementation checklist
 
-Status: **incomplete; not a playable race**.
+Status: **enabled for retained 9.27 r1; fidelity verification continues**.
 
 This file tracks promotion work, not a second encoding of map tuning. Resolve every
 row against the selected retained release using the shared
@@ -55,7 +55,7 @@ live/cold hash/wire, activation, replacement/cancellation, blocked and final
 pulse continuation. This does not close imported visual closure,
 final release/source publication, workspace validation, or native-oracle caveats.
 
-Before lobby exposure, finish reachable behavior coverage, consume authored build
-roots in race-aware match setup, and verify presentation bindings/attachments.
+Elven selection is enabled at the user's request. Race-aware match setup consumes
+the authored build roots; reachable behavior and presentation verification continue.
 Use reusable mechanic tests. Add an entity-specific regression only when a concrete
 integration issue cannot be demonstrated with a synthetic mechanic fixture.

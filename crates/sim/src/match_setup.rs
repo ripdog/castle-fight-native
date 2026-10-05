@@ -1150,20 +1150,22 @@ mod tests {
             .collect::<Vec<_>>();
         config.participants.extend(allies);
         let human = create_castle_fight_match(config.clone(), 1).unwrap();
-        let mut resolved = resolve_castle_fight_match(config).unwrap();
-        // Internal integration fixture exercises the future promotion path without
-        // weakening public/authoritative validation or opening the release gate.
-        for participant in &mut resolved.match_config.participants {
+        for participant in &mut config.participants {
             if participant.id.0 % 2 != 0 {
                 participant.builder_race = CastleFightBuilderRace::Elf;
             }
         }
-        resolved.direct_buildings =
-            participant_direct_buildings(resolved.content, &resolved.match_config.participants);
-        let mut restored = create_resolved_castle_fight_match(resolved.clone(), 4)
+        let config = CastleFightMatchConfig::development_subset_with_participants(
+            config.release.map_version,
+            "r1",
+            config.match_seed,
+            config.participants,
+        )
+        .unwrap();
+        let mut restored = create_castle_fight_match(config.clone(), 4)
             .unwrap()
             .simulation;
-        let game = create_resolved_castle_fight_match(resolved, 1).unwrap();
+        let game = create_castle_fight_match(config, 1).unwrap();
         // The immutable simulation inputs/content are shared. Source-owned builder rosters
         // are canonical entity state, so their initial gameplay checksum must differ.
         assert_ne!(
