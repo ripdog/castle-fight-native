@@ -1058,6 +1058,7 @@ impl Plugin for CastlePresentationPlugin {
                 Update,
                 (
                     toggle_debug_controls,
+                    crate::advance_network_presentation,
                     begin_presentation_profile,
                     update_camera,
                     finish_camera_profile,
@@ -2202,7 +2203,10 @@ fn update_imported_unit_animations(
         if let Some(current) = samples.current.units.get(&controller.sim_id) {
             update_live_imported_unit_animation(
                 &samples,
-                interpolated_sim_tick(&samples, playback.interpolation_alpha(&fixed_time)),
+                interpolated_sim_tick(
+                    &samples,
+                    playback.interpolation_alpha(&fixed_time, &samples),
+                ),
                 current,
                 &mut player,
                 &mut transitions,
@@ -2537,7 +2541,7 @@ fn trigger_attack_animations(
     render_map: Res<RenderMap>,
     mut weapons: Query<&mut WeaponPresentation>,
 ) {
-    if !samples.is_changed() {
+    if !samples.is_changed() || !samples.tick_advanced() {
         return;
     }
     for unit in samples.current.units.values() {
@@ -4483,7 +4487,7 @@ fn interpolate_render_transforms(
 ) {
     let (time, fixed_time, playback) = clocks;
     let (samples, metrics, terrain, unit_models) = world;
-    let alpha = playback.interpolation_alpha(&fixed_time);
+    let alpha = playback.interpolation_alpha(&fixed_time, &samples);
     let render_tick = samples.previous.tick as f32
         + (samples.current.tick.saturating_sub(samples.previous.tick) as f32) * alpha;
     let facing_blend = 1.0 - (-UNIT_FACING_RESPONSE * time.delta_secs()).exp();
@@ -5377,7 +5381,7 @@ fn update_health_bar_batch(
             **batch_visibility = Visibility::Hidden;
             return;
         };
-        let alpha = playback.interpolation_alpha(&fixed_time);
+        let alpha = playback.interpolation_alpha(&fixed_time, &samples);
         let rendered_tick = interpolated_sim_tick(&samples, alpha);
 
         for (id, unit) in &samples.current.units {
@@ -6013,7 +6017,7 @@ fn draw_presentation_gizmos(
     mut gizmos: Gizmos,
 ) {
     let (fixed_time, playback) = clocks;
-    let alpha = playback.interpolation_alpha(&fixed_time);
+    let alpha = playback.interpolation_alpha(&fixed_time, &samples);
 
     for remnant in &remnants.0 {
         let life = (remnant.remaining / DEATH_REMAINS_SECONDS).clamp(0.0, 1.0);
@@ -6204,7 +6208,7 @@ fn update_camera(
             &resources.terrain,
             resources
                 .playback
-                .interpolation_alpha(&resources.fixed_time),
+                .interpolation_alpha(&resources.fixed_time, &resources.samples),
         )
     });
     if let Some(focus) = tracking {
@@ -6728,10 +6732,7 @@ mod tests {
         transitions
             .play(&mut player, stand, Duration::ZERO)
             .repeat();
-        let mut samples = PresentationSamples {
-            previous: snapshot.clone(),
-            current: snapshot,
-        };
+        let mut samples = PresentationSamples::new(snapshot);
         for (kind, clip) in [
             (ActionAnimationKind::Attack, attack),
             (ActionAnimationKind::Cast, cast),

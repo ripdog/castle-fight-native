@@ -333,8 +333,14 @@ pub(crate) struct SimulationPlayback {
 }
 
 impl SimulationPlayback {
-    pub(crate) fn interpolation_alpha(self, fixed_time: &Time<Fixed>) -> f32 {
-        if self.paused {
+    pub(crate) fn interpolation_alpha(
+        self,
+        fixed_time: &Time<Fixed>,
+        samples: &PresentationSamples,
+    ) -> f32 {
+        if let Some(alpha) = samples.network_alpha() {
+            alpha
+        } else if self.paused {
             1.0
         } else {
             fixed_time.overstep_fraction()
@@ -1303,12 +1309,16 @@ fn advance_authoritative_simulation(
     let fixed_started = std::time::Instant::now();
 
     if authoritative.is_networked() {
+        let revision = presentation.revision();
         let result = process_network_events(
             &mut authoritative,
-            &mut presentation,
+            presentation.bypass_change_detection(),
             &mut selected_match,
             performance.as_deref_mut(),
         );
+        if presentation.revision() != revision {
+            presentation.set_changed();
+        }
         if let Some(performance) = performance.as_deref_mut() {
             performance.record_fixed_update_wall(fixed_started.elapsed());
         }
@@ -1337,6 +1347,33 @@ fn advance_authoritative_simulation(
     }
     if let Some(performance) = performance.as_deref_mut() {
         performance.record_fixed_update_wall(fixed_started.elapsed());
+    }
+}
+
+fn advance_network_presentation(
+    time: Res<Time>,
+    authoritative: Res<AuthoritativeSimulation>,
+    mut presentation: ResMut<PresentationSamples>,
+) {
+    let AuthorityMode::Network { connected, .. } = &authoritative.authority else {
+        return;
+    };
+    let (paused, speed) = authoritative
+        .network_lobby_status
+        .as_ref()
+        .map_or((false, 1.0), |status| {
+            (status.debug_paused, status.debug_speed.multiplier())
+        });
+    if presentation
+        .bypass_change_detection()
+        .advance_network_timeline(
+            time.delta_secs_f64(),
+            speed,
+            paused,
+            *connected && authoritative.catch_up.is_none(),
+        )
+    {
+        presentation.set_changed();
     }
 }
 
@@ -1369,9 +1406,11 @@ fn process_network_events(
             client.drain_events()
         }
     };
+    presentation.enable_network_timeline();
     for event in events {
         match event {
             NetworkEvent::Disconnected(reason) => {
+                presentation.freeze_network_timeline();
                 authoritative.catch_up = None;
                 authoritative.expected_execution_batch = None;
                 if let AuthorityMode::Network {
@@ -1388,6 +1427,7 @@ fn process_network_events(
                     .push(format!("Disconnected from server: {reason}"));
             }
             NetworkEvent::Reconnected(assignment) => {
+                presentation.freeze_network_timeline();
                 let (assigned_player, expected_team) = match &authoritative.authority {
                     AuthorityMode::Network {
                         assigned_player, ..
@@ -1573,9 +1613,14 @@ fn process_network_events(
                             authoritative
                                 .pending_feedback
                                 .extend(result.executions.iter().copied());
+                            presentation.enqueue_network_tick(PresentationSnapshot::capture(
+                                &authoritative.simulation,
+                            ));
+                        } else {
+                            presentation.enqueue_network_boundary(PresentationSnapshot::capture(
+                                &authoritative.simulation,
+                            ));
                         }
-                        presentation
-                            .publish(PresentationSnapshot::capture(&authoritative.simulation));
                     }
                 }
                 ServerMessage::TickExecutions { batch } => {
@@ -1703,8 +1748,7 @@ fn apply_network_lobby_roster(
     authoritative.simulation = demo.simulation;
     authoritative.pending_feedback.clear();
     authoritative.expected_execution_batch = None;
-    *presentation =
-        PresentationSamples::new(PresentationSnapshot::capture(&authoritative.simulation));
+    presentation.reset(PresentationSnapshot::capture(&authoritative.simulation));
     selected_match.direct_buildings = demo.direct_buildings;
     if let AuthorityMode::Network { match_config, .. } = &mut authoritative.authority {
         *match_config = config;
@@ -1901,8 +1945,7 @@ fn finish_snapshot_catch_up(
     authoritative.simulation.clear_presentation_events();
     authoritative.expected_execution_batch = None;
     authoritative.pending_feedback.clear();
-    *presentation =
-        PresentationSamples::new(PresentationSnapshot::capture(&authoritative.simulation));
+    presentation.reset(PresentationSnapshot::capture(&authoritative.simulation));
     authoritative
         .pending_status
         .push("Authoritative state synchronized.".to_owned());
@@ -2381,6 +2424,147 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn network_movement_survives_empty_fixed_polls_and_visible_boundary_controls() {
+        #[derive(Resource, Default)]
+        struct Publications(usize);
+        fn count_publications(samples: Res<PresentationSamples>, mut count: ResMut<Publications>) {
+            if samples.is_changed() {
+                count.0 += 1;
+            }
+        }
+
+        let mut source = crate::demo::create_demo_world(1, None);
+        let builder = source.simulation.builder_for_player(PlayerId(0)).unwrap();
+        let mut driver = MatchDriver::new(&source.simulation, source.content);
+        driver.submit_local_command(
+            &source.simulation,
+            PlayerId(0),
+            PlayerCommand::MoveBuilder {
+                builder: builder.id,
+                destination: SimPoint::new(
+                    builder.position.x + 20 * castle_fight_sim::SUBUNITS_PER_WORLD_UNIT,
+                    builder.position.y,
+                ),
+            },
+        );
+        let demo = crate::demo::create_demo_world(4, None);
+        let client = NetworkClient::connected_test_fixture(compatibility_identity_for_demo(&demo));
+        for _ in 0..2 {
+            let result = driver.advance_local_tick(&mut source.simulation).unwrap();
+            client.inject_server_message_for_test(ServerMessage::StreamRecord {
+                record: (&CanonicalStreamRecord::Tick(result.finalized.clone())).into(),
+            });
+            client.inject_server_message_for_test(ServerMessage::TickExecutions {
+                batch: castle_fight_protocol::WireExecutionBatch {
+                    tick: result.finalized.tick,
+                    executions: result.executions.iter().copied().map(Into::into).collect(),
+                },
+            });
+        }
+        let snapshot = PresentationSnapshot::capture(&demo.simulation);
+        let mut app = App::new();
+        app.insert_resource(AuthoritativeSimulation::new_networked(
+            demo.simulation,
+            demo.content,
+            demo.match_config,
+            client,
+            PlayerId(0),
+            0,
+        ))
+        .insert_resource(SelectedMatch {
+            content: demo.content,
+            direct_buildings: demo.direct_buildings,
+            local_player: PlayerId(0),
+        })
+        .insert_resource(PresentationSamples::new(snapshot))
+        .insert_resource(SimulationPlayback::default())
+        .insert_resource(Time::<()>::default())
+        .insert_resource(Time::<Fixed>::from_hz(f64::from(
+            CASTLE_FIGHT_SIMULATION_HZ,
+        )))
+        .init_resource::<Publications>()
+        .add_systems(
+            Update,
+            (
+                advance_authoritative_simulation,
+                advance_network_presentation,
+                count_publications,
+            )
+                .chain(),
+        );
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(Duration::from_millis(60));
+        app.update();
+        let displayed_x = |world: &World| {
+            let samples = world.resource::<PresentationSamples>();
+            let alpha = world
+                .resource::<SimulationPlayback>()
+                .interpolation_alpha(world.resource::<Time<Fixed>>(), samples);
+            presentation::sim_point_to_world_lerp(
+                samples.previous.builders[&builder.id].position,
+                samples.current.builders[&builder.id].position,
+                alpha,
+            )
+            .x
+        };
+        let before = displayed_x(app.world());
+        assert_eq!(
+            app.world().resource::<PresentationSamples>().previous.tick,
+            1
+        );
+        let publications = app.world().resource::<Publications>().0;
+        {
+            let mut fixed = app.world_mut().resource_mut::<Time<Fixed>>();
+            fixed.accumulate_overstep(Duration::from_millis(36));
+            let timestep = fixed.timestep();
+            fixed.discard_overstep(timestep);
+        }
+        app.world_mut()
+            .resource_mut::<Time>()
+            .advance_by(Duration::from_millis(2));
+        app.update();
+        assert!(displayed_x(app.world()) > before);
+        assert_eq!(app.world().resource::<Publications>().0, publications);
+
+        let control = driver
+            .emit_local_control(
+                &mut source.simulation,
+                castle_fight_sim::MatchControlEvent::Debug(
+                    castle_fight_sim::debug::DebugCommand::GrantResources,
+                ),
+            )
+            .unwrap();
+        let authoritative = app.world().resource::<AuthoritativeSimulation>();
+        let AuthorityMode::Network { client, .. } = &authoritative.authority else {
+            unreachable!()
+        };
+        client.inject_server_message_for_test(ServerMessage::StreamRecord {
+            record: (&CanonicalStreamRecord::Control(control)).into(),
+        });
+        let before = displayed_x(app.world());
+        app.update();
+        let samples = app.world().resource::<PresentationSamples>();
+        assert_eq!(samples.previous.tick, 1);
+        assert_eq!(samples.current.tick, 2);
+        assert_eq!(
+            samples.current.players[&PlayerId(0)].resources,
+            source.simulation.player(PlayerId(0)).unwrap().resources
+        );
+        assert!(samples.current.attacks.is_empty());
+        assert!(!samples.tick_advanced());
+        assert!(displayed_x(app.world()) > before);
+        assert_eq!(app.world().resource::<Publications>().0, publications + 1);
+        assert_eq!(
+            app.world()
+                .resource::<AuthoritativeSimulation>()
+                .simulation
+                .checksum(),
+            source.simulation.checksum()
+        );
     }
 
     #[test]

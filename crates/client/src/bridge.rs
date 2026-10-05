@@ -8,6 +8,9 @@ use castle_fight_sim::{
     ProjectileView, SecondaryAttackProfile, SimId, SimPoint, Simulation, StatusState, Team,
 };
 
+mod network_timeline;
+use network_timeline::NetworkTimeline;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnitVisualKind {
     Melee,
@@ -343,6 +346,9 @@ impl PresentationSnapshot {
 pub struct PresentationSamples {
     pub previous: PresentationSnapshot,
     pub current: PresentationSnapshot,
+    network: Option<NetworkTimeline>,
+    revision: u64,
+    tick_advanced: bool,
 }
 
 impl PresentationSamples {
@@ -351,11 +357,61 @@ impl PresentationSamples {
         Self {
             previous: initial.clone(),
             current: initial,
+            network: None,
+            revision: 0,
+            tick_advanced: false,
         }
     }
 
     pub fn publish(&mut self, next: PresentationSnapshot) {
+        self.tick_advanced = next.tick > self.current.tick;
         self.previous = std::mem::replace(&mut self.current, next);
+        self.revision += 1;
+    }
+
+    pub(crate) fn revision(&self) -> u64 {
+        self.revision
+    }
+
+    pub(crate) fn tick_advanced(&self) -> bool {
+        self.tick_advanced
+    }
+
+    pub(crate) fn reset(&mut self, mut snapshot: PresentationSnapshot) {
+        snapshot.clear_events();
+        if self.network.is_some() {
+            self.network = Some(NetworkTimeline::default());
+        }
+        self.previous = snapshot.clone();
+        self.current = snapshot;
+        self.tick_advanced = false;
+        self.revision += 1;
+    }
+}
+
+impl PresentationSnapshot {
+    fn clear_events(&mut self) {
+        self.attacks.clear();
+        self.ability_casts.clear();
+        self.shrine_revivals.clear();
+        self.chain_lightnings.clear();
+        self.building_spell_visuals.clear();
+    }
+
+    fn prepend_events(&mut self, earlier: &mut Self) {
+        // A low frame rate can cross several display ticks. Retain every event in
+        // chronological order, while publishing only the final state for this frame.
+        macro_rules! prepend {
+            ($field:ident) => {
+                std::mem::swap(&mut self.$field, &mut earlier.$field);
+                self.$field.append(&mut earlier.$field);
+            };
+        }
+        prepend!(attacks);
+        prepend!(ability_casts);
+        prepend!(shrine_revivals);
+        prepend!(chain_lightnings);
+        prepend!(building_spell_visuals);
     }
 }
 

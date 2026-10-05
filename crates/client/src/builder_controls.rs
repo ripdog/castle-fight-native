@@ -268,7 +268,7 @@ fn handle_modal_left_click(
             };
             let alpha = resources
                 .playback
-                .interpolation_alpha(&resources.fixed_time);
+                .interpolation_alpha(&resources.fixed_time, &resources.presentation);
             let target = pick_unit_on_ray(
                 ray.origin,
                 *ray.direction,
@@ -339,7 +339,7 @@ fn handle_modal_left_click(
             };
             let alpha = resources
                 .playback
-                .interpolation_alpha(&resources.fixed_time);
+                .interpolation_alpha(&resources.fixed_time, &resources.presentation);
             let target = pick_unit_on_ray(
                 ray.origin,
                 *ray.direction,
@@ -514,7 +514,7 @@ fn handle_smart_right_click(
     };
     let alpha = resources
         .playback
-        .interpolation_alpha(&resources.fixed_time);
+        .interpolation_alpha(&resources.fixed_time, &resources.presentation);
     let target = pick_unit_on_ray(
         ray.origin,
         *ray.direction,

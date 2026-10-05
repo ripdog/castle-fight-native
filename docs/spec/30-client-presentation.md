@@ -86,6 +86,8 @@ sim tick N                 sim tick N+1
 
 Interpolation is visual only. The displayed position may differ slightly from the latest canonical `SimPosition`.
 
+In network play, display time MUST advance monotonically between confirmed samples, independently of the local fixed-update overstep. A bounded presentation buffer MAY absorb packet jitter; missing ticks MUST hold confirmed state rather than extrapolating gameplay. Boundary controls MUST preserve the active movement interval while applying their persistent state, and MUST NOT replay the preceding tick's cosmetic events. Snapshot replacement MAY explicitly rebase the display clock and discard historical cosmetics. Pause, single-step, and speed changes MUST follow the server's playback state without delaying canonical input processing.
+
 Gameplay hit testing, targeting, and building validation MUST use authoritative simulation coordinates.
 
 ### 5.1 Terrain presentation and ground clamping

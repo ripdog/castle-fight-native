@@ -442,7 +442,8 @@ impl Plugin for InspectionPlugin {
                     update_selection_rectangle,
                     draw_selection_highlight,
                 )
-                    .chain(),
+                    .chain()
+                    .after(crate::advance_network_presentation),
             );
     }
 }
@@ -1058,7 +1059,9 @@ pub(crate) fn handle_world_selection(
         return;
     };
     let (camera, camera_transform) = *camera;
-    let alpha = state.playback.interpolation_alpha(&fixed_time);
+    let alpha = state
+        .playback
+        .interpolation_alpha(&fixed_time, &state.samples);
     let selection_view = SelectionView {
         camera,
         transform: camera_transform,
@@ -2551,7 +2554,7 @@ fn draw_selection_highlight(
     mut gizmos: Gizmos,
 ) {
     let (fixed_time, metrics, terrain) = world;
-    let alpha = playback.interpolation_alpha(&fixed_time);
+    let alpha = playback.interpolation_alpha(&fixed_time, &samples);
     for &id in &selection.members {
         if let Some(builder) = samples.current.builders.get(&id) {
             let previous = samples.previous.builders.get(&id).unwrap_or(builder);
