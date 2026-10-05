@@ -204,6 +204,14 @@ impl AuthoritativeSimulation {
                 "Debug commands are available only to the connected host during a match.".into(),
             );
         }
+        if matches!(request, castle_fight_protocol::DebugRequest::StepOneTick)
+            && !self
+                .network_lobby_status
+                .as_ref()
+                .is_some_and(|status| status.debug_paused)
+        {
+            return Err("Pause the simulation before single-stepping.".into());
+        }
         self.send_network_lobby_request(ClientMessage::Debug { request })
     }
 
@@ -2126,6 +2134,11 @@ mod tests {
             .unwrap()
             .host_player_id = 0;
         assert!(authoritative.debug_available());
+        assert!(
+            authoritative
+                .submit_debug_request(castle_fight_protocol::DebugRequest::StepOneTick)
+                .is_err()
+        );
         authoritative.network_lobby_status.as_mut().unwrap().started = false;
         assert!(!authoritative.debug_available());
         authoritative.network_lobby_status.as_mut().unwrap().started = true;
