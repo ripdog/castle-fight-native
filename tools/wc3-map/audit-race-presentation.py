@@ -82,13 +82,101 @@ def attachment_name(name):
     return re.sub(r"[^a-z0-9]", "", name.lower().replace("ref", ""))
 
 
-def audit(evidence, assets, builder):
+def ability_dependency_closure(fields, roots):
+    """Follow typed native ability references, including orb effects, without a rawcode table."""
+    links = {}
+    for row in fields:
+        if row["category"] == "abilities" and row["value_type"] in ("abilCode", "abilList"):
+            value = json.loads(row["recovered_value_json"])
+            if value is None or value == 0:
+                continue
+            if not isinstance(value, str):
+                raise ValueError(f"invalid typed ability reference for {row['rawcode']}: {value!r}")
+            for code in value.split(","):
+                code = code.strip()
+                if code in ("", "_", "-", "0"):
+                    continue
+                if len(code.encode("utf-8")) != 4:
+                    raise ValueError(f"invalid typed ability reference for {row['rawcode']}: {code!r}")
+                links.setdefault(row["rawcode"], set()).add(code)
+    closure = set(roots)
+    pending = list(roots)
+    while pending:
+        for child in links.get(pending.pop(), set()):
+            if child not in closure:
+                closure.add(child)
+                pending.append(child)
+    return closure
+
+
+def audit_native_lightnings(projection, manifest, abilities, root):
+    """Require selected native bindings/definitions, not merely those present in a pack."""
+    required = {row["rawcode"]: row for row in projection["abilities"]
+                if row["rawcode"] in abilities}
+    findings = []
+    native = manifest.get("native_lightnings", {})
+    bindings = {}
+    for row in native.get("abilities", []):
+        if row["rawcode"] in bindings:
+            findings.append(f"duplicate native lightning binding {row['rawcode']}")
+        bindings[row["rawcode"]] = row
+    definitions = {}
+    for row in native.get("effects", []):
+        identity = row["definition"]["id"]
+        if identity in definitions:
+            findings.append(f"duplicate native lightning definition {identity}")
+        definitions[identity] = row
+    expected = {row["id"]: row for row in projection["effects"]}
+    used = set()
+    for code, row in sorted(required.items()):
+        if bindings.get(code) != row:
+            findings.append(f"missing/stale native lightning binding {code}")
+        used.update(row["effects"])
+    for identity in sorted(used):
+        row = definitions.get(identity)
+        if not row or row["definition"] != expected[identity]:
+            findings.append(f"missing/stale native lightning definition {identity}")
+            continue
+        try:
+            safe_file(root, row["png"])
+        except (ValueError, KeyError, TypeError) as error:
+            findings.append(f"native lightning {identity}: {error}")
+    return findings
+
+
+def audit_proxy_ownership(proxy_links, relevant, native_abilities):
+    findings = []
+    for link in proxy_links:
+        for child in link["children"]:
+            for entry in relevant:
+                role = entry["role"]
+                if (entry["owner_kind"] != "abilities" or entry["owner_rawcode"] != child
+                        or entry.get("source_unit_rawcode") is not None):
+                    continue
+                if role not in ("caster", "effect", "target", "special", "missile"):
+                    continue
+                owner = child if role == "missile" or (role == "target" and child in native_abilities) else link["parent"]
+                if not any(alias["owner_rawcode"] == owner
+                           and alias.get("source_unit_rawcode") == link["unit"]
+                           and alias["role"] == role
+                           and model_identity(alias["source_model"]) == model_identity(entry["source_model"])
+                           and alias.get("gltf") for alias in relevant):
+                    findings.append(f"missing proxy ownership {link['unit']}/{owner}/{role}: {entry['source_model']}")
+    return sorted(set(findings))
+
+
+def audit(evidence, assets, builder, lightning_projection=None):
     roster = [row for row in table(evidence / "script/race-buildings.tsv")
               if row["builder_rawcode"] == builder]
     if not roster:
         raise ValueError(f"builder {builder} is absent from retained race evidence")
     fields_path = evidence / "resolved/object-fields.tsv"
     fields = table(fields_path)
+    lightning_path = lightning_projection or ROOT / "docs/original_map/extracted/resolved/native-lightning-visuals.json"
+    lightning_projection = json.loads(lightning_path.read_text())
+    fields_digest = hashlib.sha256(fields_path.read_bytes()).hexdigest()
+    if lightning_projection["objects_sha256"] != fields_digest:
+        raise ValueError("native lightning projection does not match the selected object evidence")
     objects = {}
     for row in fields:
         objects.setdefault((row["category"], row["rawcode"]), {})[row["field_id"]] = json.loads(
@@ -126,6 +214,7 @@ def audit(evidence, assets, builder):
         if source in buildings and parameters.get("effect_ability_rawcode"):
             abilities.add(parameters["effect_ability_rawcode"])
     units.update(model_variants)
+    abilities = ability_dependency_closure(fields, abilities)
     buffs = {buff for ability in abilities
              for buff in str(objects.get(("abilities", ability), {}).get("abuf", "")).split(",")
              if buff}
@@ -203,13 +292,16 @@ def audit(evidence, assets, builder):
         except (ValueError, TypeError) as error:
             findings.append(f"UI {entry['owner_rawcode']}/{entry['role']}: {error}")
     lightnings = manifests["effects"].get("native_lightnings", {})
-    for effect in lightnings.get("effects", []):
-        safe_file(assets / "effects", effect["png"])
+    findings.extend(audit_native_lightnings(lightning_projection, manifests["effects"], abilities,
+                                           assets / "effects"))
+    native_abilities = {row["rawcode"] for row in lightning_projection["abilities"]}
+    findings.extend(audit_proxy_ownership(proxy_links, relevant, native_abilities))
     return {"builder": builder, "map_version": manifests["units"]["castle_fight_catalog_version"],
             "source_sha256": {str(path.relative_to(evidence)): hashlib.sha256(path.read_bytes()).hexdigest()
                               for path in (fields_path, evidence / "script/race-buildings.tsv",
                                            evidence / "resolved/unit-spell-semantics.tsv",
                                            building_mechanics, runtime_mechanics)},
+            "lightning_projection_sha256": hashlib.sha256(lightning_path.read_bytes()).hexdigest(),
             "direct_roots": roots, "model_variants": sorted(model_variants),
             "entities": entities, "abilities": sorted(abilities),
             "buffs": sorted(buffs), "proxy_links": proxy_links,
@@ -228,8 +320,10 @@ def main():
     parser.add_argument("--evidence", type=Path, default=ROOT / "docs/original_map/extracted")
     parser.add_argument("--assets", type=Path, default=ROOT / "assets/wc3")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--lightning-projection", type=Path,
+                        help="source-linked native lightning projection (object digest must match --evidence)")
     args = parser.parse_args()
-    report = audit(args.evidence, args.assets, args.builder)
+    report = audit(args.evidence, args.assets, args.builder, args.lightning_projection)
     args.output.write_text(json.dumps(report, indent=2) + "\n")
     print(f"{len(report['entities'])} source-owned entities; {report['checked_models']} model/dependency bindings; "
           f"{len(report['findings'])} findings; report: {args.output}")

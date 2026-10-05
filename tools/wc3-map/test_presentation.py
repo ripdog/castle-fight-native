@@ -84,5 +84,64 @@ class ModelBindingAuditTests(unittest.TestCase):
                          audit.model_identity("art/model.mdx"))
 
 
+class NativeDeliveryAuditTests(unittest.TestCase):
+    def test_native_ability_reference_closure_follows_orb_children_cycles_and_ignores_text(self):
+        fields = [
+            {"category": "abilities", "rawcode": "PARN", "value_type": "abilCode", "recovered_value_json": '"CHLD"'},
+            {"category": "abilities", "rawcode": "CHLD", "value_type": "abilList", "recovered_value_json": '"LEAF,PARN,_,0"'},
+            {"category": "abilities", "rawcode": "LEAF", "value_type": "string", "recovered_value_json": '"TEXT"'},
+        ]
+        self.assertEqual(audit.ability_dependency_closure(fields, {"PARN"}), {"PARN", "CHLD", "LEAF"})
+
+    def projection(self):
+        binding = {"rawcode": "CHLD", "base_rawcode": "BASE", "native_section": "BASE",
+                   "effects": ["BEAM"], "target_art": ["impact.mdl"]}
+        definition = {"id": "BEAM", "texture": "beam.blp", "width": 12}
+        return {"abilities": [binding], "effects": [definition]}
+
+    def test_missing_native_pack_cannot_pass_with_source_required_beams(self):
+        findings = audit.audit_native_lightnings(self.projection(), {}, {"CHLD"}, HERE)
+        self.assertEqual(len(findings), 2)
+        self.assertTrue(any("binding CHLD" in finding for finding in findings))
+        self.assertTrue(any("definition BEAM" in finding for finding in findings))
+        self.assertEqual(audit.audit_native_lightnings(self.projection(), {}, {"OTHER"}, HERE), [])
+
+    def test_native_binding_definition_and_delivered_texture_are_all_required(self):
+        projection = self.projection()
+        manifest = {"native_lightnings": {
+            "abilities": projection["abilities"],
+            "effects": [{"definition": projection["effects"][0], "png": "beam.png"}]}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.assertTrue(audit.audit_native_lightnings(projection, manifest, {"CHLD"}, root))
+            (root / "beam.png").touch()
+            self.assertEqual(audit.audit_native_lightnings(projection, manifest, {"CHLD"}, root), [])
+            stale = json.loads(json.dumps(manifest))
+            stale["native_lightnings"]["effects"][0]["definition"]["width"] += 1
+            self.assertIn("missing/stale native lightning definition BEAM",
+                          audit.audit_native_lightnings(projection, stale, {"CHLD"}, root))
+            stale = json.loads(json.dumps(manifest))
+            stale["native_lightnings"]["abilities"][0]["effects"] = ["OTHER"]
+            self.assertIn("missing/stale native lightning binding CHLD",
+                          audit.audit_native_lightnings(projection, stale, {"CHLD"}, root))
+            manifest["native_lightnings"]["abilities"] = projection["abilities"] * 2
+            self.assertIn("duplicate native lightning binding CHLD",
+                          audit.audit_native_lightnings(projection, manifest, {"CHLD"}, root))
+
+    def test_proxy_ownership_keeps_child_missile_and_beam_target_but_parent_cast(self):
+        links = [{"unit": "UNIT", "parent": "PARN", "children": ["CHLD"]}]
+        rows = [{"owner_kind": "abilities", "owner_rawcode": "CHLD",
+                 "source_unit_rawcode": None, "role": role,
+                 "source_model": role + ".mdl", "gltf": role + ".gltf"}
+                for role in ("missile", "target", "caster")]
+        self.assertEqual(len(audit.audit_proxy_ownership(links, rows, {"CHLD"})), 3)
+        aliases = [dict(row, owner_rawcode="PARN" if row["role"] == "caster" else "CHLD",
+                        source_unit_rawcode="UNIT", source_model=row["role"] + ".mdx")
+                   for row in rows]
+        self.assertEqual(audit.audit_proxy_ownership(links, rows + aliases, {"CHLD"}), [])
+        aliases[0]["source_unit_rawcode"] = "ALLY"
+        self.assertEqual(len(audit.audit_proxy_ownership(links, rows + aliases, {"CHLD"})), 1)
+
+
 if __name__ == "__main__":
     unittest.main()
