@@ -122,19 +122,28 @@ def audit_native_lightnings(projection, manifest, abilities, root):
         bindings[row["rawcode"]] = row
     definitions = {}
     for row in native.get("effects", []):
-        identity = row["definition"]["id"]
+        identity = row["id"]
         if identity in definitions:
             findings.append(f"duplicate native lightning definition {identity}")
         definitions[identity] = row
     expected = {row["id"]: row for row in projection["effects"]}
     used = set()
     for code, row in sorted(required.items()):
-        if bindings.get(code) != row:
+        # Target art lives in ordinary visual bindings, not the flattened beam manifest.
+        expected_binding = {key: value for key, value in row.items() if key != "target_art"}
+        if bindings.get(code) != expected_binding:
             findings.append(f"missing/stale native lightning binding {code}")
+        for path in row.get("target_art", []):
+            if renderable(path) and not any(
+                    entry["owner_kind"] == "abilities" and entry["owner_rawcode"] == code
+                    and entry["role"] == "target" and entry.get("gltf")
+                    and model_identity(entry["source_model"]) == model_identity(path)
+                    for entry in manifest.get("assets", [])):
+                findings.append(f"missing native lightning target art {code}: {path}")
         used.update(row["effects"])
     for identity in sorted(used):
         row = definitions.get(identity)
-        if not row or row["definition"] != expected[identity]:
+        if not row or {key: value for key, value in row.items() if key != "png"} != expected[identity]:
             findings.append(f"missing/stale native lightning definition {identity}")
             continue
         try:

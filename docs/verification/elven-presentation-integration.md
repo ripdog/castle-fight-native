@@ -32,10 +32,17 @@ projection/audit tests passed**. The older local Elven pack now reports **nine
 findings**, correctly rejecting missing Healing/Chain lightning and source art
 ownership. See disk-backed `old-pack-race-audit{,-strict}.json` reports.
 
-The current exporter is being run against the local SD CASC installation and
-matching map archive into disk-backed staging. Regeneration is not yet a passing
-race delivery report, loading/attachment test, rendered inspection or Warcraft
-comparison. Native structure-buff visuals, direct/orb child ownership, script
+Current effects regeneration against the local SD CASC installation and matching
+map archive completed into disk-backed staging: 240 unique models, two unrelated
+unresolved references (`.mdx` and `sandshield.mdx`). The initial strict checker
+mistakenly expected nested effect definitions and target art inside the beam
+binding; the exporter flattens definitions and delivers target art through
+ordinary visual rows. Tests now mirror that actual schema and require those
+ordinary target-art rows separately. All nine tests passed again. The staged
+Elven race audit checks 26 source-owned entities, 60 model/dependency bindings,
+all four caster beam bindings, and reports zero findings
+(`current-pack-race-audit.json`). This is delivery evidence only, not a
+loading/attachment test, rendered inspection or Warcraft comparison. Native structure-buff visuals, direct/orb child ownership, script
 City/Shield/Overheat art and loading still need integrated review.
 
 ## Historical branch validation

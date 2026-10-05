@@ -101,30 +101,33 @@ class NativeDeliveryAuditTests(unittest.TestCase):
 
     def test_missing_native_pack_cannot_pass_with_source_required_beams(self):
         findings = audit.audit_native_lightnings(self.projection(), {}, {"CHLD"}, HERE)
-        self.assertEqual(len(findings), 2)
+        self.assertEqual(len(findings), 3)
         self.assertTrue(any("binding CHLD" in finding for finding in findings))
         self.assertTrue(any("definition BEAM" in finding for finding in findings))
         self.assertEqual(audit.audit_native_lightnings(self.projection(), {}, {"OTHER"}, HERE), [])
 
     def test_native_binding_definition_and_delivered_texture_are_all_required(self):
         projection = self.projection()
+        binding = {key: value for key, value in projection["abilities"][0].items() if key != "target_art"}
         manifest = {"native_lightnings": {
-            "abilities": projection["abilities"],
-            "effects": [{"definition": projection["effects"][0], "png": "beam.png"}]}}
+            "abilities": [binding],
+            "effects": [dict(projection["effects"][0], png="beam.png")]},
+            "assets": [{"owner_kind": "abilities", "owner_rawcode": "CHLD", "role": "target",
+                        "source_model": "impact.mdx", "gltf": "impact.gltf"}]}
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self.assertTrue(audit.audit_native_lightnings(projection, manifest, {"CHLD"}, root))
             (root / "beam.png").touch()
             self.assertEqual(audit.audit_native_lightnings(projection, manifest, {"CHLD"}, root), [])
             stale = json.loads(json.dumps(manifest))
-            stale["native_lightnings"]["effects"][0]["definition"]["width"] += 1
+            stale["native_lightnings"]["effects"][0]["width"] += 1
             self.assertIn("missing/stale native lightning definition BEAM",
                           audit.audit_native_lightnings(projection, stale, {"CHLD"}, root))
             stale = json.loads(json.dumps(manifest))
             stale["native_lightnings"]["abilities"][0]["effects"] = ["OTHER"]
             self.assertIn("missing/stale native lightning binding CHLD",
                           audit.audit_native_lightnings(projection, stale, {"CHLD"}, root))
-            manifest["native_lightnings"]["abilities"] = projection["abilities"] * 2
+            manifest["native_lightnings"]["abilities"] = [binding] * 2
             self.assertIn("duplicate native lightning binding CHLD",
                           audit.audit_native_lightnings(projection, manifest, {"CHLD"}, root))
 
