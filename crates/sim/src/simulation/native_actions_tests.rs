@@ -1,6 +1,7 @@
 use super::*;
 use crate::components::{HealingWaveProfile, ManaProfile, NativeBoltProfile};
 
+mod building_immunity;
 mod recovery;
 mod visibility;
 

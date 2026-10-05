@@ -619,6 +619,8 @@ pub struct UnitGameplayProperties {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BuildingGameplayProperties {
     pub content: Option<ContentIdentity>,
+    /// Intrinsic structure flags, independent of the classifications of produced children.
+    pub classifications: UnitClassifications,
     /// Authoritative construction duration. `None` keeps generic/synthetic building spawns
     /// immediate; Castle Fight content supplies this from the versioned map object data.
     pub construction_time_ticks: Option<u32>,
@@ -795,6 +797,7 @@ pub(crate) struct BuilderBuildOrder {
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub(crate) struct BuildingRuntimeState {
+    pub classifications: UnitClassifications,
     pub production: Option<ProductionState>,
     pub attack_cooldown: Option<AttackCooldown>,
     pub target: Option<TargetState>,

@@ -380,6 +380,7 @@ fn create_resolved_castle_fight_match(
             rawcode: u32::from_be_bytes(*b"hcas"),
             name: "Main Castle",
         }),
+        classifications: resolved.content.main_castle_classifications,
         repair_time_ticks: Some(resolved.content.main_castle_repair_time_ticks),
         damage_type: DamageType::Normal,
         armor: ArmorProfile::new(ArmorType::Fortified, 5),

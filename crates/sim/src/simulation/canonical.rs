@@ -458,6 +458,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                     hash.write_u8(0);
                 }
                 hash_optional_u32(&mut hash, building.repair_time_ticks);
+                hash_unit_classifications(&mut hash, building.classifications);
                 hash.write_u8(building.damage_type.stable_tag());
                 hash.write_u8(building.armor.armor_type.stable_tag());
                 hash.write_i32(i32::from(building.armor.armor_points));
@@ -1154,6 +1155,7 @@ pub(super) struct CanonicalBuilding {
     // Cold optional definitions must not inflate every canonical entity record.
     pub(super) production_additional_abilities: Option<Box<AdditionalAutomaticAbilityDefinitions>>,
     pub(super) production_classifications: UnitClassifications,
+    pub(super) classifications: UnitClassifications,
     pub(super) attack: Option<AttackProfile>,
     pub(super) attack_targets: Option<AttackTargetMask>,
     pub(super) damage_type: DamageType,
@@ -1254,6 +1256,7 @@ fn hash_optional_u64(hash: &mut Fnv64, value: Option<u64>) {
 }
 
 fn hash_building_runtime_state(hash: &mut Fnv64, runtime: BuildingRuntimeState) {
+    hash_unit_classifications(hash, runtime.classifications);
     match runtime.production {
         Some(production) => {
             hash.write_u8(1);
@@ -1463,6 +1466,7 @@ fn hash_building_definition(
     hash.write_u16(building.footprint.height);
     hash.write_i32(building.health);
     hash_content_identity(hash, properties.content);
+    hash_unit_classifications(hash, properties.classifications);
     hash_optional_u32(hash, properties.construction_time_ticks);
     hash_optional_u32(hash, properties.repair_time_ticks);
     hash.write_u8(properties.attack_targets.bits());

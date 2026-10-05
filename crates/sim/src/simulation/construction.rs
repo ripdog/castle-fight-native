@@ -317,6 +317,9 @@ impl Simulation {
             properties.damage_type,
             properties.armor,
         ));
+        if properties.classifications != UnitClassifications::default() {
+            entity.insert(properties.classifications);
+        }
         if let Some(owner) = owner {
             entity.insert(Owner(owner));
         }
@@ -348,6 +351,11 @@ impl Simulation {
         }
 
         let mut entity = self.world.entity_mut(entity);
+        if properties.classifications == UnitClassifications::default() {
+            entity.remove::<UnitClassifications>();
+        } else {
+            entity.insert(properties.classifications);
+        }
         if let Some(economy) = properties.economy {
             entity.insert(economy);
         }
@@ -485,6 +493,11 @@ impl Simulation {
 
     fn restore_building_runtime_state(&mut self, entity: Entity, runtime: BuildingRuntimeState) {
         let mut entity = self.world.entity_mut(entity);
+        if runtime.classifications == UnitClassifications::default() {
+            entity.remove::<UnitClassifications>();
+        } else {
+            entity.insert(runtime.classifications);
+        }
         match runtime.production {
             Some(state) => {
                 entity.insert(state);
@@ -609,6 +622,10 @@ impl Simulation {
                     *entity.get::<Health>()?,
                     entity.get::<ContentIdentity>().copied(),
                     BuildingRuntimeState {
+                        classifications: entity
+                            .get::<UnitClassifications>()
+                            .copied()
+                            .unwrap_or_default(),
                         production: entity.get::<ProductionState>().copied(),
                         attack_cooldown: entity.get::<AttackCooldown>().copied(),
                         target: entity.get::<TargetState>().copied(),
@@ -716,6 +733,11 @@ impl Simulation {
         *entity_mut
             .get_mut::<ArmorProfile>()
             .expect("upgrade source building missing armor profile") = target_properties.armor;
+        if target_properties.classifications == UnitClassifications::default() {
+            entity_mut.remove::<UnitClassifications>();
+        } else {
+            entity_mut.insert(target_properties.classifications);
+        }
         match target_properties.content {
             Some(content) => {
                 entity_mut.insert(content);

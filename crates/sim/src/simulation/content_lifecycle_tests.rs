@@ -6,6 +6,7 @@ use crate::{
     CASTLE_FIGHT_DEFAULT_MAP_VERSION, CastleFightProductionKind, castle_fight_content_bundle,
 };
 
+mod building_classifications;
 mod versioned_identity;
 
 fn wire_restore(original: &Simulation, workers: usize) -> Simulation {
@@ -49,6 +50,13 @@ fn catalog_construction_round_trips_before_activation_and_continues_across_worke
             .iter_entities()
             .find(|entity| entity.get::<SimId>() == Some(&id))
             .unwrap();
+        assert_eq!(
+            entity
+                .get::<UnitClassifications>()
+                .copied()
+                .unwrap_or_default(),
+            properties.classifications
+        );
         let construction = entity.get::<BuildingConstruction>().unwrap();
         assert_eq!(construction.properties, properties);
         assert_eq!(
@@ -66,6 +74,18 @@ fn catalog_construction_round_trips_before_activation_and_continues_across_worke
                 .unwrap()
                 .construction_complete_tick
                 .is_none()
+        );
+        let entity = restored
+            .world
+            .iter_entities()
+            .find(|entity| entity.get::<SimId>() == Some(&id))
+            .unwrap();
+        assert_eq!(
+            entity
+                .get::<UnitClassifications>()
+                .copied()
+                .unwrap_or_default(),
+            properties.classifications
         );
         let after_activation = wire_restore(&restored, 2);
         assert_eq!(restored.checksum(), after_activation.checksum());

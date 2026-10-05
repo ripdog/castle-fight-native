@@ -93,7 +93,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 5;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 6;
 
 // Coordinator promotion switch; object/menu registration alone is not fidelity closure.
 const ELVEN_RACE_PROMOTED_927: bool = false;
@@ -150,6 +150,7 @@ pub struct CastleFightContentBundle {
     pub economy: EconomyRules,
     pub damage_rules: DamageRules,
     pub main_castle_repair_time_ticks: u32,
+    pub main_castle_classifications: UnitClassifications,
     units: BTreeMap<CastleFightUnitId, CastleFightUnitDefinition>,
     production_buildings: BTreeMap<CastleFightBuildingId, CastleFightProductionDefinition>,
     towers: BTreeMap<CastleFightBuildingId, CastleFightTowerDefinition>,
@@ -1190,6 +1191,7 @@ pub struct CastleFightProductionDefinition {
     pub lumber_cost: u16,
     pub economy: BuildingEconomyProfile,
     pub building_health: i32,
+    pub classifications: UnitClassifications,
     pub construction_time_ticks: u32,
     pub repair_time_ticks: u32,
     pub armor: ArmorProfile,
@@ -1240,6 +1242,7 @@ impl CastleFightProductionDefinition {
             }),
             construction_time_ticks: Some(self.construction_time_ticks),
             repair_time_ticks: Some(self.repair_time_ticks),
+            classifications: self.classifications,
             attack_targets: AttackTargetMask::ALL,
             damage_type: DamageType::Normal,
             armor: self.armor,
@@ -1419,6 +1422,7 @@ pub struct CastleFightTowerDefinition {
     pub lumber_cost: u16,
     pub economy: BuildingEconomyProfile,
     pub health: i32,
+    pub classifications: UnitClassifications,
     pub construction_time_ticks: u32,
     pub repair_time_ticks: u32,
     pub armor: ArmorProfile,
@@ -1455,6 +1459,7 @@ impl CastleFightTowerDefinition {
             }),
             construction_time_ticks: Some(self.construction_time_ticks),
             repair_time_ticks: Some(self.repair_time_ticks),
+            classifications: self.classifications,
             attack_targets: self.attack_targets,
             damage_type: self.damage_type,
             armor: self.armor,
@@ -1652,6 +1657,8 @@ fn build_content_bundle_927() -> Result<CastleFightContentBundle, CastleFightCon
             version,
         )
         .map_err(|_| CastleFightContentError::UnsupportedRelease(version))?,
+        main_castle_classifications: extracted_content_927().units[&u32::from_be_bytes(*b"hcas")]
+            .target_classifications,
         units,
         production_buildings,
         towers,
@@ -1894,6 +1901,7 @@ fn canonical_content_bundle_hash(bundle: &CastleFightContentBundle) -> u64 {
     hash_economy_rules(&mut hash, bundle.economy);
     hash_damage_rules(&mut hash, bundle.damage_rules);
     hash.write_u32(bundle.main_castle_repair_time_ticks);
+    hash_classifications(&mut hash, bundle.main_castle_classifications);
     if let Some(shrine) = crate::golden_shrine_definition_for_version(bundle.map_version) {
         let p = &shrine.parameters;
         hash.write_u32(p.golden_shrine_unit_id);
@@ -2018,15 +2026,7 @@ fn hash_unit_definition(hash: &mut ContentHash64, definition: CastleFightUnitDef
         MovementClass::Air => 1,
     });
     hash.write_u8(u8::from(definition.mechanical));
-    hash.write_u8(u8::from(definition.classifications.hero));
-    hash.write_u8(u8::from(definition.classifications.summoned));
-    hash.write_u8(u8::from(definition.classifications.spell_immune));
-    hash.write_u8(u8::from(definition.classifications.combat_sapper));
-    hash.write_u8(u8::from(definition.classifications.invulnerable));
-    hash.write_u8(u8::from(definition.classifications.legendary));
-    hash.write_u8(u8::from(definition.classifications.summoned_marker));
-    hash.write_u8(u8::from(definition.classifications.illusion));
-    hash.write_u8(u8::from(definition.classifications.invisible));
+    hash_classifications(hash, definition.classifications);
     hash.write_i32(definition.collision_radius.0);
     match definition.corpse {
         Some(corpse) => {
@@ -2047,6 +2047,18 @@ fn hash_unit_definition(hash: &mut ContentHash64, definition: CastleFightUnitDef
     hash.write_i32(definition.movement.speed_per_tick);
 }
 
+fn hash_classifications(hash: &mut ContentHash64, flags: UnitClassifications) {
+    hash.write_u8(u8::from(flags.hero));
+    hash.write_u8(u8::from(flags.summoned));
+    hash.write_u8(u8::from(flags.spell_immune));
+    hash.write_u8(u8::from(flags.combat_sapper));
+    hash.write_u8(u8::from(flags.invulnerable));
+    hash.write_u8(u8::from(flags.legendary));
+    hash.write_u8(u8::from(flags.summoned_marker));
+    hash.write_u8(u8::from(flags.illusion));
+    hash.write_u8(u8::from(flags.invisible));
+}
+
 fn hash_production_definition(
     hash: &mut ContentHash64,
     definition: CastleFightProductionDefinition,
@@ -2058,6 +2070,7 @@ fn hash_production_definition(
     hash.write_u16(definition.lumber_cost);
     hash_building_economy(hash, definition.economy);
     hash.write_i32(definition.building_health);
+    hash_classifications(hash, definition.classifications);
     hash.write_u32(definition.construction_time_ticks);
     hash.write_u32(definition.repair_time_ticks);
     hash.write_u8(definition.armor.armor_type.stable_tag());
@@ -2106,6 +2119,7 @@ fn hash_tower_definition(hash: &mut ContentHash64, definition: CastleFightTowerD
     hash.write_u16(definition.lumber_cost);
     hash_building_economy(hash, definition.economy);
     hash.write_i32(definition.health);
+    hash_classifications(hash, definition.classifications);
     hash.write_u32(definition.construction_time_ticks);
     hash.write_u32(definition.repair_time_ticks);
     hash.write_u8(definition.armor.armor_type.stable_tag());
@@ -4135,6 +4149,7 @@ fn extracted_tower_definition_927(
         lumber_cost: building.lumber_cost,
         economy: extracted_building_economy_927(rawcode),
         health: protected.map_or(building.health, |stats| stats.health),
+        classifications: unit.target_classifications,
         construction_time_ticks: building.construction_time_ticks,
         repair_time_ticks: unit
             .repair_time_ticks
@@ -4382,6 +4397,7 @@ fn production_definition(
         lumber_cost: building.lumber_cost,
         economy,
         building_health,
+        classifications: building_unit.target_classifications,
         construction_time_ticks: building.construction_time_ticks,
         repair_time_ticks: building_unit.repair_time_ticks.unwrap_or_else(|| {
             panic!("production building {rawcode:#010x} is missing retained repair time")
@@ -4526,6 +4542,36 @@ mod tests {
             assert_eq!(properties.production_unit, produced.properties);
             assert_eq!(properties.production_spellcasting, produced.spellcasting);
         }
+    }
+
+    #[test]
+    fn every_registered_building_consumes_its_own_retained_classifications() {
+        let bundle = castle_fight_content_bundle(MapVersion::CASTLE_FIGHT_9_27).unwrap();
+        let content = extracted_content_927();
+        for definition in bundle.production_building_definitions() {
+            assert_eq!(
+                definition.classifications,
+                content.units[&definition.rawcode].target_classifications
+            );
+            assert_eq!(
+                definition.gameplay_properties().classifications,
+                definition.classifications
+            );
+        }
+        for definition in bundle.tower_definitions() {
+            assert_eq!(
+                definition.classifications,
+                content.units[&definition.rawcode].target_classifications
+            );
+            assert_eq!(
+                definition.gameplay_properties().classifications,
+                definition.classifications
+            );
+        }
+        assert_eq!(
+            bundle.main_castle_classifications,
+            content.units[&u32::from_be_bytes(*b"hcas")].target_classifications
+        );
     }
 
     #[test]

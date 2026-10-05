@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 20;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 21;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -3045,6 +3045,10 @@ impl Simulation {
                         attack_targets,
                         damage_type,
                         armor,
+                        classifications: entity_ref
+                            .get::<UnitClassifications>()
+                            .copied()
+                            .unwrap_or_default(),
                         cooldown_remaining: cooldown.map(|cooldown| cooldown.remaining),
                         target: target.and_then(|target| target.current),
                         spawn_tick: spawn_tick.map(|spawn_tick| spawn_tick.0),
@@ -3158,6 +3162,7 @@ struct BuildingSnapshot {
     team: Team,
     footprint: BuildingFootprint,
     health: i32,
+    classifications: UnitClassifications,
     attack: Option<AttackProfile>,
     attack_targets: Option<AttackTargetMask>,
     damage_type: DamageType,

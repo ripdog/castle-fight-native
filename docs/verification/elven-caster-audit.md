@@ -56,7 +56,7 @@ was introduced. Production and direct spawning share resolved definitions.
 The source `sapper` flag is now available as authoritative `combat_sapper`, and
 `Avul` is represented separately from spell immunity. Synthetic entities must
 explicitly opt into the sapper class; not every flying entity is a combat sapper.
-The integrated Shrine/caster content shares one authoritative classification field; Hex and native tower consumers now have reusable class/Avul negative cases. Native Phoenix unit visibility now checks source-team reveal at evaluation/commit without rechecking it in committed flight. Unit DOT live immunity already existed and now has wire/worker proof through all pulses/expiry and vulnerability restoration. Structure-classification transport and structure DOT immunity still need closure.
+The integrated Shrine/caster content shares one authoritative classification field; Hex and native tower consumers now have reusable class/Avul negative cases. Native Phoenix unit visibility now checks source-team reveal at evaluation/commit without rechecking it in committed flight. Unit DOT live immunity already existed and now has wire/worker proof through all pulses/expiry and vulnerability restoration. Structure-classification transport and structure DOT immunity are now integrated too: source-derived production/tower/Main Castle flags are separate from child classifications and survive live/cold hash/wire, shell activation, upgrade replacement and cancellation of acquired runtime changes. Structure launch/impact and whole-duration/temporary DOT immunity have reusable continuation proof.
 
 ### Dragonhawk Rider
 
@@ -147,15 +147,19 @@ nearest-unvisited rule is distinct from Healing Wave's least-HP rule.
 profiles, native target history and healing falloff, original launch identity,
 current homing position/tick and live projected arrival. Native DOT final-pulse
 policy and new intrinsic classifications are also canonical/snapshotted.
-The integrated compatibility constants are bundle schema 5, checksum schema 20,
-snapshot schema 15. Independent post-cast order recovery is canonical status,
+The integrated compatibility constants are bundle schema 6, checksum schema 21,
+snapshot schema 16. Independent post-cast order recovery is canonical status,
 not removable native stun. Final content/release/source publication remains open.
 
 Presentation transport includes child ability IDs on staged healing-lightning
 events, ability IDs on native projectile views, and successful native impact
 casts for both units and structures. No generic model/rawcode placeholder is
 encoded by the simulation. Actual child missile, caster/target/buff and lightning
-art comes from the frontend worker's retained visual projection.
+art is specified by the retained frontend visual projection. The local effects
+pack inspected after structure validation predates those projection changes: it
+lacks `native_lightnings` and the checked Elven source-ownership aliases. Existing
+glTF files alone do not prove current bindings or rendering. Regeneration and
+loading/attachment/rendered verification remain open.
 
 ## Integrated contracts and remaining promotion gates
 
@@ -193,6 +197,19 @@ art comes from the frontend worker's retained visual projection.
    rendered VFX fidelity cannot be signed off until the frontend merge is tested.
 
 ## Reusable behavioral verification
+
+The structure-classification update passed two focused synthetic transport tests,
+all nine lifecycle tests, all 19 caster tests, all 396 simulation tests, strict
+simulation all-target Clippy and client all-target checking
+(`building-classifications-{focused,lifecycle,casters,sim,clippy,client}.log`).
+The full suite also checks every registered building against retained source
+classifications. `content_lifecycle_tests/building_classifications.rs` covers all
+nine independent flags in live/cold hashes and wire activation, separate saved
+baseline/runtime state, replacement and cancellation.
+`native_actions_tests/building_immunity.rs` covers declared launch immunity,
+acquired in-flight immunity, blocked deadlines/expiry, and temporary immunity
+without replaying skipped damage or losing the final pulse. No untracked
+classification injection or duplicated map tuning substitutes for this transport.
 
 The visibility/live-unit-DOT update passed all 16 caster tests, 14 carrier tests,
 all 390 simulation tests, strict simulation all-target Clippy and client all-target

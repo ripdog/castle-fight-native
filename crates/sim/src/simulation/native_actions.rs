@@ -206,11 +206,8 @@ impl Simulation {
                         .iter_mut()
                         .find(|target| target.id == state.target)
                     {
-                        let immune = self
-                            .world
-                            .entity(target.entity)
-                            .get::<UnitClassifications>()
-                            .is_some_and(|flags| flags.spell_immune || flags.invulnerable);
+                        let immune = target.classifications.spell_immune
+                            || target.classifications.invulnerable;
                         if target.health > 0
                             && target.team != state.team
                             && !immune
@@ -316,9 +313,12 @@ pub(super) fn resolve_native_building_damage_over_time(
                     || (effect.final_pulse_at_expiry
                         && effect.next_pulse_tick == effect.expires_tick))
             {
-                building.health = building.health.saturating_sub(
-                    rules.apply_spell(effect.damage_per_pulse, building.armor.armor_type),
-                );
+                if !building.classifications.spell_immune && !building.classifications.invulnerable
+                {
+                    building.health = building.health.saturating_sub(
+                        rules.apply_spell(effect.damage_per_pulse, building.armor.armor_type),
+                    );
+                }
                 effect.next_pulse_tick += u64::from(effect.pulse_interval_ticks);
             }
             if tick < effect.expires_tick {

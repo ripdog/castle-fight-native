@@ -6,7 +6,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 15;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 16;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -553,6 +553,10 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
                     production_spellcasting: entity
                         .get::<ProductionSpellcastingProfile>()
                         .map(|profile| profile.0),
+                    classifications: entity
+                        .get::<UnitClassifications>()
+                        .copied()
+                        .unwrap_or_default(),
                     production_classifications: entity
                         .get::<ProductionUnitClassifications>()
                         .map_or(UnitClassifications::default(), |flags| flags.0),
@@ -682,6 +686,9 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                     building.damage_type,
                     building.armor,
                 ));
+                if building.classifications != UnitClassifications::default() {
+                    entity.insert(building.classifications);
+                }
                 if let Some(owner) = building.owner {
                     entity.insert(Owner(owner));
                 }

@@ -95,6 +95,7 @@ Optional component presence is canonical. `None` must not alias a present zero-v
 The complete current building state is:
 
 - `SimId`, optional content identity (map version and rawcode), optional owning `PlayerId`, `Team`, `BuildingFootprint`, and `Health`;
+- intrinsic `UnitClassifications`, independent of produced-child flags, in live structures and all cold building properties (including paid orders, pending construction and saved upgrade precursors). Absent ECS storage means all-false; each flag is canonically hashed and restored. Construction shells immediately use their declared classifications, upgrade shells use the target definition, successful completion keeps that definition, and cancellation restores the precursor's saved live flags, including runtime changes;
 - optional `BuildingConstruction`: start/complete ticks plus the complete pending authored building definition/properties. The current checksum hashes that definition canonically; snapshots must preserve the logical definition or an exact compatible definition reference;
 - optional `BuildingEconomyProfile` and optional `RepairTimeTicks`;
 - `DamageType` and `ArmorProfile`;
