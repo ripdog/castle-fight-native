@@ -1224,8 +1224,16 @@ mod tests {
         send_client(&mut first, hello(&server, 1));
         send_client(&mut second, hello(&server, 2));
         pump_until(&mut server, |view| view.started);
-        let _ = receive_server(&mut first);
-        let _ = receive_server(&mut second);
+        let first_assignment = match receive_server(&mut first) {
+            ServerMessage::HelloAccepted { assignment } => assignment,
+            message => panic!("expected first handshake, got {message:?}"),
+        };
+        let second_assignment = match receive_server(&mut second) {
+            ServerMessage::HelloAccepted { assignment } => assignment,
+            message => panic!("expected second handshake, got {message:?}"),
+        };
+        let disconnected_team = usize::from(second_assignment.team);
+        let winner = castle_fight_sim::Team(first_assignment.team);
 
         second.shutdown(Shutdown::Both).unwrap();
         drop(second);
@@ -1233,10 +1241,10 @@ mod tests {
         assert_eq!(
             server.authoritative().simulation().lifecycle(),
             MatchLifecycle::PausedForDisconnect {
-                disconnected_teams_mask: 0b10,
+                disconnected_teams_mask: 1 << disconnected_team,
             }
         );
-        let disconnected_since = server.team_disconnect_since[1]
+        let disconnected_since = server.team_disconnect_since[disconnected_team]
             .expect("team-wide disconnect must start an operational deadline");
         let history_len = server.authoritative().driver().history().len();
 
@@ -1264,16 +1272,16 @@ mod tests {
                 if matches!(
                     control.event,
                     castle_fight_sim::MatchControlEvent::FinishMatch {
-                        outcome: castle_fight_sim::MatchOutcome::Victory(castle_fight_sim::Team(0)),
-                    }
+                        outcome: castle_fight_sim::MatchOutcome::Victory(team),
+                    } if team == winner
                 )
         ));
         assert!(matches!(
             server.authoritative().simulation().lifecycle(),
             MatchLifecycle::Finished {
-                outcome: castle_fight_sim::MatchOutcome::Victory(castle_fight_sim::Team(0)),
+                outcome: castle_fight_sim::MatchOutcome::Victory(team),
                 ..
-            }
+            } if team == winner
         ));
         assert_eq!(server.team_disconnect_since, [None; 2]);
     }
@@ -1594,8 +1602,11 @@ mod tests {
         let mut first = connect(&server);
         let mut second = connect(&server);
         server.poll_network().unwrap();
-        send_client(&mut first, hello(&server, 1));
+        // Authenticate the second socket first: reader scheduling does not promise
+        // that TCP connection order determines the assigned authored player slot.
         send_client(&mut second, hello(&server, 2));
+        pump_until(&mut server, |view| view.authenticated == 1);
+        send_client(&mut first, hello(&server, 1));
         pump_until(&mut server, |view| view.started);
         let first_assignment = match receive_server(&mut first) {
             ServerMessage::HelloAccepted { assignment } => assignment,
@@ -1629,9 +1640,9 @@ mod tests {
                 if matches!(
                     control.event,
                     castle_fight_sim::MatchControlEvent::SetPlayerConnection {
-                        player: PlayerId(6),
+                        player,
                         connection: castle_fight_sim::PlayerConnectionStatus::Disconnected,
-                    }
+                    } if player == PlayerId(second_assignment.player_id)
                 )
         ));
 
@@ -1682,9 +1693,9 @@ mod tests {
                 if matches!(
                     control.event,
                     castle_fight_sim::MatchControlEvent::SetPlayerConnection {
-                        player: PlayerId(6),
+                        player,
                         connection: castle_fight_sim::PlayerConnectionStatus::Connected,
-                    }
+                    } if player == PlayerId(second_assignment.player_id)
                 )
         ));
         assert_eq!(
