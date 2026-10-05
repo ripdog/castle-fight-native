@@ -47,9 +47,9 @@ additional Phoenix Fire ignore ordinary order interruption but respect Hex at
 evaluation and live commitment. Subsequent Shrine/native-activation source-version and standalone timer wire
 validation passed all 384 simulation tests, strict simulation Clippy and client all-target checks.
 The following Hex/native-tower class and strict-mask integration passed all 388
-simulation tests, strict Clippy and client checks. This does not close native
-Phoenix visibility, unit/structure DOT immunity and structure classification
-transport, imported visual closure,
+simulation tests, strict Clippy and client checks. Native Phoenix unit visibility and live unit-DOT continuation then passed all
+390 simulation tests, strict Clippy and client all-target checks. This does not
+close structure classification/DOT immunity transport, imported visual closure,
 final release/source publication, workspace validation, or native-oracle caveats.
 
 Before lobby exposure, finish reachable behavior coverage, consume authored build

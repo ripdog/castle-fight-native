@@ -56,7 +56,7 @@ was introduced. Production and direct spawning share resolved definitions.
 The source `sapper` flag is now available as authoritative `combat_sapper`, and
 `Avul` is represented separately from spell immunity. Synthetic entities must
 explicitly opt into the sapper class; not every flying entity is a combat sapper.
-The integrated Shrine/caster content shares one authoritative classification field; Hex and native tower consumers now have reusable class/Avul negative cases. Native Phoenix visibility and unit/structure DOT live-immunity/structure-classification transport still need closure.
+The integrated Shrine/caster content shares one authoritative classification field; Hex and native tower consumers now have reusable class/Avul negative cases. Native Phoenix unit visibility now checks source-team reveal at evaluation/commit without rechecking it in committed flight. Unit DOT live immunity already existed and now has wire/worker proof through all pulses/expiry and vulnerability restoration. Structure-classification transport and structure DOT immunity still need closure.
 
 ### Dragonhawk Rider
 
@@ -147,7 +147,7 @@ nearest-unvisited rule is distinct from Healing Wave's least-HP rule.
 profiles, native target history and healing falloff, original launch identity,
 current homing position/tick and live projected arrival. Native DOT final-pulse
 policy and new intrinsic classifications are also canonical/snapshotted.
-The integrated compatibility constants are bundle schema 5, checksum schema 19,
+The integrated compatibility constants are bundle schema 5, checksum schema 20,
 snapshot schema 15. Independent post-cast order recovery is canonical status,
 not removable native stun. Final content/release/source publication remains open.
 
@@ -193,6 +193,14 @@ art comes from the frontend worker's retained visual projection.
    rendered VFX fidelity cannot be signed off until the frontend merge is tested.
 
 ## Reusable behavioral verification
+
+The visibility/live-unit-DOT update passed all 16 caster tests, 14 carrier tests,
+all 390 simulation tests, strict simulation all-target Clippy and client all-target
+checking (`native-fire-visibility-{focused,carriers,sim,clippy,client}.log`).
+`native_actions_tests/visibility.rs` distinguishes wrong-team versus own-team
+reveal, launch visibility versus committed impact, and skipped immune pulses
+versus later damage; it verifies wire continuation across worker counts. No
+Warcraft-executable or rendered visual conformance is implied.
 
 `simulation/native_actions_tests.rs` covers:
 

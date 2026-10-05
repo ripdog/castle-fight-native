@@ -174,7 +174,7 @@ Effects reuse the deterministic resolution rules in `15-targeting-combat.md`. Th
 
 Script selection and native effect eligibility are distinct. A script's combat-sapper or marker restriction MUST be checked at evaluation and live commitment without imposing it on unrelated autonomous native firing. Physical target classes do not replace relation, hero/organic or vulnerability qualifiers; consumers MUST implement retained qualifiers or reject unsupported evidence explicitly rather than discarding tokens.
 
-Native spell carriers honor spell immunity; independent Barrage arrows remain ordinary weapon damage and do not inherit that spell-only restriction. Both families exclude invulnerable targets at launch and revalidate invulnerability at impact, before any damage, buff or cleanse mutation. A committed missile does not rerun launch visibility selection during flight.
+Native spell carriers honor spell immunity; independent Barrage arrows remain ordinary weapon damage and do not inherit that spell-only restriction. Both families exclude invulnerable targets at launch and revalidate invulnerability at impact, before any damage, buff or cleanse mutation. Autonomous native passive firing checks source-team visibility/reveal at both evaluation and live commitment; another team's reveal is not sufficient. This rule does not replace a script's explicit vision-granting dummy helper or its independent selector. A committed missile does not rerun launch visibility selection during flight. Native unit DOT pulses consult live immunity/invulnerability, still advance their deadlines while blocked, and expire normally without replaying skipped damage when vulnerability returns.
 
 ### 8.2 Native projections and removal
 

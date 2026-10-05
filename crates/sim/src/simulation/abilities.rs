@@ -1107,7 +1107,8 @@ impl Simulation {
                 continue;
             }
             if let AbilityEffect::PhoenixFire(profile) = ability.effect
-                && (!profile.targets.can_target_unit(target.movement_class)
+                && (!target.visible_to(source.team, self.next_tick)
+                    || !profile.targets.can_target_unit(target.movement_class)
                     || native_fire_buff_active(&target.status, profile.ability, self.next_tick))
             {
                 continue;
@@ -1390,7 +1391,10 @@ impl Simulation {
                                     <= square_i32(ability.range)
                                 && match ability.effect {
                                     AbilityEffect::PhoenixFire(profile) => {
-                                        profile.targets.can_target_unit(target.movement_class)
+                                        target.visible_to(source.team, self.next_tick)
+                                            && profile
+                                                .targets
+                                                .can_target_unit(target.movement_class)
                                             && !target.status.damage_over_time[..usize::from(
                                                 target.status.damage_over_time_count,
                                             )]
