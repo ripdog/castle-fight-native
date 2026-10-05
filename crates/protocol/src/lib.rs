@@ -14,7 +14,7 @@ use castle_fight_sim::{
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-pub const PROTOCOL_SCHEMA_VERSION: u32 = 7;
+pub const PROTOCOL_SCHEMA_VERSION: u32 = 8;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub const MAX_RELEASE_REVISION_BYTES: usize = 64;
 pub const RECONNECT_TOKEN_BYTES: usize = 32;
@@ -382,10 +382,108 @@ pub enum HandshakeRejectReason {
     MatchUnavailable,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DebugSpeed {
+    Quarter,
+    Half,
+    #[default]
+    Normal,
+    Double,
+    Quadruple,
+}
+
+impl DebugSpeed {
+    pub const ALL: [Self; 5] = [
+        Self::Quarter,
+        Self::Half,
+        Self::Normal,
+        Self::Double,
+        Self::Quadruple,
+    ];
+
+    pub const fn multiplier(self) -> f64 {
+        match self {
+            Self::Quarter => 0.25,
+            Self::Half => 0.5,
+            Self::Normal => 1.0,
+            Self::Double => 2.0,
+            Self::Quadruple => 4.0,
+        }
+    }
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Quarter => "0.25x",
+            Self::Half => "0.5x",
+            Self::Normal => "1x",
+            Self::Double => "2x",
+            Self::Quadruple => "4x",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum WireDebugCommand {
+    GrantResources,
+    KillAllUnits,
+    SetBuildingsInvulnerable {
+        enabled: bool,
+    },
+    PopulateBuildings,
+    PlayerCommand {
+        player: u8,
+        command: WirePlayerCommand,
+    },
+}
+
+impl From<WireDebugCommand> for castle_fight_sim::debug::DebugCommand {
+    fn from(value: WireDebugCommand) -> Self {
+        match value {
+            WireDebugCommand::GrantResources => Self::GrantResources,
+            WireDebugCommand::KillAllUnits => Self::KillAllUnits,
+            WireDebugCommand::SetBuildingsInvulnerable { enabled } => {
+                Self::SetBuildingsInvulnerable { enabled }
+            }
+            WireDebugCommand::PopulateBuildings => Self::PopulateBuildings,
+            WireDebugCommand::PlayerCommand { player, command } => Self::PlayerCommand {
+                player: PlayerId(player),
+                command: command.into(),
+            },
+        }
+    }
+}
+impl From<castle_fight_sim::debug::DebugCommand> for WireDebugCommand {
+    fn from(value: castle_fight_sim::debug::DebugCommand) -> Self {
+        use castle_fight_sim::debug::DebugCommand;
+        match value {
+            DebugCommand::GrantResources => Self::GrantResources,
+            DebugCommand::KillAllUnits => Self::KillAllUnits,
+            DebugCommand::SetBuildingsInvulnerable { enabled } => {
+                Self::SetBuildingsInvulnerable { enabled }
+            }
+            DebugCommand::PopulateBuildings => Self::PopulateBuildings,
+            DebugCommand::PlayerCommand { player, command } => Self::PlayerCommand {
+                player: player.0,
+                command: command.into(),
+            },
+        }
+    }
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum DebugRequest {
+    Command { command: WireDebugCommand },
+    SetPlayback { paused: bool, speed: DebugSpeed },
+    StepOneTick,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LobbyStatus {
     pub host_player_id: u8,
+    pub debug_paused: bool,
+    pub debug_speed: DebugSpeed,
     pub connected_player_ids: Vec<u8>,
     pub required_players: u8,
     pub participants: Vec<LobbyParticipant>,
@@ -420,6 +518,7 @@ pub enum ClientMessage {
     Hello { hello: ClientHello },
     Reconnect { reconnect: ReconnectHello },
     StartMatch,
+    Debug { request: DebugRequest },
     SelectRace { builder_rawcode: u32 },
     SubmitCommand { request: CommandRequest },
     CheckpointReport { report: CheckpointReport },
@@ -889,9 +988,10 @@ impl From<WireCanonicalStreamRecord> for CanonicalStreamRecord {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum WireMatchControlEvent {
+    Debug { command: WireDebugCommand },
     SetPlayerConnection { player: u8, connected: bool },
     FinishMatch { outcome: WireMatchOutcome },
 }
@@ -899,6 +999,9 @@ pub enum WireMatchControlEvent {
 impl From<MatchControlEvent> for WireMatchControlEvent {
     fn from(value: MatchControlEvent) -> Self {
         match value {
+            MatchControlEvent::Debug(command) => Self::Debug {
+                command: command.into(),
+            },
             MatchControlEvent::SetPlayerConnection { player, connection } => {
                 Self::SetPlayerConnection {
                     player: player.0,
@@ -915,6 +1018,7 @@ impl From<MatchControlEvent> for WireMatchControlEvent {
 impl From<WireMatchControlEvent> for MatchControlEvent {
     fn from(value: WireMatchControlEvent) -> Self {
         match value {
+            WireMatchControlEvent::Debug { command } => Self::Debug(command.into()),
             WireMatchControlEvent::SetPlayerConnection { player, connected } => {
                 Self::SetPlayerConnection {
                     player: PlayerId(player),

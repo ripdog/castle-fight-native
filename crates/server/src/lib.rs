@@ -565,7 +565,7 @@ impl AuthoritativeMatch {
             .count()
     }
 
-    fn emit_control(
+    pub(crate) fn emit_control(
         &mut self,
         event: MatchControlEvent,
     ) -> Result<Vec<OutboundMessage>, ServerMatchError> {
@@ -606,7 +606,8 @@ impl AuthoritativeMatch {
             ClientMessage::Hello { .. }
             | ClientMessage::Reconnect { .. }
             | ClientMessage::SelectRace { .. }
-            | ClientMessage::StartMatch => {
+            | ClientMessage::StartMatch
+            | ClientMessage::Debug { .. } => {
                 vec![OutboundMessage::to_session(
                     session_id,
                     ServerMessage::ProtocolError {

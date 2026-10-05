@@ -1,12 +1,9 @@
 use bevy::{prelude::*, time::Fixed};
-use castle_fight_sim::{
-    BuildingFootprint, CASTLE_FIGHT_SIMULATION_HZ, CastleFightContentBundle,
-    CastleFightProductionKind, CastleFightTowerKind, PlayerId, SimId, Simulation, Team,
-};
+use castle_fight_protocol::{DebugRequest, DebugSpeed, WireDebugCommand};
+use castle_fight_sim::{CASTLE_FIGHT_SIMULATION_HZ, PlayerId, SimId, Simulation};
 
 use crate::{
-    AuthoritativeSimulation, SelectedMatch, SimulationPlayback,
-    advance_authoritative_simulation_once,
+    AuthoritativeSimulation, SimulationPlayback, advance_authoritative_simulation_once,
     bridge::{PresentationSamples, PresentationSnapshot},
     resource_ui::TOP_BAR_HEIGHT,
 };
@@ -18,10 +15,6 @@ const PANEL_HEIGHT: f32 = 496.0;
 const PANEL_PADDING: f32 = 12.0;
 const BUTTON_HEIGHT: f32 = 38.0;
 const BUTTON_GAP: f32 = 6.0;
-const DEBUG_RESOURCE_GRANT: u32 = 1_000_000;
-const DEBUG_KILL_DAMAGE: i32 = 9_999;
-const DEBUG_BUILDING_LINE_MARGIN_CELLS: i32 = 4;
-const DEBUG_BUILDING_LINE_GAP_CELLS: i32 = 2;
 
 const PANEL_BACKGROUND: Color = Color::srgba(0.030, 0.035, 0.045, 0.97);
 const PANEL_BORDER: Color = Color::srgb(0.42, 0.33, 0.17);
@@ -34,46 +27,6 @@ const BORDER_SELECTED: Color = Color::srgb(0.88, 0.70, 0.22);
 const TEXT_NORMAL: Color = Color::srgb(0.90, 0.91, 0.94);
 const TEXT_MUTED: Color = Color::srgb(0.56, 0.58, 0.63);
 const STATUS_COLOR: Color = Color::srgb(0.75, 0.78, 0.84);
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-enum DebugSpeed {
-    Quarter,
-    Half,
-    #[default]
-    Normal,
-    Double,
-    Quadruple,
-}
-
-impl DebugSpeed {
-    const ALL: [Self; 5] = [
-        Self::Quarter,
-        Self::Half,
-        Self::Normal,
-        Self::Double,
-        Self::Quadruple,
-    ];
-
-    const fn multiplier(self) -> f64 {
-        match self {
-            Self::Quarter => 0.25,
-            Self::Half => 0.5,
-            Self::Normal => 1.0,
-            Self::Double => 2.0,
-            Self::Quadruple => 4.0,
-        }
-    }
-
-    const fn label(self) -> &'static str {
-        match self {
-            Self::Quarter => "0.25x",
-            Self::Half => "0.5x",
-            Self::Normal => "1x",
-            Self::Double => "2x",
-            Self::Quadruple => "4x",
-        }
-    }
-}
 
 #[derive(Resource, Debug)]
 pub(crate) struct DebugMenuState {
@@ -281,10 +234,17 @@ fn spawn_debug_button(
 }
 
 fn toggle_debug_menu(
+    authoritative: Res<AuthoritativeSimulation>,
     keys: Res<ButtonInput<KeyCode>>,
     mut state: ResMut<DebugMenuState>,
     mut visibility: Single<&mut Visibility, With<DebugMenuRoot>>,
 ) {
+    if !authoritative.debug_available() {
+        state.open = false;
+        state.control_all_players = false;
+        **visibility = Visibility::Hidden;
+        return;
+    }
     if !keys.just_pressed(KeyCode::F8) {
         return;
     }
@@ -301,11 +261,10 @@ fn handle_debug_buttons(
     mut state: ResMut<DebugMenuState>,
     mut playback: ResMut<SimulationPlayback>,
     mut fixed_time: ResMut<Time<Fixed>>,
-    selected_match: Res<SelectedMatch>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
     mut presentation: ResMut<PresentationSamples>,
 ) {
-    if !state.open {
+    if !state.open || !authoritative.debug_available() {
         return;
     }
 
@@ -313,308 +272,87 @@ fn handle_debug_buttons(
         if *interaction != Interaction::Pressed {
             continue;
         }
-        match button.0 {
-            DebugAction::GrantResources => {
-                let players = authoritative.simulation.players();
-                for player in &players {
-                    let granted = authoritative.simulation.debug_grant_player_resources_for(
-                        player.id,
-                        DEBUG_RESOURCE_GRANT,
-                        DEBUG_RESOURCE_GRANT,
-                    );
-                    debug_assert!(granted, "listed debug player must have economy state");
-                }
-                presentation.publish(PresentationSnapshot::capture(&authoritative.simulation));
-                state.status = format!(
-                    "Granted all {} players +1,000,000 gold and +1,000,000 lumber.",
-                    players.len()
-                );
-            }
-            DebugAction::KillAllUnits => {
-                let affected = authoritative
-                    .simulation
-                    .debug_damage_all_units(DEBUG_KILL_DAMAGE);
-                presentation.publish(PresentationSnapshot::capture(&authoritative.simulation));
-                state.status =
-                    format!("Dealt {DEBUG_KILL_DAMAGE} damage to {affected} combat units.");
-            }
+        let request = match button.0 {
+            DebugAction::GrantResources => DebugRequest::Command {
+                command: WireDebugCommand::GrantResources,
+            },
+            DebugAction::KillAllUnits => DebugRequest::Command {
+                command: WireDebugCommand::KillAllUnits,
+            },
             DebugAction::ToggleControlAllPlayers => {
-                if authoritative.is_networked() {
-                    state.status =
-                        "Control-all-players is offline-only; the server owns network authority."
-                            .into();
-                    continue;
-                }
                 state.control_all_players = !state.control_all_players;
                 state.status = if state.control_all_players {
                     "Debug control enabled for every player-owned builder and building.".into()
                 } else {
                     "Debug control restored to normal player authority.".into()
                 };
+                continue;
             }
-            DebugAction::ToggleBuildingsInvulnerable => {
-                if authoritative.is_networked() {
-                    state.status =
-                        "Building invulnerability is offline-only; the server owns network state."
-                            .into();
-                    continue;
-                }
-                state.buildings_invulnerable = !state.buildings_invulnerable;
-                authoritative
-                    .simulation
-                    .debug_set_buildings_invulnerable(state.buildings_invulnerable);
-                state.status = if state.buildings_invulnerable {
-                    "All buildings are targetable but take zero damage.".into()
-                } else {
-                    "Building damage restored to normal.".into()
-                };
-            }
-            DebugAction::PopulateBuildings => {
-                if authoritative.is_networked() {
-                    state.status =
-                        "Building population is offline-only; the server owns network state."
-                            .into();
-                    continue;
-                }
-                let (spawned, skipped) = populate_debug_building_lines(
-                    &mut authoritative.simulation,
-                    selected_match.content,
-                );
-                presentation.publish(PresentationSnapshot::capture(&authoritative.simulation));
-                state.status = if skipped == 0 {
-                    format!("Spawned {spawned} completed buildings in top-to-bottom debug lines.")
-                } else {
-                    format!("Spawned {spawned} completed buildings; {skipped} could not be placed.")
-                };
-            }
-            DebugAction::TogglePause => {
-                playback.paused = !playback.paused;
-                state.status = if playback.paused {
-                    "Simulation paused. Single-step is now available.".into()
-                } else {
-                    "Simulation resumed.".into()
-                };
-            }
-            DebugAction::StepOneTick => {
-                if playback.paused {
-                    match advance_authoritative_simulation_once(
-                        &mut authoritative,
-                        &mut presentation,
-                    ) {
-                        Ok(_) => {
-                            state.status = format!(
-                                "Advanced one canonical tick. Current tick: {}.",
-                                authoritative.simulation.tick()
-                            );
-                        }
-                        Err(error) => {
-                            state.status = format!("Unable to advance canonical tick: {error:?}.");
-                        }
+            DebugAction::ToggleBuildingsInvulnerable => DebugRequest::Command {
+                command: WireDebugCommand::SetBuildingsInvulnerable {
+                    enabled: !authoritative.simulation.debug_buildings_invulnerable(),
+                },
+            },
+            DebugAction::PopulateBuildings => DebugRequest::Command {
+                command: WireDebugCommand::PopulateBuildings,
+            },
+            DebugAction::TogglePause => DebugRequest::SetPlayback {
+                paused: !playback.paused,
+                speed: state.speed,
+            },
+            DebugAction::StepOneTick => DebugRequest::StepOneTick,
+            DebugAction::SetSpeed(speed) => DebugRequest::SetPlayback {
+                paused: playback.paused,
+                speed,
+            },
+        };
+        if authoritative.is_networked() {
+            state.status = match authoritative.submit_debug_request(request) {
+                Ok(()) => "Debug command sent to the host server.".into(),
+                Err(error) => error,
+            };
+            continue;
+        }
+        match request {
+            DebugRequest::Command { command } => {
+                match authoritative.apply_local_debug_command(command.into()) {
+                    Ok(()) => {
+                        presentation
+                            .publish(PresentationSnapshot::capture(&authoritative.simulation));
+                        state.status = "Debug command applied.".into();
                     }
-                } else {
-                    state.status = "Pause the simulation before single-stepping.".into();
+                    Err(error) => {
+                        state.status = format!("Unable to apply debug command: {error:?}.")
+                    }
                 }
             }
-            DebugAction::SetSpeed(speed) => {
+            DebugRequest::SetPlayback { paused, speed } => {
+                playback.paused = paused;
                 state.speed = speed;
                 apply_debug_speed(&mut fixed_time, speed);
-                state.status = format!("Simulation speed set to {}.", speed.label());
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-enum DebugBuildingKind {
-    Production(CastleFightProductionKind),
-    Tower(CastleFightTowerKind),
-}
-
-impl DebugBuildingKind {
-    fn footprint_size(self, content: &CastleFightContentBundle) -> u16 {
-        match self {
-            Self::Production(kind) => {
-                content
-                    .production_building(kind)
-                    .expect("debug production kind must belong to selected content")
-                    .footprint_size_cells
-            }
-            Self::Tower(kind) => {
-                content
-                    .tower(kind)
-                    .expect("debug tower kind must belong to selected content")
-                    .footprint_size_cells
-            }
-        }
-    }
-}
-
-fn populate_debug_building_lines(
-    simulation: &mut Simulation,
-    content: &CastleFightContentBundle,
-) -> (usize, usize) {
-    let definitions = CastleFightProductionKind::ALL
-        .into_iter()
-        .filter(|kind| content.production_building(*kind).is_some())
-        .map(DebugBuildingKind::Production)
-        .chain(
-            CastleFightTowerKind::ALL
-                .into_iter()
-                .filter(|kind| content.tower(*kind).is_some())
-                .map(DebugBuildingKind::Tower),
-        )
-        .collect::<Vec<_>>();
-    if definitions.is_empty() {
-        return (0, 0);
-    }
-
-    let sizes = definitions
-        .iter()
-        .map(|definition| definition.footprint_size(content))
-        .collect::<Vec<_>>();
-    let mut spawned = 0;
-    let mut skipped = 0;
-
-    for team in [Team(0), Team(1)] {
-        let Some(castle) = simulation
-            .team_objective(team)
-            .and_then(|objective| simulation.building(objective))
-        else {
-            skipped += definitions.len();
-            continue;
-        };
-        let owner = castle.owner.or_else(|| {
-            simulation
-                .players()
-                .into_iter()
-                .filter(|player| player.team == team)
-                .map(|player| player.id)
-                .min()
-        });
-        let Some(owner) = owner else {
-            skipped += definitions.len();
-            continue;
-        };
-
-        let region = simulation
-            .team_build_regions(team)
-            .iter()
-            .copied()
-            .find(|region| footprint_contains(*region, castle.footprint))
-            .or_else(|| {
-                simulation
-                    .team_build_regions(team)
-                    .iter()
-                    .copied()
-                    .max_by_key(|region| u32::from(region.width) * u32::from(region.height))
-            });
-        let Some(region) = region else {
-            skipped += definitions.len();
-            continue;
-        };
-
-        let Some(footprints) = plan_debug_building_footprints(region, castle.footprint, &sizes)
-        else {
-            skipped += definitions.len();
-            continue;
-        };
-
-        for (&definition, footprint) in definitions.iter().zip(footprints) {
-            match definition {
-                DebugBuildingKind::Production(kind) => {
-                    let definition = content
-                        .production_building(kind)
-                        .expect("debug production kind must belong to selected content");
-                    simulation.debug_spawn_building_for_player_with_properties(
-                        owner,
-                        definition.spawn(team, footprint),
-                        definition.gameplay_properties(),
-                    );
-                }
-                DebugBuildingKind::Tower(kind) => {
-                    let definition = content
-                        .tower(kind)
-                        .expect("debug tower kind must belong to selected content");
-                    simulation.debug_spawn_building_for_player_with_properties(
-                        owner,
-                        definition.spawn(team, footprint),
-                        definition.gameplay_properties(),
-                    );
-                }
-            }
-            spawned += 1;
-        }
-    }
-
-    (spawned, skipped)
-}
-
-/// Keep the complete catalog behind the castle, adding columns rather than
-/// silently abandoning it once one vertical line fills. Prefer gaps, then use a
-/// dense grid; reject insufficient space before spawning any partial roster.
-fn plan_debug_building_footprints(
-    region: BuildingFootprint,
-    castle: BuildingFootprint,
-    sizes: &[u16],
-) -> Option<Vec<BuildingFootprint>> {
-    let Some(&maximum) = sizes.iter().max() else {
-        return Some(Vec::new());
-    };
-    if sizes.contains(&0) {
-        return None;
-    }
-    let maximum = i32::from(maximum);
-    let left_side = castle.min_x * 2 + i32::from(castle.width) - 1
-        < region.min_x * 2 + i32::from(region.width) - 1;
-    let mut min_x = region.min_x + DEBUG_BUILDING_LINE_MARGIN_CELLS;
-    let mut max_x = region.max_x() - DEBUG_BUILDING_LINE_MARGIN_CELLS;
-    if left_side {
-        max_x = max_x.min(castle.min_x - 1);
-    } else {
-        min_x = min_x.max(castle.max_x() + 1);
-    }
-    let min_y = region.min_y + DEBUG_BUILDING_LINE_MARGIN_CELLS;
-    let max_y = region.max_y() - DEBUG_BUILDING_LINE_MARGIN_CELLS;
-    let width = max_x - min_x + 1;
-    let height = max_y - min_y + 1;
-    if width < maximum || height < maximum {
-        return None;
-    }
-    for gap in [DEBUG_BUILDING_LINE_GAP_CELLS, 0] {
-        let pitch = maximum + gap;
-        let rows = usize::try_from((height + gap) / pitch).ok()?;
-        let columns = usize::try_from((width + gap) / pitch).ok()?;
-        if sizes.len().div_ceil(rows) > columns {
-            continue;
-        }
-        return sizes
-            .iter()
-            .enumerate()
-            .map(|(index, &size)| {
-                let column = i32::try_from(index / rows).ok()?;
-                let row = i32::try_from(index % rows).ok()?;
-                let slot_min_x = if left_side {
-                    min_x + column * pitch
+                state.status = if paused {
+                    "Simulation paused. Single-step is now available.".into()
                 } else {
-                    max_x - maximum + 1 - column * pitch
+                    format!("Simulation speed set to {}.", speed.label())
                 };
-                Some(BuildingFootprint::new(
-                    slot_min_x + (maximum - i32::from(size)) / 2,
-                    max_y - row * pitch - i32::from(size) + 1,
-                    size,
-                    size,
-                ))
-            })
-            .collect();
+            }
+            DebugRequest::StepOneTick if playback.paused => {
+                state.status = match advance_authoritative_simulation_once(
+                    &mut authoritative,
+                    &mut presentation,
+                ) {
+                    Ok(_) => format!(
+                        "Advanced one canonical tick. Current tick: {}.",
+                        authoritative.simulation.tick()
+                    ),
+                    Err(error) => format!("Unable to advance canonical tick: {error:?}."),
+                };
+            }
+            DebugRequest::StepOneTick => {
+                state.status = "Pause the simulation before single-stepping.".into()
+            }
+        }
     }
-    None
-}
-
-const fn footprint_contains(region: BuildingFootprint, footprint: BuildingFootprint) -> bool {
-    footprint.min_x >= region.min_x
-        && footprint.max_x() <= region.max_x()
-        && footprint.min_y >= region.min_y
-        && footprint.max_y() <= region.max_y()
 }
 
 fn apply_debug_speed(fixed_time: &mut Time<Fixed>, speed: DebugSpeed) {
@@ -622,12 +360,18 @@ fn apply_debug_speed(fixed_time: &mut Time<Fixed>, speed: DebugSpeed) {
 }
 
 fn update_debug_menu(
+    authoritative: Res<AuthoritativeSimulation>,
     playback: Res<SimulationPlayback>,
-    state: Res<DebugMenuState>,
+    mut state: ResMut<DebugMenuState>,
     buttons: Query<(&DebugMenuButton, &Children)>,
     mut labels: Query<&mut Text, With<DebugMenuButtonLabel>>,
     mut status: Single<&mut Text, (With<DebugStatusText>, Without<DebugMenuButtonLabel>)>,
 ) {
+    state.buildings_invulnerable = authoritative.simulation.debug_buildings_invulnerable();
+    if let Some(status) = &authoritative.network_lobby_status {
+        state.speed = status.debug_speed;
+    }
+
     if !state.open {
         return;
     }
@@ -729,10 +473,6 @@ impl DebugMenuState {
         self.control_all_players
     }
 
-    pub(crate) const fn buildings_invulnerable(&self) -> bool {
-        self.buildings_invulnerable
-    }
-
     pub(crate) fn can_control_builder(
         &self,
         simulation: &Simulation,
@@ -780,55 +520,87 @@ impl DebugMenuState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use castle_fight_sim::{BuildingFootprint, Team};
 
     fn footprints_overlap(a: BuildingFootprint, b: BuildingFootprint) -> bool {
         a.min_x <= b.max_x() && b.min_x <= a.max_x() && a.min_y <= b.max_y() && b.min_y <= a.max_y()
     }
 
-    #[test]
-    fn debug_layout_adds_columns_deterministically_without_crossing_castle_or_region() {
-        let region = BuildingFootprint::new(0, 0, 64, 64);
-        let sizes = [3, 5, 6, 4, 6, 3, 4, 5, 6, 3, 5, 4];
-        for (castle_x, left_side) in [(20, true), (40, false)] {
-            let castle = BuildingFootprint::new(castle_x, 30, 4, 4);
-            let plan = plan_debug_building_footprints(region, castle, &sizes).unwrap();
-            assert_eq!(
-                plan,
-                plan_debug_building_footprints(region, castle, &sizes).unwrap()
-            );
-            assert_eq!(plan.len(), sizes.len());
-            assert_ne!(plan.first().unwrap().min_x, plan.last().unwrap().min_x);
-            for (index, (&size, footprint)) in sizes.iter().zip(&plan).enumerate() {
-                assert_eq!(footprint.width, size);
-                assert_eq!(footprint.height, size);
-                assert!(footprint_contains(region, *footprint));
-                assert!(if left_side {
-                    footprint.max_x() < castle.min_x
-                } else {
-                    footprint.min_x > castle.max_x()
-                });
-                assert!(
-                    plan[index + 1..]
-                        .iter()
-                        .all(|other| !footprints_overlap(*footprint, *other))
-                );
-            }
-        }
+    fn footprint_contains(region: BuildingFootprint, footprint: BuildingFootprint) -> bool {
+        footprint.min_x >= region.min_x
+            && footprint.max_x() <= region.max_x()
+            && footprint.min_y >= region.min_y
+            && footprint.max_y() <= region.max_y()
     }
 
     #[test]
-    fn debug_layout_uses_dense_fallback_and_rejects_an_unplaceable_complete_catalog() {
-        let region = BuildingFootprint::new(0, 0, 40, 24);
-        let castle = BuildingFootprint::new(16, 10, 4, 4);
-        // Behind the castle: 12 x 16 cells. Gapped 6-cell slots hold 2,
-        // dense slots hold 4; do not skip all definitions just to preserve gaps.
-        let plan = plan_debug_building_footprints(region, castle, &[6; 4]).unwrap();
-        assert_eq!(plan.len(), 4);
-        assert!(plan_debug_building_footprints(region, castle, &[6; 5]).is_none());
-        assert!(plan_debug_building_footprints(region, castle, &[0]).is_none());
+    fn guests_cannot_open_debug_menu_and_lost_host_access_closes_it() {
+        let demo = crate::demo::create_demo_world(1, None);
+        let client = crate::network::NetworkClient::connected_test_fixture(
+            crate::compatibility_identity_for_demo(&demo),
+        );
+        let mut authoritative = AuthoritativeSimulation::new_networked(
+            demo.simulation,
+            demo.content,
+            demo.match_config,
+            client,
+            PlayerId(0),
+            0,
+        );
+        authoritative.network_lobby_status = Some(castle_fight_protocol::LobbyStatus {
+            host_player_id: 6,
+            debug_paused: false,
+            debug_speed: DebugSpeed::Normal,
+            connected_player_ids: vec![0, 6],
+            required_players: 2,
+            participants: Vec::new(),
+            started: true,
+        });
+        let mut keys = ButtonInput::<KeyCode>::default();
+        keys.press(KeyCode::F8);
+        let mut app = App::new();
+        app.insert_resource(authoritative)
+            .insert_resource(keys)
+            .init_resource::<DebugMenuState>()
+            .add_systems(Update, toggle_debug_menu);
+        let root = app
+            .world_mut()
+            .spawn((DebugMenuRoot, Visibility::Hidden))
+            .id();
+        app.update();
+        assert!(!app.world().resource::<DebugMenuState>().open);
         assert_eq!(
-            plan_debug_building_footprints(region, castle, &[]),
-            Some(Vec::new())
+            *app.world().get::<Visibility>(root).unwrap(),
+            Visibility::Hidden
+        );
+        app.world_mut()
+            .resource_mut::<AuthoritativeSimulation>()
+            .network_lobby_status
+            .as_mut()
+            .unwrap()
+            .host_player_id = 0;
+        app.update();
+        assert!(app.world().resource::<DebugMenuState>().open);
+        assert_eq!(
+            *app.world().get::<Visibility>(root).unwrap(),
+            Visibility::Visible
+        );
+        app.world_mut()
+            .resource_mut::<DebugMenuState>()
+            .control_all_players = true;
+        app.world_mut()
+            .resource_mut::<AuthoritativeSimulation>()
+            .network_lobby_status
+            .as_mut()
+            .unwrap()
+            .host_player_id = 6;
+        app.update();
+        let state = app.world().resource::<DebugMenuState>();
+        assert!(!state.open);
+        assert!(!state.control_all_players);
+        assert_eq!(
+            *app.world().get::<Visibility>(root).unwrap(),
+            Visibility::Hidden
         );
     }
 
@@ -862,7 +634,10 @@ mod tests {
     #[test]
     fn control_all_players_uses_the_selected_actors_owner_for_commands() {
         let mut demo = crate::demo::create_demo_world(1, None);
-        let (spawned, _) = populate_debug_building_lines(&mut demo.simulation, demo.content);
+        let (spawned, _) = castle_fight_sim::debug::populate_debug_building_lines(
+            &mut demo.simulation,
+            demo.content,
+        );
         assert!(spawned > 0);
         let simulation = &demo.simulation;
         let other_builder = simulation.builder_for_team(Team(1)).unwrap();
@@ -910,7 +685,8 @@ mod tests {
         let expected_spawned = implemented_rawcodes.len() * 2;
         let initial_buildings = demo.simulation.building_count();
 
-        let (spawned, skipped) = populate_debug_building_lines(&mut demo.simulation, content);
+        let (spawned, skipped) =
+            castle_fight_sim::debug::populate_debug_building_lines(&mut demo.simulation, content);
 
         assert_eq!(skipped, 0);
         assert_eq!(spawned, expected_spawned);

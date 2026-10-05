@@ -3,6 +3,7 @@ mod commands;
 mod components;
 mod content;
 mod damage;
+pub mod debug;
 mod economy;
 mod match_driver;
 mod match_setup;

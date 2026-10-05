@@ -175,6 +175,50 @@ impl AuthoritativeSimulation {
         matches!(self.authority, AuthorityMode::Network { .. })
     }
 
+    pub(crate) fn debug_available(&self) -> bool {
+        if self.simulation.lifecycle() != castle_fight_sim::MatchLifecycle::Running {
+            return false;
+        }
+        match &self.authority {
+            AuthorityMode::Local => self.commands_enabled,
+            AuthorityMode::Network {
+                assigned_player,
+                connected,
+                ..
+            } => {
+                *connected
+                    && self.catch_up.is_none()
+                    && self.network_lobby_status.as_ref().is_some_and(|status| {
+                        status.started && status.host_player_id == assigned_player.0
+                    })
+            }
+        }
+    }
+
+    pub(crate) fn submit_debug_request(
+        &mut self,
+        request: castle_fight_protocol::DebugRequest,
+    ) -> Result<(), String> {
+        if !self.debug_available() {
+            return Err(
+                "Debug commands are available only to the connected host during a match.".into(),
+            );
+        }
+        self.send_network_lobby_request(ClientMessage::Debug { request })
+    }
+
+    pub(crate) fn apply_local_debug_command(
+        &mut self,
+        command: castle_fight_sim::debug::DebugCommand,
+    ) -> Result<(), CanonicalStreamError> {
+        self.driver
+            .emit_local_control(
+                &mut self.simulation,
+                castle_fight_sim::MatchControlEvent::Debug(command),
+            )
+            .map(|_| ())
+    }
+
     pub(crate) fn request_network_start(&mut self) -> Result<(), String> {
         self.send_network_lobby_request(ClientMessage::StartMatch)
     }
@@ -204,6 +248,25 @@ impl AuthoritativeSimulation {
     ) -> ClientCommandSubmission {
         if !self.commands_enabled {
             return ClientCommandSubmission::Failed;
+        }
+        if self.debug_available()
+            && let AuthorityMode::Network {
+                assigned_player, ..
+            } = &self.authority
+            && player != *assigned_player
+        {
+            return match self.submit_debug_request(castle_fight_protocol::DebugRequest::Command {
+                command: castle_fight_protocol::WireDebugCommand::PlayerCommand {
+                    player: player.0,
+                    command: command.into(),
+                },
+            }) {
+                Ok(()) => ClientCommandSubmission::Submitted { client_sequence: 0 },
+                Err(error) => {
+                    self.pending_status.push(error);
+                    ClientCommandSubmission::Failed
+                }
+            };
         }
         match &mut self.authority {
             AuthorityMode::Local => ClientCommandSubmission::Local(
@@ -1096,7 +1159,6 @@ fn restore_simulation_quicksave(
 fn handle_quicksave_hotkeys(
     keys: Res<ButtonInput<KeyCode>>,
     selected_match: Res<SelectedMatch>,
-    debug_menu: Res<debug_menu::DebugMenuState>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
     mut presentation: ResMut<PresentationSamples>,
 ) {
@@ -1162,9 +1224,6 @@ fn handle_quicksave_hotkeys(
             selected_match.content,
             &path,
         )?;
-        authoritative
-            .simulation
-            .debug_set_buildings_invulnerable(debug_menu.buildings_invulnerable());
         authoritative.driver = MatchDriver::new(&authoritative.simulation, selected_match.content);
         authoritative.pending_feedback.clear();
         authoritative.expected_execution_batch = None;
@@ -1201,7 +1260,10 @@ fn toggle_simulation_pause(
         return;
     }
     if authoritative.is_networked() {
-        playback.paused = false;
+        playback.paused = authoritative
+            .network_lobby_status
+            .as_ref()
+            .is_some_and(|status| status.debug_paused);
         return;
     }
     let build_menu_open = action_panel
@@ -2027,6 +2089,53 @@ mod tests {
     }
 
     #[test]
+    fn network_debug_access_tracks_host_start_connection_and_handoff() {
+        let demo = crate::demo::create_demo_world(1, None);
+        let client = NetworkClient::connected_test_fixture(compatibility_identity_for_demo(&demo));
+        let mut authoritative = AuthoritativeSimulation::new_networked(
+            demo.simulation,
+            demo.content,
+            demo.match_config,
+            client,
+            PlayerId(0),
+            0,
+        );
+        assert!(!authoritative.debug_available());
+        authoritative.network_lobby_status = Some(castle_fight_protocol::LobbyStatus {
+            host_player_id: 6,
+            debug_paused: false,
+            debug_speed: castle_fight_protocol::DebugSpeed::Normal,
+            connected_player_ids: vec![0, 6],
+            required_players: 2,
+            participants: Vec::new(),
+            started: true,
+        });
+        assert!(!authoritative.debug_available());
+        let before = authoritative.simulation.checksum();
+        assert!(
+            authoritative
+                .submit_debug_request(castle_fight_protocol::DebugRequest::Command {
+                    command: castle_fight_protocol::WireDebugCommand::GrantResources
+                })
+                .is_err()
+        );
+        assert_eq!(before, authoritative.simulation.checksum());
+        authoritative
+            .network_lobby_status
+            .as_mut()
+            .unwrap()
+            .host_player_id = 0;
+        assert!(authoritative.debug_available());
+        authoritative.network_lobby_status.as_mut().unwrap().started = false;
+        assert!(!authoritative.debug_available());
+        authoritative.network_lobby_status.as_mut().unwrap().started = true;
+        if let AuthorityMode::Network { connected, .. } = &mut authoritative.authority {
+            *connected = false;
+        }
+        assert!(!authoritative.debug_available());
+    }
+
+    #[test]
     fn network_lobby_roster_is_applied_before_first_tick_in_same_event_batch() {
         use castle_fight_protocol::{LobbyParticipant, LobbyStatus};
         let config = crate::demo::create_demo_world(1, None).match_config;
@@ -2043,6 +2152,8 @@ mod tests {
             castle_fight_sim::castle_fight_content_bundle(config.release.map_version).unwrap();
         let status = LobbyStatus {
             host_player_id: 0,
+            debug_paused: false,
+            debug_speed: castle_fight_protocol::DebugSpeed::Normal,
             connected_player_ids: vec![0, 6],
             required_players: 2,
             started: false,

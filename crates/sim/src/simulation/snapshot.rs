@@ -6,7 +6,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 17;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 18;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -21,6 +21,7 @@ pub struct SimulationSnapshot {
     team_objectives: [Option<SimId>; 2],
     gjallarhorn_constructed_count: [u32; 2],
     shrine_death_generation: u64,
+    debug_buildings_invulnerable: bool,
     defense_alerts: Vec<DefenseAlert>,
     entities: Vec<CanonicalEntity>,
     checksum: u64,
@@ -261,6 +262,7 @@ impl Simulation {
             team_objectives: self.team_objectives,
             gjallarhorn_constructed_count: self.gjallarhorn_constructed_count,
             shrine_death_generation: self.shrine_death_generation,
+            debug_buildings_invulnerable: self.debug_buildings_invulnerable,
             defense_alerts: self.defense_alerts.clone(),
             entities: canonical_entities(&self.world),
             checksum: self.checksum(),
@@ -327,6 +329,7 @@ impl Simulation {
                 team_objectives: snapshot.team_objectives,
                 gjallarhorn_constructed_count: snapshot.gjallarhorn_constructed_count,
                 shrine_death_generation: snapshot.shrine_death_generation,
+                debug_buildings_invulnerable: snapshot.debug_buildings_invulnerable,
             },
         );
         if restored_checksum != snapshot.checksum {
@@ -346,6 +349,7 @@ impl Simulation {
         self.team_objectives = snapshot.team_objectives;
         self.gjallarhorn_constructed_count = snapshot.gjallarhorn_constructed_count;
         self.shrine_death_generation = snapshot.shrine_death_generation;
+        self.debug_buildings_invulnerable = snapshot.debug_buildings_invulnerable;
         self.defense_alerts.clone_from(&snapshot.defense_alerts);
         self.next_tick = snapshot.next_tick;
         self.next_id = snapshot.next_id;

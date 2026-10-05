@@ -386,3 +386,17 @@ The integration suite MUST eventually include:
 9. incompatible content/simulation version cannot join;
 10. pre-game lobby does not advance tick `0`, rejects non-host/early start requests, and starts only after the full roster is connected and the host requests start;
 11. high unit count does not materially increase steady-state command bandwidth in absence of more player actions.
+
+### Host debug controls
+
+Protocol revision 8 adds authenticated debug requests. During an interactive hosted match, only
+the original host session may invoke developer actions. Guest clients MUST hide the F8 debug menu;
+the server MUST independently reject guest, pre-start, and finished-match debug requests. Host
+authority survives reconnect with that session's credentials. Resource grants, unit damage,
+building population/immunity, and orders for other players MUST be canonical boundary controls,
+replicated and replayed in stream order. Host orders use the actor owner's normal command rules.
+Building immunity MUST participate in checksums and authoritative snapshots.
+
+Debug pause, speed, and single-step control server finalization and are broadcast to clients.
+They do not change simulation tick duration or deterministic gameplay calculations. Single-step
+is accepted only while the host has paused playback; disconnect pauses still take precedence.

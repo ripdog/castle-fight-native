@@ -45,6 +45,7 @@ pub struct FinalizedTickInputs {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MatchControlEvent {
+    Debug(crate::debug::DebugCommand),
     SetPlayerConnection {
         player: PlayerId,
         connection: PlayerConnectionStatus,
@@ -500,6 +501,7 @@ impl MatchDriver {
             });
         }
         match control.event {
+            MatchControlEvent::Debug(command) => command.apply(simulation, self.content),
             MatchControlEvent::SetPlayerConnection { player, connection } => {
                 if !simulation.set_player_connection_status(player, connection) {
                     if matches!(simulation.lifecycle(), MatchLifecycle::Finished { .. }) {

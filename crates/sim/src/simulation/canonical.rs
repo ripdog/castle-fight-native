@@ -159,6 +159,7 @@ pub(super) struct CanonicalMatchState<'a> {
     pub(super) team_objectives: [Option<SimId>; 2],
     pub(super) gjallarhorn_constructed_count: [u32; 2],
     pub(super) shrine_death_generation: u64,
+    pub(super) debug_buildings_invulnerable: bool,
 }
 
 pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) -> u64 {
@@ -172,6 +173,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
         team_objectives,
         gjallarhorn_constructed_count,
         shrine_death_generation,
+        debug_buildings_invulnerable,
     } = state;
     let entities = super::snapshot::canonical_entities(world);
 
@@ -182,6 +184,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
     hash.write_u64(next_tick);
     hash.write_u64(next_id);
     hash.write_u64(shrine_death_generation);
+    hash.write_u8(u8::from(debug_buildings_invulnerable));
     match lifecycle {
         MatchLifecycle::Running => hash.write_u8(0),
         MatchLifecycle::PausedForDisconnect {

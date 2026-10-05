@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 22;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 23;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -876,7 +876,7 @@ impl Simulation {
 
     /// Enables or disables developer-tool building damage immunity.
     ///
-    /// This is intentionally a non-match-config runtime flag for offline debugging. It suppresses
+    /// This runtime flag is canonical and snapshot-persisted for host debugging. It suppresses
     /// health loss only: buildings remain targetable, attacks still resolve, and projectile/on-hit
     /// behavior continues normally.
     pub fn debug_set_buildings_invulnerable(&mut self, enabled: bool) {
@@ -1945,6 +1945,7 @@ impl Simulation {
             &self.world,
             CanonicalMatchState {
                 shrine_death_generation: self.shrine_death_generation,
+                debug_buildings_invulnerable: self.debug_buildings_invulnerable,
                 next_tick: self.next_tick,
                 next_id: self.next_id,
                 configuration_identity: self.configuration_identity,
@@ -2057,6 +2058,7 @@ impl Simulation {
             &self.world,
             CanonicalMatchState {
                 shrine_death_generation: self.shrine_death_generation,
+                debug_buildings_invulnerable: self.debug_buildings_invulnerable,
                 next_tick: self.next_tick,
                 next_id: self.next_id,
                 configuration_identity: self.configuration_identity,

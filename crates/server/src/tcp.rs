@@ -1,3 +1,4 @@
+use castle_fight_protocol::{DebugRequest, DebugSpeed};
 use std::{
     collections::BTreeMap,
     fmt, io,
@@ -124,6 +125,8 @@ pub struct TcpAuthoritativeServer {
     started: bool,
     lobby_mode: bool,
     host_session: Option<SessionId>,
+    debug_paused: bool,
+    debug_speed: DebugSpeed,
     team_disconnect_since: [Option<Instant>; 2],
 }
 
@@ -162,6 +165,8 @@ impl TcpAuthoritativeServer {
             started: false,
             lobby_mode,
             host_session: None,
+            debug_paused: false,
+            debug_speed: DebugSpeed::Normal,
             team_disconnect_since: [None; 2],
         })
     }
@@ -261,11 +266,16 @@ impl TcpAuthoritativeServer {
 
     pub fn run_until_match_end(mut self) -> Result<(), TcpServerError> {
         let tick_hz = f64::from(CASTLE_FIGHT_SIMULATION_HZ);
-        let tick_period = Duration::from_secs_f64(1.0 / tick_hz);
+        let mut tick_period = Duration::from_secs_f64(1.0 / tick_hz);
         let mut next_tick_deadline = Instant::now() + tick_period;
 
         loop {
             self.poll_network()?;
+            let period = Duration::from_secs_f64(1.0 / (tick_hz * self.debug_speed.multiplier()));
+            if tick_period != period {
+                tick_period = period;
+                next_tick_deadline = Instant::now() + tick_period;
+            }
             if matches!(
                 self.authoritative.simulation().lifecycle(),
                 MatchLifecycle::Finished { .. }
@@ -273,6 +283,7 @@ impl TcpAuthoritativeServer {
                 return Ok(());
             }
             if !self.started
+                || self.debug_paused
                 || matches!(
                     self.authoritative.simulation().lifecycle(),
                     MatchLifecycle::PausedForDisconnect { .. }
@@ -364,6 +375,9 @@ impl TcpAuthoritativeServer {
                 return Ok(());
             }
         };
+        if let ClientMessage::Debug { request } = message {
+            return self.process_debug_request(connection_id, session_id, request);
+        }
         if matches!(message, ClientMessage::StartMatch) {
             return self.process_start_match(connection_id, session_id);
         }
@@ -544,7 +558,8 @@ impl TcpAuthoritativeServer {
                 self.bind_session_connection(connection_id, session_id);
                 Ok(())
             }
-            ClientMessage::StartMatch
+            ClientMessage::Debug { .. }
+            | ClientMessage::StartMatch
             | ClientMessage::SelectRace { .. }
             | ClientMessage::SubmitCommand { .. }
             | ClientMessage::CheckpointReport { .. } => self.send_to_connection(
@@ -554,6 +569,48 @@ impl TcpAuthoritativeServer {
                 },
             ),
         }
+    }
+
+    fn process_debug_request(
+        &mut self,
+        connection_id: ConnectionId,
+        session_id: SessionId,
+        request: DebugRequest,
+    ) -> Result<(), TcpServerError> {
+        if self.host_session != Some(session_id)
+            || !self.started
+            || self.authoritative.simulation().lifecycle() != MatchLifecycle::Running
+        {
+            return self.send_to_connection(
+                connection_id,
+                ServerMessage::ProtocolError {
+                    code: ProtocolErrorCode::Unauthorized,
+                },
+            );
+        }
+        match request {
+            DebugRequest::Command { command } => {
+                let outbound = self
+                    .authoritative
+                    .emit_control(castle_fight_sim::MatchControlEvent::Debug(command.into()))?;
+                self.dispatch_all(outbound)?;
+            }
+            DebugRequest::SetPlayback { paused, speed } => {
+                self.debug_paused = paused;
+                self.debug_speed = speed;
+                self.broadcast_lobby_status()?;
+            }
+            DebugRequest::StepOneTick if self.debug_paused => self.finalize_next_tick()?,
+            DebugRequest::StepOneTick => {
+                return self.send_to_connection(
+                    connection_id,
+                    ServerMessage::ProtocolError {
+                        code: ProtocolErrorCode::Unauthorized,
+                    },
+                );
+            }
+        }
+        Ok(())
     }
 
     fn process_start_match(
@@ -584,6 +641,8 @@ impl TcpAuthoritativeServer {
         let required_players = u8::try_from(self.authoritative.required_player_count()).ok()?;
         Some(LobbyStatus {
             host_player_id,
+            debug_paused: self.debug_paused,
+            debug_speed: self.debug_speed,
             connected_player_ids: self
                 .authoritative
                 .connected_player_ids()
@@ -1063,6 +1122,192 @@ mod tests {
                 assignment: SessionAssignment { player_id: 6, .. }
             }
         ));
+    }
+
+    #[test]
+    fn debug_requests_require_host_and_replicate_through_wire_replay_and_snapshot() {
+        use castle_fight_protocol::{DebugRequest, DebugSpeed, WireDebugCommand};
+        let mut server = lobby_server();
+        let mut host = connect(&server);
+        send_client(&mut host, hello(&server, 1));
+        pump_until(&mut server, |view| view.authenticated == 1);
+        assert!(matches!(
+            receive_server(&mut host),
+            ServerMessage::HelloAccepted { .. }
+        ));
+        assert!(matches!(
+            receive_server(&mut host),
+            ServerMessage::LobbyStatus { .. }
+        ));
+        // Even the host cannot mutate the pristine tick-zero lobby.
+        send_client(
+            &mut host,
+            ClientMessage::Debug {
+                request: DebugRequest::Command {
+                    command: WireDebugCommand::GrantResources,
+                },
+            },
+        );
+        pump_network(&mut server);
+        assert!(matches!(
+            receive_server(&mut host),
+            ServerMessage::ProtocolError {
+                code: ProtocolErrorCode::Unauthorized
+            }
+        ));
+
+        let mut guest = connect(&server);
+        send_client(&mut guest, hello(&server, 2));
+        pump_until(&mut server, |view| view.authenticated == 2);
+        assert!(matches!(
+            receive_server(&mut guest),
+            ServerMessage::HelloAccepted { .. }
+        ));
+        assert!(matches!(
+            receive_server(&mut guest),
+            ServerMessage::LobbyStatus { .. }
+        ));
+        assert!(matches!(
+            receive_server(&mut host),
+            ServerMessage::LobbyStatus { .. }
+        ));
+        send_client(&mut host, ClientMessage::StartMatch);
+        pump_network(&mut server);
+        for stream in [&mut host, &mut guest] {
+            assert!(
+                matches!(receive_server(stream), ServerMessage::LobbyStatus { status } if status.started)
+            );
+        }
+        let content =
+            castle_fight_sim::castle_fight_content_bundle(MapVersion::CASTLE_FIGHT_9_27).unwrap();
+        let config =
+            CastleFightMatchConfig::development_subset(MapVersion::CASTLE_FIGHT_9_27, "r1", 0x1234)
+                .unwrap();
+        let mut replica = create_castle_fight_match(config, 4).unwrap().simulation;
+        let mut driver = MatchDriver::new(&replica, content);
+        let builder = replica.builder_for_player(PlayerId(6)).unwrap();
+        let destination =
+            castle_fight_sim::SimPoint::new(builder.position.x - 100, builder.position.y);
+        let commands = [
+            WireDebugCommand::GrantResources,
+            WireDebugCommand::SetBuildingsInvulnerable { enabled: true },
+            WireDebugCommand::PopulateBuildings,
+            WireDebugCommand::KillAllUnits,
+            WireDebugCommand::PlayerCommand {
+                player: 6,
+                command: WirePlayerCommand::MoveBuilder {
+                    builder: builder.id.0,
+                    destination: destination.into(),
+                },
+            },
+        ];
+        for command in commands {
+            let request = DebugRequest::Command { command };
+            let before = server.authoritative.simulation().checksum();
+            send_client(
+                &mut guest,
+                ClientMessage::Debug {
+                    request: request.clone(),
+                },
+            );
+            pump_network(&mut server);
+            assert!(matches!(
+                receive_server(&mut guest),
+                ServerMessage::ProtocolError {
+                    code: ProtocolErrorCode::Unauthorized
+                }
+            ));
+            assert_eq!(server.authoritative.simulation().checksum(), before);
+            send_client(&mut host, ClientMessage::Debug { request });
+            pump_network(&mut server);
+            let ServerMessage::StreamRecord { record } = receive_server(&mut host) else {
+                panic!("debug mutation must use canonical stream")
+            };
+            assert_eq!(
+                receive_server(&mut guest),
+                ServerMessage::StreamRecord {
+                    record: record.clone()
+                }
+            );
+            driver
+                .apply_stream_record(&mut replica, record.into())
+                .unwrap();
+            assert_eq!(
+                replica.checksum(),
+                server.authoritative.simulation().checksum()
+            );
+        }
+        assert_eq!(
+            replica.builder_for_player(PlayerId(6)).unwrap().destination,
+            Some(destination)
+        );
+        assert!(replica.debug_buildings_invulnerable());
+        let wire = replica.capture_snapshot().encode_wire().unwrap();
+        let snapshot = SimulationSnapshot::decode_wire(&wire, content).unwrap();
+        replica.debug_set_buildings_invulnerable(false);
+        replica.restore_snapshot(&snapshot).unwrap();
+        assert!(replica.debug_buildings_invulnerable());
+        let replay = server.authoritative.driver().export_replay();
+        replay.play_to_end(&mut replica, &mut driver).unwrap();
+        assert_eq!(
+            replica.checksum(),
+            server.authoritative.simulation().checksum()
+        );
+        for request in [
+            DebugRequest::SetPlayback {
+                paused: true,
+                speed: DebugSpeed::Double,
+            },
+            DebugRequest::StepOneTick,
+        ] {
+            send_client(&mut guest, ClientMessage::Debug { request });
+            pump_network(&mut server);
+            assert!(matches!(
+                receive_server(&mut guest),
+                ServerMessage::ProtocolError {
+                    code: ProtocolErrorCode::Unauthorized
+                }
+            ));
+        }
+        assert!(!server.debug_paused);
+        assert_eq!(server.debug_speed, DebugSpeed::Normal);
+        send_client(
+            &mut host,
+            ClientMessage::Debug {
+                request: DebugRequest::SetPlayback {
+                    paused: true,
+                    speed: DebugSpeed::Double,
+                },
+            },
+        );
+        pump_network(&mut server);
+        for stream in [&mut host, &mut guest] {
+            assert!(
+                matches!(receive_server(stream), ServerMessage::LobbyStatus { status } if status.debug_paused && status.debug_speed == DebugSpeed::Double)
+            );
+        }
+        assert!(server.debug_paused);
+        send_client(
+            &mut host,
+            ClientMessage::Debug {
+                request: DebugRequest::StepOneTick,
+            },
+        );
+        pump_network(&mut server);
+        for stream in [&mut host, &mut guest] {
+            assert!(matches!(
+                receive_server(stream),
+                ServerMessage::StreamRecord {
+                    record: WireCanonicalStreamRecord::Tick { .. }
+                }
+            ));
+            assert!(matches!(
+                receive_server(stream),
+                ServerMessage::TickExecutions { .. }
+            ));
+        }
+        assert_eq!(server.authoritative.simulation().tick(), 1);
+        assert!(server.debug_paused);
     }
 
     #[test]

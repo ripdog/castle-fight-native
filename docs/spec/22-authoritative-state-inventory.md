@@ -30,6 +30,7 @@ A cache is not automatically derived. If retaining or clearing it can change a f
 | `lifecycle` | Mutable authoritative | Store/hash `Running`, paused-for-disconnect team mask, or terminal outcome plus finished tick. A paused or finished match must restore without advancing ordinary gameplay. |
 | `team_objectives` | Mutable authoritative | Store/hash the optional stable `SimId` registered for each team objective. Victory evaluation depends on these exact identities, not a content-name search. |
 | `shrine_death_generation` | Mutable authoritative | Store/hash exactly. Delayed revival callbacks compare their retained generation before creating a replacement. |
+| `debug_buildings_invulnerable` | Mutable authoritative | Store/hash exactly. Host debug immunity changes future building damage and must survive replay/rejoin. |
 | `config` / `SimulationConfig` | Immutable match input | Compatibility identity covers every field listed in section 4. Step 3 replaces the temporary direct configuration identity with the resolved content/mode identity where appropriate. |
 | `combat_rules` / `CombatRules` | Immutable match input | Compatibility identity covers terrain elevation, uphill miss chance, armor factor, and the complete damage-type/armor-type table. |
 | `configuration_identity` | Rebuildable derived identity | Cached canonical hash of the immutable inputs above. It is not an independent gameplay value; restoration must recompute/validate it from selected compatible inputs. |
