@@ -2882,6 +2882,7 @@ fn spawn_building_spell_details(
 }
 
 type SyncRenderWorld<'w> = (
+    Res<'w, SelectedMatch>,
     Res<'w, WorldMetrics>,
     Res<'w, TerrainSurface>,
     Res<'w, PresentationAssets>,
@@ -3363,7 +3364,6 @@ fn spawn_or_reuse_wc3_visual(
 
 fn sync_render_entities(
     mut commands: Commands,
-    selected: Res<SelectedMatch>,
     samples: Res<PresentationSamples>,
     world: SyncRenderWorld<'_>,
     mut render_map: ResMut<RenderMap>,
@@ -3371,7 +3371,8 @@ fn sync_render_entities(
     imported_roots: Query<(Entity, &ImportedUnitModelRoot)>,
     world_instances: Query<(), With<WorldInstance>>,
 ) {
-    let (metrics, terrain, assets, unit_models, building_models, wc3_visuals, experiment) = world;
+    let (selected, metrics, terrain, assets, unit_models, building_models, wc3_visuals, experiment) =
+        world;
     let (
         mut remnants,
         mut projectile_impacts,
