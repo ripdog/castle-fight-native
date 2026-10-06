@@ -42,6 +42,9 @@ impl PresentationSamples {
     }
 
     pub(crate) fn enqueue_network_tick(&mut self, mut snapshot: PresentationSnapshot) {
+        if let Some(team) = self.observer {
+            snapshot.restrict_to_team(team);
+        }
         self.enable_network_timeline();
         let timeline = self.network.as_mut().unwrap();
         if timeline.queued.len() == MAX_QUEUED_TICKS {
@@ -60,6 +63,9 @@ impl PresentationSamples {
     }
 
     pub(crate) fn enqueue_network_boundary(&mut self, mut snapshot: PresentationSnapshot) {
+        if let Some(team) = self.observer {
+            snapshot.restrict_to_team(team);
+        }
         self.enable_network_timeline();
         let timeline = self.network.as_mut().unwrap();
         snapshot.clear_events();

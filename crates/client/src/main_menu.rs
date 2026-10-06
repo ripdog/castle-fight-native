@@ -504,7 +504,13 @@ fn install_network_session(
     game.authoritative.commands_enabled = false;
     *game.presentation = PresentationSamples::new(PresentationSnapshot::capture(
         &game.authoritative.simulation,
-    ));
+    ))
+    .with_observer(
+        game.authoritative
+            .simulation
+            .player(local_player)
+            .map(|player| player.team),
+    );
     game.selected_match.content = demo.content;
     game.selected_match.direct_buildings = demo.direct_buildings;
     game.selected_match.local_player = local_player;

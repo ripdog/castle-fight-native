@@ -762,7 +762,7 @@ pub(crate) struct ProfileVisualStress {
 }
 
 #[derive(Component)]
-struct RtsCamera {
+pub(crate) struct RtsCamera {
     focus: Vec3,
     distance: f32,
     yaw: f32,
@@ -1023,7 +1023,8 @@ impl CastlePresentationPlugin {
 
 impl Plugin for CastlePresentationPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(MaterialPlugin::<HealthBarMaterial>::default())
+        app.add_plugins(crate::fog::FogPlugin)
+            .add_plugins(MaterialPlugin::<HealthBarMaterial>::default())
             .add_plugins(MaterialPlugin::<Wc3AnimatedAlphaMaterial>::default())
             .add_plugins(Wc3ParticleRenderPlugin)
             .add_plugins(MaterialPlugin::<Wc3SplatMaterial>::default())
@@ -1101,7 +1102,7 @@ impl Plugin for CastlePresentationPlugin {
                     update_wc3_model_lights,
                     spawn_miss_indicators,
                     finish_animation_profile,
-                    interpolate_render_transforms,
+                    (interpolate_render_transforms, crate::fog::update_fog).chain(),
                     finish_transform_profile,
                 )
                     .chain()
@@ -2035,6 +2036,7 @@ fn building_presentation_needs_rebuild(
 }
 
 fn building_construction_phase(current_tick: u64, building: &BuildingSample) -> Option<f32> {
+    let current_tick = building.construction_observed_tick.unwrap_or(current_tick);
     let started_tick = building.construction_started_tick?;
     let complete_tick = building.construction_complete_tick?;
     let duration_ticks = complete_tick.saturating_sub(started_tick).max(1);
@@ -3469,6 +3471,21 @@ fn sync_render_entities(
             .units
             .remove(&id)
             .expect("stale unit entry disappeared during presentation sync");
+        if samples.current.hidden_entities.contains(&id)
+            || samples.current.observer.is_some_and(|team| {
+                samples.previous.units.get(&id).is_some_and(|unit| {
+                    unit.team != team
+                        && samples
+                            .current
+                            .fog
+                            .as_ref()
+                            .is_some_and(|fog| !fog.is_visible(team, unit.position))
+                })
+            })
+        {
+            commands.entity(entry.entity).despawn();
+            continue;
+        }
         let authoritative_corpse = samples
             .current
             .corpses
@@ -3521,6 +3538,16 @@ fn sync_render_entities(
             .buildings
             .remove(&id)
             .expect("stale building entry disappeared during presentation sync");
+        if samples.current.hidden_entities.contains(&id)
+            || samples
+                .previous
+                .buildings
+                .get(&id)
+                .is_some_and(|building| building.remembered)
+        {
+            commands.entity(entry.entity).despawn();
+            continue;
+        }
         if samples
             .previous
             .buildings
@@ -3626,7 +3653,9 @@ fn sync_render_entities(
                 effect_pool.scenes.entry(key).or_default().push(model_root);
             }
             commands.entity(projectile_entry.entity).despawn();
-            if let Some(projectile) = samples.previous.projectiles.get(&id) {
+            if !samples.current.hidden_entities.contains(&id)
+                && let Some(projectile) = samples.previous.projectiles.get(&id)
+            {
                 projectile_impacts.0.push(ProjectileImpact {
                     position: projectile_entry.last_position,
                     kind: projectile.kind,
@@ -3841,8 +3870,16 @@ fn sync_render_entities(
         {
             continue;
         }
-        let source_position =
-            entity_render_position(cast.source, &samples, &metrics, &terrain, 1.0);
+        let source_visible = samples.current.units.contains_key(&cast.source)
+            || samples.current.builders.contains_key(&cast.source)
+            || samples
+                .current
+                .buildings
+                .get(&cast.source)
+                .is_some_and(|building| !building.remembered);
+        let source_position = source_visible
+            .then(|| entity_render_position(cast.source, &samples, &metrics, &terrain, 1.0))
+            .flatten();
         let target_position = cast
             .target_position
             .map(|position| sim_point_to_terrain_world(position, &terrain))
@@ -4656,6 +4693,37 @@ fn projectile_pose(
     alpha: f32,
     render_tick: f32,
 ) -> (Vec3, Quat) {
+    if samples.current.observer.is_some() {
+        let target = match projectile.kind {
+            ProjectileViewKind::NativeCarrierBolt { target, .. }
+            | ProjectileViewKind::GuaranteedHit { target }
+            | ProjectileViewKind::Reflected { target, .. }
+            | ProjectileViewKind::Bounce { target, .. } => Some(target),
+            ProjectileViewKind::Line {
+                primary_target,
+                spill_origin: None,
+                ..
+            } => Some(primary_target),
+            _ => None,
+        };
+        if target.is_some_and(|id| {
+            !samples.current.units.contains_key(&id) && !samples.current.buildings.contains_key(&id)
+        }) && let Some(current) = samples.current.projectile_positions.get(&projectile.id)
+        {
+            let previous = samples
+                .previous
+                .projectile_positions
+                .get(&projectile.id)
+                .unwrap_or(current);
+            let start =
+                sim_point_to_terrain_world(*previous, terrain) + Vec3::Y * PROJECTILE_HEIGHT;
+            let end = sim_point_to_terrain_world(*current, terrain) + Vec3::Y * PROJECTILE_HEIGHT;
+            return (
+                start.lerp(end, alpha),
+                projectile_rotation(start, end, true),
+            );
+        }
+    }
     let (origin, launch_tick, impact_tick, missile_arc) =
         projectile_segment(projectile, missile_arc);
     let start = sim_point_to_terrain_world(origin, terrain);
@@ -5417,6 +5485,9 @@ fn update_health_bar_batch(
         }
 
         for (id, building) in &samples.current.buildings {
+            if building.remembered {
+                continue;
+            }
             let Some(entry) = render_map.buildings.get(id) else {
                 continue;
             };
@@ -6091,6 +6162,9 @@ fn interpolated_sim_tick(samples: &PresentationSamples, alpha: f32) -> f64 {
 }
 
 fn construction_progress(building: &BuildingSample, rendered_tick: f64) -> Option<f32> {
+    let rendered_tick = building
+        .construction_observed_tick
+        .map_or(rendered_tick, |tick| tick as f64);
     let started_tick = building.construction_started_tick?;
     let complete_tick = building.construction_complete_tick?;
     let duration_ticks = complete_tick.saturating_sub(started_tick).max(1) as f64;
@@ -7680,6 +7754,8 @@ mod tests {
     #[test]
     fn production_progress_fills_toward_the_next_spawn_tick() {
         let mut building = BuildingSample {
+            remembered: false,
+            construction_observed_tick: None,
             id: SimId(1),
             content: None,
             owner: Some(PlayerId(0)),
@@ -7744,6 +7820,8 @@ mod tests {
     #[test]
     fn construction_progress_uses_the_same_overhead_progress_bar() {
         let building = BuildingSample {
+            remembered: false,
+            construction_observed_tick: None,
             id: SimId(1),
             content: None,
             owner: Some(PlayerId(0)),

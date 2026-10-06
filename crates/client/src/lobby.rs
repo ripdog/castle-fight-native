@@ -634,6 +634,12 @@ fn handle_lobby_buttons(
                                 AuthoritativeSimulation::new(demo.simulation, demo.content);
                             *game.presentation = PresentationSamples::new(
                                 PresentationSnapshot::capture(&game.authoritative.simulation),
+                            )
+                            .with_observer(
+                                game.authoritative
+                                    .simulation
+                                    .player(lobby.local_player())
+                                    .map(|player| player.team),
                             );
                             game.selected_match.content = demo.content;
                             game.selected_match.direct_buildings = demo.direct_buildings;

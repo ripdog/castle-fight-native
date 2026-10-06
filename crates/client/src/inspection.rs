@@ -95,7 +95,11 @@ impl InspectionSelection {
         let present = |id: &SimId| {
             samples.current.builders.contains_key(id)
                 || samples.current.units.contains_key(id)
-                || samples.current.buildings.contains_key(id)
+                || samples
+                    .current
+                    .buildings
+                    .get(id)
+                    .is_some_and(|building| !building.remembered)
         };
         self.members.retain(present);
         for group in &mut self.groups {
@@ -1220,6 +1224,9 @@ impl SelectionView<'_> {
                 self.terrain,
             ) + Vec3::Y * (BUILDER_PICK_HEIGHT * 0.5)
         } else if let Some(building) = self.samples.current.buildings.get(&id) {
+            if building.remembered {
+                return false;
+            }
             let (mut center, _) = self.metrics.footprint_center_size(building.footprint);
             center.y = self.terrain.height_at_world(center.xz());
             center
@@ -2718,7 +2725,7 @@ pub(crate) fn pick_building_at_ground(
         .current
         .buildings
         .values()
-        .find(|building| point_inside_building(world, building, metrics))
+        .find(|building| !building.remembered && point_inside_building(world, building, metrics))
         .map(|building| building.id)
 }
 
@@ -3250,6 +3257,11 @@ mod tests {
 
     fn empty_samples() -> PresentationSamples {
         let snapshot = PresentationSnapshot {
+            projectile_positions: Default::default(),
+            navigation_cell_size: SUBUNITS_PER_WORLD_UNIT,
+            fog: None,
+            observer: None,
+            hidden_entities: Default::default(),
             tick: 10,
             damage_rules: castle_fight_sim::DamageRules::warcraft_frozen_throne(),
             players: BTreeMap::from([(
@@ -3343,6 +3355,7 @@ mod tests {
         samples.current.units.insert(
             SimId(7),
             UnitSample {
+                invisible: false,
                 id: SimId(7),
                 content: Some(ContentIdentity {
                     map_version: castle_fight_sim::CASTLE_FIGHT_DEFAULT_MAP_VERSION,
@@ -3527,6 +3540,8 @@ mod tests {
         samples.current.buildings.insert(
             SimId(9),
             BuildingSample {
+                remembered: false,
+                construction_observed_tick: None,
                 id: SimId(9),
                 content: Some(ContentIdentity {
                     map_version: castle_fight_sim::CASTLE_FIGHT_DEFAULT_MAP_VERSION,
@@ -3581,6 +3596,7 @@ mod tests {
         samples.current.units.insert(
             SimId(11),
             UnitSample {
+                invisible: false,
                 id: SimId(11),
                 content: Some(ContentIdentity {
                     map_version: castle_fight_sim::CASTLE_FIGHT_DEFAULT_MAP_VERSION,

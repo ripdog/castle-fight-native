@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use bevy::prelude::Resource;
 use castle_fight_sim::{
@@ -94,6 +94,7 @@ impl BuildingVisualKind {
 
 #[derive(Debug, Clone, Copy)]
 pub struct UnitSample {
+    pub invisible: bool,
     pub id: SimId,
     pub content: Option<ContentIdentity>,
     pub owner: PlayerId,
@@ -141,6 +142,8 @@ pub struct BuilderSample {
 
 #[derive(Debug, Clone, Copy)]
 pub struct BuildingSample {
+    pub remembered: bool,
+    pub construction_observed_tick: Option<u64>,
     pub id: SimId,
     pub content: Option<ContentIdentity>,
     pub owner: Option<PlayerId>,
@@ -169,6 +172,11 @@ pub struct BuildingSample {
 
 #[derive(Debug, Clone)]
 pub struct PresentationSnapshot {
+    pub projectile_positions: BTreeMap<SimId, SimPoint>,
+    pub navigation_cell_size: i32,
+    pub fog: Option<castle_fight_sim::FogOfWar>,
+    pub observer: Option<Team>,
+    pub hidden_entities: BTreeSet<SimId>,
     pub tick: u64,
     pub damage_rules: DamageRules,
     pub players: BTreeMap<PlayerId, PlayerView>,
@@ -188,13 +196,14 @@ pub struct PresentationSnapshot {
 impl PresentationSnapshot {
     #[must_use]
     pub fn capture(simulation: &Simulation) -> Self {
-        let units = simulation
+        let units: BTreeMap<_, _> = simulation
             .units()
             .into_iter()
             .map(|unit| {
                 (
                     unit.id,
                     UnitSample {
+                        invisible: unit.classifications.invisible,
                         id: unit.id,
                         content: unit.content,
                         owner: unit.owner,
@@ -228,7 +237,7 @@ impl PresentationSnapshot {
                 )
             })
             .collect();
-        let builders = simulation
+        let builders: BTreeMap<_, _> = simulation
             .builders()
             .into_iter()
             .map(|builder| {
@@ -252,7 +261,7 @@ impl PresentationSnapshot {
                 )
             })
             .collect();
-        let buildings = simulation
+        let buildings: BTreeMap<_, _> = simulation
             .buildings()
             .into_iter()
             .map(|building| {
@@ -264,6 +273,8 @@ impl PresentationSnapshot {
                 (
                     building.id,
                     BuildingSample {
+                        remembered: false,
+                        construction_observed_tick: None,
                         id: building.id,
                         content: building.content,
                         owner: building.owner,
@@ -299,12 +310,75 @@ impl PresentationSnapshot {
             .into_iter()
             .map(|corpse| (corpse.id, corpse))
             .collect();
-        let projectiles = simulation
+        let projectiles: BTreeMap<_, _> = simulation
             .projectiles()
             .into_iter()
             .map(|projectile| (projectile.id, projectile))
             .collect();
 
+        let projectile_positions = projectiles
+            .values()
+            .map(|projectile| {
+                let target = match projectile.kind {
+                    castle_fight_sim::ProjectileViewKind::GuaranteedHit { target }
+                    | castle_fight_sim::ProjectileViewKind::Reflected { target, .. }
+                    | castle_fight_sim::ProjectileViewKind::NativeCarrierBolt { target, .. }
+                    | castle_fight_sim::ProjectileViewKind::Bounce { target, .. } => Some(target),
+                    castle_fight_sim::ProjectileViewKind::Line {
+                        primary_target,
+                        spill_origin: None,
+                        ..
+                    } => Some(primary_target),
+                    _ => None,
+                };
+                let end = target
+                    .and_then(|id| {
+                        units
+                            .get(&id)
+                            .map(|u: &UnitSample| u.position)
+                            .or_else(|| builders.get(&id).map(|b: &BuilderSample| b.position))
+                            .or_else(|| {
+                                buildings.get(&id).map(|b: &BuildingSample| {
+                                    structure_center(
+                                        b.footprint,
+                                        simulation.config().navigation_cell_size,
+                                    )
+                                })
+                            })
+                    })
+                    .or(match projectile.kind {
+                        castle_fight_sim::ProjectileViewKind::Line { destination, .. }
+                        | castle_fight_sim::ProjectileViewKind::Ballistic { destination, .. } => {
+                            Some(destination)
+                        }
+                        _ => None,
+                    })
+                    .unwrap_or(projectile.launch_position);
+                let (start, launch) = match projectile.kind {
+                    castle_fight_sim::ProjectileViewKind::Line {
+                        spill_origin: Some(origin),
+                        primary_impact_tick,
+                        ..
+                    } => (origin, primary_impact_tick),
+                    _ => (projectile.launch_position, projectile.launch_tick),
+                };
+                let duration = projectile.impact_tick.saturating_sub(launch).max(1);
+                let elapsed = simulation
+                    .tick()
+                    .saturating_sub(1)
+                    .saturating_sub(launch)
+                    .min(duration);
+                let axis = |start: i32, end: i32| {
+                    start
+                        + ((i64::from(end) - i64::from(start)) * elapsed as i64 / duration as i64)
+                            as i32
+                };
+                (
+                    projectile.id,
+                    SimPoint::new(axis(start.x, end.x), axis(start.y, end.y)),
+                )
+            })
+            .collect();
         let players = simulation
             .players()
             .into_iter()
@@ -324,6 +398,11 @@ impl PresentationSnapshot {
             .collect();
 
         Self {
+            projectile_positions,
+            navigation_cell_size: simulation.config().navigation_cell_size,
+            fog: simulation.fog_of_war(),
+            observer: None,
+            hidden_entities: BTreeSet::new(),
             tick: simulation.tick(),
             damage_rules: simulation.damage_rules(),
             players,
@@ -344,6 +423,7 @@ impl PresentationSnapshot {
 
 #[derive(Resource, Debug, Clone)]
 pub struct PresentationSamples {
+    observer: Option<Team>,
     pub previous: PresentationSnapshot,
     pub current: PresentationSnapshot,
     network: Option<NetworkTimeline>,
@@ -355,6 +435,7 @@ impl PresentationSamples {
     #[must_use]
     pub fn new(initial: PresentationSnapshot) -> Self {
         Self {
+            observer: None,
             previous: initial.clone(),
             current: initial,
             network: None,
@@ -363,7 +444,19 @@ impl PresentationSamples {
         }
     }
 
-    pub fn publish(&mut self, next: PresentationSnapshot) {
+    pub fn with_observer(mut self, team: Option<Team>) -> Self {
+        self.observer = team;
+        if let Some(team) = team {
+            self.current.restrict_to_team(team);
+            self.previous = self.current.clone();
+        }
+        self
+    }
+
+    pub fn publish(&mut self, mut next: PresentationSnapshot) {
+        if let Some(team) = self.observer {
+            next.restrict_to_team(team);
+        }
         self.tick_advanced = next.tick > self.current.tick;
         self.previous = std::mem::replace(&mut self.current, next);
         self.revision += 1;
@@ -378,6 +471,9 @@ impl PresentationSamples {
     }
 
     pub(crate) fn reset(&mut self, mut snapshot: PresentationSnapshot) {
+        if let Some(team) = self.observer {
+            snapshot.restrict_to_team(team);
+        }
         snapshot.clear_events();
         if self.network.is_some() {
             self.network = Some(NetworkTimeline::default());
@@ -390,6 +486,153 @@ impl PresentationSamples {
 }
 
 impl PresentationSnapshot {
+    fn restrict_to_team(&mut self, team: Team) {
+        if self.observer == Some(team) {
+            return;
+        }
+        let Some(fog) = &self.fog else {
+            return;
+        };
+        self.observer = Some(team);
+        self.units.retain(|id, unit| {
+            let visible = unit.team == team
+                || unit.status.is_revealed_to(team, self.tick)
+                || fog.detects_invisible(team, unit.position)
+                || (!unit.invisible && fog.is_visible(team, unit.position));
+            if !visible {
+                self.hidden_entities.insert(*id);
+            }
+            visible
+        });
+        self.builders.retain(|id, builder| {
+            let visible = builder.team == team || fog.is_visible(team, builder.position);
+            if !visible {
+                self.hidden_entities.insert(*id);
+            }
+            visible
+        });
+        // Structure memory carries only the last observed silhouette, never live health, production,
+        // mana, target, construction, buffs or upgrades from behind fog.
+        let memory = &fog.remembered_structures[usize::from(team.0)];
+        self.buildings.retain(|id, building| {
+            let visible = building.team == team
+                || memory.iter().any(|s| s.id == *id)
+                    && fog.is_visible(
+                        team,
+                        structure_center(building.footprint, self.navigation_cell_size),
+                    );
+            if !visible {
+                self.hidden_entities.insert(*id);
+            }
+            visible
+        });
+        for structure in memory {
+            if self.buildings.contains_key(&structure.id) {
+                continue;
+            }
+            self.buildings.insert(
+                structure.id,
+                BuildingSample {
+                    remembered: true,
+                    construction_observed_tick: structure.construction.map(|c| c.observed_tick),
+                    id: structure.id,
+                    content: structure.content,
+                    owner: structure.owner,
+                    team: Team(1 - team.0),
+                    footprint: structure.footprint,
+                    health: 1,
+                    health_max: 1,
+                    construction_started_tick: structure.construction.map(|c| c.started_tick),
+                    construction_complete_tick: structure.construction.map(|c| c.complete_tick),
+                    attack: None,
+                    damage_type: None,
+                    armor: ArmorProfile::default(),
+                    target: None,
+                    next_spawn_tick: None,
+                    production_queue: None,
+                    production_interval_ticks: None,
+                    cooldown_remaining: None,
+                    mana_current: None,
+                    mana_maximum: None,
+                    ability_ready_tick: None,
+                    ability_autocast_enabled: None,
+                    stunned_until_tick: None,
+                    status: StatusState::default(),
+                    visual_kind: BuildingVisualKind::Structure,
+                },
+            );
+        }
+        self.corpses.retain(|_, corpse| {
+            let visible = fog.is_visible(team, corpse.position);
+            if !visible {
+                self.hidden_entities.insert(corpse.source_unit);
+            }
+            visible
+        });
+        self.projectiles.retain(|id, _| {
+            let visible = self
+                .projectile_positions
+                .get(id)
+                .is_some_and(|p| fog.is_visible(team, *p));
+            if !visible {
+                self.hidden_entities.insert(*id);
+            }
+            visible
+        });
+        self.projectile_positions
+            .retain(|id, _| self.projectiles.contains_key(id));
+        let seen = |id: &SimId| {
+            self.units.contains_key(id)
+                || self.builders.contains_key(id)
+                || self
+                    .buildings
+                    .get(id)
+                    .is_some_and(|building| !building.remembered)
+        };
+        self.attacks.retain(|event| {
+            seen(&event.source)
+                && fog.is_visible(team, event.source_position)
+                && fog.is_visible(team, event.target_position)
+        });
+        self.ability_casts.retain(|event| {
+            (seen(&event.source)
+                || match event.target {
+                    castle_fight_sim::AbilityCastTarget::Unit(target) => seen(&target),
+                    castle_fight_sim::AbilityCastTarget::Point(position) => {
+                        fog.is_visible(team, position)
+                    }
+                    _ => false,
+                })
+                && event
+                    .target_position
+                    .is_none_or(|p| fog.is_visible(team, p))
+        });
+        self.shrine_revivals
+            .retain(|event| fog.is_visible(team, event.position));
+        self.chain_lightnings.retain(|event| {
+            seen(&event.source) && event.points().iter().all(|p| fog.is_visible(team, *p))
+        });
+        self.building_spell_visuals
+            .retain(|event| seen(&event.target));
+        let seen_ids: BTreeSet<_> = self
+            .units
+            .keys()
+            .chain(self.builders.keys())
+            .chain(
+                self.buildings
+                    .iter()
+                    .filter_map(|(id, b)| (!b.remembered).then_some(id)),
+            )
+            .copied()
+            .collect();
+        for unit in self.units.values_mut() {
+            unit.target = unit.target.filter(|id| seen_ids.contains(id));
+        }
+        for building in self.buildings.values_mut() {
+            building.target = building.target.filter(|id| seen_ids.contains(id));
+        }
+    }
+
     fn clear_events(&mut self) {
         self.attacks.clear();
         self.ability_casts.clear();
@@ -415,6 +658,13 @@ impl PresentationSnapshot {
     }
 }
 
+fn structure_center(footprint: BuildingFootprint, cell_size: i32) -> SimPoint {
+    SimPoint::new(
+        footprint.min_x * cell_size + i32::from(footprint.width) * cell_size / 2,
+        footprint.min_y * cell_size + i32::from(footprint.height) * cell_size / 2,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use castle_fight_sim::{
@@ -424,6 +674,117 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn observer_hides_enemies_and_retains_only_last_seen_structure_silhouettes() {
+        use castle_fight_sim::{
+            BuildingSpawn, FogRules, NavCell, SightProfile, UnitClassifications,
+        };
+        let scale = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(
+            SimulationConfig {
+                navigation_min: NavCell::new(-10, -10),
+                navigation_max: NavCell::new(40, 10),
+                fog: Some(FogRules {
+                    cell_size: scale,
+                    fallback_sight: SightProfile {
+                        day: 4 * scale,
+                        night: 4 * scale,
+                    },
+                    initially_explored: true,
+                    night: false,
+                    clock: None,
+                    attack_reveal: None,
+                    permanent_rectangles: [Vec::new(), Vec::new()],
+                    sight_blockers: Vec::new(),
+                }),
+                ..SimulationConfig::default()
+            },
+            1,
+        );
+        let spawn = |team, x| UnitSpawn {
+            team,
+            position: SimPoint::new(x * scale, scale / 2),
+            health: 100,
+            attack: AttackProfile {
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 1,
+                delivery: AttackDelivery::Melee,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        };
+        let own = sim.spawn_unit(spawn(Team(0), 0));
+        let visible = sim.spawn_unit(spawn(Team(1), 2));
+        let hidden = sim.spawn_unit(spawn(Team(1), 20));
+        let invisible = sim.spawn_unit_with_properties(
+            spawn(Team(1), 2),
+            castle_fight_sim::UnitGameplayProperties {
+                classifications: UnitClassifications {
+                    invisible: true,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        );
+        let structure = sim.spawn_building(BuildingSpawn {
+            team: Team(1),
+            footprint: BuildingFootprint::new(3, 1, 1, 1),
+            health: 100,
+            attack: None,
+            production: None,
+            spellcasting: None,
+        });
+        let mut snapshot = PresentationSnapshot::capture(&sim);
+        for target in [visible, invisible] {
+            snapshot.ability_casts.push(AbilityCastEvent {
+                source: hidden,
+                ability: AbilityId(900),
+                target: castle_fight_sim::AbilityCastTarget::Unit(target),
+                target_position: Some(SimPoint::new(2 * scale, scale / 2)),
+                effect: castle_fight_sim::AbilityEffect::Damage { amount: 1 },
+            });
+        }
+        let mut samples = PresentationSamples::new(snapshot.clone()).with_observer(Some(Team(0)));
+        assert_eq!(
+            samples.current.ability_casts.len(),
+            1,
+            "visible impacts survive a concealed caster without exposing an invisible target"
+        );
+        assert!(samples.current.units.contains_key(&own));
+        assert!(samples.current.units.contains_key(&visible));
+        assert!(!samples.current.units.contains_key(&hidden));
+        assert!(!samples.current.units.contains_key(&invisible));
+        assert!(!samples.current.buildings[&structure].remembered);
+        let mut veiled = snapshot;
+        veiled.fog.as_mut().unwrap().visible[0].fill(0);
+        veiled.tick += 1;
+        samples.publish(veiled.clone());
+        assert!(samples.current.units.contains_key(&own));
+        assert!(!samples.current.units.contains_key(&visible));
+        assert!(samples.current.hidden_entities.contains(&visible));
+        let ghost = &samples.current.buildings[&structure];
+        assert!(ghost.remembered);
+        assert!(
+            ghost.target.is_none()
+                && ghost.next_spawn_tick.is_none()
+                && ghost.mana_current.is_none()
+        );
+        assert_eq!(ghost.status, StatusState::default());
+        let remembered_footprint = ghost.footprint;
+        veiled.buildings.remove(&structure);
+        samples.reset(veiled.clone());
+        assert!(samples.current.buildings[&structure].remembered);
+        assert_eq!(
+            samples.previous.buildings[&structure].footprint,
+            remembered_footprint
+        );
+        samples.enqueue_network_boundary(veiled);
+        samples.advance_network_timeline(0.0, 1.0, true, true);
+        assert!(!samples.current.units.contains_key(&visible));
+        assert_eq!(samples.current.observer, Some(Team(0)));
+    }
 
     #[test]
     fn captures_authoritative_corpses_and_attack_events() {

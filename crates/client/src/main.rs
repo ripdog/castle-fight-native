@@ -8,6 +8,7 @@ mod cursor;
 mod debug_menu;
 mod demo;
 mod doodads;
+mod fog;
 mod inspection;
 mod lobby;
 mod main_menu;
@@ -470,6 +471,15 @@ fn main() {
             .id;
         (local_player, None)
     };
+    let observer_team = (!options.is_profiling()
+        && options.stress_units.is_none()
+        && options.stress_visual.is_none())
+    .then(|| {
+        demo.simulation
+            .player(local_player)
+            .expect("local player exists")
+            .team
+    });
     let initial_snapshot = PresentationSnapshot::capture(&demo.simulation);
     let present_mode = if options.stress_units.is_some()
         || options.stress_visual.is_some()
@@ -534,7 +544,7 @@ fn main() {
         .insert_resource(SimulationPlayback {
             paused: show_main_menu || options.is_profiling(),
         })
-        .insert_resource(PresentationSamples::new(initial_snapshot))
+        .insert_resource(PresentationSamples::new(initial_snapshot).with_observer(observer_team))
         .insert_resource(demo.metrics)
         .insert_resource(TerrainSurface::new(demo.terrain))
         .insert_resource(terrain_texture_layout)
@@ -1252,7 +1262,13 @@ fn handle_quicksave_hotkeys(
         authoritative.catch_up = None;
         authoritative.pending_build_commands.clear();
         *presentation =
-            PresentationSamples::new(PresentationSnapshot::capture(&authoritative.simulation));
+            PresentationSamples::new(PresentationSnapshot::capture(&authoritative.simulation))
+                .with_observer(
+                    authoritative
+                        .simulation
+                        .player(selected_match.local_player)
+                        .map(|player| player.team),
+                );
         Ok(completed_tick)
     })();
 
