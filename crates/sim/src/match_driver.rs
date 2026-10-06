@@ -517,6 +517,7 @@ impl MatchDriver {
                 self.pending_commands.clear();
             }
         }
+        simulation.refresh_vision();
         self.last_executions.clear();
         self.replay_checkpoints.push(ReplayCheckpoint {
             stream_position: control.stream_position,

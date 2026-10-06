@@ -21,6 +21,7 @@ The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** de
 - [14-spatial-navigation.md](14-spatial-navigation.md) — map occupancy, spatial indexing, pathing, flow fields, local steering, and caging.
 - [15-targeting-combat.md](15-targeting-combat.md) — individual target selection, attack delivery modes, projectiles, effects, deaths, and deterministic tie-breaking.
 - [16-abilities-spellcasting.md](16-abilities-spellcasting.md) — mana, autonomous spellcasting, player-targeted legendary abilities, auras, and deterministic ability execution.
+- [17-visibility-fog.md](17-visibility-fog.md) — team sight, day/night vision, revelation, invisible detection, exploration, and observer filtering.
 
 ### Layer 2 — Multiplayer and continuity
 

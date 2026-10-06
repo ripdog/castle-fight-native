@@ -116,6 +116,7 @@ impl Simulation {
                 &mut result,
                 unit.entity,
                 AbilitySourceSnapshot {
+                    map_version: unit.map_version,
                     source: AbilitySourceIndex::Unit(index),
                     id: unit.id,
                     team: unit.team,
@@ -138,6 +139,7 @@ impl Simulation {
                 &mut result,
                 building.entity,
                 AbilitySourceSnapshot {
+                    map_version: building.map_version,
                     source: AbilitySourceIndex::Building(index),
                     id: building.id,
                     team: building.team,

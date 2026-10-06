@@ -284,7 +284,11 @@ impl Simulation {
 
         let mut best_building: Option<(u64, SimId)> = None;
         for candidate in buildings {
-            if candidate.team == source.team || candidate.health <= 0 || candidate.id == source.id {
+            if candidate.team == source.team
+                || candidate.health <= 0
+                || candidate.id == source.id
+                || candidate.visible_teams & (1 << source.team.0) == 0
+            {
                 continue;
             }
             let distance_sq = footprint_to_footprint_distance_sq(
@@ -332,6 +336,7 @@ impl Simulation {
         if let Some(index) = find_building_index(buildings, target_id) {
             let target = &buildings[index];
             return attack_targets.can_target_buildings()
+                && target.visible_teams & (1 << source.team.0) != 0
                 && target.team != source.team
                 && target.health > 0
                 && footprint_to_footprint_distance_sq(
@@ -400,7 +405,10 @@ impl Simulation {
             return best.map(|(_, _, id)| id);
         }
         for building in buildings {
-            if source.team == building.team || building.health <= 0 {
+            if source.team == building.team
+                || building.health <= 0
+                || building.visible_teams & (1 << source.team.0) == 0
+            {
                 continue;
             }
             let distance_sq = point_to_footprint_distance_sq(
@@ -846,6 +854,7 @@ impl Simulation {
     ) -> bool {
         if source.health <= 0
             || target.health <= 0
+            || target.visible_teams & (1 << source.team.0) == 0
             || distance_sq > pursuit_limit_sq
             || !source.attack_targets.can_target_buildings()
         {

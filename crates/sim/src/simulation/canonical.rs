@@ -46,6 +46,45 @@ pub(super) fn canonical_configuration_identity(
         hash.write_u8(player.id.0);
         hash.write_u8(player.team.0);
     }
+    match &config.fog {
+        None => hash.write_u8(0),
+        Some(rules) => {
+            hash.write_u8(1);
+            hash.write_i32(rules.cell_size);
+            hash.write_i32(rules.fallback_sight.day);
+            hash.write_i32(rules.fallback_sight.night);
+            hash.write_u8(u8::from(rules.initially_explored));
+            hash.write_u8(u8::from(rules.night));
+            hash.write_u8(u8::from(rules.attack_reveal.is_some()));
+            if let Some(reveal) = rules.attack_reveal {
+                hash.write_i32(reveal.radius);
+                hash.write_u64(reveal.duration_ticks);
+            }
+            match rules.clock {
+                Some(clock) => {
+                    hash.write_u8(1);
+                    hash.write_u64(clock.cycle_ticks);
+                    hash.write_u64(clock.dawn_phase_ticks);
+                    hash.write_u64(clock.dusk_phase_ticks);
+                    hash.write_u64(clock.initial_phase_ticks);
+                }
+                None => hash.write_u8(0),
+            }
+            for rects in rules
+                .permanent_rectangles
+                .iter()
+                .chain(std::iter::once(&rules.sight_blockers))
+            {
+                hash.write_u64(rects.len() as u64);
+                for &(min, max) in rects {
+                    hash.write_i32(min.x);
+                    hash.write_i32(min.y);
+                    hash.write_i32(max.x);
+                    hash.write_i32(max.y);
+                }
+            }
+        }
+    }
     hash.write_u64(config.match_seed);
     hash.write_i32(config.spatial_cell_size);
     hash.write_i32(config.navigation_cell_size);
@@ -160,6 +199,7 @@ pub(super) struct CanonicalMatchState<'a> {
     pub(super) gjallarhorn_constructed_count: [u32; 2],
     pub(super) shrine_death_generation: u64,
     pub(super) debug_buildings_invulnerable: bool,
+    pub(super) fog: Option<&'a crate::FogOfWar>,
 }
 
 pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) -> u64 {
@@ -174,6 +214,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
         gjallarhorn_constructed_count,
         shrine_death_generation,
         debug_buildings_invulnerable,
+        fog,
     } = state;
     let entities = super::snapshot::canonical_entities(world);
 
@@ -181,6 +222,48 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
     hash.write_u64(0x4346_5354_4154_4503);
     hash.write_u64(u64::from(CANONICAL_CHECKSUM_SCHEMA_VERSION));
     hash.write_u64(configuration_identity);
+    match fog {
+        None => hash.write_u8(0),
+        Some(fog) => {
+            hash.write_u8(1);
+            for cells in &fog.explored {
+                hash.write_u64(cells.len() as u64);
+                for &cell in cells {
+                    hash.write_u8(cell);
+                }
+            }
+            hash.write_u64(fog.reveals.len() as u64);
+            for reveal in &fog.reveals {
+                hash.write_u8(reveal.team.0);
+                hash.write_i32(reveal.position.x);
+                hash.write_i32(reveal.position.y);
+                hash.write_i32(reveal.radius);
+                hash.write_u8(u8::from(reveal.detects_invisible));
+                hash.write_u64(reveal.expires_tick);
+            }
+            for structures in &fog.remembered_structures {
+                hash.write_u64(structures.len() as u64);
+                for structure in structures {
+                    hash.write_u64(structure.id.0);
+                    hash_content_identity(&mut hash, structure.content);
+                    match structure.owner {
+                        Some(owner) => {
+                            hash.write_u8(1);
+                            hash.write_u8(owner.0);
+                        }
+                        None => hash.write_u8(0),
+                    }
+                    hash_building_footprint(&mut hash, structure.footprint);
+                    hash.write_u8(u8::from(structure.construction.is_some()));
+                    if let Some(construction) = structure.construction {
+                        hash.write_u64(construction.started_tick);
+                        hash.write_u64(construction.complete_tick);
+                        hash.write_u64(construction.observed_tick);
+                    }
+                }
+            }
+        }
+    }
     hash.write_u64(next_tick);
     hash.write_u64(next_id);
     hash.write_u64(shrine_death_generation);

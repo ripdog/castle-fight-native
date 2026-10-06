@@ -6,7 +6,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 20;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 21;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -25,6 +25,7 @@ pub struct SimulationSnapshot {
     defense_alerts: Vec<DefenseAlert>,
     entities: Vec<CanonicalEntity>,
     checksum: u64,
+    fog: Option<crate::FogOfWar>,
 }
 
 impl SimulationSnapshot {
@@ -76,6 +77,13 @@ impl SimulationSnapshot {
         &mut self,
         content: &CastleFightContentBundle,
     ) -> Result<(), SnapshotWireError> {
+        if let Some(fog) = &mut self.fog {
+            for memory in &mut fog.remembered_structures {
+                for structure in memory {
+                    rehydrate_optional_content(&mut structure.content, content)?;
+                }
+            }
+        }
         for entity in &mut self.entities {
             match entity {
                 CanonicalEntity::Unit(unit) => {
@@ -236,6 +244,7 @@ pub enum SnapshotRestoreError {
         actual: u64,
     },
     TickBoundaryMismatch,
+    InvalidFogState,
     PlayerIdentityMismatch,
     DuplicateEntityId(SimId),
     AllocatorBehindEntityIds {
@@ -268,6 +277,7 @@ impl Simulation {
             defense_alerts: self.defense_alerts.clone(),
             entities: canonical_entities(&self.world),
             checksum: self.checksum(),
+            fog: self.fog.clone(),
         }
     }
 
@@ -317,6 +327,11 @@ impl Simulation {
             });
         }
 
+        match (&snapshot.fog, &self.fog) {
+            (None, None) => {}
+            (Some(fog), Some(expected)) if fog.valid_shape(expected) => {}
+            _ => return Err(SnapshotRestoreError::InvalidFogState),
+        }
         let mut restored_world = World::new();
         restore_entities(&mut restored_world, &snapshot.entities);
         let restored_checksum = canonical_checksum(
@@ -332,6 +347,7 @@ impl Simulation {
                 gjallarhorn_constructed_count: snapshot.gjallarhorn_constructed_count,
                 shrine_death_generation: snapshot.shrine_death_generation,
                 debug_buildings_invulnerable: snapshot.debug_buildings_invulnerable,
+                fog: snapshot.fog.as_ref(),
             },
         );
         if restored_checksum != snapshot.checksum {
@@ -346,6 +362,7 @@ impl Simulation {
             snapshot.next_tick,
         );
         self.world = restored_world;
+        self.fog.clone_from(&snapshot.fog);
         self.players.clone_from(&snapshot.players);
         self.lifecycle = snapshot.lifecycle;
         self.team_objectives = snapshot.team_objectives;
@@ -360,6 +377,11 @@ impl Simulation {
         self.radius_objective_fields.clear();
         self.topology_dirty = true;
         self.refresh_topology_if_dirty();
+        if let Some(live) = self.fog_of_war()
+            && let Some(fog) = &mut self.fog
+        {
+            fog.visible = live.visible;
+        }
         debug_assert_eq!(self.checksum(), snapshot.checksum);
         Ok(())
     }

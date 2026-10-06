@@ -178,7 +178,6 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
     object_fields_bytes = _retained_file_bytes(
         repo_root, git_tree, "resolved/object-fields.tsv"
     )
-
     frequency = re.search(
         r"^pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = ([0-9]+);$",
         (repo_root / "crates/sim/src/content.rs").read_text(encoding="utf-8"), re.MULTILINE,
@@ -186,13 +185,90 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
     if frequency is None or int(frequency.group(1)) <= 0:
         raise SystemExit("cannot resolve the engine's simulation frequency")
     simulation_hz = int(frequency.group(1))
+    script_bytes = _retained_file_bytes(repo_root, git_tree, "script/war3map.lua")
+    if b"FogMaskEnable(false)FogEnable(true)" not in script_bytes:
+        raise SystemExit("map fog initialization changed")
+    def fog_rectangle(symbol: bytes) -> list[int]:
+        match = re.search(rb"\b" + symbol + rb"=_b\[.{1,180}?\]\((.*?)\)(?=[A-Za-z_])", script_bytes)
+        if match is None:
+            raise SystemExit("map permanent vision rectangle changed")
+        values = match[1].replace(b"(", b"").replace(b")", b"").split(b",")
+        if len(values) != 4:
+            raise SystemExit("map vision rectangle is not a rectangle")
+        return [int(Decimal(value.decode())) for value in values]
+    base_misc_path = repo_root / "docs/original_map/base/2.0.4.23745/miscdata.txt"
+    base_misc = base_misc_path.read_bytes()
+    base_manifest = json.loads(_retained_file_bytes(repo_root, git_tree, "resolved/base-data-manifest.json"))
+    expected_misc = next(row["sha256"] for row in base_manifest if row["path"] == "base/units/miscdata.txt")
+    if hashlib.sha256(base_misc).hexdigest() != expected_misc:
+        raise SystemExit("retained Warcraft vision defaults drifted")
+    misc_values = dict(re.findall(r"^([A-Za-z]+)=([^\r\n]+)", base_misc.decode(), re.MULTILINE))
+    misc_values.update(dict(re.findall(r"^([A-Za-z]+)=([^\r\n]+)", _retained_file_bytes(repo_root, git_tree, "war3mapMisc.txt").decode(), re.MULTILINE)))
+    cycle_ticks = int(misc_values["DayLength"]) * simulation_hz
+    def clock_phase(hour: int) -> int:
+        value = Decimal(hour) * cycle_ticks / Decimal(misc_values["DayHours"])
+        if value != value.to_integral_value():
+            raise SystemExit("day/night boundaries must fall on simulation ticks")
+        return int(value)
+    helper = re.search(rb"function dummyCastTargetWithVision1\(.*?end function", script_bytes)
+    if helper is None:
+        raise SystemExit("script dummy target vision helper changed")
+    helper_radius = re.search(rb",([0-9.]+),true,false\)", helper[0])
+    helper_duration = re.search(rb"doAfter\(([0-9.]+),", helper[0])
+    if helper_radius is None or helper_duration is None or b"player_hasVisibility" not in helper[0]:
+        raise SystemExit("script dummy target vision geometry/timing changed")
+    graph: dict[str, set[str]] = {}
+    for row in csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree, "script/call-graph.tsv").decode()), delimiter="\t"):
+        graph.setdefault(row["caller"], set()).add(row["callee"])
+    def reaches_helper(roots: list[str]) -> bool:
+        pending, seen = list(roots), set()
+        while pending:
+            name = pending.pop()
+            if name in seen:
+                continue
+            seen.add(name)
+            if name == "dummyCastTargetWithVision1":
+                return True
+            pending.extend(graph.get(name, set()) - seen)
+        return False
+    spell_reveals: dict[str, dict[str, Any]] = {}
+    for path, column in (("resolved/unit-spell-mechanics.tsv", "handler_function"),
+                         ("resolved/building-spell-mechanics.tsv", "source_functions")):
+        for row in csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree, path).decode()), delimiter="\t"):
+            if reaches_helper(row[column].split(",")):
+                spell_reveals[row["ability_rawcode"]] = {
+                    "rawcode": row["ability_rawcode"], "radius_world": _line_world_integer(helper_radius[1].decode()),
+                    "duration_ticks": int(Decimal(helper_duration[1].decode()) * simulation_hz), "only_if_hidden": True,
+                    "detects_invisible": False,
+                }
+            if "starfallSpell" in row[column].split(","):
+                parameters = json.loads(row["parameters_json"])
+                spell_reveals[row["ability_rawcode"]] = {
+                    "rawcode": row["ability_rawcode"], "radius_world": parameters["temporary_vision_radius"],
+                    "duration_ticks": int(Decimal(parameters["visual_and_fog_cleanup_delay_seconds"]) * simulation_hz),
+                    "only_if_hidden": False,
+                    "detects_invisible": False,
+                }
+
     action_fields: dict[str, dict[str, str]] = {}
+    sight_fields: dict[str, dict[str, int]] = {}
     bounce_fields: dict[str, dict[str, str]] = {}
     line_fields: dict[str, dict[str, str]] = {}
     objects: dict[str, dict[str, Any]] = {}
+    far_sight: dict[str, dict[str, int]] = {}
     with io.StringIO(object_fields_bytes.decode("utf-8"), newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
         for row in reader:
+            if row["category"] == "abilities" and row["base_rawcode"] == "AOfs" and row["level"] == "1" and row["field_id"] in {"aare", "adur", "Ofs1"}:
+                far_sight.setdefault(row["rawcode"], {})[row["field_id"]] = _integer_recovered_value(
+                    row["recovered_value_json"], rawcode=row["rawcode"], field_id=row["field_id"])
+            if row["category"] == "units" and row["field_id"] in {"usid", "usin"}:
+                value = _integer_recovered_value(
+                    row["recovered_value_json"], rawcode=row["rawcode"], field_id=row["field_id"]
+                )
+                if value < 0:
+                    raise SystemExit("sight radius must be nonnegative")
+                sight_fields.setdefault(row["rawcode"], {})[row["field_id"]] = value
             if row["category"] == "units" and row["field_id"] in {"udp1", "ubs1", "udp2", "ubs2", "ucpt", "ucbs"}:
                 action_fields.setdefault(row["rawcode"], {})[row["field_id"]] = row["recovered_value_json"].strip('"')
             if row["category"] == "units" and row["field_id"] in {
@@ -242,6 +318,19 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
                 )
             output[key] = value
 
+    for row in csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree, "resolved/building-spell-mechanics.tsv").decode()), delimiter="\t"):
+        parameters = json.loads(row["parameters_json"])
+        auxiliary = parameters.get("auxiliary_ability_id")
+        if auxiliary is not None:
+            rawcode = int(auxiliary).to_bytes(4, "big").decode()
+            if rawcode in far_sight:
+                fields = far_sight[rawcode]
+                spell_reveals[row["ability_rawcode"]] = {
+                    "rawcode": row["ability_rawcode"], "source_ability_rawcode": rawcode,
+                    "radius_world": fields["aare"], "duration_ticks": fields["adur"] * simulation_hz,
+                    "only_if_hidden": False, "detects_invisible": bool(fields["Ofs1"] & 1),
+                }
+
     bounce_weapons = []
     line_weapons = []
     unit_rows = csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree, "resolved/units.tsv").decode()), delimiter="\t")
@@ -271,8 +360,30 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
         bounce_weapons.append({"rawcode": unit["rawcode"], "maximum_targets": targets,
                                "damage_percent_per_bounce": int(retained_percent), "range_world": int(fields["ua1f"])})
     return {
-        "schema_version": 4,
+        "schema_version": 5,
+        "fog_rules": {
+            "initially_explored": True,
+            "attack_reveal_radius_world": _line_world_integer(misc_values["FoggedAttackRevealRadius"]),
+            "attack_reveal_duration_ticks": int(Decimal(misc_values["FogFlashTime"]) * simulation_hz),
+            "clock": {
+                "cycle_ticks": cycle_ticks,
+                "dawn_phase_ticks": clock_phase(int(misc_values["Dawn"])),
+                "dusk_phase_ticks": clock_phase(int(misc_values["Dusk"])),
+                # Native custom-map convention: noon. CF never sets/scales/suspends time;
+                # do not apply Blizzard.j's unrelated melee-only starting time.
+                "initial_phase_ticks": clock_phase(12),
+            },
+            "source_base_misc_sha256": expected_misc,
+            "permanent_rectangles_world": [[fog_rectangle(b"NFb"), fog_rectangle(b"JFb")],
+                                           [fog_rectangle(b"MFb"), fog_rectangle(b"JFb")]],
+            "source_script_sha256": hashlib.sha256(script_bytes).hexdigest(),
+        },
+        "sight_profiles": [
+            {"rawcode": rawcode, "day_world": fields["usid"], "night_world": fields["usin"]}
+            for rawcode, fields in sorted(sight_fields.items())
+        ],
         "simulation_hz": simulation_hz,
+        "spell_reveals": sorted(spell_reveals.values(), key=lambda reveal: reveal["rawcode"]),
         "action_timings": [
             {
                 "rawcode": rawcode,

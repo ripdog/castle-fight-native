@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 25;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 26;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -30,6 +30,7 @@ mod building_spells;
 mod building_spells_source_tests;
 #[cfg(test)]
 mod building_spells_tests;
+mod vision;
 use building_spells::{BuildingSpellControl, BuildingSpellTargetState};
 pub use building_spells::{BuildingSpellVisualEvent, BuildingSpellVisualKind, HexState};
 #[cfg(test)]
@@ -132,6 +133,7 @@ impl TargetlessLane {
 
 #[derive(Debug, Clone)]
 pub struct SimulationConfig {
+    pub fog: Option<crate::FogRules>,
     pub match_seed: u64,
     pub spatial_cell_size: i32,
     pub navigation_cell_size: i32,
@@ -169,6 +171,7 @@ pub struct CombatRules {
 impl Default for SimulationConfig {
     fn default() -> Self {
         Self {
+            fog: None,
             match_seed: 0,
             spatial_cell_size: 8 * SUBUNITS_PER_WORLD_UNIT,
             navigation_cell_size: SUBUNITS_PER_WORLD_UNIT,
@@ -636,6 +639,7 @@ pub struct Simulation {
     next_id: u64,
     configuration_identity: u64,
     debug_buildings_invulnerable: bool,
+    fog: Option<crate::FogOfWar>,
 }
 
 impl Simulation {
@@ -751,7 +755,21 @@ impl Simulation {
             config.team_objective,
         );
 
+        let fog = config.fog.as_ref().map(|rules| {
+            crate::FogOfWar::new(
+                SimPoint::new(
+                    config.navigation_min.x * config.navigation_cell_size,
+                    config.navigation_min.y * config.navigation_cell_size,
+                ),
+                SimPoint::new(
+                    (config.navigation_max.x + 1) * config.navigation_cell_size,
+                    (config.navigation_max.y + 1) * config.navigation_cell_size,
+                ),
+                rules,
+            )
+        });
         Self {
+            fog,
             world: World::new(),
             config,
             combat_rules,
@@ -868,6 +886,10 @@ impl Simulation {
     }
 
     #[must_use]
+    pub fn config(&self) -> &SimulationConfig {
+        &self.config
+    }
+
     pub fn players(&self) -> Vec<PlayerView> {
         self.players
             .iter()
@@ -1480,6 +1502,7 @@ impl Simulation {
         let production = phase_start.elapsed();
 
         let phase_start = Instant::now();
+        self.refresh_vision();
         let mut units = self.snapshot_units();
         let mut buildings = self.snapshot_buildings();
         resolve_periodic_unit_statuses(&mut units, completed_tick, self.combat_rules.damage_rules);
@@ -1955,10 +1978,12 @@ impl Simulation {
         self.defense_alerts = next_defense_alerts;
         let projectiles_alive = self.projectile_count();
         let corpses_alive = self.corpse_count();
+        self.reveal_fogged_attack_sources(&units, &buildings);
         self.next_tick = self
             .next_tick
             .checked_add(1)
             .expect("tick counter exhausted");
+        self.refresh_vision();
         let structural_commit = phase_start.elapsed();
 
         let phase_start = Instant::now();
@@ -1967,6 +1992,7 @@ impl Simulation {
             CanonicalMatchState {
                 shrine_death_generation: self.shrine_death_generation,
                 debug_buildings_invulnerable: self.debug_buildings_invulnerable,
+                fog: self.fog.as_ref(),
                 next_tick: self.next_tick,
                 next_id: self.next_id,
                 configuration_identity: self.configuration_identity,
@@ -2080,6 +2106,7 @@ impl Simulation {
             CanonicalMatchState {
                 shrine_death_generation: self.shrine_death_generation,
                 debug_buildings_invulnerable: self.debug_buildings_invulnerable,
+                fog: self.fog.as_ref(),
                 next_tick: self.next_tick,
                 next_id: self.next_id,
                 configuration_identity: self.configuration_identity,
@@ -2966,6 +2993,14 @@ impl Simulation {
                     debug_assert_eq!(spellcasting.is_some(), mana_current.is_some());
                     debug_assert_eq!(spellcasting.is_some(), ability_state.is_some());
                     UnitSnapshot {
+                        detection_teams: self.fog.as_ref().map_or(0, |fog| {
+                            u8::from(fog.detects_invisible(Team(0), position.0))
+                                | (u8::from(fog.detects_invisible(Team(1), position.0)) << 1)
+                        }),
+                        map_version: entity_ref
+                            .get::<ContentIdentity>()
+                            .map(|content| content.map_version),
+                        visible_teams: self.visible_teams(position.0),
                         entity,
                         id: *id,
                         owner: owner.0,
@@ -3072,6 +3107,13 @@ impl Simulation {
                         !(attack.is_some() || spellcasting.is_some()) || status.is_some()
                     );
                     BuildingSnapshot {
+                        map_version: entity_ref
+                            .get::<ContentIdentity>()
+                            .map(|content| content.map_version),
+                        visible_teams: self.visible_teams(footprint_center_point(
+                            *footprint,
+                            self.config.navigation_cell_size,
+                        )),
                         entity,
                         id: *id,
                         team: *team,
@@ -3103,6 +3145,9 @@ impl Simulation {
 
 #[derive(Debug, Clone, Copy)]
 struct UnitSnapshot {
+    detection_teams: u8,
+    map_version: Option<crate::MapVersion>,
+    visible_teams: u8,
     entity: Entity,
     id: SimId,
     owner: PlayerId,
@@ -3144,8 +3189,9 @@ struct UnitSnapshot {
 impl UnitSnapshot {
     fn visible_to(&self, team: Team, tick: u64) -> bool {
         self.team == team
-            || !self.classifications.invisible
             || self.status.is_revealed_to(team, tick)
+            || self.detection_teams & (1 << team.0) != 0
+            || (!self.classifications.invisible && self.visible_teams & (1 << team.0) != 0)
     }
 
     fn attack_for_unit(
@@ -3194,6 +3240,8 @@ impl UnitSnapshot {
 
 #[derive(Debug, Clone, Copy)]
 struct BuildingSnapshot {
+    map_version: Option<crate::MapVersion>,
+    visible_teams: u8,
     entity: Entity,
     id: SimId,
     team: Team,
@@ -3267,6 +3315,7 @@ enum AbilitySourceOrigin {
 
 #[derive(Debug, Clone, Copy)]
 struct AbilitySourceSnapshot {
+    map_version: Option<crate::MapVersion>,
     source: AbilitySourceIndex,
     id: SimId,
     team: Team,

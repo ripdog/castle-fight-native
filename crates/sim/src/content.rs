@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r15";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r16";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 8;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 9;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1403,8 +1403,21 @@ impl CastleFightTowerKind {
                         damage: 150,
                         radius: world(300),
                         consume_radius: world(220),
-                        reveal_radius: world(400),
-                        reveal_duration_ticks: 7 * CASTLE_FIGHT_SIMULATION_HZ as u16,
+                        reveal_radius: spell_reveal_for_version(
+                            MapVersion::CASTLE_FIGHT_9_27,
+                            AbilityId(u32::from_be_bytes(*b"A0HN")),
+                        )
+                        .expect("resolved Far Sight proxy")
+                        .radius,
+                        reveal_duration_ticks: u16::try_from(
+                            spell_reveal_for_version(
+                                MapVersion::CASTLE_FIGHT_9_27,
+                                AbilityId(u32::from_be_bytes(*b"A0HN")),
+                            )
+                            .expect("resolved Far Sight proxy")
+                            .duration_ticks,
+                        )
+                        .expect("Far Sight duration capacity"),
                     },
                 },
             }),
@@ -1898,6 +1911,24 @@ fn stable_ability_id(
 
 fn canonical_content_bundle_hash(bundle: &CastleFightContentBundle) -> u64 {
     let mut hash = ContentHash64::new();
+    for r in catalog_supplement_927()
+        .expect("validated catalog")
+        .spell_reveals
+    {
+        hash.write_u32(parse_rawcode(&r.rawcode));
+        hash.write_i32(r.radius_world);
+        hash.write_u64(r.duration_ticks);
+        hash.write_u8(u8::from(r.only_if_hidden));
+        hash.write_u8(u8::from(r.detects_invisible));
+    }
+    for p in catalog_supplement_927()
+        .expect("validated catalog")
+        .sight_profiles
+    {
+        hash.write_u32(parse_rawcode(&p.rawcode));
+        hash.write_i32(p.day_world);
+        hash.write_i32(p.night_world);
+    }
     hash.write_u64(0x4346_434f_4e54_0001);
     hash.write_u32(CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION);
     hash.write_u16(bundle.map_version.major);
@@ -2768,6 +2799,147 @@ struct CatalogSupplement927 {
     action_timings: Vec<CatalogActionTiming927>,
     bounce_weapons: Vec<CatalogBounceWeapon927>,
     line_weapons: Vec<CatalogLineWeapon927>,
+    sight_profiles: Vec<CatalogSightProfile927>,
+    fog_rules: CatalogFogRules927,
+    spell_reveals: Vec<CatalogSpellReveal927>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SpellRevealProfile {
+    pub radius: i32,
+    pub duration_ticks: u64,
+    pub only_if_hidden: bool,
+    pub detects_invisible: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct CatalogSpellReveal927 {
+    rawcode: String,
+    radius_world: i32,
+    duration_ticks: u64,
+    only_if_hidden: bool,
+    detects_invisible: bool,
+}
+
+pub(crate) fn spell_reveal_for_version(
+    version: MapVersion,
+    ability: AbilityId,
+) -> Option<SpellRevealProfile> {
+    if version != MapVersion::CASTLE_FIGHT_9_27 {
+        return None;
+    }
+    static PROFILES: OnceLock<BTreeMap<u32, SpellRevealProfile>> = OnceLock::new();
+    PROFILES
+        .get_or_init(|| {
+            catalog_supplement_927()
+                .expect("validated spell vision projection")
+                .spell_reveals
+                .into_iter()
+                .map(|r| {
+                    (
+                        parse_rawcode(&r.rawcode),
+                        SpellRevealProfile {
+                            radius: r.radius_world * SUBUNITS_PER_WORLD_UNIT,
+                            duration_ticks: r.duration_ticks,
+                            only_if_hidden: r.only_if_hidden,
+                            detects_invisible: r.detects_invisible,
+                        },
+                    )
+                })
+                .collect()
+        })
+        .get(&ability.0)
+        .copied()
+}
+
+#[derive(Debug, Deserialize)]
+struct CatalogFogRules927 {
+    initially_explored: bool,
+    clock: crate::FogClock,
+    attack_reveal_radius_world: i32,
+    attack_reveal_duration_ticks: u64,
+    permanent_rectangles_world: [Vec<[i32; 4]>; 2],
+}
+
+pub fn castle_fight_fog_rules_for_version(version: MapVersion) -> Option<crate::FogRules> {
+    if version != MapVersion::CASTLE_FIGHT_9_27 {
+        return None;
+    }
+    let rules = catalog_supplement_927()
+        .expect("validated map fog projection")
+        .fog_rules;
+    Some(crate::FogRules {
+        cell_size: 64 * SUBUNITS_PER_WORLD_UNIT,
+        fallback_sight: crate::SightProfile::default(),
+        initially_explored: rules.initially_explored,
+        night: false,
+        clock: Some(rules.clock),
+        attack_reveal: Some(crate::FogAttackReveal {
+            radius: rules.attack_reveal_radius_world * SUBUNITS_PER_WORLD_UNIT,
+            duration_ticks: rules.attack_reveal_duration_ticks,
+        }),
+        permanent_rectangles: rules.permanent_rectangles_world.map(|rects| {
+            rects
+                .into_iter()
+                .map(|r| {
+                    (
+                        crate::SimPoint::new(
+                            r[0] * SUBUNITS_PER_WORLD_UNIT,
+                            r[1] * SUBUNITS_PER_WORLD_UNIT,
+                        ),
+                        crate::SimPoint::new(
+                            r[2] * SUBUNITS_PER_WORLD_UNIT,
+                            r[3] * SUBUNITS_PER_WORLD_UNIT,
+                        ),
+                    )
+                })
+                .collect()
+        }),
+        sight_blockers: Vec::new(),
+    })
+}
+
+#[derive(Debug, Deserialize)]
+struct CatalogSightProfile927 {
+    rawcode: String,
+    day_world: i32,
+    night_world: i32,
+}
+
+/// Resolved day/night sight, including inherited base fields, for this exact map version.
+pub fn castle_fight_sight_for_version(
+    version: MapVersion,
+    rawcode: u32,
+) -> Option<crate::fog::SightProfile> {
+    if version != MapVersion::CASTLE_FIGHT_9_27 {
+        return None;
+    }
+    static PROFILES: OnceLock<BTreeMap<u32, crate::fog::SightProfile>> = OnceLock::new();
+    PROFILES
+        .get_or_init(|| {
+            catalog_supplement_927()
+                .expect("validated sight projection")
+                .sight_profiles
+                .into_iter()
+                .map(|p| {
+                    (
+                        parse_rawcode(&p.rawcode),
+                        crate::fog::SightProfile {
+                            day: p
+                                .day_world
+                                .checked_mul(SUBUNITS_PER_WORLD_UNIT)
+                                .expect("day sight overflow"),
+                            night: p
+                                .night_world
+                                .checked_mul(SUBUNITS_PER_WORLD_UNIT)
+                                .expect("night sight overflow"),
+                        },
+                    )
+                })
+                .collect()
+        })
+        .get(&rawcode)
+        .copied()
 }
 
 #[derive(Debug, Deserialize)]
@@ -3468,7 +3640,7 @@ impl ExtractedContent927 {
 fn catalog_supplement_927() -> Result<CatalogSupplement927, String> {
     let supplement: CatalogSupplement927 = serde_json::from_str(CATALOG_SUPPLEMENT_927_R1_JSON)
         .map_err(|error| format!("invalid 9.27 catalog supplement: {error}"))?;
-    if supplement.schema_version != 4 {
+    if supplement.schema_version != 5 {
         return Err(format!(
             "unsupported 9.27 catalog supplement schema {}",
             supplement.schema_version
@@ -4479,6 +4651,56 @@ const fn world(world_units: i32) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resolved_sight_covers_every_playable_source_and_is_version_scoped() {
+        let version = MapVersion::CASTLE_FIGHT_9_27;
+        let bundle = castle_fight_content_bundle(version).unwrap();
+        let projection = catalog_supplement_927().unwrap();
+        let sight: BTreeMap<_, _> = projection
+            .sight_profiles
+            .into_iter()
+            .map(|p| {
+                (
+                    parse_rawcode(&p.rawcode),
+                    crate::SightProfile {
+                        day: p.day_world * SUBUNITS_PER_WORLD_UNIT,
+                        night: p.night_world * SUBUNITS_PER_WORLD_UNIT,
+                    },
+                )
+            })
+            .collect();
+        for rawcode in bundle
+            .units
+            .values()
+            .map(|u| u.rawcode)
+            .chain(
+                bundle
+                    .production_buildings
+                    .values()
+                    .flat_map(|b| [b.rawcode, b.produced_unit.rawcode]),
+            )
+            .chain(bundle.towers.values().map(|b| b.rawcode))
+            .chain(bundle.builders.values().map(|b| b.rawcode))
+            .chain([u32::from_be_bytes(*b"hcas")])
+        {
+            assert_eq!(
+                castle_fight_sight_for_version(version, rawcode),
+                sight.get(&rawcode).copied(),
+                "{rawcode:08x}"
+            );
+            assert!(sight.contains_key(&rawcode));
+        }
+        let unsupported = MapVersion {
+            major: u16::MAX,
+            minor: u16::MAX,
+        };
+        assert!(
+            castle_fight_sight_for_version(unsupported, u32::from_be_bytes(*b"hcas")).is_none()
+        );
+        assert!(castle_fight_fog_rules_for_version(unsupported).is_none());
+        assert!(spell_reveal_for_version(unsupported, AbilityId(0)).is_none());
+    }
 
     fn parse_extracted_char(value: &str) -> char {
         let value = value.trim_matches('"');

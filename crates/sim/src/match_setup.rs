@@ -659,6 +659,7 @@ fn simulation_config_927(
     }
 
     SimulationConfig {
+        fog: crate::content::castle_fight_fog_rules_for_version(content.map_version),
         match_seed,
         spatial_cell_size: 256 * SUBUNITS_PER_WORLD_UNIT,
         navigation_cell_size: NAV_CELL_SUBUNITS,

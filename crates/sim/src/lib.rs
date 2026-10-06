@@ -15,10 +15,15 @@ mod simulation;
 pub use shrine_system::{
     GoldenShrineDefinition, GoldenShrineParameters, golden_shrine_definition_for_version,
 };
+mod fog;
 mod spatial;
 mod terrain;
 mod topology;
 mod version;
+pub use fog::{
+    FogAttackReveal, FogClock, FogOfWar, FogReveal, FogRules, RememberedConstruction,
+    RememberedStructure, SightProfile,
+};
 
 pub use commands::{
     BuildPosition, BuilderQueuedCommand, CommandAdmissionError, CommandExecutionResult,
@@ -55,8 +60,9 @@ pub use content::{
     castle_fight_command_card_layout_for_version, castle_fight_content_availability,
     castle_fight_content_bundle, castle_fight_content_bundle_for_revision,
     castle_fight_damage_rules, castle_fight_damage_rules_for_version, castle_fight_economy_rules,
-    castle_fight_economy_rules_for_version, castle_fight_main_castle_repair_time_ticks,
-    castle_fight_main_castle_repair_time_ticks_for_version,
+    castle_fight_economy_rules_for_version, castle_fight_fog_rules_for_version,
+    castle_fight_main_castle_repair_time_ticks,
+    castle_fight_main_castle_repair_time_ticks_for_version, castle_fight_sight_for_version,
 };
 pub use damage::{
     ArmorProfile, ArmorType, DAMAGE_MULTIPLIER_SCALE, DamageRules, DamageRulesLoadError, DamageType,
@@ -330,6 +336,7 @@ mod tests {
     fn original_map_terrain_config() -> SimulationConfig {
         let tile = WC3_TERRAIN_TILE_WORLD_UNITS * SUBUNITS_PER_WORLD_UNIT;
         SimulationConfig {
+            fog: None,
             match_seed: 0x5550_4849_4c4c,
             spatial_cell_size: 4 * tile,
             navigation_cell_size: tile,

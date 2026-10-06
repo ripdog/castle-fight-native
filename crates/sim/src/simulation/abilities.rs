@@ -28,6 +28,7 @@ impl Simulation {
                 .map(|(source_index, source)| {
                     self.evaluate_automatic_ability(
                         AbilitySourceSnapshot {
+                            map_version: source.map_version,
                             source: AbilitySourceIndex::Building(source_index),
                             id: source.id,
                             team: source.team,
@@ -53,6 +54,7 @@ impl Simulation {
                 .map(|(source_index, source)| {
                     self.evaluate_automatic_ability(
                         AbilitySourceSnapshot {
+                            map_version: source.map_version,
                             source: AbilitySourceIndex::Unit(source_index),
                             id: source.id,
                             team: source.team,
@@ -125,6 +127,7 @@ impl Simulation {
                 AbilitySourceIndex::Unit(index) => {
                     let source = &units[index];
                     AbilitySourceSnapshot {
+                        map_version: source.map_version,
                         source: intent.source,
                         id: source.id,
                         team: source.team,
@@ -139,6 +142,7 @@ impl Simulation {
                 AbilitySourceIndex::Building(index) => {
                     let source = &buildings[index];
                     AbilitySourceSnapshot {
+                        map_version: source.map_version,
                         source: intent.source,
                         id: source.id,
                         team: source.team,
@@ -342,6 +346,21 @@ impl Simulation {
                 target_position
             };
 
+            if let Some(content) = self.world.get::<ContentIdentity>(entity)
+                && let Some(reveal) =
+                    crate::content::spell_reveal_for_version(content.map_version, intent.ability.id)
+                && let Some(position) = target_position
+                && (!reveal.only_if_hidden
+                    || self.visible_teams(position) & (1 << source.team.0) == 0)
+            {
+                self.reveal_area(
+                    source.team,
+                    position,
+                    reveal.radius,
+                    reveal.duration_ticks,
+                    reveal.detects_invisible,
+                );
+            }
             match intent.target {
                 AbilityIntentTarget::Unit { index, .. } => {
                     if let AbilityEffect::SolarStrike {
@@ -550,12 +569,21 @@ impl Simulation {
                         damage,
                         radius,
                         consume_radius,
-                        reveal_radius: _,
-                        reveal_duration_ticks: _,
+                        reveal_radius,
+                        reveal_duration_ticks,
                     } = intent.ability.effect
                     else {
                         unreachable!("corpse target requires Purification")
                     };
+                    if source.map_version.is_none() {
+                        self.reveal_area(
+                            source.team,
+                            position,
+                            reveal_radius,
+                            u64::from(reveal_duration_ticks),
+                            true,
+                        );
+                    }
                     for target in units.iter_mut() {
                         if target.health > 0
                             && target.team != source.team
@@ -1121,6 +1149,7 @@ impl Simulation {
                 || target.team == source.team
                 || target.classifications.invulnerable
                 || target.classifications.spell_immune
+                || !self.native_target_visible(source, ability, target)
                 || (ability.target_policy == AbilityTargetPolicy::FlyingEnemyUnit
                     && (target.movement_class != MovementClass::Air
                         || !target.classifications.combat_sapper
@@ -1174,6 +1203,7 @@ impl Simulation {
                 *checks += 1;
                 let position = footprint_center_point(*footprint, self.config.navigation_cell_size);
                 if health.current <= 0
+                    || self.visible_teams(position) & (1 << source.team.0) == 0
                     || entity.get::<StatusState>().is_some_and(|status| {
                         native_fire_buff_active(status, profile.ability, self.next_tick)
                     })
@@ -1209,6 +1239,23 @@ impl Simulation {
         best.map(|(_, _, target)| target)
     }
 
+    fn native_target_visible(
+        &self,
+        source: AbilitySourceSnapshot,
+        ability: AutomaticAbilityProfile,
+        target: &UnitSnapshot,
+    ) -> bool {
+        target.visible_to(source.team, self.next_tick)
+            || ((!target.classifications.invisible
+                || target.status.is_revealed_to(source.team, self.next_tick))
+                && source
+                    .map_version
+                    .and_then(|version| {
+                        crate::content::spell_reveal_for_version(version, ability.id)
+                    })
+                    .is_some_and(|reveal| reveal.only_if_hidden))
+    }
+
     fn enemy_is_in_combat(&self, candidate: &UnitSnapshot, units: &[UnitSnapshot]) -> bool {
         candidate
             .target
@@ -1241,6 +1288,8 @@ impl Simulation {
         target.health > 0
             && target.team != source.team
             && !target.mechanical
+            && (ability.target_policy == AbilityTargetPolicy::RandomEnemyDebuff
+                || target.visible_to(source.team, self.next_tick))
             && !target.classifications.spell_immune
             && self.ability_source_distance_sq(source.origin, target.position)
                 <= square_i32(ability.range)
@@ -1405,6 +1454,7 @@ impl Simulation {
                         AbilityTargetPolicy::FlyingEnemyUnit
                         | AbilityTargetPolicy::RandomEnemyUnitOrBuilding => {
                             target.team != source.team
+                                && self.native_target_visible(source, ability, target)
                                 && !target.classifications.invulnerable
                                 && !target.classifications.spell_immune
                                 && (ability.target_policy != AbilityTargetPolicy::FlyingEnemyUnit
@@ -1492,6 +1542,7 @@ impl Simulation {
             }
             AbilityIntentTarget::Building { id, position } => {
                 ability.target_policy == AbilityTargetPolicy::RandomEnemyUnitOrBuilding
+                    && self.visible_teams(position) & (1 << source.team.0) != 0
                     && self.ability_source_distance_sq(source.origin, position)
                         <= square_i32(ability.range)
                     && self.world.iter_entities().any(|entity| {

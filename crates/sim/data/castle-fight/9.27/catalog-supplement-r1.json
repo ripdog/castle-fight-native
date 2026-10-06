@@ -1,6 +1,3217 @@
 {
-  "schema_version": 4,
+  "schema_version": 5,
+  "fog_rules": {
+    "initially_explored": true,
+    "attack_reveal_radius_world": 200,
+    "attack_reveal_duration_ticks": 90,
+    "clock": {
+      "cycle_ticks": 14400,
+      "dawn_phase_ticks": 3600,
+      "dusk_phase_ticks": 10800,
+      "initial_phase_ticks": 7200
+    },
+    "source_base_misc_sha256": "c6a900ad7126b6f88897ebd26f1f2af2a90dadca72d615c737b5282921638016",
+    "permanent_rectangles_world": [
+      [
+        [
+          -6144,
+          -2048,
+          -1920,
+          2048
+        ],
+        [
+          -1408,
+          -2208,
+          1216,
+          -1024
+        ]
+      ],
+      [
+        [
+          1920,
+          -2048,
+          6144,
+          2048
+        ],
+        [
+          -1408,
+          -2208,
+          1216,
+          -1024
+        ]
+      ]
+    ],
+    "source_script_sha256": "e478835f6c2bd79320f463472a7f043bf1d40770c74c3647cdfed655ed33874a"
+  },
+  "sight_profiles": [
+    {
+      "rawcode": "X006",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "X00C",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "X00E",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "X00O",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "X00P",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "X017",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "X018",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "X019",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "X01A",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "X051",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "X06P",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "X075",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "X078",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "X07P",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "X089",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "X0Z0",
+      "day_world": 1400,
+      "night_world": 1400
+    },
+    {
+      "rawcode": "e000",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "e001",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "e002",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "e003",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "e004",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "e005",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "e006",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "e007",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "e008",
+      "day_world": 0,
+      "night_world": 0
+    },
+    {
+      "rawcode": "e009",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "e00A",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "e00B",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "e00C",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "e00D",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "e00E",
+      "day_world": 0,
+      "night_world": 0
+    },
+    {
+      "rawcode": "e00F",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "e00G",
+      "day_world": 1800,
+      "night_world": 1800
+    },
+    {
+      "rawcode": "e00I",
+      "day_world": 16,
+      "night_world": 16
+    },
+    {
+      "rawcode": "e00J",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "e00M",
+      "day_world": 0,
+      "night_world": 0
+    },
+    {
+      "rawcode": "h000",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h001",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h002",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h003",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h004",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h005",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h006",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h007",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h008",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h009",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h00A",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h00B",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h00C",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h00D",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h00E",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h00F",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h00G",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h00I",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h00J",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h00K",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h00L",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h00M",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h00N",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h00O",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h00P",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h00Q",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h00R",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h00S",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h00T",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h00U",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h00V",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h00W",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h00X",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h00Y",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h00Z",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h010",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h011",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h012",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h013",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h014",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h015",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h016",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h017",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h018",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h019",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h01A",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h01B",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h01C",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h01D",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h01E",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h01F",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h01G",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h01H",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h01I",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h01J",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h01K",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h01L",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h01M",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h01N",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h01O",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h01P",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h01Q",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h01R",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h01S",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h01T",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h01U",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h01V",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h01W",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h01X",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h01Y",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h01Z",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h020",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h021",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h022",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h023",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h024",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h025",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h026",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h027",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h028",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h029",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h02A",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h02B",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h02C",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h02D",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h02E",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h02F",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h02G",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h02H",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h02I",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h02J",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h02K",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h02L",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h02M",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h02N",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h02O",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h02P",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h02Q",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h02R",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h02S",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h02T",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h02U",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h02V",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h02W",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h02X",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h02Y",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h02Z",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h030",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h031",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h032",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h033",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h034",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h035",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h036",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h037",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h038",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h039",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h03A",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h03B",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h03C",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h03D",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h03E",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h03F",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h03G",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h03H",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h03I",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h03J",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h03K",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h03L",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h03M",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h03N",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h03O",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h03P",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h03Q",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h03R",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h03S",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h03T",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h03U",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h03V",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h03W",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h03X",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h03Y",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h03Z",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h040",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h041",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h042",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h043",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h044",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h045",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h046",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h047",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h048",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h049",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h04A",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h04B",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h04C",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h04D",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h04E",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h04F",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h04G",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h04H",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h04I",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h04J",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h04K",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h04L",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h04M",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h04N",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h04O",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h04P",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h04Q",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h04R",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h04S",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h04T",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h04U",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h04V",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h04W",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h04X",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h04Y",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h04Z",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h050",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h051",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h052",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h053",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h054",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h055",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h056",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h057",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h058",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h059",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h05A",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h05B",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h05C",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h05D",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h05E",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h05F",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h05G",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h05H",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h05I",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h05J",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h05K",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h05L",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h05M",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h05N",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h05O",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h05P",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h05Q",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h05R",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h05S",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h05T",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h05U",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h05V",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h05W",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h05X",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h05Y",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h05Z",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h060",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h061",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h062",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h063",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h064",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h065",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h066",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h067",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h068",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h069",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h06A",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h06B",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h06C",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h06D",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h06E",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h06F",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h06G",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h06H",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h06I",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h06J",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h06L",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h06M",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h06N",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h06O",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h06P",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h06Q",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h06R",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h06S",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h06T",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h06U",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h06V",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h06W",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h06X",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h06Y",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h06Z",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h070",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h071",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h072",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h073",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h074",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h075",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h076",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h077",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h078",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h079",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h07A",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h07B",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h07C",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h07D",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h07E",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h07F",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h07G",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h07H",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h07I",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h07J",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h07K",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h07L",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h07M",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h07N",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h07O",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h07P",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h07Q",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h07R",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h07S",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h07T",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h07U",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h07V",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h07W",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h07X",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h07Y",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h07Z",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h080",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h081",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h082",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h088",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h089",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08A",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08B",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08C",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08D",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08E",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08F",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08G",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08H",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08I",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08J",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08K",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08L",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08M",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08N",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08O",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08P",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h08Q",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08R",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08S",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08T",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08U",
+      "day_world": 700,
+      "night_world": 700
+    },
+    {
+      "rawcode": "h08V",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08W",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h08X",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h08Y",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h08Z",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h090",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h091",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h092",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h093",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h094",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h096",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h097",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h098",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h099",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h09A",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h09B",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h09C",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h09D",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h09E",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h09F",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h09G",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h09H",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h09I",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h09J",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h09K",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h09L",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h09M",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h09N",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h09O",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h09P",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h09Q",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h09R",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h09T",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h09U",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h09V",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h09W",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h09X",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h09Y",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h09Z",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h0A0",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "h0A1",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h0A2",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "h0Z1",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h0Z2",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h0Z3",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h0Z4",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h0Z5",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h0Z6",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "h0Z7",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "hcas",
+      "day_world": 900,
+      "night_world": 600
+    },
+    {
+      "rawcode": "hfoo",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "hmtm",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "hrif",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n000",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n001",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n002",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n003",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n004",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n005",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n006",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n007",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n008",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n009",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00A",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00B",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00C",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "n00D",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00E",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00F",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "n00G",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "n00H",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00I",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00J",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00K",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00L",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00M",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00N",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00O",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00P",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00Q",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00R",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00S",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00T",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00U",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00V",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00W",
+      "day_world": 300,
+      "night_world": 300
+    },
+    {
+      "rawcode": "n00X",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00Y",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n00Z",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n010",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n011",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n012",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n013",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n014",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n015",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n016",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n017",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n018",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n019",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01A",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01B",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01C",
+      "day_world": 200,
+      "night_world": 200
+    },
+    {
+      "rawcode": "n01D",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01E",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01F",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01G",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01H",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01I",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01J",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "n01K",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01L",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01M",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "n01N",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01O",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01P",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01Q",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01R",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01S",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01T",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01U",
+      "day_world": 1800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01V",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01W",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01X",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01Y",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n01Z",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n020",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n021",
+      "day_world": 200,
+      "night_world": 200
+    },
+    {
+      "rawcode": "n022",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n023",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n024",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n025",
+      "day_world": 0,
+      "night_world": 0
+    },
+    {
+      "rawcode": "n026",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n027",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n028",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n029",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02A",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02B",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02D",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "n02E",
+      "day_world": 1200,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02F",
+      "day_world": 1200,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02G",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02H",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02I",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02J",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02K",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02L",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02M",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02N",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02O",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02P",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02Q",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02R",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02S",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02T",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02U",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02V",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02W",
+      "day_world": 900,
+      "night_world": 900
+    },
+    {
+      "rawcode": "n02X",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02Y",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n02Z",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n030",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n031",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n032",
+      "day_world": 900,
+      "night_world": 900
+    },
+    {
+      "rawcode": "n033",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n034",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "n035",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n036",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n037",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n038",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n039",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n03A",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "n03B",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n03C",
+      "day_world": 400,
+      "night_world": 400
+    },
+    {
+      "rawcode": "n03D",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n03E",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n03F",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n03G",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n03H",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n03I",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n03J",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n03K",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n03L",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n03M",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n03N",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n03O",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n03P",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n03Q",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n03R",
+      "day_world": 0,
+      "night_world": 0
+    },
+    {
+      "rawcode": "n03S",
+      "day_world": 900,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n03T",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n03U",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n0Z1",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n0Z2",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "n0Z3",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "n0Z4",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "n0Z7",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "nalb",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "ncp2",
+      "day_world": 300,
+      "night_world": 300
+    },
+    {
+      "rawcode": "ncrb",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "nder",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "ndog",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "ndwm",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "nech",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "necr",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "nfbr",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "nfro",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "nhmc",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "nmrk",
+      "day_world": 500,
+      "night_world": 500
+    },
+    {
+      "rawcode": "npig",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "npng",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "npnw",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "nrac",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "nrat",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "nsea",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "nshe",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "nshp",
+      "day_world": 500,
+      "night_world": 500
+    },
+    {
+      "rawcode": "nskk",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "nsno",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "nvul",
+      "day_world": 350,
+      "night_world": 350
+    },
+    {
+      "rawcode": "o000",
+      "day_world": 1000,
+      "night_world": 1000
+    },
+    {
+      "rawcode": "o001",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "o002",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "o003",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "o004",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "o005",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "o006",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "o007",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "o008",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "o009",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "o00A",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "o00B",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "o00C",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "o00D",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "o00E",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "o00F",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "o00G",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "o00H",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "otot",
+      "day_world": 600,
+      "night_world": 600
+    },
+    {
+      "rawcode": "tec1",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "tec2",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "tec3",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "u000",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "u001",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "u002",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "u003",
+      "day_world": 1400,
+      "night_world": 900
+    },
+    {
+      "rawcode": "u004",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "u005",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "u006",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "u007",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "u008",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "u009",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "u00A",
+      "day_world": 1400,
+      "night_world": 900
+    },
+    {
+      "rawcode": "u00B",
+      "day_world": 800,
+      "night_world": 600
+    },
+    {
+      "rawcode": "u00C",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "u00D",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "u00E",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "u00F",
+      "day_world": 1400,
+      "night_world": 800
+    },
+    {
+      "rawcode": "u00G",
+      "day_world": 0,
+      "night_world": 0
+    },
+    {
+      "rawcode": "x001",
+      "day_world": 1,
+      "night_world": 1
+    },
+    {
+      "rawcode": "x002",
+      "day_world": 1,
+      "night_world": 1
+    },
+    {
+      "rawcode": "x003",
+      "day_world": 1,
+      "night_world": 1
+    },
+    {
+      "rawcode": "z000",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "z001",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "z002",
+      "day_world": 800,
+      "night_world": 800
+    },
+    {
+      "rawcode": "z003",
+      "day_world": 800,
+      "night_world": 800
+    }
+  ],
   "simulation_hz": 30,
+  "spell_reveals": [
+    {
+      "rawcode": "A00O",
+      "radius_world": 128,
+      "duration_ticks": 3,
+      "only_if_hidden": true,
+      "detects_invisible": false
+    },
+    {
+      "rawcode": "A017",
+      "radius_world": 128,
+      "duration_ticks": 3,
+      "only_if_hidden": true,
+      "detects_invisible": false
+    },
+    {
+      "rawcode": "A02Z",
+      "radius_world": 128,
+      "duration_ticks": 3,
+      "only_if_hidden": true,
+      "detects_invisible": false
+    },
+    {
+      "rawcode": "A04I",
+      "radius_world": 128,
+      "duration_ticks": 3,
+      "only_if_hidden": true,
+      "detects_invisible": false
+    },
+    {
+      "rawcode": "A06P",
+      "radius_world": 128,
+      "duration_ticks": 3,
+      "only_if_hidden": true,
+      "detects_invisible": false
+    },
+    {
+      "rawcode": "A06R",
+      "radius_world": 128,
+      "duration_ticks": 3,
+      "only_if_hidden": true,
+      "detects_invisible": false
+    },
+    {
+      "rawcode": "A07R",
+      "radius_world": 128,
+      "duration_ticks": 3,
+      "only_if_hidden": true,
+      "detects_invisible": false
+    },
+    {
+      "rawcode": "A07U",
+      "radius_world": 1100,
+      "duration_ticks": 240,
+      "only_if_hidden": false,
+      "detects_invisible": false
+    },
+    {
+      "rawcode": "A08V",
+      "radius_world": 128,
+      "duration_ticks": 3,
+      "only_if_hidden": true,
+      "detects_invisible": false
+    },
+    {
+      "rawcode": "A09X",
+      "radius_world": 128,
+      "duration_ticks": 3,
+      "only_if_hidden": true,
+      "detects_invisible": false
+    },
+    {
+      "rawcode": "A0BM",
+      "radius_world": 128,
+      "duration_ticks": 3,
+      "only_if_hidden": true,
+      "detects_invisible": false
+    },
+    {
+      "rawcode": "A0FB",
+      "radius_world": 128,
+      "duration_ticks": 3,
+      "only_if_hidden": true,
+      "detects_invisible": false
+    },
+    {
+      "rawcode": "A0GF",
+      "radius_world": 128,
+      "duration_ticks": 3,
+      "only_if_hidden": true,
+      "detects_invisible": false
+    },
+    {
+      "rawcode": "A0HN",
+      "source_ability_rawcode": "A9FS",
+      "radius_world": 400,
+      "duration_ticks": 210,
+      "only_if_hidden": false,
+      "detects_invisible": true
+    }
+  ],
   "action_timings": [
     {
       "rawcode": "X006",

@@ -31,6 +31,8 @@ A cache is not automatically derived. If retaining or clearing it can change a f
 | `team_objectives` | Mutable authoritative | Store/hash the optional stable `SimId` registered for each team objective. Victory evaluation depends on these exact identities, not a content-name search. |
 | `shrine_death_generation` | Mutable authoritative | Store/hash exactly. Delayed revival callbacks compare their retained generation before creating a replacement. |
 | `debug_buildings_invulnerable` | Mutable authoritative | Store/hash exactly. Host debug immunity changes future building damage and must survive replay/rejoin. |
+| `fog.explored`, timed reveals, remembered enemy structures | Mutable authoritative | Store/hash both teams' exploration, stationary grants with detection and exclusive expiry, and last-observed structure identities/owners/footprints and frozen observed construction phases. |
+| `fog.visible` | Rebuildable derived state | Recompute from living sight sources, marked targets, permanent regions and active timed grants; validate serialized shape and rebuild on restore. Cosmetic smoothing is excluded. |
 | `config` / `SimulationConfig` | Immutable match input | Compatibility identity covers every field listed in section 4. Step 3 replaces the temporary direct configuration identity with the resolved content/mode identity where appropriate. |
 | `combat_rules` / `CombatRules` | Immutable match input | Compatibility identity covers terrain elevation, uphill miss chance, armor factor, and the complete damage-type/armor-type table. |
 | `configuration_identity` | Rebuildable derived identity | Cached canonical hash of the immutable inputs above. It is not an independent gameplay value; restoration must recompute/validate it from selected compatible inputs. |
@@ -49,6 +51,7 @@ Until the canonical content bundle from step 3 exists, the checksum compatibilit
 - checksum schema revision and simulation tick rate;
 - `match_seed`;
 - spatial and navigation cell sizes and navigation min/max cells;
+- optional fog rules: grid size, contentless fixture sight, initial exploration, day/night clock, permanent regions, and authored sight blockers;
 - target-pursuit extra range, unit-separation distance, and per-tick separation cap;
 - ground static blockers, air-only blockers, placement-only blockers, and both teams' build regions;
 - optional targetless-lane bounds;
