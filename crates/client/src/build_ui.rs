@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    fmt::Write,
     time::Duration,
 };
 
@@ -195,6 +196,9 @@ struct BuildTooltip;
 struct BuildTooltipTitle;
 
 #[derive(Component)]
+struct BuildTooltipCost;
+
+#[derive(Component)]
 struct BuildTooltipBody;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -206,6 +210,31 @@ enum ActionTooltipKind {
 }
 
 impl ActionTooltipKind {
+    fn cost_label(self, content: &CastleFightContentBundle) -> String {
+        let (Self::Build(kind) | Self::BuildingUpgrade(kind)) = self else {
+            return String::new();
+        };
+        let economy = kind.economy(content);
+        let mut label = format!("{} gold", economy.gold_cost);
+        if economy.lumber_cost > 0 {
+            write!(label, "  {} lumber", economy.lumber_cost).expect("write cost to string");
+        }
+        if economy.legendary_points_cost > 0 {
+            write!(
+                label,
+                "\n{} legendary point{}",
+                economy.legendary_points_cost,
+                if economy.legendary_points_cost == 1 {
+                    ""
+                } else {
+                    "s"
+                },
+            )
+            .expect("write cost to string");
+        }
+        label
+    }
+
     fn tooltips(self, content: &CastleFightContentBundle) -> (&'static str, &'static str) {
         match self {
             Self::Build(kind) => kind.tooltips(content),
@@ -306,6 +335,7 @@ struct BuildTooltipUi<'w, 's> {
     state: ResMut<'w, BuildTooltipState>,
     visibility: Single<'w, 's, &'static mut Visibility, With<BuildTooltip>>,
     title: Single<'w, 's, Entity, With<BuildTooltipTitle>>,
+    cost: Single<'w, 's, (&'static mut Text, &'static mut Node), With<BuildTooltipCost>>,
     body: Single<'w, 's, Entity, With<BuildTooltipBody>>,
 }
 
@@ -550,17 +580,40 @@ fn setup_action_panel(
             BuildTooltip,
         ))
         .with_children(|tooltip| {
-            tooltip.spawn((
-                Text::new(""),
-                TextFont::from_font_size(12.0),
-                TextColor(TOOLTIP_TITLE_COLOR),
-                TextLayout::default(),
-                Node {
+            tooltip
+                .spawn(Node {
                     width: percent(100.0),
+                    align_items: AlignItems::FlexStart,
+                    column_gap: px(12.0),
                     ..default()
-                },
-                BuildTooltipTitle,
-            ));
+                })
+                .with_children(|header| {
+                    header.spawn((
+                        Text::new(""),
+                        TextFont::from_font_size(12.0),
+                        TextColor(TOOLTIP_TITLE_COLOR),
+                        TextLayout::default(),
+                        Node {
+                            flex_basis: px(0.0),
+                            flex_grow: 1.0,
+                            min_width: px(0.0),
+                            ..default()
+                        },
+                        BuildTooltipTitle,
+                    ));
+                    header.spawn((
+                        Text::new(""),
+                        TextFont::from_font_size(10.0),
+                        TextColor(TOOLTIP_TEXT_COLOR),
+                        TextLayout::justify(Justify::Right),
+                        Node {
+                            display: Display::None,
+                            flex_shrink: 0.0,
+                            ..default()
+                        },
+                        BuildTooltipCost,
+                    ));
+                });
             tooltip.spawn((
                 Text::new(""),
                 TextFont::from_font_size(10.0),
@@ -1745,6 +1798,13 @@ fn update_build_tooltip(
 
     let (basic, extended) = kind.tooltips(selected_match.content);
     set_wc3_text(&mut commands, *tooltip.title, basic, TOOLTIP_TITLE_COLOR);
+    let cost = kind.cost_label(selected_match.content);
+    tooltip.cost.1.display = if cost.is_empty() {
+        Display::None
+    } else {
+        Display::Flex
+    };
+    tooltip.cost.0.0 = cost;
     set_wc3_text(&mut commands, *tooltip.body, extended, TOOLTIP_TEXT_COLOR);
     **tooltip.visibility = Visibility::Visible;
 }
