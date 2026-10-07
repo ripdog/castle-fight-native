@@ -56,6 +56,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
     DragonhawkRider = 0x1000_0015 => b"n01Y",
     Sorceress = 0x1000_0016 => b"h07B",
     Wizard = 0x1000_0017 => b"h00W",
+    FrostWolf = 0x1000_0018 => b"n017",
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
@@ -82,6 +83,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
     DragonhawkPortal = 0x2000_0015 => b"h06Y",
     SchoolOfWizardry = 0x2000_0016 => b"h09X",
     TowerOfSupremeMagic = 0x2000_0017 => b"h00X",
+    SnowyRocks = 0x2000_0018 => b"h049",
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;

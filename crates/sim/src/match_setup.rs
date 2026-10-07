@@ -1138,96 +1138,104 @@ mod tests {
 
     #[test]
     fn mixed_race_fixture_owns_source_menus_and_rejects_cross_catalog_commands() {
-        let mut config =
-            CastleFightMatchConfig::development_subset(MapVersion::CASTLE_FIGHT_9_27, "r1", 1)
-                .unwrap();
-        let allies = config
-            .participants
-            .iter()
-            .map(|participant| CastleFightParticipantConfig {
-                id: PlayerId(participant.id.0 + 1),
-                ..*participant
-            })
-            .collect::<Vec<_>>();
-        config.participants.extend(allies);
-        let human = create_castle_fight_match(config.clone(), 1).unwrap();
-        for participant in &mut config.participants {
-            if participant.id.0 % 2 != 0 {
-                participant.builder_race = CastleFightBuilderRace::Elf;
-            }
-        }
-        let config = CastleFightMatchConfig::development_subset_with_participants(
-            config.release.map_version,
-            "r1",
-            config.match_seed,
-            config.participants,
-        )
-        .unwrap();
-        let mut restored = create_castle_fight_match(config.clone(), 4)
-            .unwrap()
-            .simulation;
-        let game = create_castle_fight_match(config, 1).unwrap();
-        // The immutable simulation inputs/content are shared. Source-owned builder rosters
-        // are canonical entity state, so their initial gameplay checksum must differ.
-        assert_ne!(
-            game.simulation.checksum(),
-            human.simulation.checksum(),
-            "initial authoritative state must distinguish source-owned race rosters"
-        );
-        let snapshot = game.simulation.capture_snapshot();
-        let encoded = snapshot.encode_wire().unwrap();
-        let decoded = crate::SimulationSnapshot::decode_wire(&encoded, game.content).unwrap();
-        assert_eq!(
-            decoded.configuration_identity(),
-            snapshot.configuration_identity()
-        );
-        restored.restore_snapshot(&decoded).unwrap();
-        assert_eq!(restored.checksum(), game.simulation.checksum());
-        for participant in &game.match_config.participants {
-            let builder = game.simulation.builder_for_player(participant.id).unwrap();
-            let source = game.content.builder(participant.builder_race).unwrap();
-            let expected = source
-                .build_catalog
+        for race in [
+            CastleFightBuilderRace::Elf,
+            CastleFightBuilderRace::Northern,
+        ] {
+            let mut config =
+                CastleFightMatchConfig::development_subset(MapVersion::CASTLE_FIGHT_9_27, "r1", 1)
+                    .unwrap();
+            let allies = config
+                .participants
                 .iter()
-                .copied()
-                .filter(|rawcode| {
-                    game.direct_buildings
-                        .iter()
-                        .any(|kind| kind.rawcode(game.content) == Some(*rawcode))
+                .map(|participant| CastleFightParticipantConfig {
+                    id: PlayerId(participant.id.0 + 1),
+                    ..*participant
                 })
                 .collect::<Vec<_>>();
-            assert_eq!(builder.configuration.build_catalog, expected);
-            for &kind in &game.direct_buildings {
-                let result = crate::admit_player_command(
-                    &game.simulation,
-                    game.content,
-                    participant.id,
-                    crate::PlayerCommand::PlaceBuilding {
-                        builder: builder.id,
-                        building: kind.stable_id(),
-                        position: crate::BuildPosition::new(0, 0),
-                    },
-                );
-                if builder
-                    .configuration
-                    .allows_building(kind.rawcode(game.content).unwrap())
-                {
-                    assert_eq!(result, Ok(()));
-                } else {
-                    assert!(matches!(
-                        result,
-                        Err(crate::CommandAdmissionError::BuildingNotInBuilderCatalog { .. })
-                    ));
+            config.participants.extend(allies);
+            let human = create_castle_fight_match(config.clone(), 1).unwrap();
+            for participant in &mut config.participants {
+                if participant.id.0 % 2 != 0 {
+                    participant.builder_race = race;
                 }
             }
+            let config = CastleFightMatchConfig::development_subset_with_participants(
+                config.release.map_version,
+                "r1",
+                config.match_seed,
+                config.participants,
+            )
+            .unwrap();
+            let mut restored = create_castle_fight_match(config.clone(), 4)
+                .unwrap()
+                .simulation;
+            let game = create_castle_fight_match(config, 1).unwrap();
+            // The immutable simulation inputs/content are shared. Source-owned builder rosters
+            // are canonical entity state, so their initial gameplay checksum must differ.
+            assert_ne!(
+                game.simulation.checksum(),
+                human.simulation.checksum(),
+                "initial authoritative state must distinguish source-owned race rosters"
+            );
+            let snapshot = game.simulation.capture_snapshot();
+            let encoded = snapshot.encode_wire().unwrap();
+            let decoded = crate::SimulationSnapshot::decode_wire(&encoded, game.content).unwrap();
+            assert_eq!(
+                decoded.configuration_identity(),
+                snapshot.configuration_identity()
+            );
+            restored.restore_snapshot(&decoded).unwrap();
+            assert_eq!(restored.checksum(), game.simulation.checksum());
+            for participant in &game.match_config.participants {
+                let builder = game.simulation.builder_for_player(participant.id).unwrap();
+                let source = game.content.builder(participant.builder_race).unwrap();
+                let expected = source
+                    .build_catalog
+                    .iter()
+                    .copied()
+                    .filter(|rawcode| {
+                        game.direct_buildings
+                            .iter()
+                            .any(|kind| kind.rawcode(game.content) == Some(*rawcode))
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(builder.configuration.build_catalog, expected);
+                for &kind in &game.direct_buildings {
+                    let result = crate::admit_player_command(
+                        &game.simulation,
+                        game.content,
+                        participant.id,
+                        crate::PlayerCommand::PlaceBuilding {
+                            builder: builder.id,
+                            building: kind.stable_id(),
+                            position: crate::BuildPosition::new(0, 0),
+                        },
+                    );
+                    if builder
+                        .configuration
+                        .allows_building(kind.rawcode(game.content).unwrap())
+                    {
+                        assert_eq!(result, Ok(()));
+                    } else {
+                        assert!(matches!(
+                            result,
+                            Err(crate::CommandAdmissionError::BuildingNotInBuilderCatalog { .. })
+                        ));
+                    }
+                }
+            }
+            let human = game.simulation.builder_for_player(PlayerId(0)).unwrap();
+            let other = game.simulation.builder_for_player(PlayerId(1)).unwrap();
+            assert_ne!(
+                human.configuration.build_catalog,
+                other.configuration.build_catalog
+            );
+            assert_ne!(
+                human.configuration.appearance,
+                other.configuration.appearance
+            );
         }
-        let human = game.simulation.builder_for_player(PlayerId(0)).unwrap();
-        let elf = game.simulation.builder_for_player(PlayerId(1)).unwrap();
-        assert_ne!(
-            human.configuration.build_catalog,
-            elf.configuration.build_catalog
-        );
-        assert_ne!(human.configuration.appearance, elf.configuration.appearance);
     }
 
     #[test]
