@@ -52,6 +52,7 @@
     {"source_kind": "unit-ability", "source_key": "A059", "unit_rawcode": "n012", "kind": "pulverize"},
     {"source_kind": "unit-ability", "source_key": "A05A", "unit_rawcode": "n013", "kind": "pulverize"},
     {"source_kind": "unit-ability", "source_key": "A05C", "unit_rawcode": "n013", "kind": "howl-of-terror"},
-    {"source_kind": "ability-effect", "source_key": "A05B", "unit_rawcode": "n013", "kind": "howl-of-terror"}
+    {"source_kind": "ability-effect", "source_key": "A05B", "unit_rawcode": "n013", "kind": "howl-of-terror"},
+    {"source_kind": "unit-ability", "source_key": "A03Y", "unit_rawcode": "n010", "kind": "frost-attack"}
   ]
 }

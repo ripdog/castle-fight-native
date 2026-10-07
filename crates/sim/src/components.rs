@@ -220,6 +220,7 @@ pub(crate) struct BallisticProjectile {
     pub damage: i32,
     pub burning_oil: Option<BurningOilEffectProfile>,
     pub splash_falloff: Option<SplashFalloffProfile>,
+    pub frost: Option<FrostAttackEffectProfile>,
     pub damage_type: DamageType,
     pub launch_position: SimPoint,
     pub destination: SimPoint,

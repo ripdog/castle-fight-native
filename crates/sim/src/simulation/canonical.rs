@@ -789,6 +789,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(projectile.projectile.source_team.0);
                 hash.write_u8(projectile.projectile.target_mask.bits());
                 hash.write_i32(projectile.projectile.damage);
+                hash_frost_profile_option(&mut hash, projectile.projectile.frost);
                 match projectile.projectile.burning_oil {
                     Some(profile) => {
                         hash.write_u8(1);
@@ -1871,8 +1872,11 @@ fn hash_feedback_profile(hash: &mut Fnv64, profile: crate::components::FeedbackE
     hash.write_u8(profile.targets.bits());
 }
 
-fn hash_pending_attack_effects(hash: &mut Fnv64, effects: PendingAttackEffects) {
-    match effects.frost {
+fn hash_frost_profile_option(
+    hash: &mut Fnv64,
+    frost: Option<crate::components::FrostAttackEffectProfile>,
+) {
+    match frost {
         None => hash.write_u8(0),
         Some(p) => {
             hash.write_u8(1);
@@ -1884,6 +1888,10 @@ fn hash_pending_attack_effects(hash: &mut Fnv64, effects: PendingAttackEffects) 
             hash.write_u8(p.targets.bits());
         }
     }
+}
+
+fn hash_pending_attack_effects(hash: &mut Fnv64, effects: PendingAttackEffects) {
+    hash_frost_profile_option(hash, effects.frost);
     hash.write_u16(effects.stun_duration_ticks);
     if let Some(profile) = effects.feedback {
         hash.write_u8(1);

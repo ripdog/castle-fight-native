@@ -14,7 +14,7 @@ Northern is selectable for retained Castle Fight 9.27/r1 once Snowy Rocks is pro
 
 ## Remaining command-card order
 
-Azure Nest; Crystal Palace; alternate Snowveil Fountain / Frost Launcher and its upgrade; Chilling Mushroom; Icy Tower; World Freezer. This is an implementation checklist, not a claim that those entities are playable.
+Crystal Palace; alternate Snowveil Fountain / Frost Launcher and its upgrade; Chilling Mushroom; Icy Tower; World Freezer. This is an implementation checklist, not a claim that those entities are playable.
 
 ## Icy Rocks / Polar Bear
 
@@ -73,3 +73,10 @@ The Northern proc audit also found a shared importer bug: `A03W` explicitly has 
 - `RK` selects an enemy ground combat sapper for the parent order; native parent restrictions exclude heroes, invulnerability and magic immunity. Parent range/resources use object/protected fields. The immediate helper casts the child at the caster, with independent air/ground enemy effect eligibility including heroes and non-sappers. There is no effect delay, parasite summon, DOT, retreat or child resource commitment.
 - Howl retains normal/hero durations, lowers armor and outgoing weapon damage, and replaces its own active modifier rather than stacking on repeated casts. Signed authoritative weapon modifiers coexist with existing positive support buffs; damage clamps at zero. The child identity and caster center reach presentation, while the parent owns mana/cooldown.
 - Shared proxy area tests prove trigger/effect differences, center, signed outgoing weapon damage, hero expiry, ally/immunity/outside exclusions, resources and worker/wire continuation. Generated closure covers both parent and child. Bundle/checksum/snapshot become 15/32/27.
+
+## Azure Nest / Azure Drake
+
+- `h03I` produces `n010` (base `nadk`), with ordinary/protected flying splash weapon, armor, movement, sight, acquisition, collision, production/build/repair timings and source corpse classifications supplied by the retained catalog.
+- Complete inventory is native Frost Breath `A03Y`. Its unit-only air/ground mask, normal/hero durations and map Misc slow rates consume the shared versioned Frost projection. No spell order, mana charge, scripted proxy, delay or special AI is attached.
+- Ballistic splash retains its Frost payload independently of the source lifetime and applies slow to live eligible impact victims. Moving the original selected target does not move the impact point. Air and ground victims are eligible; friendly, outside, dead, immune and invulnerable victims receive no slow. Structure weapon permission does not expand the ability's unit-only mask.
+- Shared synthetic flight tests prove splash center, a selected target leaving the impact area, hero expiry, ordinary weapon damage on a magic-immune victim without slow, allied/outside exclusions and in-flight wire restoration across workers. Existing splash geometry/falloff and catalog-wide closure tests also apply. Flight shape becomes bundle/checksum/snapshot 16/33/28.

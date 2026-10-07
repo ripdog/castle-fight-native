@@ -394,6 +394,7 @@ impl Simulation {
                             damage,
                             burning_oil: on_hit.burning_oil,
                             splash_falloff: on_hit.splash_falloff,
+                            frost: on_hit.frost,
                             damage_type: intent.damage_type,
                             launch_position: intent.source_position,
                             destination: target_position,

@@ -1025,6 +1025,21 @@
         "protected": "resolved/protected-ability-fields.tsv",
         "script": "resolved/unit-spell-mechanics.tsv"
       }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A03Y",
+      "unit_rawcode": "n010",
+      "kind": "frost-attack",
+      "duration_millis": 5000,
+      "hero_duration_millis": 5000,
+      "movement_percent_delta": -30,
+      "attack_speed_percent_delta": -30,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A03Y",
+        "source": "resolved/object-fields.tsv"
+      }
     }
   ]
 }

@@ -19,7 +19,7 @@ pub(super) struct TargetProjectileContext<'a> {
 
 pub(super) struct BallisticImpactContext<'a> {
     pub(super) due_projectiles: Vec<BallisticProjectileSnapshot>,
-    pub(super) units: &'a [UnitSnapshot],
+    pub(super) units: &'a mut [UnitSnapshot],
     pub(super) buildings: &'a [BuildingSnapshot],
     pub(super) positions: &'a [SimPoint],
     pub(super) unit_health: &'a mut [i32],
@@ -678,6 +678,15 @@ impl Simulation {
                     .is_some()
                     {
                         projectile_effects += 1;
+                        if let TargetIndex::Unit(index) = target
+                            && let Some(profile) = snapshot.projectile.frost
+                            && unit_health[index] > 0
+                            && !units[index].classifications.spell_immune
+                            && !units[index].classifications.invulnerable
+                            && profile.targets.can_target_unit(units[index].movement_class)
+                        {
+                            apply_frost_attack(&mut units[index], profile, completed_tick);
+                        }
                     }
                 }
                 if let Some(profile) = snapshot.projectile.burning_oil {
@@ -803,6 +812,7 @@ impl Simulation {
                     damage: launch.damage,
                     burning_oil: launch.burning_oil,
                     splash_falloff: launch.splash_falloff,
+                    frost: launch.frost,
                     damage_type: launch.damage_type,
                     launch_position: launch.launch_position,
                     destination: launch.destination,
