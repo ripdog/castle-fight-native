@@ -69,6 +69,12 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         effect["chance_per_10k"] = number("DataA1", 10_000)
     elif kind == "spell-resistance":
         effect["damage_taken_per_10k"] = 10_000 - number("DataB1", 10_000)
+    elif kind == "cleave":
+        tokens = set(fields["targs1"].split(","))
+        if tokens - {"ground", "enemy", "enemies", "neutral", "structure"} or "ground" not in tokens:
+            raise ValueError("cleave requires an explicitly supported ground target mask")
+        effect.update(radius_world=number("Area1"), damage_per_10k=number("DataA1", 10_000),
+                      targets=1 | (4 if "structure" in tokens else 0))
     elif kind == "critical-strike":
         effect.update(chance_per_10k=number("DataA1", 100),
                       damage_multiplier_per_10k=number("DataB1", 10_000),

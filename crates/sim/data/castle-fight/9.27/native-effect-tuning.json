@@ -696,6 +696,32 @@
         "ability": "A062",
         "source": "resolved/object-fields.tsv"
       }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A00D",
+      "unit_rawcode": "n018",
+      "kind": "critical-strike",
+      "chance_per_10k": 1000,
+      "damage_multiplier_per_10k": 20000,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A00D",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A063",
+      "unit_rawcode": "n018",
+      "kind": "cleave",
+      "radius_world": 200,
+      "damage_per_10k": 2700,
+      "targets": 1,
+      "provenance": {
+        "ability": "A063",
+        "source": "resolved/object-fields.tsv"
+      }
     }
   ]
 }

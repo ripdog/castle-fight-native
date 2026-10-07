@@ -188,9 +188,7 @@ impl Simulation {
                             },
                         );
                         debug_assert!(applied.is_some());
-                        if matches!(intent.attack.delivery, AttackDelivery::Melee)
-                            && let TargetIndex::Unit(primary_index) = intent.target
-                        {
+                        if matches!(intent.attack.delivery, AttackDelivery::Melee) {
                             for effect in intent.passive_effects.iter() {
                                 let PassiveUnitEffect::Cleave(profile) = effect else {
                                     continue;
@@ -199,21 +197,44 @@ impl Simulation {
                                     i64::from(damage) * i64::from(profile.damage_per_10k) / 10_000,
                                 )
                                 .expect("cleave damage exceeds i32");
-                                for index in 0..units.len() {
-                                    if index == primary_index
-                                        || units[index].team == intent.source_team
-                                        || !matches!(
-                                            units[index].movement_class,
-                                            MovementClass::Ground
-                                        )
-                                        || unit_health[index] <= 0
-                                        || target_position.distance_sq(positions[index])
-                                            > square_i32(profile.radius)
-                                    {
+                                let target_count = units.len()
+                                    + if profile.targets.can_target_buildings() {
+                                        buildings.len()
+                                    } else {
+                                        0
+                                    };
+                                for index in 0..target_count {
+                                    let target = if index < units.len() {
+                                        if units[index].team == intent.source_team
+                                            || !profile
+                                                .targets
+                                                .can_target_unit(units[index].movement_class)
+                                            || unit_health[index] <= 0
+                                            || target_position.distance_sq(positions[index])
+                                                > square_i32(profile.radius)
+                                        {
+                                            continue;
+                                        }
+                                        TargetIndex::Unit(index)
+                                    } else {
+                                        let index = index - units.len();
+                                        if buildings[index].team == intent.source_team
+                                            || building_health[index] <= 0
+                                            || point_to_footprint_distance_sq(
+                                                target_position,
+                                                buildings[index].footprint,
+                                                self.config.navigation_cell_size,
+                                            ) > square_i32(profile.radius)
+                                        {
+                                            continue;
+                                        }
+                                        TargetIndex::Building(index)
+                                    };
+                                    if target == intent.target {
                                         continue;
                                     }
                                     apply_damage_to_target(
-                                        TargetIndex::Unit(index),
+                                        target,
                                         intent.source_id,
                                         splash_damage,
                                         intent.damage_type,

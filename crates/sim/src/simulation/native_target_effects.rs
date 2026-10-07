@@ -658,3 +658,93 @@ fn faerie_fire_does_not_consume_resources_for_no_combat_or_out_of_range_targets(
     assert_eq!(sim.unit(caster).unwrap().mana_current, Some(12));
     assert_eq!(sim.unit(caster).unwrap().ability_cast_sequence, Some(0));
 }
+
+#[test]
+fn cleave_uses_primary_center_mask_and_critical_damage_only_on_landed_melee_hits() {
+    for targets in [
+        AttackTargetMask::GROUND_UNITS,
+        AttackTargetMask::GROUND_AND_BUILDINGS,
+    ] {
+        for delivery in [AttackDelivery::Melee, AttackDelivery::RangedInstant] {
+            for evade in [0, 10_000] {
+                let mut sim = simulation(1);
+                sim.spawn_unit_with_properties(
+                    unit(0, 20, 40, delivery),
+                    UnitGameplayProperties {
+                        passive_effects: PassiveUnitEffects::from_slice(&[
+                            PassiveUnitEffect::Cleave(crate::components::CleaveEffectProfile {
+                                ability: AbilityId(101),
+                                radius: 60 * SUBUNITS_PER_WORLD_UNIT,
+                                damage_per_10k: 5000,
+                                targets,
+                            }),
+                            PassiveUnitEffect::CriticalStrike(CriticalStrikeEffectProfile {
+                                ability: AbilityId(102),
+                                chance_per_10k: 10_000,
+                                damage_multiplier_per_10k: 20_000,
+                                targets: AttackTargetMask::GROUND_UNITS,
+                            }),
+                        ]),
+                        ..UnitGameplayProperties::default()
+                    },
+                );
+                let primary = sim.spawn_unit_with_properties(
+                    unit(1, 60, 0, AttackDelivery::Melee),
+                    UnitGameplayProperties {
+                        passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Evasion(
+                            EvasionEffectProfile {
+                                ability: AbilityId(103),
+                                chance_per_10k: evade,
+                            },
+                        )),
+                        ..UnitGameplayProperties::default()
+                    },
+                );
+                let secondary = sim.spawn_unit(unit(1, 115, 0, AttackDelivery::Melee));
+                let outside = sim.spawn_unit(unit(1, 125, 0, AttackDelivery::Melee));
+                let ally = sim.spawn_unit(unit(0, 105, 0, AttackDelivery::Melee));
+                let air = sim.spawn_unit_with_properties(
+                    unit(1, 105, 0, AttackDelivery::Melee),
+                    UnitGameplayProperties {
+                        movement_class: MovementClass::Air,
+                        ..UnitGameplayProperties::default()
+                    },
+                );
+                let structure = sim.spawn_building(BuildingSpawn {
+                    team: Team(1),
+                    footprint: BuildingFootprint::new(3, 0, 1, 1),
+                    health: 1000,
+                    production: None,
+                    attack: None,
+                    spellcasting: None,
+                });
+                sim.step();
+                let mut restored = wire_restored(&sim, 4);
+                sim.step();
+                restored.step();
+                assert_eq!(sim.checksum(), restored.checksum());
+                let landed = evade == 0;
+                let cleaved = landed && delivery == AttackDelivery::Melee;
+                assert_eq!(
+                    sim.unit(primary).unwrap().health,
+                    1000 - if landed { 80 } else { 0 }
+                );
+                assert_eq!(
+                    sim.unit(secondary).unwrap().health,
+                    1000 - if cleaved { 40 } else { 0 }
+                );
+                for id in [outside, ally, air] {
+                    assert_eq!(sim.unit(id).unwrap().health, 1000);
+                }
+                assert_eq!(
+                    sim.building(structure).unwrap().health,
+                    1000 - if cleaved && targets.can_target_buildings() {
+                        40
+                    } else {
+                        0
+                    }
+                );
+            }
+        }
+    }
+}

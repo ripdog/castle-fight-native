@@ -36,6 +36,8 @@
     {"source_kind": "unit-ability", "source_key": "A00Z", "unit_rawcode": "h00W", "kind": "orb-spell-proc"},
     {"source_kind": "ability-effect", "source_key": "A00L", "kind": "chain-lightning"},
     {"source_kind": "unit-ability", "source_key": "A0AH", "unit_rawcode": "h00W", "kind": "spell-resistance"},
-    {"source_kind": "unit-ability", "source_key": "A062", "unit_rawcode": "n017", "kind": "critical-strike"}
+    {"source_kind": "unit-ability", "source_key": "A062", "unit_rawcode": "n017", "kind": "critical-strike"},
+    {"source_kind": "unit-ability", "source_key": "A00D", "unit_rawcode": "n018", "kind": "critical-strike"},
+    {"source_kind": "unit-ability", "source_key": "A063", "unit_rawcode": "n018", "kind": "cleave"}
   ]
 }

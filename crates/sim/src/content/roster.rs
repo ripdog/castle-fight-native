@@ -57,6 +57,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
     Sorceress = 0x1000_0016 => b"h07B",
     Wizard = 0x1000_0017 => b"h00W",
     FrostWolf = 0x1000_0018 => b"n017",
+    PolarBear = 0x1000_0019 => b"n018",
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
@@ -84,6 +85,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
     SchoolOfWizardry = 0x2000_0016 => b"h09X",
     TowerOfSupremeMagic = 0x2000_0017 => b"h00X",
     SnowyRocks = 0x2000_0018 => b"h049",
+    IcyRocks = 0x2000_0019 => b"h04F",
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;

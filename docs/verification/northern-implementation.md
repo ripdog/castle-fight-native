@@ -14,4 +14,12 @@ Northern is selectable for retained Castle Fight 9.27/r1 once Snowy Rocks is pro
 
 ## Remaining command-card order
 
-Finish Icy Rocks / Polar Bear, then Glacier / Magnataur; then Igloo and Modern Igloo; Ice Troll Hut and Voodoo Lounge; Ice Claws and Frost Claws; Azure Nest; Crystal Palace; alternate Snowveil Fountain / Frost Launcher and its upgrade; Chilling Mushroom; Icy Tower; World Freezer. This is an implementation checklist, not a claim that those entities are playable.
+Finish Glacier / Magnataur; then Igloo and Modern Igloo; Ice Troll Hut and Voodoo Lounge; Ice Claws and Frost Claws; Azure Nest; Crystal Palace; alternate Snowveil Fountain / Frost Launcher and its upgrade; Chilling Mushroom; Icy Tower; World Freezer. This is an implementation checklist, not a claim that those entities are playable.
+
+## Icy Rocks / Polar Bear
+
+- Entity/source: `h04F` (base `hbla`) upgrades Snowy Rocks and produces `n018` (base `nplb`). All ordinary stats, timing, attacks, classification and corpse data consume the retained catalog.
+- Complete inventory: native Critical Strike `A00D` and Cleave `A063`; neither has a script cast, proxy, delayed callback, extra resource cost or custom AI. Critical chance/multiplier and cleave radius/fraction/mask are reproducibly projected from object fields.
+- Cleave affects enemy ground units; the ordinary attack can still hit structures. The engine retains the separate mask rather than inferring effect eligibility from weapon eligibility.
+- Shared synthetic tests distinguish primary-centered cleave from caster-centered effects; prove critical damage composition, melee-only behavior, misses, air/ally/outside/structure exclusions, and checksum/wire continuation across worker counts. Projection tests reject unsupported class qualifiers.
+- Both models are delivered by the existing local pack. The shared upgrade/production lifecycle transports the resolved definition. Cleave masks change authoritative shape: bundle schema 10, checksum 27, snapshot 22.

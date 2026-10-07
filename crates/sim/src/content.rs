@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r17";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r18";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 9;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 10;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -961,6 +961,7 @@ impl CastleFightUnitKind {
                     ability: AbilityId(u32::from_be_bytes(*b"A01F")),
                     radius: world(175),
                     damage_per_10k: 2_500,
+                    targets: AttackTargetMask::GROUND_UNITS,
                 }));
                 if self == Self::Paladin {
                     effects.push(PassiveUnitEffect::Aura(AuraEffectProfile {
@@ -977,6 +978,7 @@ impl CastleFightUnitKind {
                     ability: AbilityId(u32::from_be_bytes(*b"A0AD")),
                     radius: world(225),
                     damage_per_10k: 4_000,
+                    targets: AttackTargetMask::GROUND_UNITS,
                 }));
                 effects.push(PassiveUnitEffect::SpellResistance(
                     SpellResistanceEffectProfile {
@@ -1702,6 +1704,12 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A00D") => {
+            0x4000_0040
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A063") => {
+            0x4000_0041
+        }
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A062") => {
             0x4000_003f
         }
@@ -2345,6 +2353,7 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
                 hash.write_u32(profile.ability.0);
                 hash.write_i32(profile.radius);
                 hash.write_u16(profile.damage_per_10k);
+                hash.write_u8(profile.targets.bits());
             }
             PassiveUnitEffect::Aura(profile) => {
                 hash.write_u8(8);

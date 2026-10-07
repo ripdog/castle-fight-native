@@ -425,6 +425,8 @@
     {"source_kind":"unit-ability","source_key":"A00Z","implementation":"warcraft-orb-spell-proc-v1","valid_from":"9.27","valid_through":"9.27","notes":"Wizard on-hit orb."},
     {"source_kind":"ability-effect","source_key":"A00L","implementation":"warcraft-chain-lightning-v1","valid_from":"9.27","valid_through":"9.27","notes":"Wizard orb child."},
     {"source_kind":"unit-ability","source_key":"A013","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27","notes":"Zero-factor Slow Aura marker; no authored runtime slowing."},
-    {"source_kind": "unit-ability", "source_key": "A062", "implementation": "warcraft-critical-strike-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Frost Wolf native critical strike; tuning projected from retained object fields."}
+    {"source_kind": "unit-ability", "source_key": "A062", "implementation": "warcraft-critical-strike-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Frost Wolf native critical strike; tuning projected from retained object fields."},
+    {"source_kind": "unit-ability", "source_key": "A00D", "implementation": "warcraft-critical-strike-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Polar Bear native critical-strike from retained object fields."},
+    {"source_kind": "unit-ability", "source_key": "A063", "implementation": "warcraft-cleave-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Polar Bear native cleave from retained object fields."}
   ]
 }

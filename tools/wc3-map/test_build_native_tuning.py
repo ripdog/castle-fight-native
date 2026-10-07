@@ -17,6 +17,15 @@ class NativeTuningProjectionTest(unittest.TestCase):
         generated = native.build_tuning(release, root, recipes)
         self.assertEqual(json.loads((directory / "native-effect-tuning.json").read_text()), generated)
 
+    def test_cleave_projects_geometry_and_rejects_unrepresented_classes(self) -> None:
+        recipe = {"kind": "cleave", "source_key": "TEST", "source_kind": "unit-ability"}
+        fields = {"area1": "123", "dataa1": "0.37", "targs1": "ground,enemy,structure"}
+        effect = native.project_effect(recipe, fields, None, {}, {})
+        self.assertEqual((effect["radius_world"], effect["damage_per_10k"], effect["targets"]), (123, 3700, 5))
+        for mask in ("ground,air,enemy", "ground,enemy,organic", "ground,enemy,nonhero"):
+            with self.subTest(mask=mask), self.assertRaises(ValueError):
+                native.project_effect(recipe, {**fields, "targs1": mask}, None, {}, {})
+
     def test_fixed_point_conversion_is_exact_not_float_rounded(self) -> None:
         self.assertEqual(native.scaled("0.1234", 10_000), 1234)
         self.assertEqual(native.scaled("0.123", 1000), 123)

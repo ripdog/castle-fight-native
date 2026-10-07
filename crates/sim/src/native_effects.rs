@@ -10,11 +10,11 @@ use crate::{
     components::{
         AbilityConfigurationError, AbilityEffect, AbilityId, AbilityTargetPolicy,
         AdditionalAutomaticAbilityDefinitions, AttackTargetMask, BashEffectProfile,
-        BurningOilEffectProfile, ChainLightningEffectProfile, CriticalStrikeEffectProfile,
-        DefendEffectProfile, EntanglingRootsEffectProfile, EvasionEffectProfile,
-        FeedbackEffectProfile, ManaProfile, ModifierId, PassiveUnitEffect, PassiveUnitEffects,
-        SpellResistanceEffectProfile, SpellcastingProfile, TriggeredAttackEffect,
-        TriggeredSpellProcProfile, compose_spellcasting_profiles,
+        BurningOilEffectProfile, ChainLightningEffectProfile, CleaveEffectProfile,
+        CriticalStrikeEffectProfile, DefendEffectProfile, EntanglingRootsEffectProfile,
+        EvasionEffectProfile, FeedbackEffectProfile, ManaProfile, ModifierId, PassiveUnitEffect,
+        PassiveUnitEffects, SpellResistanceEffectProfile, SpellcastingProfile,
+        TriggeredAttackEffect, TriggeredSpellProcProfile, compose_spellcasting_profiles,
     },
     content::CASTLE_FIGHT_SIMULATION_HZ,
     math::SUBUNITS_PER_WORLD_UNIT,
@@ -38,6 +38,7 @@ pub enum NativeEffectImplementationId {
     WarcraftBurningOilV1,
     WarcraftFrostArmorV1,
     WarcraftCriticalStrikeV1,
+    WarcraftCleaveV1,
     WarcraftHumanSupportV1,
     WarcraftHumanPassiveV1,
     WarcraftHumanUtilityV1,
@@ -65,6 +66,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftBurningOilV1 => 8,
             Self::WarcraftFrostArmorV1 => 9,
             Self::WarcraftCriticalStrikeV1 => 10,
+            Self::WarcraftCleaveV1 => 18,
             Self::WarcraftHumanSupportV1 => 11,
             Self::WarcraftHumanPassiveV1 => 12,
             Self::WarcraftHumanUtilityV1 => 13,
@@ -518,6 +520,14 @@ enum TuningEffect {
         #[allow(dead_code)]
         provenance: serde_json::Value,
     },
+    Cleave {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        radius_world: i32,
+        damage_per_10k: u16,
+        targets: AttackTargetMask,
+    },
     CriticalStrike {
         source_kind: String,
         source_key: String,
@@ -662,6 +672,7 @@ impl TuningEffect {
             | Self::FaerieFire { source_kind, .. }
             | Self::SpellResistance { source_kind, .. }
             | Self::Evasion { source_kind, .. }
+            | Self::Cleave { source_kind, .. }
             | Self::CriticalStrike { source_kind, .. }
             | Self::Defend { source_kind, .. }
             | Self::Bash { source_kind, .. }
@@ -680,6 +691,7 @@ impl TuningEffect {
             | Self::FaerieFire { source_key, .. }
             | Self::SpellResistance { source_key, .. }
             | Self::Evasion { source_key, .. }
+            | Self::Cleave { source_key, .. }
             | Self::CriticalStrike { source_key, .. }
             | Self::Defend { source_key, .. }
             | Self::Bash { source_key, .. }
@@ -698,6 +710,7 @@ impl TuningEffect {
             | Self::FaerieFire { unit_rawcode, .. }
             | Self::SpellResistance { unit_rawcode, .. }
             | Self::Evasion { unit_rawcode, .. }
+            | Self::Cleave { unit_rawcode, .. }
             | Self::CriticalStrike { unit_rawcode, .. }
             | Self::Defend { unit_rawcode, .. }
             | Self::Bash { unit_rawcode, .. }
@@ -716,6 +729,7 @@ impl TuningEffect {
             Self::FaerieFire { .. } => NativeEffectImplementationId::WarcraftFaerieFireV1,
             Self::Evasion { .. } => NativeEffectImplementationId::WarcraftEvasionV1,
             Self::CriticalStrike { .. } => NativeEffectImplementationId::WarcraftCriticalStrikeV1,
+            Self::Cleave { .. } => NativeEffectImplementationId::WarcraftCleaveV1,
             Self::Defend { .. } => NativeEffectImplementationId::WarcraftDefendV1,
             Self::Bash { .. } => NativeEffectImplementationId::WarcraftBashV1,
             Self::OrbSpellProc { .. } => NativeEffectImplementationId::WarcraftOrbSpellProcV1,
@@ -734,6 +748,7 @@ impl TuningEffect {
             Self::FaerieFire { .. } => "faerie-fire",
             Self::Evasion { .. } => "evasion",
             Self::CriticalStrike { .. } => "critical-strike",
+            Self::Cleave { .. } => "cleave",
             Self::Defend { .. } => "defend",
             Self::Bash { .. } => "bash",
             Self::OrbSpellProc { .. } => "orb-spell-proc",
@@ -816,6 +831,7 @@ fn native_unit_mechanics_from_tuning(
                 TuningEffect::Feedback { .. }
                 | TuningEffect::SpellResistance { .. }
                 | TuningEffect::Evasion { .. }
+                | TuningEffect::Cleave { .. }
                 | TuningEffect::CriticalStrike { .. }
                 | TuningEffect::Defend { .. }
                 | TuningEffect::Bash { .. }
@@ -881,6 +897,22 @@ pub fn native_effect_implementation_for(
 
 fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUnitEffect {
     match effect {
+        TuningEffect::Cleave {
+            source_key,
+            radius_world,
+            damage_per_10k,
+            targets,
+            ..
+        } => {
+            assert!(*radius_world >= 0 && *damage_per_10k <= 10_000);
+            PassiveUnitEffect::Cleave(CleaveEffectProfile {
+                ability: AbilityId(rawcode(source_key).expect("validated cleave rawcode")),
+                radius: world(*radius_world),
+                damage_per_10k: *damage_per_10k,
+                targets: *targets,
+            })
+        }
+
         TuningEffect::Feedback {
             source_key,
             maximum_mana_drained,

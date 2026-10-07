@@ -471,6 +471,7 @@ pub struct CleaveEffectProfile {
     pub ability: AbilityId,
     pub radius: i32,
     pub damage_per_10k: u16,
+    pub targets: AttackTargetMask,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

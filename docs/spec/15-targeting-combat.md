@@ -496,3 +496,7 @@ The targeting/combat test suite MUST eventually include:
 30. pathological candidate density remains bounded enough for configured performance goals or triggers a known optimization path;
 31. a nearby ally attacked by a distant ranged unit or attack building can still cause a building-engaged responder to peel off even when the aggressor lies beyond the responder's ordinary pursuit leash;
 32. Elemental of Lightning/Greater Elemental of Lightning unit-primary Lightning Attack never selects a nearby structure as an additional Forked Lightning victim, while a structure-primary attack damages only the selected structure through its one-target structure profile.
+
+## Native cleave target masks
+
+A landed melee primary hit resolves cleave around the primary impact position using its versioned radius, damage fraction and explicit target mask. Secondary hits exclude the primary target, allies and dead entities. Structure eligibility is independent of unit eligibility; structures use footprint distance. Ranged attacks and missed primary attacks do not trigger cleave. The profile and target mask participate in content identity, canonical checksums and snapshot transport.

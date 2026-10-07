@@ -1759,6 +1759,7 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                 hash.write_u64(u64::from(profile.ability.0));
                 hash.write_i32(profile.radius);
                 hash.write_u16(profile.damage_per_10k);
+                hash.write_u8(profile.targets.bits());
             }
             PassiveUnitEffect::Aura(profile) => {
                 hash.write_u8(8);
