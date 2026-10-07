@@ -722,6 +722,108 @@
         "ability": "A063",
         "source": "resolved/object-fields.tsv"
       }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A04E",
+      "unit_rawcode": "n016",
+      "kind": "critical-strike",
+      "chance_per_10k": 1500,
+      "damage_multiplier_per_10k": 30000,
+      "targets": "air-ground-units-and-buildings",
+      "provenance": {
+        "ability": "A04E",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A04D",
+      "unit_rawcode": "n016",
+      "kind": "cleave",
+      "radius_world": 250,
+      "damage_per_10k": 4000,
+      "targets": 5,
+      "provenance": {
+        "ability": "A04D",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A05E",
+      "unit_rawcode": "n016",
+      "spellcasting": {
+        "mana": {
+          "maximum": 100,
+          "starting": 75,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093678405,
+          "mana_cost": 25,
+          "cooldown_ticks": 360,
+          "range": 102400,
+          "target_policy": "RandomGroundEnemyUnit",
+          "effect": {
+            "AreaStun": {
+              "ability": 1093678404,
+              "damage": 75,
+              "radius": 256000,
+              "stun_ticks": 105,
+              "hero_stun_ticks": 53,
+              "targets": 1
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": "A05D",
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "ability-effect",
+      "source_key": "A05D",
+      "unit_rawcode": "n016",
+      "spellcasting": {
+        "mana": {
+          "maximum": 100,
+          "starting": 75,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093678404,
+          "mana_cost": 0,
+          "cooldown_ticks": 0,
+          "range": 0,
+          "target_policy": "RandomGroundEnemyUnit",
+          "effect": {
+            "AreaStun": {
+              "ability": 1093678404,
+              "damage": 75,
+              "radius": 256000,
+              "stun_ticks": 105,
+              "hero_stun_ticks": 53,
+              "targets": 1
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv"
+      }
     }
   ]
 }

@@ -41,6 +41,36 @@ pub(super) fn apply_ability_effect_to_unit(
                 expires_tick,
             );
         }
+        AbilityEffect::AreaStun {
+            damage,
+            stun_ticks,
+            hero_stun_ticks,
+            targets,
+            ..
+        } => {
+            if target.classifications.invulnerable
+                || target.classifications.spell_immune
+                || !targets.can_target_unit(target.movement_class)
+            {
+                return false;
+            }
+            let adjusted = damage_rules.apply_spell(damage, target.armor.armor_type);
+            let adjusted = spell_damage_after_defend(*target, adjusted, completed_tick);
+            target.health = target
+                .health
+                .checked_sub(adjusted)
+                .expect("area stun damage overflow");
+            let duration = if target.classifications.hero {
+                hero_stun_ticks
+            } else {
+                stun_ticks
+            };
+            target.status.stunned_until_tick = target.status.stunned_until_tick.max(
+                completed_tick
+                    .checked_add(u64::from(duration))
+                    .expect("area stun expiry overflow"),
+            );
+        }
         AbilityEffect::AreaDamage { amount, .. } => {
             let adjusted = damage_rules.apply_spell(amount, target.armor.armor_type);
             let adjusted = spell_damage_after_defend(*target, adjusted, completed_tick);

@@ -14,7 +14,7 @@ Northern is selectable for retained Castle Fight 9.27/r1 once Snowy Rocks is pro
 
 ## Remaining command-card order
 
-Finish Glacier / Magnataur; then Igloo and Modern Igloo; Ice Troll Hut and Voodoo Lounge; Ice Claws and Frost Claws; Azure Nest; Crystal Palace; alternate Snowveil Fountain / Frost Launcher and its upgrade; Chilling Mushroom; Icy Tower; World Freezer. This is an implementation checklist, not a claim that those entities are playable.
+Finish Igloo and Modern Igloo; Ice Troll Hut and Voodoo Lounge; Ice Claws and Frost Claws; Azure Nest; Crystal Palace; alternate Snowveil Fountain / Frost Launcher and its upgrade; Chilling Mushroom; Icy Tower; World Freezer. This is an implementation checklist, not a claim that those entities are playable.
 
 ## Icy Rocks / Polar Bear
 
@@ -23,3 +23,12 @@ Finish Glacier / Magnataur; then Igloo and Modern Igloo; Ice Troll Hut and Voodo
 - Cleave affects enemy ground units; the ordinary attack can still hit structures. The engine retains the separate mask rather than inferring effect eligibility from weapon eligibility.
 - Shared synthetic tests distinguish primary-centered cleave from caster-centered effects; prove critical damage composition, melee-only behavior, misses, air/ally/outside/structure exclusions, and checksum/wire continuation across worker counts. Projection tests reject unsupported class qualifiers.
 - Both models are delivered by the existing local pack. The shared upgrade/production lifecycle transports the resolved definition. Cleave masks change authoritative shape: bundle schema 10, checksum 27, snapshot 22.
+
+## Glacier / Magnataur
+
+- Entity/source: `h03W` (base `hbla`) upgrades Icy Rocks and produces `n016` (base `nmgw`). Ordinary data, protected overlays, ground sapper/ward classification, organic raisable/decaying corpse, production and repair/build timings use retained catalog definitions.
+- Complete inventory: native critical `A04E`, cleave `A04D`, scripted Parasite order `A05E` invoking native War Stomp `A05D`. Both physical passives permit structures; this differs from the earlier chain members and is retained explicitly.
+- Trigger: `RK` registers the enemy-ground-combat-sapper Parasite order, with primary nonhero/vulnerable/native spell eligibility. Approach/range comes from the parent order. The native child is cast immediately at the caster through `dummyCastImmediateFrom`; effect eligibility is independently enemy ground units, including heroes and non-sappers. Damage, radius and ordinary/hero stun durations come from the child object.
+- Resources/timing: protected `xD` supplies the parent's cost/cooldown and makes the child free. Dummy recycling after the helper's lifetime does not delay or repeat the effect. Existing mana, cooldown sequence and absolute stun state are authoritative. No retreat or sleep is scripted in this handler.
+- Presentation uses child `A05D` at the caster, while the parent retains order/resources. Parent Parasite does not create a damaging parasite or a summoned minion: runtime initialization and its callback own the actual effect.
+- Verification: generic proxy area tests distinguish cast trigger from native effect, effect center from selected-target center, hero duration, air/ally/immunity/range/resource rejection, cooldown and worker/wire continuation. Generated projection includes both parent and child, checked against the retained tree. Compatibility becomes bundle 11, checksum 28, snapshot 23.

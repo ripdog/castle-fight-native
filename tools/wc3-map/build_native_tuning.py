@@ -33,22 +33,24 @@ def scaled(value: str | int | float, scale: int = 1) -> int:
     return int(number)
 
 
-def unit_targets(value: str) -> str:
+def unit_targets(value: str, *, allow_structures: bool = False) -> str:
     tokens = set(value.split(","))
-    if "structure" in tokens:
+    if "structure" in tokens and not allow_structures:
         raise ValueError("native unit-only proc primitive cannot silently drop structure targets")
     # Legacy child-proc restrictions are separately audited; directed Bash/Crit/
     # Feedback projections below reject class flattening now heroes are modeled.
     supported = {"air", "ground", "enemy", "enemies", "neutral", "ward", "nonhero"}
+    if allow_structures:
+        supported.add("structure")
     if tokens - supported:
         raise ValueError(f"unsupported native proc target constraints: {sorted(tokens - supported)}")
     movement = tokens & {"air", "ground"}
     if movement == {"air", "ground"}:
-        return "air-ground-units"
+        return "air-ground-units-and-buildings" if "structure" in tokens else "air-ground-units"
     if movement == {"air"}:
         return "air-units"
     if movement == {"ground"}:
-        return "ground-units"
+        return "ground-units-and-buildings" if "structure" in tokens else "ground-units"
     raise ValueError(f"unsupported native proc targets: {value!r}")
 
 
@@ -60,10 +62,14 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
 
     kind = recipe["kind"]
     effect: dict[str, Any] = dict(recipe)
+    if kind == "war-stomp":
+        return project_scripted_area(recipe, fields, unit, protected, mechanics)
     if kind in {"healing-wave", "solar-strike", "phoenix-fire"}:
         return project_elven_automatic(recipe, fields, unit, protected, mechanics)
     if kind in {"bash", "critical-strike", "feedback", "faerie-fire"}:
-        if set(fields["targs1"].split(",")) - {"air", "ground", "enemy", "enemies", "neutral"}:
+        supported = {"air", "ground", "enemy", "enemies", "neutral"}
+        if kind == "critical-strike": supported.add("structure")
+        if set(fields["targs1"].split(",")) - supported:
             raise ValueError("native directed passive/debuff cannot flatten class restrictions")
     if kind == "evasion":
         effect["chance_per_10k"] = number("DataA1", 10_000)
@@ -78,7 +84,7 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     elif kind == "critical-strike":
         effect.update(chance_per_10k=number("DataA1", 100),
                       damage_multiplier_per_10k=number("DataB1", 10_000),
-                      targets=unit_targets(fields["targs1"]))
+                      targets=unit_targets(fields["targs1"], allow_structures=True))
     elif kind == "feedback":
         if number("DataA1") != number("DataC1") or number("DataB1", 10_000) != number("DataD1", 10_000):
             raise ValueError("class-specific Feedback requires a richer native primitive")
@@ -228,6 +234,44 @@ def project_elven_automatic(recipe: dict[str, str], fields: dict[str, str], unit
             "protected": "resolved/protected-ability-fields.tsv", "script": "resolved/unit-spell-mechanics.tsv"}}
 
 
+def project_scripted_area(recipe: dict[str, str], fields: dict[str, str], unit: dict[str, str] | None,
+                          protected: dict[str, str], mechanics: dict[str, Any]) -> dict[str, Any]:
+    if unit is None:
+        raise ValueError("scripted area spell needs a retained mana source")
+    child = mechanics["effect_key"]
+    child_fields = mechanics["effect_fields"]
+    child_protected = mechanics["effect_protected"]
+    if scaled(child_protected.get("mana_cost", child_fields["cost1"])) != 0 or scaled(child_protected.get("cooldown", child_fields["cool1"])) != 0:
+        raise ValueError("scripted area child requires separate non-free resource state")
+    if set(child_fields["targs1"].split(",")) != {"ground"}:
+        raise ValueError("War Stomp needs explicit coverage for this effect mask")
+    row = mechanics["mechanics_row"]
+    if row["mechanic_kind"] != "dummy-immediate-ability-from-caster" or json.loads(row["scheduled_delays_json"]):
+        raise ValueError("area spell requires immediate caster-centered source control flow")
+    def ticks(value: str) -> int:
+        return int((Decimal(value) * 30).to_integral_value(rounding="ROUND_CEILING"))
+    def fourcc(value: str) -> int:
+        return int.from_bytes(value.encode("ascii"), "big")
+    def mana(name: str, scale: int = 1) -> int:
+        return 0 if unit[name].strip() in {"-", "", "_"} else scaled(unit[name], scale)
+    rate = mana("mana_regen", 10_000)
+    child_only = recipe["source_kind"] == "ability-effect"
+    effect = {"AreaStun": {"ability": fourcc(child), "damage": scaled(child_fields["dataa1"]),
+        "radius": scaled(child_fields["area1"], 1024), "stun_ticks": ticks(child_fields["dur1"]),
+        "hero_stun_ticks": ticks(child_fields["herodur1"]), "targets": 1}}
+    profile = {"mana": {"maximum": mana("mana_max"), "starting": mana("mana_start"),
+        "regen_per_tick_per_10k": (1 << 31) | rate}, "ability": {"id": fourcc(recipe["source_key"]),
+        "mana_cost": 0 if child_only else scaled(protected.get("mana_cost", fields["cost1"])),
+        "cooldown_ticks": 0 if child_only else ticks(protected.get("cooldown", fields["cool1"])),
+        "range": 0 if child_only else scaled(fields["rng1"], 1024),
+        "target_policy": "RandomGroundEnemyUnit", "effect": effect}}
+    return {"kind": "scripted-automatic", "source_kind": recipe["source_kind"], "source_key": recipe["source_key"],
+        "unit_rawcode": recipe["unit_rawcode"], "spellcasting": profile, "mana_regen_per_second_per_10k": rate,
+        "effect_ability_rawcode": None if child_only else child,
+        "provenance": {"source": "resolved/object-fields.tsv", "unit": "resolved/units.tsv",
+            "protected": "resolved/protected-ability-fields.tsv", "script": "resolved/unit-spell-mechanics.tsv"}}
+
+
 def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, Any]) -> dict[str, Any]:
     if recipes["schema_version"] != 1:
         raise ValueError("unsupported native recipe schema")
@@ -271,7 +315,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
                 raise ValueError(f"recipe {key} is not in its source unit's extracted ability inventory")
         source = recipe["source_key"]
         spell = spell_mechanics.get(source)
-        if spell is None and recipe["kind"] in {"healing-wave", "solar-strike"}:
+        if spell is None and recipe["kind"] in {"healing-wave", "solar-strike", "war-stomp"}:
             spell = next((row for row in spell_mechanics.values() if source in row["direct_map_rawcodes"].split(",")
                 or source in row["reachable_map_objects_json"]), None)
         detail = dict(mechanics.get(recipe.get("unit_rawcode", ""), {}))

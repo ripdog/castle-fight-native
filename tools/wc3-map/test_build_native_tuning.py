@@ -17,6 +17,14 @@ class NativeTuningProjectionTest(unittest.TestCase):
         generated = native.build_tuning(release, root, recipes)
         self.assertEqual(json.loads((directory / "native-effect-tuning.json").read_text()), generated)
 
+    def test_critical_strike_retains_structure_permission_without_flattening_classes(self) -> None:
+        recipe = {"kind": "critical-strike", "source_key": "TEST", "source_kind": "unit-ability"}
+        fields = {"dataa1": "17", "datab1": "1.7", "targs1": "air,ground,enemies,structure"}
+        effect = native.project_effect(recipe, fields, None, {}, {})
+        self.assertEqual(effect["targets"], "air-ground-units-and-buildings")
+        with self.assertRaises(ValueError):
+            native.project_effect(recipe, {**fields, "targs1": "ground,enemies,structure,nonhero"}, None, {}, {})
+
     def test_cleave_projects_geometry_and_rejects_unrepresented_classes(self) -> None:
         recipe = {"kind": "cleave", "source_key": "TEST", "source_kind": "unit-ability"}
         fields = {"area1": "123", "dataa1": "0.37", "targs1": "ground,enemy,structure"}

@@ -1069,6 +1069,14 @@ pub enum AbilityEffect {
         percent_delta: i16,
         duration_ticks: u16,
     },
+    AreaStun {
+        ability: AbilityId,
+        damage: i32,
+        radius: i32,
+        stun_ticks: u16,
+        hero_stun_ticks: u16,
+        targets: AttackTargetMask,
+    },
     AreaDamage {
         amount: i32,
         radius: i32,
@@ -1168,6 +1176,7 @@ impl AbilityEffect {
             Self::SolarStrike { .. } => 12,
             Self::PhoenixFire(_) => 13,
             Self::Hex { .. } => 14,
+            Self::AreaStun { .. } => 15,
         }
     }
 }

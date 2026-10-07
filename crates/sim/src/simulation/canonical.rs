@@ -1945,6 +1945,21 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_i32(i32::from(percent_delta));
             hash.write_u16(duration_ticks);
         }
+        AbilityEffect::AreaStun {
+            ability,
+            damage,
+            radius,
+            stun_ticks,
+            hero_stun_ticks,
+            targets,
+        } => {
+            hash.write_u32(ability.0);
+            hash.write_i32(damage);
+            hash.write_i32(radius);
+            hash.write_u16(stun_ticks);
+            hash.write_u16(hero_stun_ticks);
+            hash.write_u8(targets.bits());
+        }
         AbilityEffect::AreaDamage {
             amount,
             radius,

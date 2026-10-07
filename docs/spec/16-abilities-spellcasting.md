@@ -393,3 +393,7 @@ The ability test suite MUST eventually include:
 18. Roots/Wand of Freezing periodic damage includes the final whole-second pulse of its configured duration and its movement/attack disable expires on the exact authored tick;
 19. Frost Armor friendly autocast targets an eligible ally attacked on the preceding tick, spends exact fixed-point-regenerated mana, refreshes no duplicate active armor instance, and applies its melee retaliation slow deterministically;
 20. persistent Burning Oil zones and Chain Lightning jump selection produce identical authoritative state across worker counts.
+
+## Native proxy area stun
+
+A scripted proxy area stun separates its ground combat-sapper cast trigger from the native effect. Trigger commitment respects the primary order's range, resource cost, cooldown, vulnerability, spell immunity and nonhero restriction. The native effect originates at the caster and can affect ordinary non-sapper units and heroes inside its separate radius. It excludes allies, air units, invulnerable units and spell-immune units, applies spell damage and the appropriate ordinary/hero stun duration, and emits the child ability's presentation identity at that same origin. Absolute stun/cooldown deadlines and all profile fields are covered by checksums and snapshots.

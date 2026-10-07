@@ -39,6 +39,7 @@ pub enum NativeEffectImplementationId {
     WarcraftFrostArmorV1,
     WarcraftCriticalStrikeV1,
     WarcraftCleaveV1,
+    WarcraftScriptedAutomaticV1,
     WarcraftHumanSupportV1,
     WarcraftHumanPassiveV1,
     WarcraftHumanUtilityV1,
@@ -67,6 +68,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftFrostArmorV1 => 9,
             Self::WarcraftCriticalStrikeV1 => 10,
             Self::WarcraftCleaveV1 => 18,
+            Self::WarcraftScriptedAutomaticV1 => 19,
             Self::WarcraftHumanSupportV1 => 11,
             Self::WarcraftHumanPassiveV1 => 12,
             Self::WarcraftHumanUtilityV1 => 13,
@@ -476,6 +478,14 @@ struct TuningFile {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum TuningEffect {
+    ScriptedAutomatic {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        spellcasting: SpellcastingProfile,
+        mana_regen_per_second_per_10k: u32,
+        effect_ability_rawcode: Option<String>,
+    },
     ElvenAutomatic {
         source_kind: String,
         source_key: String,
@@ -653,7 +663,11 @@ impl TuningEffect {
                 effect_ability_rawcode,
                 ..
             } => effect_ability_rawcode,
-            Self::ElvenAutomatic {
+            Self::ScriptedAutomatic {
+                effect_ability_rawcode: Some(effect),
+                ..
+            }
+            | Self::ElvenAutomatic {
                 effect_ability_rawcode: Some(effect),
                 ..
             } => effect,
@@ -667,7 +681,8 @@ impl TuningEffect {
 
     fn source_kind(&self) -> &str {
         match self {
-            Self::ElvenAutomatic { source_kind, .. }
+            Self::ScriptedAutomatic { source_kind, .. }
+            | Self::ElvenAutomatic { source_kind, .. }
             | Self::Feedback { source_kind, .. }
             | Self::FaerieFire { source_kind, .. }
             | Self::SpellResistance { source_kind, .. }
@@ -686,7 +701,8 @@ impl TuningEffect {
 
     fn source_key(&self) -> &str {
         match self {
-            Self::ElvenAutomatic { source_key, .. }
+            Self::ScriptedAutomatic { source_key, .. }
+            | Self::ElvenAutomatic { source_key, .. }
             | Self::Feedback { source_key, .. }
             | Self::FaerieFire { source_key, .. }
             | Self::SpellResistance { source_key, .. }
@@ -705,7 +721,8 @@ impl TuningEffect {
 
     fn unit_rawcode(&self) -> Option<&str> {
         match self {
-            Self::ElvenAutomatic { unit_rawcode, .. }
+            Self::ScriptedAutomatic { unit_rawcode, .. }
+            | Self::ElvenAutomatic { unit_rawcode, .. }
             | Self::Feedback { unit_rawcode, .. }
             | Self::FaerieFire { unit_rawcode, .. }
             | Self::SpellResistance { unit_rawcode, .. }
@@ -724,6 +741,9 @@ impl TuningEffect {
     const fn expected_implementation(&self) -> NativeEffectImplementationId {
         match self {
             Self::ElvenAutomatic { .. } => NativeEffectImplementationId::WarcraftElvenAutomaticV1,
+            Self::ScriptedAutomatic { .. } => {
+                NativeEffectImplementationId::WarcraftScriptedAutomaticV1
+            }
             Self::SpellResistance { .. } => NativeEffectImplementationId::WarcraftSpellResistanceV1,
             Self::Feedback { .. } => NativeEffectImplementationId::WarcraftFeedbackV1,
             Self::FaerieFire { .. } => NativeEffectImplementationId::WarcraftFaerieFireV1,
@@ -743,6 +763,7 @@ impl TuningEffect {
     const fn kind_name(&self) -> &'static str {
         match self {
             Self::ElvenAutomatic { .. } => "elven-automatic",
+            Self::ScriptedAutomatic { .. } => "scripted-automatic",
             Self::SpellResistance { .. } => "spell-resistance",
             Self::Feedback { .. } => "feedback",
             Self::FaerieFire { .. } => "faerie-fire",
@@ -812,7 +833,8 @@ fn native_unit_mechanics_from_tuning(
             .filter(|effect| effect.source().ok() == Some(source))
         {
             match effect {
-                TuningEffect::ElvenAutomatic { .. }
+                TuningEffect::ScriptedAutomatic { .. }
+                | TuningEffect::ElvenAutomatic { .. }
                 | TuningEffect::FrostArmor { .. }
                 | TuningEffect::FaerieFire { .. } => {
                     let candidate = build_spellcasting(effect);
@@ -1080,7 +1102,8 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             target_ground_units: *target_ground_units,
             target_buildings: *target_buildings,
         }),
-        TuningEffect::ElvenAutomatic { .. }
+        TuningEffect::ScriptedAutomatic { .. }
+        | TuningEffect::ElvenAutomatic { .. }
         | TuningEffect::ChainLightning { .. }
         | TuningEffect::EntanglingRoots { .. }
         | TuningEffect::FrostArmor { .. }
@@ -1125,7 +1148,12 @@ fn build_triggered_effect(effect: &TuningEffect) -> TriggeredAttackEffect {
 }
 
 fn build_spellcasting(effect: &TuningEffect) -> SpellcastingProfile {
-    if let TuningEffect::ElvenAutomatic {
+    if let TuningEffect::ScriptedAutomatic {
+        spellcasting,
+        mana_regen_per_second_per_10k,
+        ..
+    }
+    | TuningEffect::ElvenAutomatic {
         spellcasting,
         mana_regen_per_second_per_10k,
         ..
@@ -1250,6 +1278,8 @@ fn target_mask(value: &str) -> AttackTargetMask {
         "ground-units" => AttackTargetMask::GROUND_UNITS,
         "air-units" => AttackTargetMask::AIR_UNITS,
         "air-ground-units" => AttackTargetMask::AIR_AND_GROUND,
+        "air-ground-units-and-buildings" => AttackTargetMask::ALL,
+        "ground-units-and-buildings" => AttackTargetMask::GROUND_AND_BUILDINGS,
         other => panic!("unsupported native-effect target mask {other}"),
     }
 }

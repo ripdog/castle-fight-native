@@ -748,3 +748,188 @@ fn cleave_uses_primary_center_mask_and_critical_damage_only_on_landed_melee_hits
         }
     }
 }
+
+fn area_stun() -> SpellcastingProfile {
+    SpellcastingProfile {
+        mana: ManaProfile {
+            maximum: 50,
+            starting: 30,
+            regen_per_tick_per_10k: 0,
+        },
+        ability: AutomaticAbilityProfile {
+            id: AbilityId(201),
+            mana_cost: 10,
+            cooldown_ticks: 20,
+            range: 50 * SUBUNITS_PER_WORLD_UNIT,
+            target_policy: AbilityTargetPolicy::RandomGroundEnemyUnit,
+            effect: AbilityEffect::AreaStun {
+                ability: AbilityId(202),
+                damage: 13,
+                radius: 70 * SUBUNITS_PER_WORLD_UNIT,
+                stun_ticks: 9,
+                hero_stun_ticks: 3,
+                targets: AttackTargetMask::GROUND_UNITS,
+            },
+        },
+    }
+}
+
+#[test]
+fn proxy_area_stun_separates_ground_sapper_trigger_from_caster_centered_native_effect() {
+    let mut sim = simulation(1);
+    let source =
+        sim.spawn_unit_with_spellcasting(unit(0, 100, 0, AttackDelivery::Melee), area_stun());
+    let primary = sim.spawn_unit_with_properties(
+        unit(1, 150, 0, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            classifications: UnitClassifications {
+                combat_sapper: true,
+                ..UnitClassifications::default()
+            },
+            ..UnitGameplayProperties::default()
+        },
+    );
+    let secondary = sim.spawn_unit(unit(1, 40, 0, AttackDelivery::Melee));
+    let outside = sim.spawn_unit(unit(1, 200, 0, AttackDelivery::Melee));
+    let hero = sim.spawn_unit_with_properties(
+        unit(1, 70, 0, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            classifications: UnitClassifications {
+                hero: true,
+                ..UnitClassifications::default()
+            },
+            ..UnitGameplayProperties::default()
+        },
+    );
+    let air = sim.spawn_unit_with_properties(
+        unit(1, 110, 0, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            movement_class: MovementClass::Air,
+            ..UnitGameplayProperties::default()
+        },
+    );
+    let ally = sim.spawn_unit(unit(0, 105, 0, AttackDelivery::Melee));
+    let immune = sim.spawn_unit_with_properties(
+        unit(1, 110, 0, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            classifications: UnitClassifications {
+                spell_immune: true,
+                ..UnitClassifications::default()
+            },
+            ..UnitGameplayProperties::default()
+        },
+    );
+    sim.step();
+    for id in [primary, secondary, hero] {
+        assert_eq!(sim.unit(id).unwrap().health, 987);
+    }
+    for id in [outside, air, ally, immune] {
+        assert_eq!(sim.unit(id).unwrap().health, 1000);
+    }
+    assert_eq!(sim.unit(source).unwrap().mana_current, Some(20));
+    assert_eq!(sim.unit(hero).unwrap().status.stunned_until_tick, 3);
+    assert_eq!(sim.unit(secondary).unwrap().status.stunned_until_tick, 9);
+    let cast = sim
+        .ability_casts_last_tick()
+        .iter()
+        .find(|cast| cast.source == source)
+        .unwrap();
+    assert_eq!(cast.ability, AbilityId(202));
+    assert_eq!(
+        cast.target_position,
+        Some(sim.unit(source).unwrap().position)
+    );
+    let mut restored = wire_restored(&sim, 4);
+    for _ in 0..12 {
+        sim.step();
+        restored.step();
+        assert_eq!(sim.checksum(), restored.checksum());
+    }
+    assert_eq!(sim.unit(source).unwrap().mana_current, Some(20));
+}
+
+#[test]
+fn proxy_area_stun_rejects_invalid_trigger_classes_range_and_insufficient_mana() {
+    for (movement, flags, x, mana) in [
+        (
+            MovementClass::Air,
+            UnitClassifications {
+                combat_sapper: true,
+                ..UnitClassifications::default()
+            },
+            140,
+            30,
+        ),
+        (
+            MovementClass::Ground,
+            UnitClassifications::default(),
+            140,
+            30,
+        ),
+        (
+            MovementClass::Ground,
+            UnitClassifications {
+                combat_sapper: true,
+                hero: true,
+                ..UnitClassifications::default()
+            },
+            140,
+            30,
+        ),
+        (
+            MovementClass::Ground,
+            UnitClassifications {
+                combat_sapper: true,
+                invulnerable: true,
+                ..UnitClassifications::default()
+            },
+            140,
+            30,
+        ),
+        (
+            MovementClass::Ground,
+            UnitClassifications {
+                combat_sapper: true,
+                spell_immune: true,
+                ..UnitClassifications::default()
+            },
+            140,
+            30,
+        ),
+        (
+            MovementClass::Ground,
+            UnitClassifications {
+                combat_sapper: true,
+                ..UnitClassifications::default()
+            },
+            151,
+            30,
+        ),
+        (
+            MovementClass::Ground,
+            UnitClassifications {
+                combat_sapper: true,
+                ..UnitClassifications::default()
+            },
+            140,
+            9,
+        ),
+    ] {
+        let mut sim = simulation(1);
+        let mut profile = area_stun();
+        profile.mana.starting = mana;
+        let source =
+            sim.spawn_unit_with_spellcasting(unit(0, 100, 0, AttackDelivery::Melee), profile);
+        sim.spawn_unit_with_properties(
+            unit(1, x, 0, AttackDelivery::Melee),
+            UnitGameplayProperties {
+                movement_class: movement,
+                classifications: flags,
+                ..UnitGameplayProperties::default()
+            },
+        );
+        sim.step();
+        assert!(sim.ability_casts_last_tick().is_empty());
+        assert_eq!(sim.unit(source).unwrap().mana_current, Some(mana));
+    }
+}

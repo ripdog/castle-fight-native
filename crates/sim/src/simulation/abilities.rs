@@ -333,7 +333,7 @@ impl Simulation {
                 AbilityEffect::AreaDamage {
                     origin: AreaDamageOrigin::Caster,
                     ..
-                }
+                } | AbilityEffect::AreaStun { .. }
             ) {
                 match source.origin {
                     AbilitySourceOrigin::Unit(position) => Some(position),
@@ -441,6 +441,25 @@ impl Simulation {
                                 || target.team != source.team
                                 || target.mechanical
                                 || center.distance_sq(target.position) > radius_sq
+                            {
+                                continue;
+                            }
+                            if apply_ability_effect_to_unit(
+                                target,
+                                intent.ability.effect,
+                                source.team,
+                                self.next_tick,
+                                self.combat_rules.damage_rules,
+                            ) {
+                                metrics.effects += 1;
+                            }
+                        }
+                    } else if let AbilityEffect::AreaStun { radius, .. } = intent.ability.effect {
+                        let center = target_position.expect("caster-centered area effect");
+                        for target in units.iter_mut() {
+                            if target.health <= 0
+                                || target.team == source.team
+                                || center.distance_sq(target.position) > square_i32(radius)
                             {
                                 continue;
                             }
@@ -699,7 +718,10 @@ impl Simulation {
             }
             self.last_ability_casts.push(AbilityCastEvent {
                 source: intent.source_id,
-                ability: intent.ability.id,
+                ability: match intent.ability.effect {
+                    AbilityEffect::AreaStun { ability, .. } => ability,
+                    _ => intent.ability.id,
+                },
                 target: intent.target.cast_target(),
                 target_position,
                 effect: intent.ability.effect,
@@ -1110,6 +1132,11 @@ impl Simulation {
                 *candidate_checks += 1;
                 let candidate = &units[unit_index];
                 if candidate.health <= 0
+                    || (matches!(ability.effect, AbilityEffect::AreaStun { .. })
+                        && (!candidate.classifications.combat_sapper
+                            || candidate.classifications.invulnerable
+                            || candidate.classifications.spell_immune
+                            || candidate.classifications.hero))
                     || (ability.target_policy == AbilityTargetPolicy::RandomGroundEnemyUnit
                         && candidate.movement_class != MovementClass::Ground)
                     || self.ability_source_distance_sq(source.origin, candidate.position) > range_sq
@@ -1489,7 +1516,12 @@ impl Simulation {
                                     <= square_i32(ability.range)
                         }
                         AbilityTargetPolicy::RandomGroundEnemyUnit => {
-                            target.team != source.team
+                            (!matches!(ability.effect, AbilityEffect::AreaStun { .. })
+                                || (target.classifications.combat_sapper
+                                    && !target.classifications.invulnerable
+                                    && !target.classifications.spell_immune
+                                    && !target.classifications.hero))
+                                && target.team != source.team
                                 && target.movement_class == MovementClass::Ground
                                 && self.ability_source_distance_sq(source.origin, target.position)
                                     <= square_i32(ability.range)
