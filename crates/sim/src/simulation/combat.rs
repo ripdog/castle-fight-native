@@ -669,6 +669,12 @@ impl Simulation {
                         on_hit.triggered_spell = Some(profile.effect);
                     }
                 }
+                PassiveUnitEffect::FrostAttack(profile) => {
+                    assert!(
+                        on_hit.frost.replace(profile).is_none(),
+                        "multiple Frost Attack effects"
+                    );
+                }
                 PassiveUnitEffect::Feedback(profile) => {
                     let TargetIndex::Unit(index) = intent.target else {
                         continue;

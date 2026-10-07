@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 29;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 30;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -4636,6 +4636,13 @@ fn apply_pending_attack_effects(
     if unit_health[index] <= 0 {
         return PendingAttackEffectResult::default();
     }
+    if let Some(profile) = effects.frost
+        && !units[index].classifications.spell_immune
+        && !units[index].classifications.invulnerable
+        && profile.targets.can_target_unit(units[index].movement_class)
+    {
+        apply_frost_attack(&mut units[index], profile, completed_tick);
+    }
     if let Some(profile) = effects.feedback
         && !units[index].classifications.spell_immune
         && profile.targets.can_target_unit(units[index].movement_class)
@@ -4725,7 +4732,9 @@ fn apply_pending_attack_effects(
                 }
             }
             TriggeredAttackEffect::EntanglingRoots(profile) => {
-                if profile.targets.can_target_unit(units[index].movement_class)
+                if !units[index].classifications.spell_immune
+                    && !units[index].classifications.invulnerable
+                    && profile.targets.can_target_unit(units[index].movement_class)
                     && !(profile.nonhero_only && units[index].classifications.hero)
                 {
                     let duration = if units[index].classifications.hero {
@@ -4760,6 +4769,33 @@ fn apply_pending_attack_effects(
         }
     }
     result
+}
+
+fn apply_frost_attack(
+    unit: &mut UnitSnapshot,
+    profile: crate::components::FrostAttackEffectProfile,
+    tick: u64,
+) {
+    let duration = if unit.classifications.hero {
+        profile.hero_duration_ticks
+    } else {
+        profile.duration_ticks
+    };
+    let until = tick
+        .checked_add(u64::from(duration))
+        .expect("Frost expiry overflow");
+    apply_timed_movement_modifier(
+        &mut unit.status,
+        ModifierId(profile.ability.0),
+        profile.movement_percent_delta,
+        until,
+    );
+    apply_timed_attack_speed_modifier(
+        &mut unit.status,
+        ModifierId(profile.ability.0),
+        profile.attack_speed_percent_delta,
+        until,
+    );
 }
 
 fn ceil_millis_to_ticks(millis: u64) -> u64 {

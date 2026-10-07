@@ -12,9 +12,10 @@ use crate::{
         AdditionalAutomaticAbilityDefinitions, AttackTargetMask, BashEffectProfile,
         BurningOilEffectProfile, ChainLightningEffectProfile, CleaveEffectProfile,
         CriticalStrikeEffectProfile, DefendEffectProfile, EntanglingRootsEffectProfile,
-        EvasionEffectProfile, FeedbackEffectProfile, ManaProfile, ModifierId, PassiveUnitEffect,
-        PassiveUnitEffects, SpellResistanceEffectProfile, SpellcastingProfile,
-        TriggeredAttackEffect, TriggeredSpellProcProfile, compose_spellcasting_profiles,
+        EvasionEffectProfile, FeedbackEffectProfile, FrostAttackEffectProfile, ManaProfile,
+        ModifierId, PassiveUnitEffect, PassiveUnitEffects, SpellResistanceEffectProfile,
+        SpellcastingProfile, TriggeredAttackEffect, TriggeredSpellProcProfile,
+        compose_spellcasting_profiles,
     },
     content::CASTLE_FIGHT_SIMULATION_HZ,
     math::SUBUNITS_PER_WORLD_UNIT,
@@ -39,6 +40,7 @@ pub enum NativeEffectImplementationId {
     WarcraftFrostArmorV1,
     WarcraftCriticalStrikeV1,
     WarcraftCleaveV1,
+    WarcraftFrostAttackV1,
     WarcraftScriptedAutomaticV1,
     WarcraftHumanSupportV1,
     WarcraftHumanPassiveV1,
@@ -68,6 +70,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftFrostArmorV1 => 9,
             Self::WarcraftCriticalStrikeV1 => 10,
             Self::WarcraftCleaveV1 => 18,
+            Self::WarcraftFrostAttackV1 => 20,
             Self::WarcraftScriptedAutomaticV1 => 19,
             Self::WarcraftHumanSupportV1 => 11,
             Self::WarcraftHumanPassiveV1 => 12,
@@ -478,6 +481,16 @@ struct TuningFile {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum TuningEffect {
+    FrostAttack {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        duration_millis: u32,
+        hero_duration_millis: u32,
+        movement_percent_delta: i16,
+        attack_speed_percent_delta: i16,
+        targets: String,
+    },
     ScriptedAutomatic {
         source_kind: String,
         source_key: String,
@@ -683,7 +696,8 @@ impl TuningEffect {
 
     fn source_kind(&self) -> &str {
         match self {
-            Self::ScriptedAutomatic { source_kind, .. }
+            Self::FrostAttack { source_kind, .. }
+            | Self::ScriptedAutomatic { source_kind, .. }
             | Self::ElvenAutomatic { source_kind, .. }
             | Self::Feedback { source_kind, .. }
             | Self::FaerieFire { source_kind, .. }
@@ -703,7 +717,8 @@ impl TuningEffect {
 
     fn source_key(&self) -> &str {
         match self {
-            Self::ScriptedAutomatic { source_key, .. }
+            Self::FrostAttack { source_key, .. }
+            | Self::ScriptedAutomatic { source_key, .. }
             | Self::ElvenAutomatic { source_key, .. }
             | Self::Feedback { source_key, .. }
             | Self::FaerieFire { source_key, .. }
@@ -723,7 +738,8 @@ impl TuningEffect {
 
     fn unit_rawcode(&self) -> Option<&str> {
         match self {
-            Self::ScriptedAutomatic { unit_rawcode, .. }
+            Self::FrostAttack { unit_rawcode, .. }
+            | Self::ScriptedAutomatic { unit_rawcode, .. }
             | Self::ElvenAutomatic { unit_rawcode, .. }
             | Self::Feedback { unit_rawcode, .. }
             | Self::FaerieFire { unit_rawcode, .. }
@@ -752,6 +768,7 @@ impl TuningEffect {
             Self::Evasion { .. } => NativeEffectImplementationId::WarcraftEvasionV1,
             Self::CriticalStrike { .. } => NativeEffectImplementationId::WarcraftCriticalStrikeV1,
             Self::Cleave { .. } => NativeEffectImplementationId::WarcraftCleaveV1,
+            Self::FrostAttack { .. } => NativeEffectImplementationId::WarcraftFrostAttackV1,
             Self::Defend { .. } => NativeEffectImplementationId::WarcraftDefendV1,
             Self::Bash { .. } => NativeEffectImplementationId::WarcraftBashV1,
             Self::OrbSpellProc { .. } => NativeEffectImplementationId::WarcraftOrbSpellProcV1,
@@ -772,6 +789,7 @@ impl TuningEffect {
             Self::Evasion { .. } => "evasion",
             Self::CriticalStrike { .. } => "critical-strike",
             Self::Cleave { .. } => "cleave",
+            Self::FrostAttack { .. } => "frost-attack",
             Self::Defend { .. } => "defend",
             Self::Bash { .. } => "bash",
             Self::OrbSpellProc { .. } => "orb-spell-proc",
@@ -852,7 +870,8 @@ fn native_unit_mechanics_from_tuning(
                         automatic_spell = Some(candidate);
                     }
                 }
-                TuningEffect::Feedback { .. }
+                TuningEffect::FrostAttack { .. }
+                | TuningEffect::Feedback { .. }
                 | TuningEffect::SpellResistance { .. }
                 | TuningEffect::Evasion { .. }
                 | TuningEffect::Cleave { .. }
@@ -921,6 +940,29 @@ pub fn native_effect_implementation_for(
 
 fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUnitEffect {
     match effect {
+        TuningEffect::FrostAttack {
+            source_key,
+            duration_millis,
+            hero_duration_millis,
+            movement_percent_delta,
+            attack_speed_percent_delta,
+            targets,
+            ..
+        } => PassiveUnitEffect::FrostAttack(FrostAttackEffectProfile {
+            ability: AbilityId(rawcode(source_key).expect("validated Frost Attack rawcode")),
+            duration_ticks: u16::try_from(
+                (u64::from(*duration_millis) * CASTLE_FIGHT_SIMULATION_HZ as u64).div_ceil(1000),
+            )
+            .expect("Frost duration fits"),
+            hero_duration_ticks: u16::try_from(
+                (u64::from(*hero_duration_millis) * CASTLE_FIGHT_SIMULATION_HZ as u64)
+                    .div_ceil(1000),
+            )
+            .expect("hero Frost duration fits"),
+            movement_percent_delta: *movement_percent_delta,
+            attack_speed_percent_delta: *attack_speed_percent_delta,
+            targets: target_mask(targets),
+        }),
         TuningEffect::Cleave {
             source_key,
             radius_world,
@@ -1198,15 +1240,13 @@ fn build_spellcasting(effect: &TuningEffect) -> SpellcastingProfile {
         ..
     } = effect
     {
-        let hz = u32::try_from(CASTLE_FIGHT_SIMULATION_HZ).expect("positive simulation Hz");
-        assert_eq!(*mana_regen_per_second_per_10k % hz, 0);
         let id = rawcode(source_key).expect("validated Faerie Fire rawcode");
         return SpellcastingProfile {
-            mana: ManaProfile {
-                maximum: *mana_maximum,
-                starting: *mana_starting,
-                regen_per_tick_per_10k: *mana_regen_per_second_per_10k / hz,
-            },
+            mana: ManaProfile::per_second(
+                *mana_maximum,
+                *mana_starting,
+                *mana_regen_per_second_per_10k,
+            ),
             ability: crate::components::AutomaticAbilityProfile {
                 id: AbilityId(id),
                 mana_cost: *mana_cost,
@@ -1247,18 +1287,12 @@ fn build_spellcasting(effect: &TuningEffect) -> SpellcastingProfile {
     else {
         panic!("{} is not an automatic spell", effect.kind_name());
     };
-    let hz = u32::try_from(CASTLE_FIGHT_SIMULATION_HZ).expect("simulation Hz is positive");
-    assert_eq!(
-        *mana_regen_per_second_per_10k % hz,
-        0,
-        "mana regeneration must map exactly to fixed-point ticks"
-    );
     SpellcastingProfile {
-        mana: ManaProfile {
-            maximum: *mana_maximum,
-            starting: *mana_starting,
-            regen_per_tick_per_10k: *mana_regen_per_second_per_10k / hz,
-        },
+        mana: ManaProfile::per_second(
+            *mana_maximum,
+            *mana_starting,
+            *mana_regen_per_second_per_10k,
+        ),
         ability: crate::components::AutomaticAbilityProfile {
             id: AbilityId(rawcode(source_key).expect("validated Frost Armor rawcode")),
             mana_cost: *mana_cost,

@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r21";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r22";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 12;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 13;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1704,6 +1704,18 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A047") => {
+            0x4000_004c
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A03C") => {
+            0x4000_0049
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A048") => {
+            0x4000_004a
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A040") => {
+            0x4000_004b
+        }
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0FM") => {
             0x4000_0047
         }
@@ -2384,6 +2396,15 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
                 hash.write_i32(i32::from(profile.armor_bonus_per_100));
                 hash.write_u32(profile.mana_regeneration_per_second_per_10k);
                 hash.write_u8(u8::from(profile.suspend_during_spell_cooldown));
+            }
+            PassiveUnitEffect::FrostAttack(profile) => {
+                hash.write_u8(11);
+                hash.write_u32(profile.ability.0);
+                hash.write_u16(profile.duration_ticks);
+                hash.write_u16(profile.hero_duration_ticks);
+                hash.write_i32(i32::from(profile.movement_percent_delta));
+                hash.write_i32(i32::from(profile.attack_speed_percent_delta));
+                hash.write_u8(profile.targets.bits());
             }
             PassiveUnitEffect::Feedback(profile) => {
                 hash.write_u8(10);

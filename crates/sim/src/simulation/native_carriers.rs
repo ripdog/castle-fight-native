@@ -540,6 +540,7 @@ fn cleanse_native_effects(
             PassiveUnitEffect::Aura(p) => Some(p.ability),
             PassiveUnitEffect::SpellResistance(p) => Some(p.ability),
             PassiveUnitEffect::Feedback(p) => Some(p.ability),
+            PassiveUnitEffect::FrostAttack(p) => Some(p.ability),
             PassiveUnitEffect::SplashFalloff(_) => None,
         };
         ability.is_none_or(|id| !profile.removed_persistent_abilities.contains(&id))

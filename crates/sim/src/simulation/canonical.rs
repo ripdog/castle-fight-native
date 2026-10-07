@@ -1769,6 +1769,15 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                 hash.write_u64(u64::from(profile.mana_regeneration_per_second_per_10k));
                 hash.write_u8(u8::from(profile.suspend_during_spell_cooldown));
             }
+            PassiveUnitEffect::FrostAttack(profile) => {
+                hash.write_u8(11);
+                hash.write_u32(profile.ability.0);
+                hash.write_u16(profile.duration_ticks);
+                hash.write_u16(profile.hero_duration_ticks);
+                hash.write_i32(i32::from(profile.movement_percent_delta));
+                hash.write_i32(i32::from(profile.attack_speed_percent_delta));
+                hash.write_u8(profile.targets.bits());
+            }
             PassiveUnitEffect::Feedback(profile) => {
                 hash.write_u8(10);
                 hash_feedback_profile(hash, profile);
@@ -1854,6 +1863,18 @@ fn hash_feedback_profile(hash: &mut Fnv64, profile: crate::components::FeedbackE
 }
 
 fn hash_pending_attack_effects(hash: &mut Fnv64, effects: PendingAttackEffects) {
+    match effects.frost {
+        None => hash.write_u8(0),
+        Some(p) => {
+            hash.write_u8(1);
+            hash.write_u32(p.ability.0);
+            hash.write_u16(p.duration_ticks);
+            hash.write_u16(p.hero_duration_ticks);
+            hash.write_i32(i32::from(p.movement_percent_delta));
+            hash.write_i32(i32::from(p.attack_speed_percent_delta));
+            hash.write_u8(p.targets.bits());
+        }
+    }
     hash.write_u16(effects.stun_duration_ticks);
     if let Some(profile) = effects.feedback {
         hash.write_u8(1);

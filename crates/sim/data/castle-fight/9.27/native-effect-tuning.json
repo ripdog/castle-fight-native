@@ -852,6 +852,71 @@
         "ability": "A0FM",
         "source": "resolved/object-fields.tsv"
       }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A03C",
+      "unit_rawcode": "o00A",
+      "kind": "frost-attack",
+      "duration_millis": 5000,
+      "hero_duration_millis": 1250,
+      "movement_percent_delta": -30,
+      "attack_speed_percent_delta": -30,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A03C",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A048",
+      "unit_rawcode": "o00A",
+      "kind": "orb-spell-proc",
+      "chance_per_10k": 1000,
+      "effect_ability_rawcode": "A047",
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A048",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A040",
+      "unit_rawcode": "o00A",
+      "kind": "frost-armor",
+      "mana_maximum": 300,
+      "mana_starting": 200,
+      "mana_regen_per_second_per_10k": 20000,
+      "mana_cost": 35,
+      "cooldown_millis": 8000,
+      "range_world": 800,
+      "armor_bonus_per_100": 700,
+      "armor_duration_millis": 45000,
+      "slow_duration_millis": 6000,
+      "movement_percent_delta": -50,
+      "attack_speed_percent_delta": -25,
+      "provenance": {
+        "ability": "A040",
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A047",
+      "kind": "entangling-roots",
+      "damage_per_second": 20,
+      "duration_millis": 10000,
+      "hero_duration_millis": 2500,
+      "nonhero_only": true,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A047",
+        "source": "resolved/object-fields.tsv"
+      }
     }
   ]
 }

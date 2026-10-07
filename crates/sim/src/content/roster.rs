@@ -60,6 +60,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
     PolarBear = 0x1000_0019 => b"n018",
     Magnataur = 0x1000_001a => b"n016",
     Hrimthrusa = 0x1000_001b => b"n011",
+    IceTrollWitchDoctor = 0x1000_001d => b"o00A",
     AngryHrimthrusa = 0x1000_001c => b"n02I",
 );
 
@@ -91,6 +92,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
     IcyRocks = 0x2000_0019 => b"h04F",
     Glacier = 0x2000_001a => b"h03W",
     Igloo = 0x2000_001b => b"h03U",
+    IceTrollVoodooLounge = 0x2000_001d => b"h03J",
     ModernIgloo = 0x2000_001c => b"h06L",
 );
 

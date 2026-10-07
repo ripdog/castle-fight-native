@@ -986,3 +986,109 @@ fn orb_child_nonhero_restriction_does_not_cancel_primary_hit_and_retains_hero_du
         }
     }
 }
+
+#[test]
+fn frost_attack_retains_independent_orb_payload_and_live_hero_immunity_after_restore() {
+    use crate::components::{FrostAttackEffectProfile, TriggeredSpellProcProfile};
+    for (hero, immune, evades) in [
+        (false, false, false),
+        (true, false, false),
+        (true, true, false),
+        (false, true, false),
+        (false, false, true),
+    ] {
+        let mut sim = simulation(1);
+        sim.spawn_unit_with_properties(
+            unit(
+                0,
+                20,
+                10,
+                AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: 10 * SUBUNITS_PER_WORLD_UNIT,
+                },
+            ),
+            UnitGameplayProperties {
+                passive_effects: PassiveUnitEffects::from_slice(&[
+                    PassiveUnitEffect::FrostAttack(FrostAttackEffectProfile {
+                        ability: AbilityId(21),
+                        duration_ticks: 12,
+                        hero_duration_ticks: 3,
+                        movement_percent_delta: -40,
+                        attack_speed_percent_delta: -20,
+                        targets: AttackTargetMask::AIR_AND_GROUND,
+                    }),
+                    PassiveUnitEffect::TriggeredSpellProc(TriggeredSpellProcProfile {
+                        ability: AbilityId(22),
+                        chance_per_10k: 10_000,
+                        targets: AttackTargetMask::AIR_AND_GROUND,
+                        effect: TriggeredAttackEffect::EntanglingRoots(
+                            crate::components::EntanglingRootsEffectProfile {
+                                ability: AbilityId(23),
+                                damage_per_second: 1,
+                                duration_ticks: 2,
+                                hero_duration_ticks: 2,
+                                nonhero_only: true,
+                                targets: AttackTargetMask::AIR_AND_GROUND,
+                            },
+                        ),
+                    }),
+                ]),
+                ..UnitGameplayProperties::default()
+            },
+        );
+        let victim = sim.spawn_unit_with_properties(
+            unit(1, 60, 0, AttackDelivery::Melee),
+            UnitGameplayProperties {
+                classifications: UnitClassifications {
+                    hero,
+                    ..UnitClassifications::default()
+                },
+                passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Evasion(
+                    EvasionEffectProfile {
+                        ability: AbilityId(24),
+                        chance_per_10k: if evades { 10_000 } else { 0 },
+                    },
+                )),
+                ..UnitGameplayProperties::default()
+            },
+        );
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(victim).unwrap().health, 1000);
+        sim.world
+            .entity_mut(entity(&sim, victim))
+            .insert(UnitClassifications {
+                hero,
+                spell_immune: immune,
+                ..UnitClassifications::default()
+            });
+        let mut restored = wire_restored(&sim, 4);
+        for _ in 0..4 {
+            sim.step();
+            restored.step();
+            assert_eq!(sim.checksum(), restored.checksum());
+        }
+        let target = sim.world.entity(entity(&sim, victim));
+        let status = target.get::<StatusState>().unwrap();
+        let frost = status
+            .attack_speed_modifiers
+            .iter()
+            .find(|p| p.id == ModifierId(21));
+        if immune || evades {
+            assert!(frost.is_none());
+            assert_eq!(status.stunned_until_tick, 0);
+        } else {
+            assert_eq!(frost.unwrap().percent_delta, -20);
+            assert_eq!(
+                frost.unwrap().expires_tick,
+                sim.tick() - 1 + if hero { 3 } else { 12 }
+            );
+            assert_eq!(status.stunned_until_tick > sim.tick(), !hero);
+        }
+        for _ in 0..14 {
+            sim.step();
+            restored.step();
+            assert_eq!(sim.checksum(), restored.checksum());
+        }
+    }
+}

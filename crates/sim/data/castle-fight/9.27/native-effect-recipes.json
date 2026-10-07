@@ -44,6 +44,10 @@
     {"source_kind": "unit-ability", "source_key": "A05E", "unit_rawcode": "n016", "kind": "war-stomp"},
     {"source_kind": "ability-effect", "source_key": "A05D", "unit_rawcode": "n016", "kind": "war-stomp"},
     {"source_kind": "unit-ability", "source_key": "A03X", "unit_rawcode": "n011", "kind": "orb-spell-proc"},
-    {"source_kind": "unit-ability", "source_key": "A0FM", "unit_rawcode": "n02I", "kind": "orb-spell-proc"}
+    {"source_kind": "unit-ability", "source_key": "A0FM", "unit_rawcode": "n02I", "kind": "orb-spell-proc"},
+    {"source_kind": "unit-ability", "source_key": "A03C", "unit_rawcode": "o00A", "kind": "frost-attack"},
+    {"source_kind": "unit-ability", "source_key": "A048", "unit_rawcode": "o00A", "kind": "orb-spell-proc"},
+    {"source_kind": "unit-ability", "source_key": "A040", "unit_rawcode": "o00A", "kind": "frost-armor"},
+    {"source_kind": "ability-effect", "source_key": "A047", "kind": "entangling-roots"}
   ]
 }

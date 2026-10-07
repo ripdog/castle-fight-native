@@ -179,6 +179,7 @@ pub(crate) struct PendingAttackEffects {
     pub burning_oil: Option<BurningOilEffectProfile>,
     pub splash_falloff: Option<SplashFalloffProfile>,
     pub feedback: Option<FeedbackEffectProfile>,
+    pub frost: Option<FrostAttackEffectProfile>,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -469,6 +470,16 @@ pub struct SplashFalloffProfile {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FrostAttackEffectProfile {
+    pub ability: AbilityId,
+    pub duration_ticks: u16,
+    pub hero_duration_ticks: u16,
+    pub movement_percent_delta: i16,
+    pub attack_speed_percent_delta: i16,
+    pub targets: AttackTargetMask,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CleaveEffectProfile {
     pub ability: AbilityId,
     pub radius: i32,
@@ -557,6 +568,7 @@ pub enum PassiveUnitEffect {
     Aura(AuraEffectProfile),
     SpellResistance(SpellResistanceEffectProfile),
     Feedback(FeedbackEffectProfile),
+    FrostAttack(FrostAttackEffectProfile),
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

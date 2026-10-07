@@ -434,6 +434,10 @@
     {"source_kind": "ability-effect", "source_key": "A05D", "implementation": "warcraft-scripted-automatic-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Magnataur war-stomp from retained object and script evidence."},
     {"source_kind": "unit-ability", "source_key": "A03X", "implementation": "warcraft-orb-spell-proc-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Hrimthrusa landed directed attack invokes the shared native roots child."},
     {"source_kind": "unit-ability", "source_key": "A0FM", "implementation": "warcraft-orb-spell-proc-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Angry Hrimthrusa warcraft-orb-spell-proc-v1 from retained map evidence."},
-    {"source_kind": "unit-ability", "source_key": "A0FL", "implementation": "warcraft-barrage-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Angry Hrimthrusa warcraft-barrage-v1 from retained map evidence."}
+    {"source_kind": "unit-ability", "source_key": "A0FL", "implementation": "warcraft-barrage-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Angry Hrimthrusa warcraft-barrage-v1 from retained map evidence."},
+    {"source_kind": "unit-ability", "source_key": "A03C", "implementation": "warcraft-frost-attack-v1", "valid_from": "9.27", "valid_through": "9.27"},
+    {"source_kind": "unit-ability", "source_key": "A048", "implementation": "warcraft-orb-spell-proc-v1", "valid_from": "9.27", "valid_through": "9.27"},
+    {"source_kind": "unit-ability", "source_key": "A040", "implementation": "warcraft-frost-armor-v1", "valid_from": "9.27", "valid_through": "9.27"},
+    {"source_kind": "ability-effect", "source_key": "A047", "implementation": "warcraft-entangling-roots-v1", "valid_from": "9.27", "valid_through": "9.27"}
   ]
 }

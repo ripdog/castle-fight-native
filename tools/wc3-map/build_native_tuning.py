@@ -85,6 +85,13 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         effect.update(chance_per_10k=number("DataA1", 100),
                       damage_multiplier_per_10k=number("DataB1", 10_000),
                       targets=unit_targets(fields["targs1"], allow_structures=True))
+    elif kind == "frost-attack":
+        if set(fields["targs1"].split(",")) - {"air", "ground", "enemy", "enemies", "neutral"}:
+            raise ValueError("Frost Attack cannot discard target class restrictions")
+        effect.update(duration_millis=number("Dur1", 1000), hero_duration_millis=number("HeroDur1", 1000),
+            movement_percent_delta=-scaled(mechanics["misc"]["FrostMoveSpeedDecrease"], 100),
+            attack_speed_percent_delta=-scaled(mechanics["misc"]["FrostAttackSpeedDecrease"], 100),
+            targets=unit_targets(fields["targs1"]))
     elif kind == "feedback":
         if number("DataA1") != number("DataC1") or number("DataB1", 10_000) != number("DataD1", 10_000):
             raise ValueError("class-specific Feedback requires a richer native primitive")
@@ -299,6 +306,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
     }
     spell_mechanics = {row["ability_rawcode"]: row for row in rows(retained("resolved/unit-spell-mechanics.tsv"))}
     spell_semantics = {row["ability_rawcode"]: row for row in rows(retained("resolved/unit-spell-semantics.tsv"))}
+    misc = dict(line.split("=", 1) for line in retained("war3mapMisc.txt").decode().splitlines() if "=" in line and not line.startswith("//"))
     effects = []
     seen = set()
     for recipe in recipes["effects"]:
@@ -321,6 +329,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             spell = next((row for row in spell_mechanics.values() if source in row["direct_map_rawcodes"].split(",")
                 or source in row["reachable_map_objects_json"]), None)
         detail = dict(mechanics.get(recipe.get("unit_rawcode", ""), {}))
+        detail["misc"] = misc
         if spell is not None:
             semantics = spell_semantics[spell["ability_rawcode"]]
             effect_key = semantics["effect_rawcodes"].split(",")[0]

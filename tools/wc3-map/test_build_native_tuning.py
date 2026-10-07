@@ -34,6 +34,15 @@ class NativeTuningProjectionTest(unittest.TestCase):
             with self.subTest(mask=mask), self.assertRaises(ValueError):
                 native.project_effect(recipe, {**fields, "targs1": mask}, None, {}, {})
 
+    def test_frost_attack_retains_hero_duration_and_uses_supplied_map_misc(self) -> None:
+        recipe = {"kind": "frost-attack", "source_key": "TEST", "source_kind": "unit-ability"}
+        fields = {"dur1": "1.25", "herodur1": "0.1", "targs1": "air,ground"}
+        misc = {"FrostMoveSpeedDecrease": "0.17", "FrostAttackSpeedDecrease": "0.23"}
+        effect = native.project_effect(recipe, fields, None, {}, {"misc": misc})
+        self.assertEqual((effect["duration_millis"], effect["hero_duration_millis"], effect["movement_percent_delta"], effect["attack_speed_percent_delta"]), (1250, 100, -17, -23))
+        with self.assertRaises(ValueError):
+            native.project_effect(recipe, {**fields, "targs1": "ground,nonhero"}, None, {}, {"misc": misc})
+
     def test_fixed_point_conversion_is_exact_not_float_rounded(self) -> None:
         self.assertEqual(native.scaled("0.1234", 10_000), 1234)
         self.assertEqual(native.scaled("0.123", 1000), 123)
