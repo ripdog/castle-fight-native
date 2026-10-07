@@ -431,6 +431,7 @@
     {"source_kind": "unit-ability", "source_key": "A04E", "implementation": "warcraft-critical-strike-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Magnataur critical-strike from retained object and script evidence."},
     {"source_kind": "unit-ability", "source_key": "A04D", "implementation": "warcraft-cleave-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Magnataur cleave from retained object and script evidence."},
     {"source_kind": "unit-ability", "source_key": "A05E", "implementation": "warcraft-scripted-automatic-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Magnataur war-stomp from retained object and script evidence."},
-    {"source_kind": "ability-effect", "source_key": "A05D", "implementation": "warcraft-scripted-automatic-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Magnataur war-stomp from retained object and script evidence."}
+    {"source_kind": "ability-effect", "source_key": "A05D", "implementation": "warcraft-scripted-automatic-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Magnataur war-stomp from retained object and script evidence."},
+    {"source_kind": "unit-ability", "source_key": "A03X", "implementation": "warcraft-orb-spell-proc-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Hrimthrusa landed directed attack invokes the shared native roots child."}
   ]
 }

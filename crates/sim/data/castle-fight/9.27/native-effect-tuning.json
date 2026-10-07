@@ -824,6 +824,19 @@
         "protected": "resolved/protected-ability-fields.tsv",
         "script": "resolved/unit-spell-mechanics.tsv"
       }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A03X",
+      "unit_rawcode": "n011",
+      "kind": "orb-spell-proc",
+      "chance_per_10k": 500,
+      "effect_ability_rawcode": "A03W",
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A03X",
+        "source": "resolved/object-fields.tsv"
+      }
     }
   ]
 }

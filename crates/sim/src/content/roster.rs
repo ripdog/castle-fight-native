@@ -59,6 +59,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
     FrostWolf = 0x1000_0018 => b"n017",
     PolarBear = 0x1000_0019 => b"n018",
     Magnataur = 0x1000_001a => b"n016",
+    Hrimthrusa = 0x1000_001b => b"n011",
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
@@ -88,6 +89,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
     SnowyRocks = 0x2000_0018 => b"h049",
     IcyRocks = 0x2000_0019 => b"h04F",
     Glacier = 0x2000_001a => b"h03W",
+    Igloo = 0x2000_001b => b"h03U",
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
