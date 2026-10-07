@@ -83,6 +83,7 @@ fn command_slot(position: CommandCardPosition) -> usize {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TargetingAction {
+    SnowExplosion,
     Move,
     Repair,
     Blink,
@@ -970,6 +971,7 @@ fn populate_action_panel(
 fn action_hotkey(action: PanelAction, content: &CastleFightContentBundle) -> Option<char> {
     match action {
         PanelAction::OpenBuildMenu => Some(content.command_card.build_hotkey),
+        PanelAction::Target(TargetingAction::SnowExplosion) => None,
         PanelAction::Target(TargetingAction::Blink) => Some(content.command_card.blink_hotkey),
         PanelAction::Target(TargetingAction::Build(kind)) => Some(kind.hotkey(content)),
         PanelAction::Building(BuildingPanelAction::Upgrade(target)) => Some(target.hotkey(content)),
@@ -1142,6 +1144,13 @@ fn action_icon_key(
                 presentation.repair_command
             }
         }
+        PanelAction::Target(TargetingAction::SnowExplosion) => UiIconKey::ability(
+            castle_fight_sim::building_mechanics::snowveil_manual_ability_for_version(
+                content.map_version,
+            )
+            .0,
+            UiIconRole::Normal,
+        ),
         PanelAction::Target(TargetingAction::Blink) => presentation.blink_command,
         PanelAction::Target(TargetingAction::Attack) => presentation.attack_command,
         PanelAction::Target(TargetingAction::Build(kind)) => {
@@ -1333,6 +1342,18 @@ fn action_layout(
                         );
                     }
 
+                    if kind
+                        == Some(CastleFightBuildingKind::Tower(
+                            castle_fight_sim::CastleFightTowerKind::SnowveilFountain,
+                        ))
+                    {
+                        insert_panel_action(
+                            &mut slots,
+                            0,
+                            cancel_slot,
+                            PanelAction::Target(TargetingAction::SnowExplosion),
+                        );
+                    }
                     if let Some(kind) = kind {
                         insert_building_upgrade_actions(
                             &mut slots,
@@ -1462,6 +1483,9 @@ fn handle_action_panel_buttons(
             PanelAction::Target(action) => {
                 state.mode = ActionPanelMode::Targeting(action);
                 state.status = match action {
+                    TargetingAction::SnowExplosion => {
+                        "Winter’s Wrath: left-click snow to detonate; Esc cancels.".into()
+                    }
                     TargetingAction::Move => "Move: left-click a destination; Esc cancels.".into(),
                     TargetingAction::Repair => {
                         "Repair: left-click a friendly building or mechanical unit; Esc cancels."
@@ -1701,6 +1725,14 @@ fn style_action_panel_buttons(
                     )
             }
             PanelAction::TrainUnit => !production_queue_has_room(&state, &authoritative),
+            PanelAction::Target(TargetingAction::SnowExplosion) => state
+                .actor
+                .and_then(|actor| authoritative.simulation.building(actor))
+                .and_then(|building| building.owner)
+                .is_none_or(|owner| {
+                    authoritative.simulation.snowveil_manual_ready_tick(owner)
+                        > authoritative.simulation.tick()
+                }),
             PanelAction::GjallarhornSpell => state
                 .actor
                 .and_then(|actor| authoritative.simulation.building(actor))
@@ -2423,6 +2455,7 @@ fn action_label(action: PanelAction, content: &CastleFightContentBundle) -> Stri
         PanelAction::GjallarhornSpell => "Holy Power".into(),
         PanelAction::CancelProduction => "Cancel\nEsc".into(),
         PanelAction::CancelConstruction | PanelAction::Cancel => "Cancel\nEsc".into(),
+        PanelAction::Target(TargetingAction::SnowExplosion) => "Winter’s Wrath".into(),
         PanelAction::Target(TargetingAction::Move) => "Move".into(),
         PanelAction::Target(TargetingAction::Repair) => "Repair".into(),
         PanelAction::Target(TargetingAction::Blink) => "Blink".into(),

@@ -15,7 +15,7 @@ use castle_fight_sim::{
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-pub const PROTOCOL_SCHEMA_VERSION: u32 = 9;
+pub const PROTOCOL_SCHEMA_VERSION: u32 = 10;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub const MAX_RELEASE_REVISION_BYTES: usize = 64;
 pub const RECONNECT_TOKEN_BYTES: usize = 32;
@@ -809,6 +809,10 @@ pub enum WirePlayerCommand {
         building: u64,
         target: u64,
     },
+    CastBuildingSpellAt {
+        building: u64,
+        position: [i32; 2],
+    },
     CastBuildingSpell {
         building: u64,
     },
@@ -882,6 +886,12 @@ impl From<PlayerCommand> for WirePlayerCommand {
                 building: building.0,
                 target: target.0,
             },
+            PlayerCommand::CastBuildingSpellAt { building, position } => {
+                Self::CastBuildingSpellAt {
+                    building: building.0,
+                    position: [position.x, position.y],
+                }
+            }
             PlayerCommand::CastBuildingSpell { building } => Self::CastBuildingSpell {
                 building: building.0,
             },
@@ -963,6 +973,12 @@ impl From<WirePlayerCommand> for PlayerCommand {
                 Self::AttackWithBuilding {
                     building: SimId(building),
                     target: SimId(target),
+                }
+            }
+            WirePlayerCommand::CastBuildingSpellAt { building, position } => {
+                Self::CastBuildingSpellAt {
+                    building: SimId(building),
+                    position: SimPoint::new(position[0], position[1]),
                 }
             }
             WirePlayerCommand::CastBuildingSpell { building } => Self::CastBuildingSpell {
@@ -1690,6 +1706,10 @@ mod tests {
             PlayerCommand::AttackWithBuilding {
                 building: SimId(9),
                 target: SimId(10),
+            },
+            PlayerCommand::CastBuildingSpellAt {
+                building: SimId(9),
+                position: SimPoint::new(-123, 456),
             },
             PlayerCommand::CastBuildingSpell { building: SimId(9) },
             PlayerCommand::SetBuildingSpellAutocast {

@@ -213,11 +213,12 @@ impl Simulation {
                             && !immune
                             && profile.targets.can_target_buildings()
                         {
-                            target.health = target.health.saturating_sub(
+                            target.health = target.health.saturating_sub(scale_damage_per_10k(
                                 self.combat_rules
                                     .damage_rules
                                     .apply_spell(profile.damage, target.armor.armor_type),
-                            );
+                                target.snow_damage_taken_per_10k,
+                            ));
                             if target.health > 0 && profile.damage_per_second > 0 {
                                 apply_native_fire_damage_over_time(
                                     target.status.get_or_insert_default(),
@@ -315,9 +316,10 @@ pub(super) fn resolve_native_building_damage_over_time(
             {
                 if !building.classifications.spell_immune && !building.classifications.invulnerable
                 {
-                    building.health = building.health.saturating_sub(
+                    building.health = building.health.saturating_sub(scale_damage_per_10k(
                         rules.apply_spell(effect.damage_per_pulse, building.armor.armor_type),
-                    );
+                        building.snow_damage_taken_per_10k,
+                    ));
                 }
                 effect.next_pulse_tick += u64::from(effect.pulse_interval_ticks);
             }

@@ -6,7 +6,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 29;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 30;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -125,6 +125,9 @@ impl SimulationSnapshot {
                     if let Some(definition) = &mut corpse.corpse.resurrection {
                         rehydrate_optional_content(&mut definition.properties.content, content)?;
                     }
+                }
+                CanonicalEntity::Snowveil { state, .. } => {
+                    validate_content_version(state.version, content)?;
                 }
                 CanonicalEntity::BuildingSpellTarget { state, .. } => {
                     validate_content_version(state.version, content)?;
@@ -406,6 +409,12 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
                 return Some(CanonicalEntity::DelayedShrineRevival {
                     id,
                     revival: *revival,
+                });
+            }
+            if let Some(state) = entity.get::<SnowveilState>() {
+                return Some(CanonicalEntity::Snowveil {
+                    id,
+                    state: state.clone(),
                 });
             }
             if let Some(state) = entity.get::<BuildingSpellTargetState>() {
@@ -709,6 +718,9 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
             }
             CanonicalEntity::DelayedShrineRevival { id, revival } => {
                 world.spawn((*id, *revival));
+            }
+            CanonicalEntity::Snowveil { id, state } => {
+                world.spawn((*id, state.clone()));
             }
             CanonicalEntity::BuildingSpellTarget { id, state } => {
                 world.spawn((*id, state.clone()));

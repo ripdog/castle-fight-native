@@ -119,6 +119,10 @@ pub enum PlayerCommand {
         building: SimId,
         target: SimId,
     },
+    CastBuildingSpellAt {
+        building: SimId,
+        position: SimPoint,
+    },
     CastBuildingSpell {
         building: SimId,
     },
@@ -232,6 +236,7 @@ pub fn admit_player_command(
         | PlayerCommand::QueueProductionUnit { building }
         | PlayerCommand::CancelProductionUnit { building }
         | PlayerCommand::AttackWithBuilding { building, .. }
+        | PlayerCommand::CastBuildingSpellAt { building, .. }
         | PlayerCommand::CastBuildingSpell { building }
         | PlayerCommand::SetBuildingSpellAutocast { building, .. } => {
             if simulation.can_player_control_building(player, building) {
@@ -339,6 +344,10 @@ pub(crate) fn execute_player_command(
         }
         PlayerCommand::AttackWithBuilding { building, target } => simulation
             .order_building_attack_target_as(player, building, target)
+            .map(|()| CommandExecutionResult::Applied)
+            .map_err(CommandRejectReason::Building),
+        PlayerCommand::CastBuildingSpellAt { building, position } => simulation
+            .cast_building_spell_at_for_player(player, building, position)
             .map(|()| CommandExecutionResult::Applied)
             .map_err(CommandRejectReason::Building),
         PlayerCommand::CastBuildingSpell { building } => simulation

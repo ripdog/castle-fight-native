@@ -52,6 +52,7 @@ pub enum NativeEffectImplementationId {
     WarcraftFaerieFireV1,
     WarcraftElvenAutomaticV1,
     WarcraftBuildingHexV1,
+    WarcraftSnowveilV1,
     WarcraftBarrageV1,
     WarcraftPersistentCarrierV1,
 }
@@ -84,6 +85,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftFaerieFireV1 => 16,
             Self::WarcraftElvenAutomaticV1 => 17,
             Self::WarcraftBuildingHexV1 => 24,
+            Self::WarcraftSnowveilV1 => 25,
             Self::WarcraftBarrageV1 => 64,
             Self::WarcraftPersistentCarrierV1 => 65,
         }
@@ -841,11 +843,20 @@ pub fn resolve_native_effect_requirements(
     version: MapVersion,
     roots: &[NativeEffectSource],
 ) -> Result<Vec<ResolvedNativeEffectBinding>, NativeEffectResolveError> {
+    let (snow_roots, roots): (Vec<_>, Vec<_>) = roots
+        .iter()
+        .copied()
+        .partition(|source| crate::building_mechanics::snow_source_for_version(*source, version));
     let (building_roots, ordinary_roots): (Vec<_>, Vec<_>) = roots
         .iter()
         .copied()
         .partition(|source| crate::building_mechanics::hex_source_for_version(*source, version));
     let mut resolved = catalog().resolve_requirements(version, &ordinary_roots)?;
+    if !snow_roots.is_empty() {
+        resolved.extend(crate::building_mechanics::snow_bindings_for_version(
+            version,
+        ));
+    }
     if !building_roots.is_empty() {
         resolved.extend(crate::building_mechanics::hex_bindings_for_version(version));
     }
@@ -967,6 +978,11 @@ pub fn native_effect_implementation_for(
         .is_some_and(|source| crate::building_mechanics::hex_source_for_version(source, version))
     {
         return Some(NativeEffectImplementationId::WarcraftBuildingHexV1);
+    }
+    if source
+        .is_some_and(|source| crate::building_mechanics::snow_source_for_version(source, version))
+    {
+        return Some(NativeEffectImplementationId::WarcraftSnowveilV1);
     }
     catalog().implementation_for(source_kind, source_key, version)
 }

@@ -194,7 +194,10 @@ impl Simulation {
                         .damage_rules
                         .apply_spell(damage, target.armor.armor_type);
                     unit_health[index] = unit_health[index]
-                        .checked_sub(damage)
+                        .checked_sub(scale_damage_per_10k(
+                            damage,
+                            target.snow_damage_taken_per_10k,
+                        ))
                         .expect("Pulverize damage overflow");
                 }
                 self.last_ability_casts.push(AbilityCastEvent {

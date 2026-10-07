@@ -349,6 +349,22 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                     }
                 }
             }
+            CanonicalEntity::Snowveil { id, state } => {
+                hash.write_u8(14);
+                hash.write_u64(id.0);
+                hash.write_u16(state.version.major);
+                hash.write_u16(state.version.minor);
+                hash.write_u64(state.tiles.len() as u64);
+                for (tile, team) in &state.tiles {
+                    hash.write_u32(*tile);
+                    hash.write_u8(team.0);
+                }
+                hash.write_u64(state.manual_ready.len() as u64);
+                for (owner, tick) in &state.manual_ready {
+                    hash.write_u8(owner.0);
+                    hash.write_u64(*tick);
+                }
+            }
             CanonicalEntity::BuildingSpellTarget { id, state } => {
                 hash.write_u8(12);
                 hash.write_u64(id.0);
@@ -1091,6 +1107,10 @@ pub(super) enum CanonicalEntity {
         id: SimId,
         state: BuildingSpellTargetState,
     },
+    Snowveil {
+        id: SimId,
+        state: SnowveilState,
+    },
     NativeCarrier {
         id: SimId,
         state: crate::native_carriers::NativeCarrierState,
@@ -1115,6 +1135,7 @@ impl CanonicalEntity {
             Self::LineProjectile(projectile) => projectile.id,
             Self::BuildingSpellTarget { id, .. } => *id,
             Self::NativeCarrier { id, .. } => *id,
+            Self::Snowveil { id, .. } => *id,
         }
     }
 }
@@ -1952,6 +1973,10 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
     hash.write_u8(ability.target_policy.stable_tag());
     hash.write_u8(ability.effect.stable_tag());
     match ability.effect {
+        AbilityEffect::Snowfall { map_version } => {
+            hash.write_u16(map_version.major);
+            hash.write_u16(map_version.minor);
+        }
         AbilityEffect::Hex { profile } => hash_hex_profile(hash, profile),
         AbilityEffect::FaerieFire {
             modifier,

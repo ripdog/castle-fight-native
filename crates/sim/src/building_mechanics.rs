@@ -21,6 +21,132 @@ fn evidence(version: MapVersion) -> &'static Value {
     })
 }
 
+pub(crate) fn canonical_projection_for_version(version: MapVersion) -> &'static [u8] {
+    assert_eq!(version, MapVersion::CASTLE_FIGHT_9_27);
+    include_bytes!("../data/castle-fight/9.27/building-mechanics-r1.json")
+}
+
+pub(crate) struct SnowveilProfile {
+    pub rawcode: u32,
+    pub manual_ability: AbilityId,
+    pub snow_terrain_rawcode: u32,
+    pub tile_size: i32,
+    pub origin: crate::SimPoint,
+    pub battlefield_bounds: [i32; 4],
+    pub width: i32,
+    pub height: i32,
+    pub damage_taken_per_10k: u16,
+    pub explosion_damage: i32,
+    pub explosion_radius: i32,
+    pub manual_cooldown_ticks: u16,
+}
+
+pub(crate) fn snowveil_for_version(version: MapVersion) -> &'static SnowveilProfile {
+    static PROFILE: OnceLock<SnowveilProfile> = OnceLock::new();
+    assert_eq!(version, MapVersion::CASTLE_FIGHT_9_27);
+    PROFILE.get_or_init(|| {
+        let data = evidence(version);
+        let p: Value =
+            serde_json::from_str(data["snow"]["parameters_json"].as_str().unwrap()).unwrap();
+        let world = |value: &Value| {
+            value.as_str().unwrap().parse::<i32>().unwrap() * SUBUNITS_PER_WORLD_UNIT
+        };
+        let grid = &data["terrain_grid"];
+        SnowveilProfile {
+            rawcode: u32::from_be_bytes(*b"h07W"),
+            manual_ability: AbilityId(p["manual_explosion_ability_id"].as_u64().unwrap() as u32),
+            snow_terrain_rawcode: u32::from_be_bytes(
+                grid["snow_rawcode"]
+                    .as_str()
+                    .unwrap()
+                    .as_bytes()
+                    .try_into()
+                    .unwrap(),
+            ),
+            tile_size: p["tile_spacing_world_units"].as_i64().unwrap() as i32
+                * SUBUNITS_PER_WORLD_UNIT,
+            battlefield_bounds: std::array::from_fn(|i| {
+                grid["battlefield_bounds"][i].as_i64().unwrap() as i32 * SUBUNITS_PER_WORLD_UNIT
+            }),
+            origin: crate::SimPoint::new(
+                grid["offset"]["x"].as_i64().unwrap() as i32 * SUBUNITS_PER_WORLD_UNIT,
+                grid["offset"]["y"].as_i64().unwrap() as i32 * SUBUNITS_PER_WORLD_UNIT,
+            ),
+            width: grid["width"].as_i64().unwrap() as i32,
+            height: grid["height"].as_i64().unwrap() as i32,
+            damage_taken_per_10k: (p["incoming_damage_multiplier"]
+                .as_str()
+                .unwrap()
+                .parse::<f64>()
+                .unwrap()
+                * 10_000.0) as u16,
+            explosion_damage: p["manual_explosion_damage"]
+                .as_str()
+                .unwrap()
+                .parse()
+                .unwrap(),
+            explosion_radius: world(&p["manual_explosion_radius"]),
+            manual_cooldown_ticks: ticks(&data["snow_manual_cooldowns"]["normal"]),
+        }
+    })
+}
+
+pub(crate) fn snow_spellcasting_for_version(version: MapVersion) -> SpellcastingProfile {
+    let data = evidence(version);
+    let fields = &data["fields"]["h07W"];
+    let protected = |field: &str| {
+        data["protected"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["rawcode"] == "A0HO" && row["field"] == field)
+            .unwrap()["runtime_value"]
+            .clone()
+    };
+    SpellcastingProfile {
+        mana: ManaProfile::per_second(
+            fields["umpm:0"].as_i64().unwrap() as i32,
+            0,
+            (fields["umpr:0"].as_f64().unwrap() * 10_000.0) as u32,
+        ),
+        ability: AutomaticAbilityProfile {
+            id: AbilityId(u32::from_be_bytes(*b"A0HO")),
+            mana_cost: protected("mana_cost").as_str().unwrap().parse().unwrap(),
+            cooldown_ticks: ticks(&protected("cooldown")),
+            range: 0,
+            target_policy: AbilityTargetPolicy::RandomEnemyUnitGlobal,
+            effect: AbilityEffect::Snowfall {
+                map_version: version,
+            },
+        },
+    }
+}
+
+pub(crate) fn snow_bindings_for_version(
+    version: MapVersion,
+) -> [crate::ResolvedNativeEffectBinding; 2] {
+    [*b"A0HO", *b"AM0{"].map(|code| crate::ResolvedNativeEffectBinding {
+        source: crate::NativeEffectSource::new(
+            crate::NativeEffectSourceKind::UnitAbility,
+            u32::from_be_bytes(code),
+        ),
+        implementation: {
+            assert_eq!(version, MapVersion::CASTLE_FIGHT_9_27);
+            crate::NativeEffectImplementationId::WarcraftSnowveilV1
+        },
+    })
+}
+
+pub(crate) fn snow_source_for_version(
+    source: crate::NativeEffectSource,
+    version: MapVersion,
+) -> bool {
+    version == MapVersion::CASTLE_FIGHT_9_27
+        && snow_bindings_for_version(version)
+            .iter()
+            .any(|binding| binding.source == source)
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct HexFormProfile {
     pub rawcode: u32,
@@ -275,4 +401,17 @@ pub fn building_effect_art_for_version(
     evidence(version)["fields"][code][field]
         .as_str()
         .filter(|value| !value.is_empty() && *value != "_")
+}
+
+pub fn snowveil_manual_ability_for_version(version: MapVersion) -> AbilityId {
+    snowveil_for_version(version).manual_ability
+}
+
+pub(crate) fn snow_trigger_eligible(
+    point: crate::SimPoint,
+    sapper: bool,
+    version: MapVersion,
+) -> bool {
+    let [min_x, min_y, max_x, max_y] = snowveil_for_version(version).battlefield_bounds;
+    sapper && point.x >= min_x && point.x <= max_x && point.y >= min_y && point.y <= max_y
 }

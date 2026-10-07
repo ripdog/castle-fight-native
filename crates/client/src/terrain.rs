@@ -815,6 +815,40 @@ fn sample_display_height(sample: TerrainElevationSample) -> f32 {
     sample.display_height_quarters() as f32 / HEIGHT_QUARTERS_PER_WORLD_UNIT
 }
 
+impl TerrainTextureLayout {
+    /// Apply script-owned vertex tiles to a clone; explosions recover the retained baseline.
+    pub(crate) fn with_snow_tiles(
+        &self,
+        terrain: &TerrainSurface,
+        tiles: &[(castle_fight_sim::SimPoint, castle_fight_sim::Team, i32, u32)],
+    ) -> Self {
+        let mut result = self.clone();
+        for (point, _, spacing, rawcode) in tiles {
+            let code = String::from_utf8(rawcode.to_be_bytes().to_vec()).expect("terrain rawcode");
+            let palette = result
+                .tile_palette
+                .iter()
+                .position(|entry| entry == &code)
+                .unwrap_or_else(|| {
+                    result.tile_palette.push(code);
+                    result.tile_palette.len() - 1
+                });
+            let world = Vec2::new(point.x as f32, point.y as f32) / SUBUNITS_PER_WORLD_UNIT as f32;
+            let grid =
+                (world - terrain.origin_world) / (*spacing as f32 / SUBUNITS_PER_WORLD_UNIT as f32);
+            if grid.x < 0.0 || grid.y < 0.0 {
+                continue;
+            }
+            if let Ok(index) = result.tilepoint_index(grid.x.round() as u32, grid.y.round() as u32)
+            {
+                result.ground_texture[index] = palette.try_into().expect("terrain palette fits u8");
+                result.ground_variation[index] = 0;
+            }
+        }
+        result
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use castle_fight_sim::SimPoint;

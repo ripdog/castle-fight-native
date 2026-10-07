@@ -1055,6 +1055,7 @@ impl Plugin for CastlePresentationPlugin {
                 ..default()
             })
             .add_systems(Startup, setup_scene)
+            .add_systems(Update, update_snow_terrain)
             .add_systems(
                 Update,
                 (
@@ -1477,6 +1478,7 @@ fn setup_scene(
                         ..default()
                     });
                     commands.spawn((
+                        TerrainTextureLayer(texture_mesh.palette_index),
                         Mesh3d(meshes.add(texture_mesh.mesh)),
                         MeshMaterial3d(material),
                         Transform::IDENTITY,
@@ -3144,6 +3146,7 @@ fn prewarm_timed_wc3_effects(
                         AbilityEffect::HealingWave(_)
                         | AbilityEffect::SolarStrike { .. }
                         | AbilityEffect::PhoenixFire(_)
+                        | AbilityEffect::Snowfall { .. }
                         | AbilityEffect::Hex { .. }
                         | AbilityEffect::Damage { .. }
                         | AbilityEffect::Stun { .. }
@@ -7955,4 +7958,94 @@ mod tests {
         assert!(support_height > center_height + 30.0);
         assert!(support_height >= 574.0);
     }
+}
+
+#[derive(Component)]
+struct TerrainTextureLayer(usize);
+
+#[derive(Default)]
+struct SnowTerrainCache {
+    tiles: Vec<(SimPoint, Team, i32, u32)>,
+    materials: BTreeMap<usize, Handle<StandardMaterial>>,
+}
+
+type SnowTerrainLayers<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Entity,
+        &'static TerrainTextureLayer,
+        &'static Mesh3d,
+        &'static MeshMaterial3d<StandardMaterial>,
+    ),
+>;
+
+#[derive(SystemParam)]
+struct SnowTerrainResources<'w, 's> {
+    commands: Commands<'w, 's>,
+    samples: Res<'w, PresentationSamples>,
+    terrain: Res<'w, TerrainSurface>,
+    layout: Res<'w, TerrainTextureLayout>,
+    textures: Res<'w, TerrainTextureSet>,
+    asset_server: Res<'w, AssetServer>,
+    meshes: ResMut<'w, Assets<Mesh>>,
+    materials: ResMut<'w, Assets<StandardMaterial>>,
+    layers: SnowTerrainLayers<'w, 's>,
+    cache: Local<'s, SnowTerrainCache>,
+}
+
+fn update_snow_terrain(resources: SnowTerrainResources<'_, '_>) {
+    let SnowTerrainResources {
+        mut commands,
+        samples,
+        terrain,
+        layout,
+        textures,
+        asset_server,
+        mut meshes,
+        mut materials,
+        layers,
+        mut cache,
+    } = resources;
+    if cache.tiles == samples.current.snow_tiles || !textures.is_available() {
+        return;
+    }
+    let updated = layout.with_snow_tiles(&terrain, &samples.current.snow_tiles);
+    let Ok(generated) = terrain.textured_meshes(&updated, &textures) else {
+        return;
+    };
+    for (entity, layer, mesh, material) in &layers {
+        cache
+            .materials
+            .entry(layer.0)
+            .or_insert_with(|| material.0.clone());
+        meshes.remove(mesh.0.id());
+        commands.entity(entity).despawn();
+    }
+    for layer in generated {
+        let material = cache
+            .materials
+            .entry(layer.palette_index)
+            .or_insert_with(|| {
+                let atlas = textures
+                    .atlas(layer.palette_index)
+                    .expect("validated snow atlas");
+                materials.add(StandardMaterial {
+                    base_color_texture: Some(asset_server.load(atlas.asset_path().to_owned())),
+                    alpha_mode: AlphaMode::Blend,
+                    unlit: true,
+                    depth_bias: layer.palette_index as f32 + 1.0,
+                    perceptual_roughness: 0.95,
+                    ..default()
+                })
+            })
+            .clone();
+        commands.spawn((
+            TerrainTextureLayer(layer.palette_index),
+            Mesh3d(meshes.add(layer.mesh)),
+            MeshMaterial3d(material),
+            Transform::IDENTITY,
+        ));
+    }
+    cache.tiles.clone_from(&samples.current.snow_tiles);
 }

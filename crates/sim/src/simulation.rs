@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 34;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 35;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -26,6 +26,8 @@ mod abilities;
 mod automatic_abilities;
 mod builder;
 mod building_spells;
+mod snowveil;
+use snowveil::SnowveilState;
 #[cfg(test)]
 mod building_spells_source_tests;
 #[cfg(test)]
@@ -878,6 +880,7 @@ impl Simulation {
             return false;
         }
         self.invalidate_pending_golden_shrine_revivals();
+        self.clear_snow();
         self.lifecycle = MatchLifecycle::Finished {
             outcome,
             finished_tick: self.next_tick.saturating_sub(1),
@@ -1101,6 +1104,7 @@ impl Simulation {
             (true, false) => MatchOutcome::Victory(Team(0)),
         };
         self.invalidate_pending_golden_shrine_revivals();
+        self.clear_snow();
         self.lifecycle = MatchLifecycle::Finished {
             outcome,
             finished_tick: completed_tick,
@@ -1505,6 +1509,7 @@ impl Simulation {
         self.refresh_vision();
         let mut units = self.snapshot_units();
         let mut buildings = self.snapshot_buildings();
+        self.refresh_snow_protection(&mut units, &mut buildings);
         resolve_periodic_unit_statuses(&mut units, completed_tick, self.combat_rules.damage_rules);
         native_actions::resolve_native_building_damage_over_time(
             &mut buildings,
@@ -1714,6 +1719,7 @@ impl Simulation {
         );
 
         let phase_start = Instant::now();
+        self.refresh_snow_protection_at(&mut units, &mut buildings, Some(&positions));
         let ballistic_impacts = self.resolve_due_ballistic_impacts(BallisticImpactContext {
             due_projectiles: due_ballistic_projectiles,
             units: &mut units,
@@ -2993,6 +2999,7 @@ impl Simulation {
                     debug_assert_eq!(spellcasting.is_some(), mana_current.is_some());
                     debug_assert_eq!(spellcasting.is_some(), ability_state.is_some());
                     UnitSnapshot {
+                        snow_damage_taken_per_10k: 10_000,
                         detection_teams: self.fog.as_ref().map_or(0, |fog| {
                             u8::from(fog.detects_invisible(Team(0), position.0))
                                 | (u8::from(fog.detects_invisible(Team(1), position.0)) << 1)
@@ -3107,6 +3114,7 @@ impl Simulation {
                         !(attack.is_some() || spellcasting.is_some()) || status.is_some()
                     );
                     BuildingSnapshot {
+                        snow_damage_taken_per_10k: 10_000,
                         map_version: entity_ref
                             .get::<ContentIdentity>()
                             .map(|content| content.map_version),
@@ -3145,6 +3153,7 @@ impl Simulation {
 
 #[derive(Debug, Clone, Copy)]
 struct UnitSnapshot {
+    snow_damage_taken_per_10k: u16,
     detection_teams: u8,
     map_version: Option<crate::MapVersion>,
     visible_teams: u8,
@@ -3240,6 +3249,7 @@ impl UnitSnapshot {
 
 #[derive(Debug, Clone, Copy)]
 struct BuildingSnapshot {
+    snow_damage_taken_per_10k: u16,
     map_version: Option<crate::MapVersion>,
     visible_teams: u8,
     entity: Entity,
@@ -3837,6 +3847,9 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
     }
     match spellcasting.ability.effect {
+        AbilityEffect::Snowfall { map_version } => {
+            assert_eq!(map_version, crate::MapVersion::CASTLE_FIGHT_9_27);
+        }
         AbilityEffect::SolarStrike {
             profile,
             radius,
@@ -4578,6 +4591,7 @@ fn spell_damage_after_defend(unit: UnitSnapshot, damage: i32, completed_tick: u6
         .map_or(damage, |profile| {
             scale_damage_per_10k(damage, profile.spell_damage_taken_per_10k)
         });
+    let damage = scale_damage_per_10k(damage, unit.snow_damage_taken_per_10k);
     unit.passive_effects.iter().fold(damage, |damage, effect| {
         if let PassiveUnitEffect::SpellResistance(profile) = effect {
             scale_damage_per_10k(damage, profile.damage_taken_per_10k)
@@ -4608,7 +4622,10 @@ fn apply_damage_to_target(
                 effective_armor_points_per_100(&state.units[index]),
             );
             state.unit_health[index] = state.unit_health[index]
-                .checked_sub(adjusted_damage)
+                .checked_sub(scale_damage_per_10k(
+                    adjusted_damage,
+                    state.units[index].snow_damage_taken_per_10k,
+                ))
                 .expect("unit damage arithmetic overflowed validated bounds");
             let source_is_unit = find_unit_index(state.units, source_id).is_some();
             let recorded_attacker_is_building = state.attackers_this_tick[index]
@@ -4638,7 +4655,10 @@ fn apply_damage_to_target(
                     state.buildings[index].armor,
                 );
                 state.building_health[index] = state.building_health[index]
-                    .checked_sub(adjusted_damage)
+                    .checked_sub(scale_damage_per_10k(
+                        adjusted_damage,
+                        state.buildings[index].snow_damage_taken_per_10k,
+                    ))
                     .expect("building damage arithmetic overflowed validated bounds");
             }
             Some(footprint_center_point(

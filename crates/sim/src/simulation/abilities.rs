@@ -557,6 +557,10 @@ impl Simulation {
                                 metrics.effects += 1;
                             }
                         }
+                    } else if let AbilityEffect::Snowfall { map_version } = intent.ability.effect {
+                        self.place_snow(units[index].position, source.team, map_version);
+                        self.refresh_snow_protection(units, buildings);
+                        metrics.effects += 1;
                     } else if let AbilityEffect::Hex { profile } = intent.ability.effect {
                         if self.resolve_building_hex(
                             &mut units[index],
@@ -659,7 +663,10 @@ impl Simulation {
                             && target.team != source.team
                             && position.distance_sq(target.position) <= square_i32(radius)
                         {
-                            target.health = target.health.saturating_sub(damage);
+                            target.health = target.health.saturating_sub(scale_damage_per_10k(
+                                damage,
+                                target.snow_damage_taken_per_10k,
+                            ));
                             metrics.effects += 1;
                         }
                     }
@@ -1492,6 +1499,13 @@ impl Simulation {
             if candidate.health <= 0
                 || candidate.team == source.team
                 || match ability.effect {
+                    AbilityEffect::Snowfall { map_version } => {
+                        !crate::building_mechanics::snow_trigger_eligible(
+                            candidate.position,
+                            candidate.classifications.combat_sapper,
+                            map_version,
+                        )
+                    }
                     AbilityEffect::Hex { profile } => {
                         !self.hex_trigger_eligible(candidate, profile.map_version)
                     }
@@ -1601,6 +1615,13 @@ impl Simulation {
                         AbilityTargetPolicy::RandomEnemyUnitGlobal => {
                             target.team != source.team
                                 && match ability.effect {
+                                    AbilityEffect::Snowfall { map_version } => {
+                                        crate::building_mechanics::snow_trigger_eligible(
+                                            target.position,
+                                            target.classifications.combat_sapper,
+                                            map_version,
+                                        )
+                                    }
                                     AbilityEffect::Hex { profile } => {
                                         self.hex_trigger_eligible(target, profile.map_version)
                                     }

@@ -935,7 +935,10 @@ impl Simulation {
                             .apply_spell(damage, building.armor.armor_type);
                         building.health = building
                             .health
-                            .checked_sub(adjusted)
+                            .checked_sub(scale_damage_per_10k(
+                                adjusted,
+                                building.snow_damage_taken_per_10k,
+                            ))
                             .expect("Burning Oil building damage overflow");
                     }
                 }

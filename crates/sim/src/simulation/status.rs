@@ -275,7 +275,8 @@ pub(super) fn apply_ability_effect_to_unit(
                 },
             );
         }
-        AbilityEffect::Hex { .. }
+        AbilityEffect::Snowfall { .. }
+        | AbilityEffect::Hex { .. }
         | AbilityEffect::HolyFervour { .. }
         | AbilityEffect::Purification { .. }
         | AbilityEffect::ArtilleryBombardment { .. } => return false,
@@ -556,7 +557,10 @@ pub(super) fn resolve_periodic_unit_statuses(
                     .map_or(adjusted, |factor| scale_damage_per_10k(adjusted, factor));
                 unit.health = unit
                     .health
-                    .checked_sub(adjusted)
+                    .checked_sub(scale_damage_per_10k(
+                        adjusted,
+                        unit.snow_damage_taken_per_10k,
+                    ))
                     .expect("damage-over-time health arithmetic overflow");
                 effect.next_pulse_tick = effect
                     .next_pulse_tick

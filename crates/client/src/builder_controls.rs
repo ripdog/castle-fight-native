@@ -236,6 +236,31 @@ fn handle_modal_left_click(
         .expect("targeting mode requires an action-panel actor");
 
     match action {
+        TargetingAction::SnowExplosion => {
+            let Some(world) = world else {
+                return;
+            };
+            let controller = resources.debug_menu.controller_for_actor(
+                &resources.authoritative.simulation,
+                resources.selected_match.local_player,
+                actor,
+            );
+            let submission = resources.authoritative.submit_local_command(
+                controller,
+                PlayerCommand::CastBuildingSpellAt {
+                    building: actor,
+                    position: world_to_sim_point(world),
+                },
+            );
+            match command_submission_status(
+                submission,
+                "Winter’s Wrath queued.".into(),
+                "Spell rejected",
+            ) {
+                Ok(status) => finish_modal(resources, status),
+                Err(status) => resources.action_panel.status = status,
+            }
+        }
         TargetingAction::Move => {
             let Some(world) = world else {
                 resources.action_panel.status = "Move rejected: no battlefield point.".into();

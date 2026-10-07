@@ -105,6 +105,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    SnowveilFountain = 0x2100_000a => b"h07W",
     WatchTower = 0x2100_0001 => b"h006",
     PoofTower = 0x2100_0002 => b"h07P",
     Artillery = 0x2100_0003 => b"h001",

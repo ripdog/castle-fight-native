@@ -351,8 +351,13 @@ def main() -> int:
     if not isinstance(cliff_palette, list) or not all(isinstance(value, str) for value in cliff_palette):
         raise ValueError("terrain JSON has no valid cliffTilePalette")
 
+    # Script-authored terrain changes need their native atlas, even outside the W3E palette.
+    mechanics = json.loads((REPO_ROOT / "crates/sim/data/castle-fight/9.27/building-mechanics-r1.json").read_text())
+    dynamic = mechanics["terrain_grid"]["snow_rawcode"]
+    if dynamic not in ground_palette:
+        ground_palette.append(dynamic)
     output.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="cf-terrain-") as temp_name:
+    with tempfile.TemporaryDirectory(prefix="cf-terrain-", dir=output) as temp_name:
         temp = Path(temp_name)
         terrain_slk = temp / "terrain.slk"
         cliff_slk = temp / "clifftypes.slk"

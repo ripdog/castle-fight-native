@@ -1179,6 +1179,9 @@ pub enum AbilityEffect {
     },
     PhoenixFire(NativeBoltProfile),
     HealingWave(HealingWaveProfile),
+    Snowfall {
+        map_version: crate::MapVersion,
+    },
     Hex {
         profile: crate::building_mechanics::HexEffectProfile,
     },
@@ -1225,6 +1228,7 @@ impl AbilityEffect {
             Self::AreaStun { .. } => 15,
             Self::AreaDebuff { .. } => 16,
             Self::FrostNova { .. } => 17,
+            Self::Snowfall { .. } => 18,
         }
     }
 }

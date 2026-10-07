@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r26";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r27";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 17;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 18;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1317,6 +1317,11 @@ impl CastleFightTowerKind {
         let expected_name = extracted_content_927().buildings[&rawcode].name;
         let mut definition = extracted_tower_definition_927(rawcode, expected_name);
         definition.spellcasting = match self {
+            Self::SnowveilFountain => {
+                Some(crate::building_mechanics::snow_spellcasting_for_version(
+                    MapVersion::CASTLE_FIGHT_9_27,
+                ))
+            }
             Self::CityOfMagic => Some(crate::building_mechanics::city_spellcasting_for_version(
                 MapVersion::CASTLE_FIGHT_9_27,
             )),
@@ -1707,6 +1712,12 @@ fn stable_ability_id(
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A04B") => {
             0x4000_0058
         }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0HO") => {
+            0x4000_005a
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"AM0{") => {
+            0x4000_005b
+        }
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A04C") => {
             0x4000_0059
         }
@@ -2029,6 +2040,9 @@ fn canonical_content_bundle_hash(bundle: &CastleFightContentBundle) -> u64 {
         &crate::native_carriers::canonical_projection_for_version(bundle.map_version)
             .expect("registered native tower content version"),
     );
+    hash.write_bytes(crate::building_mechanics::canonical_projection_for_version(
+        bundle.map_version,
+    ));
     hash_command_card(&mut hash, bundle.command_card);
     hash_economy_rules(&mut hash, bundle.economy);
     hash_damage_rules(&mut hash, bundle.damage_rules);
@@ -2545,6 +2559,10 @@ fn hash_automatic_ability_profile(hash: &mut ContentHash64, ability: AutomaticAb
     hash.write_u8(ability.target_policy.stable_tag());
     hash.write_u8(ability.effect.stable_tag());
     match ability.effect {
+        AbilityEffect::Snowfall { map_version } => {
+            hash.write_u16(map_version.major);
+            hash.write_u16(map_version.minor);
+        }
         AbilityEffect::Hex { profile } => {
             hash.write_u16(profile.map_version.major);
             hash.write_u16(profile.map_version.minor);
