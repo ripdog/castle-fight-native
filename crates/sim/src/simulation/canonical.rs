@@ -1769,6 +1769,15 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                 hash.write_u64(u64::from(profile.mana_regeneration_per_second_per_10k));
                 hash.write_u8(u8::from(profile.suspend_during_spell_cooldown));
             }
+            PassiveUnitEffect::Pulverize(profile) => {
+                hash.write_u8(12);
+                hash.write_u32(profile.ability.0);
+                hash.write_u16(profile.chance_per_10k);
+                hash.write_i32(profile.damage);
+                hash.write_i32(profile.full_radius);
+                hash.write_i32(profile.half_radius);
+                hash.write_u8(profile.targets.bits());
+            }
             PassiveUnitEffect::FrostAttack(profile) => {
                 hash.write_u8(11);
                 hash.write_u32(profile.ability.0);

@@ -48,6 +48,7 @@
     {"source_kind": "unit-ability", "source_key": "A03C", "unit_rawcode": "o00A", "kind": "frost-attack"},
     {"source_kind": "unit-ability", "source_key": "A048", "unit_rawcode": "o00A", "kind": "orb-spell-proc"},
     {"source_kind": "unit-ability", "source_key": "A040", "unit_rawcode": "o00A", "kind": "frost-armor"},
-    {"source_kind": "ability-effect", "source_key": "A047", "kind": "entangling-roots"}
+    {"source_kind": "ability-effect", "source_key": "A047", "kind": "entangling-roots"},
+    {"source_kind": "unit-ability", "source_key": "A059", "unit_rawcode": "n012", "kind": "pulverize"}
   ]
 }

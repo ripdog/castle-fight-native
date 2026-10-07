@@ -470,6 +470,16 @@ pub struct SplashFalloffProfile {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PulverizeEffectProfile {
+    pub ability: AbilityId,
+    pub chance_per_10k: u16,
+    pub damage: i32,
+    pub full_radius: i32,
+    pub half_radius: i32,
+    pub targets: AttackTargetMask,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FrostAttackEffectProfile {
     pub ability: AbilityId,
     pub duration_ticks: u16,
@@ -569,6 +579,7 @@ pub enum PassiveUnitEffect {
     SpellResistance(SpellResistanceEffectProfile),
     Feedback(FeedbackEffectProfile),
     FrostAttack(FrostAttackEffectProfile),
+    Pulverize(PulverizeEffectProfile),
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

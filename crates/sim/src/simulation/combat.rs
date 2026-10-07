@@ -154,6 +154,61 @@ impl Simulation {
                 }
             }
 
+            for effect in intent.passive_effects.iter() {
+                let PassiveUnitEffect::Pulverize(profile) = effect else {
+                    continue;
+                };
+                if !matches!(
+                    intent.attack.delivery,
+                    AttackDelivery::Melee | AttackDelivery::RangedInstant
+                ) || deterministic_random(
+                    self.config.match_seed,
+                    completed_tick,
+                    intent.source_id,
+                    RANDOM_PURPOSE_ATTACK_PROC ^ u64::from(profile.ability.0),
+                    intent.attack_sequence,
+                ) % 10_000
+                    >= u64::from(profile.chance_per_10k)
+                {
+                    continue;
+                }
+                for (index, target) in units.iter().enumerate() {
+                    let distance = intent.source_position.distance_sq(positions[index]);
+                    if target.team == intent.source_team
+                        || unit_health[index] <= 0
+                        || target.classifications.invulnerable
+                        || !profile.targets.can_target_unit(target.movement_class)
+                        || distance > square_i32(profile.half_radius)
+                    {
+                        continue;
+                    }
+                    let damage = if distance <= square_i32(profile.full_radius) {
+                        profile.damage
+                    } else {
+                        profile.damage / 2
+                    };
+                    // Native Pulverize is physical ability damage: bypass ordinary armor points,
+                    // retain the spell attack/armor table, and permit magic-immune victims.
+                    let damage = self
+                        .combat_rules
+                        .damage_rules
+                        .apply_spell(damage, target.armor.armor_type);
+                    unit_health[index] = unit_health[index]
+                        .checked_sub(damage)
+                        .expect("Pulverize damage overflow");
+                }
+                self.last_ability_casts.push(AbilityCastEvent {
+                    source: intent.source_id,
+                    ability: profile.ability,
+                    target: AbilityCastTarget::Unit(intent.target_id),
+                    target_position: Some(intent.source_position),
+                    effect: AbilityEffect::AreaDamage {
+                        amount: profile.damage,
+                        radius: profile.half_radius,
+                        origin: AreaDamageOrigin::Caster,
+                    },
+                });
+            }
             let missed = self.uphill_attack_misses(&intent, target_position, completed_tick, units)
                 || self.attack_is_evaded(&intent, units, completed_tick);
             let mut critical = false;
@@ -700,7 +755,8 @@ impl Simulation {
                     );
                     on_hit.splash_falloff = Some(profile);
                 }
-                PassiveUnitEffect::Evasion(_)
+                PassiveUnitEffect::Pulverize(_)
+                | PassiveUnitEffect::Evasion(_)
                 | PassiveUnitEffect::Defend(_)
                 | PassiveUnitEffect::Cleave(_)
                 | PassiveUnitEffect::Aura(_)

@@ -43,6 +43,14 @@ class NativeTuningProjectionTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             native.project_effect(recipe, {**fields, "targs1": "ground,nonhero"}, None, {}, {"misc": misc})
 
+    def test_pulverize_projects_distinct_full_and_half_radii_without_class_flattening(self) -> None:
+        recipe = {"kind": "pulverize", "source_key": "TEST", "source_kind": "unit-ability"}
+        fields = {"dataa1": "17", "datab1": "31", "datac1": "41", "datad1": "73", "targs1": "ground,enemy"}
+        effect = native.project_effect(recipe, fields, None, {}, {})
+        self.assertEqual((effect["chance_per_10k"], effect["damage"], effect["full_radius_world"], effect["half_radius_world"]), (1700, 31, 41, 73))
+        with self.assertRaises(ValueError):
+            native.project_effect(recipe, {**fields, "targs1": "ground,enemy,nonhero"}, None, {}, {})
+
     def test_fixed_point_conversion_is_exact_not_float_rounded(self) -> None:
         self.assertEqual(native.scaled("0.1234", 10_000), 1234)
         self.assertEqual(native.scaled("0.123", 1000), 123)

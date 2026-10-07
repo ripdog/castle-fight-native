@@ -500,3 +500,5 @@ The targeting/combat test suite MUST eventually include:
 ## Native cleave target masks
 
 A landed melee primary hit resolves cleave around the primary impact position using its versioned radius, damage fraction and explicit target mask. Secondary hits exclude the primary target, allies and dead entities. Structure eligibility is independent of unit eligibility; structures use footprint distance. Ranged attacks and missed primary attacks do not trigger cleave. The profile and target mask participate in content identity, canonical checksums and snapshot transport.
+
+Native Pulverize rolls its physical area proc when an eligible weapon attack is released, independently of directed evasion. It uses caster-centered full and half radii, its own ground-unit mask and ability damage; ordinary critical damage does not multiply it. Physical ability damage bypasses armor points and permits magic immunity while retaining the spell attack/armor table.

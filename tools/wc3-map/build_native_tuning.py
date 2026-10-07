@@ -85,6 +85,11 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         effect.update(chance_per_10k=number("DataA1", 100),
                       damage_multiplier_per_10k=number("DataB1", 10_000),
                       targets=unit_targets(fields["targs1"], allow_structures=True))
+    elif kind == "pulverize":
+        if set(fields["targs1"].split(",")) - {"ground", "enemy", "enemies", "neutral"}:
+            raise ValueError("unsupported native Pulverize mask")
+        effect.update(chance_per_10k=number("DataA1", 100), damage=number("DataB1"),
+            full_radius_world=number("DataC1"), half_radius_world=number("DataD1"), targets=unit_targets(fields["targs1"]))
     elif kind == "frost-attack":
         if set(fields["targs1"].split(",")) - {"air", "ground", "enemy", "enemies", "neutral"}:
             raise ValueError("Frost Attack cannot discard target class restrictions")

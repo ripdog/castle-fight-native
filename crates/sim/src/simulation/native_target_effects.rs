@@ -1092,3 +1092,90 @@ fn frost_attack_retains_independent_orb_payload_and_live_hero_immunity_after_res
         }
     }
 }
+
+#[test]
+fn pulverize_uses_caster_radii_independent_physical_proc_and_restored_rng() {
+    for chance in [0, 10_000] {
+        for evade in [0, 10_000] {
+            let mut sim = simulation(1);
+            let caster = sim.spawn_unit_with_properties(
+                unit(0, 20, 10, AttackDelivery::Melee),
+                UnitGameplayProperties {
+                    passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Pulverize(
+                        crate::PulverizeEffectProfile {
+                            ability: AbilityId(41),
+                            chance_per_10k: chance,
+                            damage: 20,
+                            full_radius: 40 * SUBUNITS_PER_WORLD_UNIT,
+                            half_radius: 70 * SUBUNITS_PER_WORLD_UNIT,
+                            targets: AttackTargetMask::GROUND_UNITS,
+                        },
+                    )),
+                    ..UnitGameplayProperties::default()
+                },
+            );
+            let primary = sim.spawn_unit_with_properties(
+                unit(1, 60, 0, AttackDelivery::Melee),
+                UnitGameplayProperties {
+                    classifications: UnitClassifications {
+                        spell_immune: true,
+                        ..UnitClassifications::default()
+                    },
+                    passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Evasion(
+                        EvasionEffectProfile {
+                            ability: AbilityId(42),
+                            chance_per_10k: evade,
+                        },
+                    )),
+                    ..UnitGameplayProperties::default()
+                },
+            );
+            let half = sim.spawn_unit(unit(1, 90, 0, AttackDelivery::Melee));
+            let outside = sim.spawn_unit(unit(1, 91, 0, AttackDelivery::Melee));
+            let ally = sim.spawn_unit(unit(0, 90, 0, AttackDelivery::Melee));
+            let air = sim.spawn_unit_with_properties(
+                unit(1, 90, 0, AttackDelivery::Melee),
+                UnitGameplayProperties {
+                    movement_class: MovementClass::Air,
+                    ..UnitGameplayProperties::default()
+                },
+            );
+            let structure = sim.spawn_building(BuildingSpawn {
+                team: Team(1),
+                footprint: BuildingFootprint::new(2, 0, 1, 1),
+                health: 1000,
+                production: None,
+                attack: None,
+                spellcasting: None,
+            });
+            sim.step();
+            let mut restored = wire_restored(&sim, 4);
+            sim.step();
+            restored.step();
+            assert_eq!(sim.checksum(), restored.checksum());
+            assert_eq!(
+                sim.unit(primary).unwrap().health,
+                1000 - if evade == 0 { 10 } else { 0 } - if chance > 0 { 20 } else { 0 }
+            );
+            assert_eq!(
+                sim.unit(half).unwrap().health,
+                1000 - if chance > 0 { 10 } else { 0 }
+            );
+            for id in [outside, ally, air] {
+                assert_eq!(sim.unit(id).unwrap().health, 1000);
+            }
+            assert_eq!(sim.building(structure).unwrap().health, 1000);
+            if chance > 0 {
+                let effect = sim
+                    .ability_casts_last_tick()
+                    .iter()
+                    .find(|e| e.source == caster)
+                    .unwrap();
+                assert_eq!(
+                    effect.target_position,
+                    Some(sim.unit(caster).unwrap().position)
+                );
+            }
+        }
+    }
+}

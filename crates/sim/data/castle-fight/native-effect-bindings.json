@@ -438,6 +438,7 @@
     {"source_kind": "unit-ability", "source_key": "A03C", "implementation": "warcraft-frost-attack-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "unit-ability", "source_key": "A048", "implementation": "warcraft-orb-spell-proc-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "unit-ability", "source_key": "A040", "implementation": "warcraft-frost-armor-v1", "valid_from": "9.27", "valid_through": "9.27"},
-    {"source_kind": "ability-effect", "source_key": "A047", "implementation": "warcraft-entangling-roots-v1", "valid_from": "9.27", "valid_through": "9.27"}
+    {"source_kind": "ability-effect", "source_key": "A047", "implementation": "warcraft-entangling-roots-v1", "valid_from": "9.27", "valid_through": "9.27"},
+    {"source_kind": "unit-ability", "source_key": "A059", "implementation": "warcraft-pulverize-v1", "valid_from": "9.27", "valid_through": "9.27"}
   ]
 }

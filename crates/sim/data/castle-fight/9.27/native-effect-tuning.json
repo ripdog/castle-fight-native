@@ -917,6 +917,21 @@
         "ability": "A047",
         "source": "resolved/object-fields.tsv"
       }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A059",
+      "unit_rawcode": "n012",
+      "kind": "pulverize",
+      "chance_per_10k": 2500,
+      "damage": 80,
+      "full_radius_world": 150,
+      "half_radius_world": 250,
+      "targets": "ground-units",
+      "provenance": {
+        "ability": "A059",
+        "source": "resolved/object-fields.tsv"
+      }
     }
   ]
 }

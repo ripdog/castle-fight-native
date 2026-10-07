@@ -14,7 +14,7 @@ Northern is selectable for retained Castle Fight 9.27/r1 once Snowy Rocks is pro
 
 ## Remaining command-card order
 
-Ice Troll Hut and Voodoo Lounge; Ice Claws and Frost Claws; Azure Nest; Crystal Palace; alternate Snowveil Fountain / Frost Launcher and its upgrade; Chilling Mushroom; Icy Tower; World Freezer. This is an implementation checklist, not a claim that those entities are playable.
+Frost Claws; Azure Nest; Crystal Palace; alternate Snowveil Fountain / Frost Launcher and its upgrade; Chilling Mushroom; Icy Tower; World Freezer. This is an implementation checklist, not a claim that those entities are playable.
 
 ## Icy Rocks / Polar Bear
 
@@ -57,3 +57,11 @@ The Northern proc audit also found a shared importer bug: `A03W` explicitly has 
 - Frost Attack reads retained map Misc movement/attack decreases and independent normal/hero object durations. Its payload survives directed missile flight, applies at live impact, rejects native immunity and misses, and coexists with the separate root roll. The tooltip's unit-or-building freezing promise does not override the actual unit-only parent/child masks.
 - Native spellcasting now retains rational mana regeneration rather than requiring a rate divisible by the simulation frequency. Existing mana remainder transport provides exact accumulation.
 - Shared synthetic tests cover simultaneous slow and roots, ordinary/hero duration, live immunity, misses and wire continuation. Catalog-wide closure covers the upgrade and hidden inventory. Profile/payload shape advances bundle/checksum/snapshot schemas to 13/30/25.
+
+
+## Ice Claws / Wandigoo
+
+- `h03T` produces `n012` (base `nwen`); catalog/protected definitions own ordinary melee attacks, stats, timing, organic sapper/ward classification, corpse lifetime and upgrade relationships.
+- Complete inventory is native Pulverize `A059`; no resource use, script delay, dummy, marker or AI override. Its probability, damage, full/half radii and ground-enemy mask are projected from retained object fields.
+- The native physical area proc rolls at released attacks separately from directed evasion, is centered on the attacker, and includes its primary target if within the appropriate radius. It bypasses ordinary armor points, retains the spell attack/armor table and permits magic immunity. It emits the native ability identity at the caster. Blizzard's [native ability description](https://classic.battle.net/war3/orc/units/tauren.shtml) identifies the attack-triggered area primitive; Castle Fight tuning comes exclusively from its retained object.
+- Shared synthetic fixtures distinguish caster versus primary center, inclusive radii/full/half falloff, zero/full probability, directed evasion, immunity, air/ally/structure exclusions and saved-state RNG continuation. Catalog closure and strict workspace checks cover the promotion. Profile shape becomes bundle/checksum/snapshot 14/31/26.
