@@ -43,6 +43,7 @@
     {"source_kind": "unit-ability", "source_key": "A04D", "unit_rawcode": "n016", "kind": "cleave"},
     {"source_kind": "unit-ability", "source_key": "A05E", "unit_rawcode": "n016", "kind": "war-stomp"},
     {"source_kind": "ability-effect", "source_key": "A05D", "unit_rawcode": "n016", "kind": "war-stomp"},
-    {"source_kind": "unit-ability", "source_key": "A03X", "unit_rawcode": "n011", "kind": "orb-spell-proc"}
+    {"source_kind": "unit-ability", "source_key": "A03X", "unit_rawcode": "n011", "kind": "orb-spell-proc"},
+    {"source_kind": "unit-ability", "source_key": "A0FM", "unit_rawcode": "n02I", "kind": "orb-spell-proc"}
   ]
 }

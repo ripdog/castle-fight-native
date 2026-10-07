@@ -14,7 +14,7 @@ Northern is selectable for retained Castle Fight 9.27/r1 once Snowy Rocks is pro
 
 ## Remaining command-card order
 
-Finish Igloo and Modern Igloo; Ice Troll Hut and Voodoo Lounge; Ice Claws and Frost Claws; Azure Nest; Crystal Palace; alternate Snowveil Fountain / Frost Launcher and its upgrade; Chilling Mushroom; Icy Tower; World Freezer. This is an implementation checklist, not a claim that those entities are playable.
+Ice Troll Hut and Voodoo Lounge; Ice Claws and Frost Claws; Azure Nest; Crystal Palace; alternate Snowveil Fountain / Frost Launcher and its upgrade; Chilling Mushroom; Icy Tower; World Freezer. This is an implementation checklist, not a claim that those entities are playable.
 
 ## Icy Rocks / Polar Bear
 
@@ -39,3 +39,13 @@ Finish Igloo and Modern Igloo; Ice Troll Hut and Voodoo Lounge; Ice Claws and Fr
 - Complete inventory: native orb chance `A03X` invokes `A03W` Entangling Roots on a landed directed attack. Parent probability and targets are newly projected; child damage, duration, targeting and authoritative root/DOT transport already belong to the shared Ice Troll mechanic. Neither the orb nor its free child spends unit mana or runs a scripted spell/retreat.
 - The proc targets units independently of the ordinary weapon's structure permission. Air targets are retained according to the parent/child evidence. Existing deterministic orb roll, live impact immunity, root/DOT timing and wire state apply; inherited static placeholder attack values are not used.
 - Verification: catalog-wide ability closure and production definitions; shared triggered proc/roots tests and strict simulation Clippy. Local pack has the source unit/building models. No entity-specific tuning constants or new persistent fields were added.
+
+## Modern Igloo / Angry Hrimthrusa
+
+- Entity/source: `h06L` upgrades Igloo and produces `n02I`; all resolved/protected stats, costs, timing, ordinary missile attack, corpse data and command relationships use the catalog.
+- Complete inventory: native Barrage `A0FL`, orb proc `A0FM` invoking shared roots `A03W`, spell resistance `A0AH`, legendary classifier `A07H`, visual legendary marker `A06V`, and anti-Hex/Devour protection `A070`. The existing legendary classification and spell-resistance bindings retain these hidden hooks.
+- `xD` restores native Barrage cooldown. The ordinary weapon controls firing; Barrage has independent source-derived range, target mask, count and missile speed. Its damage fields are not interpreted as a separate damage budget. Secondary arrows are ordinary attacks and carry no inherited primary orb proc. Both proc chance and Barrage tuning remain reproducible projections.
+- Runtime now discovers Barrage from the source inventory for unit and tower sources and resolves every arrow's speed by its retained version/ability, including restored flight. No unit-specific hand-authored stat table or persistent shape change was introduced.
+- Verification: shared Barrage capacity/masks/critical/miss/immunity/homing tests, new unit-source and mixed-worker wire-flight regression using source definitions rather than copied tuning, catalog-wide closure, projection reproduction and workspace Clippy. Unsupported hostile mechanics outside the development slice remain dormant; legendary exclusions remain represented.
+
+The Northern proc audit also found a shared importer bug: `A03W` explicitly has `nonhero` targeting, which the old physical-mask projection dropped. The shared root profile now retains that qualifier and the independent hero duration. A normal attack can hit a hero while its child roots fails. Synthetic tests prove this distinction and restored continuation; it applies to the already promoted Hrimthrusa and Ice Troll procs too. This profile-shape correction advances bundle/checksum/snapshot schemas to 12/29/24.

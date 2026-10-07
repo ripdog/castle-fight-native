@@ -129,6 +129,8 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
                       targets=unit_targets(fields["targs1"]))
     elif kind == "entangling-roots":
         effect.update(damage_per_second=number("DataA1"), duration_millis=number("Dur1", 1000),
+                      hero_duration_millis=number("HeroDur1", 1000),
+                      nonhero_only="nonhero" in fields["targs1"].split(","),
                       targets=unit_targets(fields["targs1"]))
     elif kind == "burning-oil":
         tokens = set(fields["targs1"].split(","))

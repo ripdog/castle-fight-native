@@ -1,5 +1,6 @@
 use super::*;
 use crate::components::{EvasionEffectProfile, SpellResistanceEffectProfile};
+use crate::native_carriers::barrage_for_version;
 
 mod cleanse;
 mod eligibility;
@@ -568,4 +569,74 @@ fn positive_native_barrage_count_is_offset_and_damage_fields_are_not_a_damage_bu
     profile.maximum_targets = 1;
     profile.maximum_total_damage = 2;
     assert_eq!(profile.additional_targets(), 1);
+}
+
+#[test]
+fn barrage_uses_each_source_profile_for_units_and_buildings_and_restores_mixed_flight() {
+    let mut sim = simulation(1);
+    let unit_definition = crate::CastleFightUnitKind::AngryHrimthrusa.definition();
+    let profile = crate::native_carriers::barrage_for_source(
+        unit_definition.map_version,
+        unit_definition.rawcode,
+    )
+    .unwrap()
+    .unwrap();
+    let attack = AttackProfile {
+        damage: 11,
+        range: profile.range,
+        acquisition_range: profile.range,
+        cooldown_ticks: 1000,
+        delivery: AttackDelivery::RangedGuaranteedHit {
+            speed_per_tick: SUBUNITS_PER_WORLD_UNIT,
+        },
+    };
+    let source = sim.spawn_unit_with_properties(
+        UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(64 * SUBUNITS_PER_WORLD_UNIT, 20 * SUBUNITS_PER_WORLD_UNIT),
+            health: 1000,
+            attack,
+            movement: MovementProfile { speed_per_tick: 0 },
+        },
+        UnitGameplayProperties {
+            action_timing: ActionTimingProfile::default(),
+            ..unit_definition.gameplay_properties()
+        },
+    );
+    tower(
+        &mut sim,
+        crate::CastleFightTowerKind::ArcaneTower,
+        Some(attack),
+    );
+    for i in 0..profile.additional_targets() + 2 {
+        victim(
+            &mut sim,
+            (100 + i as i32 * 10) * SUBUNITS_PER_WORLD_UNIT,
+            UnitGameplayProperties::default(),
+        );
+    }
+    sim.step();
+    sim.step();
+    let bolts = sim
+        .projectiles()
+        .into_iter()
+        .filter(|p| {
+            matches!(p.kind,
+        ProjectileViewKind::NativeCarrierBolt { ability, .. } if ability == profile.ability)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(bolts.len(), profile.additional_targets());
+    assert!(bolts.iter().all(|bolt| bolt.source == source));
+    let mut resumed = Simulation::new(sim.config.clone(), 4);
+    let content = crate::castle_fight_content_bundle(MapVersion::CASTLE_FIGHT_9_27).unwrap();
+    let snapshot =
+        SimulationSnapshot::decode_wire(&sim.capture_snapshot().encode_wire().unwrap(), content)
+            .unwrap();
+    resumed.restore_snapshot(&snapshot).unwrap();
+    for _ in 0..120 {
+        sim.step();
+        resumed.step();
+        assert_eq!(sim.checksum(), resumed.checksum());
+    }
+    assert!(sim.projectiles().is_empty());
 }

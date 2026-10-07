@@ -933,3 +933,56 @@ fn proxy_area_stun_rejects_invalid_trigger_classes_range_and_insufficient_mana()
         assert_eq!(sim.unit(source).unwrap().mana_current, Some(mana));
     }
 }
+
+#[test]
+fn orb_child_nonhero_restriction_does_not_cancel_primary_hit_and_retains_hero_duration() {
+    for nonhero_only in [false, true] {
+        let mut sim = simulation(1);
+        sim.spawn_unit_with_properties(
+            unit(0, 20, 10, AttackDelivery::Melee),
+            UnitGameplayProperties {
+                passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::TriggeredSpellProc(
+                    crate::TriggeredSpellProcProfile {
+                        ability: AbilityId(301),
+                        chance_per_10k: 10_000,
+                        targets: AttackTargetMask::AIR_AND_GROUND,
+                        effect: crate::TriggeredAttackEffect::EntanglingRoots(
+                            crate::EntanglingRootsEffectProfile {
+                                ability: AbilityId(302),
+                                damage_per_second: 1,
+                                duration_ticks: 9,
+                                hero_duration_ticks: 3,
+                                nonhero_only,
+                                targets: AttackTargetMask::AIR_AND_GROUND,
+                            },
+                        ),
+                    },
+                )),
+                ..UnitGameplayProperties::default()
+            },
+        );
+        let hero = sim.spawn_unit_with_properties(
+            unit(1, 60, 0, AttackDelivery::Melee),
+            UnitGameplayProperties {
+                classifications: UnitClassifications {
+                    hero: true,
+                    ..UnitClassifications::default()
+                },
+                ..UnitGameplayProperties::default()
+            },
+        );
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(hero).unwrap().health, 990);
+        assert_eq!(
+            sim.unit(hero).unwrap().status.stunned_until_tick,
+            if nonhero_only { 0 } else { 4 }
+        );
+        let mut restored = wire_restored(&sim, 4);
+        for _ in 0..12 {
+            sim.step();
+            restored.step();
+            assert_eq!(sim.checksum(), restored.checksum());
+        }
+    }
+}

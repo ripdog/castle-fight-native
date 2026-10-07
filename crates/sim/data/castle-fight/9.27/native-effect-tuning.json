@@ -254,6 +254,8 @@
       "kind": "entangling-roots",
       "damage_per_second": 15,
       "duration_millis": 7000,
+      "hero_duration_millis": 1750,
+      "nonhero_only": true,
       "targets": "air-ground-units",
       "provenance": {
         "ability": "A03W",
@@ -835,6 +837,19 @@
       "targets": "air-ground-units",
       "provenance": {
         "ability": "A03X",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0FM",
+      "unit_rawcode": "n02I",
+      "kind": "orb-spell-proc",
+      "chance_per_10k": 1000,
+      "effect_ability_rawcode": "A03W",
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A0FM",
         "source": "resolved/object-fields.tsv"
       }
     }

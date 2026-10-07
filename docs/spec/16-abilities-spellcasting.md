@@ -397,3 +397,7 @@ The ability test suite MUST eventually include:
 ## Native proxy area stun
 
 A scripted proxy area stun separates its ground combat-sapper cast trigger from the native effect. Trigger commitment respects the primary order's range, resource cost, cooldown, vulnerability, spell immunity and nonhero restriction. The native effect originates at the caster and can affect ordinary non-sapper units and heroes inside its separate radius. It excludes allies, air units, invulnerable units and spell-immune units, applies spell damage and the appropriate ordinary/hero stun duration, and emits the child ability's presentation identity at that same origin. Absolute stun/cooldown deadlines and all profile fields are covered by checksums and snapshots.
+
+Barrage source discovery uses the retained source object's ability inventory for both unit and building sources. Each independent in-flight arrow retains its source version and Barrage ability identity; homing speed is resolved from that same versioned ability rather than from a particular tower definition. Barrage arrows retain ordinary weapon damage and do not inherit the primary arrow's orb proc.
+
+An ordinary attack's proc eligibility and its invoked child's target restrictions remain separate. Entangling Roots retains the child's explicit nonhero qualifier and independent hero duration. A child rejected for classification does not cancel or undo the already landed ordinary attack. Those profile fields participate in content identity, checksums and in-flight/snapshot state.

@@ -1260,6 +1260,8 @@ mod tests {
                                 ability: AbilityId(u32::from_be_bytes(*b"ROOT")),
                                 damage_per_second: 30,
                                 duration_ticks: 60,
+                                hero_duration_ticks: 30,
+                                nonhero_only: false,
                                 targets: AttackTargetMask::GROUND_UNITS,
                             },
                         ),

@@ -1,4 +1,8 @@
 {
+  "barrage_sources": {
+    "h014": "A015",
+    "n02I": "A0FL"
+  },
   "cleanse": {
     "building_name": "Obelisk of Light",
     "building_rawcode": "h005",
@@ -226,6 +230,19 @@
       "amsp": 1000,
       "atar": "air,enemies,ground"
     },
+    "A0FL": {
+      "Efk1": 0,
+      "Efk2": 99999,
+      "Efk3": 3,
+      "aare": 720,
+      "acdn": 99,
+      "adur": 1,
+      "ahdu": 1,
+      "amac": 0,
+      "amat": "Abilities\\Weapons\\Axe\\AxeMissile.mdl",
+      "amsp": 1100,
+      "atar": "air,enemies,ground"
+    },
     "B01M": {
       "ftat": "",
       "ftip": "Ray of Light"
@@ -344,6 +361,7 @@
   "sources": {
     "object-fields.tsv": "01040f03e4a625ac1d960a0a2d43d0732d64b797e9357f4f40e8c2c0d6d9710d",
     "objects.tsv": "974d21575d4106609146f2e228b99ec5494732462a1e40735f48e63e7cdae96d",
-    "runtime-system-mechanics.tsv": "436cbff2586e2d540d06c86ca7b403f4d5f0d9b37ee27d68d31f896c3b0f412e"
+    "runtime-system-mechanics.tsv": "436cbff2586e2d540d06c86ca7b403f4d5f0d9b37ee27d68d31f896c3b0f412e",
+    "units.tsv": "59b14699740198de9614221029ce2c9c7423a7ee55d12c9c5d04b59313b2d470"
   }
 }

@@ -606,6 +606,8 @@ enum TuningEffect {
         source_key: String,
         damage_per_second: i32,
         duration_millis: u32,
+        hero_duration_millis: u32,
+        nonhero_only: bool,
         targets: String,
         #[allow(dead_code)]
         provenance: serde_json::Value,
@@ -1135,12 +1137,20 @@ fn build_triggered_effect(effect: &TuningEffect) -> TriggeredAttackEffect {
             source_key,
             damage_per_second,
             duration_millis,
+            hero_duration_millis,
+            nonhero_only,
             targets,
             ..
         } => TriggeredAttackEffect::EntanglingRoots(EntanglingRootsEffectProfile {
             ability: AbilityId(rawcode(source_key).expect("validated Entangling Roots rawcode")),
             damage_per_second: *damage_per_second,
             duration_ticks: exact_millis_to_ticks(*duration_millis, "Entangling Roots duration"),
+            hero_duration_ticks: u16::try_from(
+                (u64::from(*hero_duration_millis) * CASTLE_FIGHT_SIMULATION_HZ as u64)
+                    .div_ceil(1000),
+            )
+            .expect("root hero duration fits"),
+            nonhero_only: *nonhero_only,
             targets: target_mask(targets),
         }),
         _ => panic!("{} cannot be used as an orb effect", effect.kind_name()),

@@ -13,7 +13,7 @@ from build_runtime_catalog import _load_release, _retained_file_bytes
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "crates/sim/data/castle-fight/9.27/native-carriers.json"
-OBJECTS = {"A015", "A03N", "A000", "B01M", "h014", "h005", "A03D"}
+OBJECTS = {"A015", "A03N", "A000", "B01M", "h014", "h005", "A03D", "A0FL"}
 FIELDS = {
     "Efk1", "Efk2", "Efk3", "aare", "atar", "amsp", "amat", "amac",
     "acat", "aeat", "atat", "abuf", "adur", "ahdu", "acdn", "pxf1",
@@ -45,7 +45,7 @@ def build(map_version="9.27", revision="r1", repo_root=ROOT, releases=None):
     tree = release["extraction"]["git_tree"]
     if not tree:
         raise ValueError("native carrier projection requires a retained extraction tree")
-    paths = ("object-fields.tsv", "runtime-system-mechanics.tsv", "objects.tsv")
+    paths = ("object-fields.tsv", "runtime-system-mechanics.tsv", "objects.tsv", "units.tsv")
     sources = {
         path: _retained_file_bytes(repo_root, tree, f"resolved/{path}")
         for path in paths
@@ -56,7 +56,7 @@ def build(map_version="9.27", revision="r1", repo_root=ROOT, releases=None):
             fields.setdefault(row["rawcode"], {})[row["field_id"]] = json.loads(
                 row["recovered_value_json"]
             )
-    for object_id in ("A015", "A000"):
+    for object_id in ("A015", "A000", "A0FL"):
         validate_hostile_target_mask(fields[object_id]["atar"])
     runtime = next(
         row for row in csv.DictReader(io.StringIO(sources[paths[1]].decode()), delimiter="\t")
@@ -73,6 +73,11 @@ def build(map_version="9.27", revision="r1", repo_root=ROOT, releases=None):
         "extraction_git_tree": tree,
         "sources": {path: hashlib.sha256(data).hexdigest() for path, data in sources.items()},
         "fields": fields,
+        "barrage_sources": {
+            row["rawcode"]: ability
+            for row in csv.DictReader(io.StringIO(sources[paths[3]].decode()), delimiter="\t")
+            for ability in row["abilities"].split(",") if ability in {"A015", "A0FL"}
+        },
         "cleanse": json.loads(runtime["parameters_json"]),
         "native_buff_ids": native_buffs,
     }

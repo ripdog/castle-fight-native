@@ -70,6 +70,7 @@ pub struct NativeCarrierProfile {
 #[derive(Deserialize, Serialize)]
 struct Projection {
     fields: BTreeMap<String, BTreeMap<String, serde_json::Value>>,
+    barrage_sources: BTreeMap<String, String>,
     cleanse: Cleanse,
     native_buff_ids: Vec<u32>,
     /// Retain release/source identity as part of the normalized content commitment.
@@ -150,18 +151,47 @@ pub(crate) fn canonical_projection_for_version(
 pub fn barrage_for_version(
     version: MapVersion,
 ) -> Result<NativeBarrageProfile, UnsupportedCastleFightMapVersion> {
+    barrage_for_ability(version, AbilityId(u32::from_be_bytes(*b"A015")))
+        .map(|profile| profile.expect("registered Arcane Barrage"))
+}
+
+pub(crate) fn barrage_for_source(
+    version: MapVersion,
+    rawcode: u32,
+) -> Result<Option<NativeBarrageProfile>, UnsupportedCastleFightMapVersion> {
     let p = projection(version)?;
-    Ok(NativeBarrageProfile {
-        ability: AbilityId(u32::from_be_bytes(*b"A015")),
-        maximum_targets: p.number("A015", "Efk3") as u16,
-        damage_per_target: p.number("A015", "Efk1") as i32,
-        maximum_total_damage: p.number("A015", "Efk2") as i32,
-        range: (p.number("A015", "aare") * f64::from(SUBUNITS_PER_WORLD_UNIT)) as i32,
-        targets: p.targets("A015"),
-        speed_per_tick: (p.number("A015", "amsp") * f64::from(SUBUNITS_PER_WORLD_UNIT)
+    let bytes = rawcode.to_be_bytes();
+    let code = std::str::from_utf8(&bytes).expect("source rawcode");
+    let Some(ability) = p.barrage_sources.get(code) else {
+        return Ok(None);
+    };
+    let ability = AbilityId(u32::from_be_bytes(
+        ability.as_bytes().try_into().expect("ability rawcode"),
+    ));
+    barrage_for_ability(version, ability)
+}
+
+pub(crate) fn barrage_for_ability(
+    version: MapVersion,
+    ability: AbilityId,
+) -> Result<Option<NativeBarrageProfile>, UnsupportedCastleFightMapVersion> {
+    let p = projection(version)?;
+    let bytes = ability.0.to_be_bytes();
+    let code = std::str::from_utf8(&bytes).expect("ability rawcode");
+    if !p.barrage_sources.values().any(|value| value == code) {
+        return Ok(None);
+    }
+    Ok(Some(NativeBarrageProfile {
+        ability,
+        maximum_targets: p.number(code, "Efk3") as u16,
+        damage_per_target: p.number(code, "Efk1") as i32,
+        maximum_total_damage: p.number(code, "Efk2") as i32,
+        range: (p.number(code, "aare") * f64::from(SUBUNITS_PER_WORLD_UNIT)) as i32,
+        targets: p.targets(code),
+        speed_per_tick: (p.number(code, "amsp") * f64::from(SUBUNITS_PER_WORLD_UNIT)
             / f64::from(CASTLE_FIGHT_SIMULATION_HZ))
         .round() as i32,
-    })
+    }))
 }
 
 pub fn carrier_for_version(

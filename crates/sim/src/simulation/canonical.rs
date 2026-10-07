@@ -1798,6 +1798,8 @@ fn hash_triggered_attack_effect(hash: &mut Fnv64, effect: TriggeredAttackEffect)
             hash.write_u64(u64::from(profile.ability.0));
             hash.write_i32(profile.damage_per_second);
             hash.write_u16(profile.duration_ticks);
+            hash.write_u16(profile.hero_duration_ticks);
+            hash.write_u8(u8::from(profile.nonhero_only));
             hash.write_u8(profile.targets.bits());
         }
     }

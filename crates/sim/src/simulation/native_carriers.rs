@@ -3,9 +3,7 @@ use super::*;
 mod tests;
 #[cfg(test)]
 use crate::MapVersion;
-use crate::native_carriers::{
-    NativeCarrierBolt, NativeCarrierState, barrage_for_version, carrier_for_version,
-};
+use crate::native_carriers::{NativeCarrierBolt, NativeCarrierState, carrier_for_version};
 
 const RANDOM_PURPOSE_NATIVE_CARRIER: u64 = 0x4341_5252_4945_5201;
 
@@ -153,23 +151,19 @@ impl Simulation {
         health: &[i32],
         tick: u64,
     ) -> usize {
-        let AttackSourceIndex::Building(index) = intent.source else {
+        let entity = match intent.source {
+            AttackSourceIndex::Building(index) => buildings[index].entity,
+            AttackSourceIndex::Unit(index) => units[index].entity,
+        };
+        let Some(content) = self.world.get::<ContentIdentity>(entity) else {
             return 0;
         };
-        let source = self.world.entity(buildings[index].entity);
-        let Some(content) = source.get::<ContentIdentity>() else {
-            return 0;
-        };
-        let kind = crate::CastleFightTowerKind::from_rawcode_for_version(
-            content.rawcode,
-            content.map_version,
-        )
-        .expect("building content must reference a supported version");
-        if kind != Some(crate::CastleFightTowerKind::ArcaneTower) {
-            return 0;
-        }
         let version = content.map_version;
-        let profile = barrage_for_version(version).expect("registered Barrage version");
+        let Some(profile) = crate::native_carriers::barrage_for_source(version, content.rawcode)
+            .expect("registered Barrage version")
+        else {
+            return 0;
+        };
         let mut candidates: Vec<_> = units
             .iter()
             .enumerate()
@@ -348,8 +342,9 @@ impl Simulation {
                         continue;
                     };
                     let speed = if bolt.attack_damage_type.is_some() {
-                        barrage_for_version(bolt.map_version)
+                        crate::native_carriers::barrage_for_ability(bolt.map_version, bolt.ability)
                             .unwrap()
+                            .expect("registered in-flight Barrage ability")
                             .speed_per_tick
                     } else {
                         carrier_for_version(bolt.map_version)

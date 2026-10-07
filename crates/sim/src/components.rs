@@ -417,6 +417,8 @@ pub struct EntanglingRootsEffectProfile {
     pub ability: AbilityId,
     pub damage_per_second: i32,
     pub duration_ticks: u16,
+    pub hero_duration_ticks: u16,
+    pub nonhero_only: bool,
     pub targets: AttackTargetMask,
 }
 
