@@ -3472,7 +3472,8 @@ fn sync_render_entities(
             .remove(&id)
             .expect("stale unit entry disappeared during presentation sync");
         if samples.current.hidden_entities.contains(&id)
-            || samples.current.observer.is_some_and(|team| {
+            || samples.current.observer.is_some_and(|observer| {
+                let team = observer.team;
                 samples.previous.units.get(&id).is_some_and(|unit| {
                     unit.team != team
                         && samples

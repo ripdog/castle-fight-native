@@ -1191,6 +1191,7 @@ fn restore_simulation_quicksave(
 fn handle_quicksave_hotkeys(
     keys: Res<ButtonInput<KeyCode>>,
     selected_match: Res<SelectedMatch>,
+    debug_menu: Res<debug_menu::DebugMenuState>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
     mut presentation: ResMut<PresentationSamples>,
 ) {
@@ -1263,11 +1264,12 @@ fn handle_quicksave_hotkeys(
         authoritative.pending_build_commands.clear();
         *presentation =
             PresentationSamples::new(PresentationSnapshot::capture(&authoritative.simulation))
-                .with_observer(
+                .with_player_control(
                     authoritative
                         .simulation
                         .player(selected_match.local_player)
                         .map(|player| player.team),
+                    debug_menu.controls_all_players(),
                 );
         Ok(completed_tick)
     })();

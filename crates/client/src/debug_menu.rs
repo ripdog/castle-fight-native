@@ -32,6 +32,8 @@ const STATUS_COLOR: Color = Color::srgb(0.75, 0.78, 0.84);
 pub(crate) struct DebugMenuState {
     open: bool,
     speed: DebugSpeed,
+    // Session control survives closing the debug menu and is independent of its override.
+    single_player: bool,
     control_all_players: bool,
     buildings_invulnerable: bool,
     status: String,
@@ -42,6 +44,7 @@ impl Default for DebugMenuState {
         Self {
             open: false,
             speed: DebugSpeed::Normal,
+            single_player: false,
             control_all_players: false,
             buildings_invulnerable: false,
             status: "F8 closes this menu.".into(),
@@ -84,10 +87,13 @@ impl Plugin for DebugMenuPlugin {
                 (
                     toggle_debug_menu,
                     handle_debug_buttons,
+                    sync_control_vision,
                     update_debug_menu,
                     style_debug_buttons,
                 )
-                    .chain(),
+                    .chain()
+                    .before(crate::advance_network_presentation)
+                    .before(crate::inspection::handle_world_selection),
             );
     }
 }
@@ -280,6 +286,9 @@ fn handle_debug_buttons(
                 command: WireDebugCommand::KillAllUnits,
             },
             DebugAction::ToggleControlAllPlayers => {
+                if state.single_player {
+                    continue;
+                }
                 state.control_all_players = !state.control_all_players;
                 state.status = if state.control_all_players {
                     "Debug control enabled for every player-owned builder and building.".into()
@@ -359,6 +368,20 @@ fn apply_debug_speed(fixed_time: &mut Time<Fixed>, speed: DebugSpeed) {
     fixed_time.set_timestep_hz(f64::from(CASTLE_FIGHT_SIMULATION_HZ) * speed.multiplier());
 }
 
+fn sync_control_vision(
+    authoritative: Res<AuthoritativeSimulation>,
+    state: Res<DebugMenuState>,
+    mut presentation: ResMut<PresentationSamples>,
+) {
+    let control_all_players = state.controls_all_players();
+    if presentation.control_vision_changed(control_all_players) {
+        presentation.set_control_vision(
+            control_all_players,
+            PresentationSnapshot::capture(&authoritative.simulation),
+        );
+    }
+}
+
 fn update_debug_menu(
     authoritative: Res<AuthoritativeSimulation>,
     playback: Res<SimulationPlayback>,
@@ -383,7 +406,9 @@ fn update_debug_menu(
             } else {
                 "Pause simulation"
             }),
-            DebugAction::ToggleControlAllPlayers => Some(if state.control_all_players {
+            DebugAction::ToggleControlAllPlayers => Some(if state.single_player {
+                "Control all players: Single Player"
+            } else if state.controls_all_players() {
                 "Control all players: ON"
             } else {
                 "Control all players: OFF"
@@ -428,9 +453,10 @@ fn style_debug_buttons(
     }
 
     for (button, interaction, mut background, mut border, children) in &mut buttons {
-        let disabled = button.0 == DebugAction::StepOneTick && !playback.paused;
+        let disabled = (button.0 == DebugAction::StepOneTick && !playback.paused)
+            || (button.0 == DebugAction::ToggleControlAllPlayers && state.single_player);
         let selected = matches!(button.0, DebugAction::SetSpeed(speed) if speed == state.speed)
-            || (button.0 == DebugAction::ToggleControlAllPlayers && state.control_all_players)
+            || (button.0 == DebugAction::ToggleControlAllPlayers && state.controls_all_players())
             || (button.0 == DebugAction::ToggleBuildingsInvulnerable
                 && state.buildings_invulnerable);
         background.0 = if disabled {
@@ -470,7 +496,12 @@ impl DebugMenuState {
     }
 
     pub(crate) const fn controls_all_players(&self) -> bool {
-        self.control_all_players
+        self.single_player || self.control_all_players
+    }
+
+    pub(crate) fn set_single_player(&mut self, enabled: bool) {
+        self.single_player = enabled;
+        self.control_all_players = false;
     }
 
     pub(crate) fn can_control_builder(
@@ -479,7 +510,7 @@ impl DebugMenuState {
         local_player: PlayerId,
         builder: SimId,
     ) -> bool {
-        self.control_all_players && simulation.builder(builder).is_some()
+        self.controls_all_players() && simulation.builder(builder).is_some()
             || simulation.can_player_control_builder(local_player, builder)
     }
 
@@ -489,7 +520,7 @@ impl DebugMenuState {
         local_player: PlayerId,
         building: SimId,
     ) -> bool {
-        self.control_all_players
+        self.controls_all_players()
             && simulation
                 .building(building)
                 .is_some_and(|building| building.owner.is_some())
@@ -502,7 +533,7 @@ impl DebugMenuState {
         local_player: PlayerId,
         actor: SimId,
     ) -> PlayerId {
-        if !self.control_all_players {
+        if !self.controls_all_players() {
             return local_player;
         }
         simulation
@@ -632,6 +663,87 @@ mod tests {
     }
 
     #[test]
+    fn control_changes_refresh_vision_without_advancing_the_simulation() {
+        let demo = crate::demo::create_demo_world(1, None);
+        let other = demo.simulation.builder_for_team(Team(1)).unwrap().id;
+        let checksum = demo.simulation.checksum();
+        let samples = PresentationSamples::new(PresentationSnapshot::capture(&demo.simulation))
+            .with_observer(Some(Team(0)));
+        assert!(!samples.current.builders.contains_key(&other));
+        let mut app = App::new();
+        app.insert_resource(AuthoritativeSimulation::new(demo.simulation, demo.content))
+            .insert_resource(samples)
+            .insert_resource(ButtonInput::<KeyCode>::default())
+            .init_resource::<DebugMenuState>()
+            .add_systems(Update, (toggle_debug_menu, sync_control_vision).chain());
+        app.world_mut().spawn((DebugMenuRoot, Visibility::Hidden));
+        app.world_mut()
+            .resource_mut::<DebugMenuState>()
+            .control_all_players = true;
+        app.update();
+        assert!(
+            app.world()
+                .resource::<PresentationSamples>()
+                .current
+                .builders
+                .contains_key(&other)
+        );
+
+        app.world_mut()
+            .resource_mut::<AuthoritativeSimulation>()
+            .commands_enabled = false;
+        app.update();
+        assert!(
+            !app.world()
+                .resource::<PresentationSamples>()
+                .current
+                .builders
+                .contains_key(&other)
+        );
+        assert!(
+            !app.world()
+                .resource::<DebugMenuState>()
+                .controls_all_players()
+        );
+
+        // Lobby/menu availability cannot clear the single-player session's control.
+        app.world_mut()
+            .resource_mut::<DebugMenuState>()
+            .set_single_player(true);
+        app.update();
+        assert!(
+            app.world()
+                .resource::<PresentationSamples>()
+                .current
+                .builders
+                .contains_key(&other)
+        );
+        assert!(
+            app.world()
+                .resource::<DebugMenuState>()
+                .controls_all_players()
+        );
+        assert_eq!(
+            app.world()
+                .resource::<AuthoritativeSimulation>()
+                .simulation
+                .checksum(),
+            checksum
+        );
+        app.world_mut()
+            .resource_mut::<DebugMenuState>()
+            .set_single_player(false);
+        app.update();
+        assert!(
+            !app.world()
+                .resource::<PresentationSamples>()
+                .current
+                .builders
+                .contains_key(&other)
+        );
+    }
+
+    #[test]
     fn control_all_players_uses_the_selected_actors_owner_for_commands() {
         let mut demo = crate::demo::create_demo_world(1, None);
         let (spawned, _) = castle_fight_sim::debug::populate_debug_building_lines(
@@ -655,18 +767,22 @@ mod tests {
             control_all_players: true,
             ..DebugMenuState::default()
         };
-        assert!(debug.can_control_builder(simulation, local, other_builder.id));
-        assert!(debug.can_control_building(simulation, local, other_building.id));
-        assert_eq!(
-            debug.controller_for_actor(simulation, local, other_builder.id),
-            other_builder.owner
-        );
-        assert!(simulation.can_player_control_builder(other_builder.owner, other_builder.id));
-        assert_eq!(
-            debug.controller_for_actor(simulation, local, other_building.id),
-            other_builder.owner
-        );
-        assert!(simulation.can_player_control_building(other_builder.owner, other_building.id));
+        let mut single_player = DebugMenuState::default();
+        single_player.set_single_player(true);
+        for state in [debug, single_player] {
+            assert!(state.can_control_builder(simulation, local, other_builder.id));
+            assert!(state.can_control_building(simulation, local, other_building.id));
+            assert_eq!(
+                state.controller_for_actor(simulation, local, other_builder.id),
+                other_builder.owner
+            );
+            assert!(simulation.can_player_control_builder(other_builder.owner, other_builder.id));
+            assert_eq!(
+                state.controller_for_actor(simulation, local, other_building.id),
+                other_builder.owner
+            );
+            assert!(simulation.can_player_control_building(other_builder.owner, other_building.id));
+        }
     }
 
     #[test]

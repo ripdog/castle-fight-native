@@ -170,12 +170,24 @@ pub struct BuildingSample {
     pub visual_kind: BuildingVisualKind,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ObserverVision {
+    pub(crate) team: Team,
+    pub(crate) control_all_players: bool,
+}
+
+impl ObserverVision {
+    fn shares_team(self, team: Team) -> bool {
+        self.control_all_players || self.team == team
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PresentationSnapshot {
     pub projectile_positions: BTreeMap<SimId, SimPoint>,
     pub navigation_cell_size: i32,
     pub fog: Option<castle_fight_sim::FogOfWar>,
-    pub observer: Option<Team>,
+    pub(crate) observer: Option<ObserverVision>,
     pub hidden_entities: BTreeSet<SimId>,
     pub tick: u64,
     pub damage_rules: DamageRules,
@@ -423,7 +435,7 @@ impl PresentationSnapshot {
 
 #[derive(Resource, Debug, Clone)]
 pub struct PresentationSamples {
-    observer: Option<Team>,
+    observer: Option<ObserverVision>,
     pub previous: PresentationSnapshot,
     pub current: PresentationSnapshot,
     network: Option<NetworkTimeline>,
@@ -444,18 +456,29 @@ impl PresentationSamples {
         }
     }
 
-    pub fn with_observer(mut self, team: Option<Team>) -> Self {
-        self.observer = team;
-        if let Some(team) = team {
-            self.current.restrict_to_team(team);
+    pub fn with_observer(self, team: Option<Team>) -> Self {
+        self.with_player_control(team, false)
+    }
+
+    pub(crate) fn with_player_control(
+        mut self,
+        team: Option<Team>,
+        control_all_players: bool,
+    ) -> Self {
+        self.observer = team.map(|team| ObserverVision {
+            team,
+            control_all_players,
+        });
+        if let Some(observer) = self.observer {
+            self.current.restrict_to_observer(observer);
             self.previous = self.current.clone();
         }
         self
     }
 
     pub fn publish(&mut self, mut next: PresentationSnapshot) {
-        if let Some(team) = self.observer {
-            next.restrict_to_team(team);
+        if let Some(observer) = self.observer {
+            next.restrict_to_observer(observer);
         }
         self.tick_advanced = next.tick > self.current.tick;
         self.previous = std::mem::replace(&mut self.current, next);
@@ -471,8 +494,8 @@ impl PresentationSamples {
     }
 
     pub(crate) fn reset(&mut self, mut snapshot: PresentationSnapshot) {
-        if let Some(team) = self.observer {
-            snapshot.restrict_to_team(team);
+        if let Some(observer) = self.observer {
+            snapshot.restrict_to_observer(observer);
         }
         snapshot.clear_events();
         if self.network.is_some() {
@@ -483,19 +506,55 @@ impl PresentationSamples {
         self.tick_advanced = false;
         self.revision += 1;
     }
+
+    pub(crate) fn control_vision_changed(&self, control_all_players: bool) -> bool {
+        self.observer
+            .is_some_and(|observer| observer.control_all_players != control_all_players)
+    }
+
+    pub(crate) fn set_control_vision(
+        &mut self,
+        control_all_players: bool,
+        snapshot: PresentationSnapshot,
+    ) {
+        if let Some(observer) = &mut self.observer {
+            observer.control_all_players = control_all_players;
+        }
+        // Rebuild from unfiltered authoritative state. Previously hidden actors and queued
+        // network samples cannot be recovered by filtering the old observer's snapshots.
+        self.reset(snapshot);
+    }
 }
 
 impl PresentationSnapshot {
-    fn restrict_to_team(&mut self, team: Team) {
-        if self.observer == Some(team) {
+    fn restrict_to_observer(&mut self, observer: ObserverVision) {
+        if self.observer == Some(observer) {
             return;
         }
-        let Some(fog) = &self.fog else {
+        let Some(fog) = &mut self.fog else {
             return;
         };
-        self.observer = Some(team);
+        let team = observer.team;
+        self.observer = Some(observer);
+        if observer.control_all_players {
+            // Team sight is already shared by allied players. Controlling both teams adds
+            // their terrain vision and exploration without revealing cells neither has seen.
+            let merge = |grids: &mut [Vec<u8>; 2]| {
+                let [west, east] = grids;
+                let (target, source) = if team == Team(0) {
+                    (west, east)
+                } else {
+                    (east, west)
+                };
+                for (target, source) in target.iter_mut().zip(source.iter()) {
+                    *target |= *source;
+                }
+            };
+            merge(&mut fog.visible);
+            merge(&mut fog.explored);
+        }
         self.units.retain(|id, unit| {
-            let visible = unit.team == team
+            let visible = observer.shares_team(unit.team)
                 || unit.status.is_revealed_to(team, self.tick)
                 || fog.detects_invisible(team, unit.position)
                 || (!unit.invisible && fog.is_visible(team, unit.position));
@@ -505,7 +564,8 @@ impl PresentationSnapshot {
             visible
         });
         self.builders.retain(|id, builder| {
-            let visible = builder.team == team || fog.is_visible(team, builder.position);
+            let visible =
+                observer.shares_team(builder.team) || fog.is_visible(team, builder.position);
             if !visible {
                 self.hidden_entities.insert(*id);
             }
@@ -515,7 +575,7 @@ impl PresentationSnapshot {
         // mana, target, construction, buffs or upgrades from behind fog.
         let memory = &fog.remembered_structures[usize::from(team.0)];
         self.buildings.retain(|id, building| {
-            let visible = building.team == team
+            let visible = observer.shares_team(building.team)
                 || memory.iter().any(|s| s.id == *id)
                     && fog.is_visible(
                         team,
@@ -676,6 +736,130 @@ mod tests {
     use super::*;
 
     #[test]
+    fn control_vision_combines_teams_and_rebases_when_control_changes() {
+        use castle_fight_sim::{
+            BuildingSpawn, FogRules, NavCell, SightProfile, UnitClassifications,
+        };
+
+        let scale = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(
+            SimulationConfig {
+                navigation_min: NavCell::new(-5, -5),
+                navigation_max: NavCell::new(30, 5),
+                fog: Some(FogRules {
+                    cell_size: scale,
+                    fallback_sight: SightProfile {
+                        day: 2 * scale,
+                        night: 2 * scale,
+                    },
+                    initially_explored: false,
+                    night: false,
+                    clock: None,
+                    attack_reveal: None,
+                    permanent_rectangles: [Vec::new(), Vec::new()],
+                    sight_blockers: Vec::new(),
+                }),
+                ..Default::default()
+            },
+            1,
+        );
+        let spawn = |team, x| UnitSpawn {
+            team,
+            position: SimPoint::new(x * scale, scale / 2),
+            health: 100,
+            attack: AttackProfile {
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 1,
+                delivery: AttackDelivery::Melee,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        };
+        let west = sim.spawn_unit(spawn(Team(0), 0));
+        let east = sim.spawn_unit_with_properties(
+            spawn(Team(1), 15),
+            castle_fight_sim::UnitGameplayProperties {
+                classifications: UnitClassifications {
+                    invisible: true,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        );
+        let building = sim.spawn_building(BuildingSpawn {
+            team: Team(1),
+            footprint: BuildingFootprint::new(20, 0, 1, 1),
+            health: 100,
+            attack: None,
+            production: None,
+            spellcasting: None,
+        });
+        let checksum = sim.checksum();
+        let mut snapshot = PresentationSnapshot::capture(&sim);
+        snapshot.attacks.push(AttackEvent {
+            source: east,
+            target: building,
+            source_position: SimPoint::new(15 * scale, scale / 2),
+            target_position: SimPoint::new(20 * scale, scale / 2),
+            delivery: AttackDelivery::Melee,
+            missed: false,
+            critical: false,
+        });
+        for team in [Team(0), Team(1)] {
+            let mut samples =
+                PresentationSamples::new(snapshot.clone()).with_player_control(Some(team), true);
+            assert!(samples.current.units.contains_key(&west));
+            assert!(
+                samples.current.units.contains_key(&east),
+                "controlled invisible units are visible"
+            );
+            assert!(!samples.current.buildings[&building].remembered);
+            assert_eq!(samples.current.attacks.len(), 1);
+            let fog = samples.current.fog.as_ref().unwrap();
+            for x in [0, 15, 20] {
+                assert!(fog.is_visible(team, SimPoint::new(x * scale, scale / 2)));
+            }
+            let unseen = SimPoint::new(8 * scale, scale / 2);
+            assert!(!fog.is_visible(team, unseen));
+            assert!(!fog.is_explored(team, unseen));
+
+            let mut next = snapshot.clone();
+            next.tick += 1;
+            samples.enqueue_network_tick(next.clone());
+            samples.advance_network_timeline(0.0, 1.0, true, true);
+            assert!(samples.current.units.contains_key(&east));
+            samples.enqueue_network_boundary(next);
+            samples.advance_network_timeline(0.0, 1.0, true, true);
+            assert!(samples.current.units.contains_key(&east));
+
+            // A paused control change rebuilds both endpoints and drops queued samples under
+            // the previous authority, including invisible enemies and live structure details.
+            samples.enqueue_network_tick(snapshot.clone());
+            samples.set_control_vision(false, snapshot.clone());
+            assert_eq!(samples.current.units.contains_key(&east), team == Team(1));
+            assert_eq!(samples.previous.units.contains_key(&east), team == Team(1));
+            assert_eq!(
+                samples.current.buildings.contains_key(&building),
+                team == Team(1)
+            );
+            assert!(!samples.advance_network_timeline(0.0, 1.0, true, true));
+            samples.set_control_vision(true, snapshot.clone());
+            assert!(samples.current.units.contains_key(&east));
+            samples.reset(snapshot.clone());
+            assert!(
+                samples.current.units.contains_key(&east),
+                "loads retain control vision"
+            );
+        }
+        assert_eq!(
+            sim.checksum(),
+            checksum,
+            "client control cannot change authoritative sight"
+        );
+    }
+
+    #[test]
     fn observer_hides_enemies_and_retains_only_last_seen_structure_silhouettes() {
         use castle_fight_sim::{
             BuildingSpawn, FogRules, NavCell, SightProfile, UnitClassifications,
@@ -783,7 +967,7 @@ mod tests {
         samples.enqueue_network_boundary(veiled);
         samples.advance_network_timeline(0.0, 1.0, true, true);
         assert!(!samples.current.units.contains_key(&visible));
-        assert_eq!(samples.current.observer, Some(Team(0)));
+        assert_eq!(samples.current.observer.unwrap().team, Team(0));
     }
 
     #[test]

@@ -4,7 +4,9 @@ use castle_fight_sim::{CastleFightBuilderRace, CastleFightContentBundle, PlayerI
 use crate::{
     AuthoritativeSimulation, ClientOptions, SelectedMatch, SimulationPlayback,
     bridge::{PresentationSamples, PresentationSnapshot},
-    client_match_config, create_demo_world_for_match_config, default_worker_count,
+    client_match_config, create_demo_world_for_match_config,
+    debug_menu::DebugMenuState,
+    default_worker_count,
     presentation::CameraFocusRequest,
 };
 
@@ -287,7 +289,7 @@ fn spawn_lobby(commands: &mut Commands, lobby: &LobbyState) {
                         } else {
                             label(
                                 footer,
-                                "Choose your position and each player's race.",
+                                "Choose your position and each player's race. You control all players.",
                                 13.0,
                                 MUTED,
                             );
@@ -502,6 +504,7 @@ struct LobbyGame<'w> {
     selected_match: ResMut<'w, SelectedMatch>,
     playback: ResMut<'w, SimulationPlayback>,
     camera_focus: Option<ResMut<'w, CameraFocusRequest>>,
+    debug_menu: ResMut<'w, DebugMenuState>,
 }
 
 impl LobbyGame<'_> {
@@ -630,16 +633,18 @@ fn handle_lobby_buttons(
                     });
                     match result {
                         Ok(demo) => {
+                            game.debug_menu.set_single_player(true);
                             *game.authoritative =
                                 AuthoritativeSimulation::new(demo.simulation, demo.content);
                             *game.presentation = PresentationSamples::new(
                                 PresentationSnapshot::capture(&game.authoritative.simulation),
                             )
-                            .with_observer(
+                            .with_player_control(
                                 game.authoritative
                                     .simulation
                                     .player(lobby.local_player())
                                     .map(|player| player.team),
+                                true,
                             );
                             game.selected_match.content = demo.content;
                             game.selected_match.direct_buildings = demo.direct_buildings;
@@ -758,6 +763,7 @@ mod tests {
                 local_player: PlayerId(0),
             })
             .insert_resource(SimulationPlayback { paused: true })
+            .init_resource::<DebugMenuState>()
             .add_plugins(LobbyPlugin);
         app.update();
 
@@ -835,6 +841,7 @@ mod tests {
             })
             .insert_resource(SimulationPlayback { paused: true })
             .insert_resource(CameraFocusRequest::default())
+            .init_resource::<DebugMenuState>()
             .add_plugins(LobbyPlugin);
         app.update();
         assert!(app.world().resource::<LobbyState>().active());
@@ -873,6 +880,7 @@ mod tests {
             })
             .insert_resource(SimulationPlayback { paused: true })
             .insert_resource(CameraFocusRequest::default())
+            .init_resource::<DebugMenuState>()
             .add_plugins(LobbyPlugin);
         app.update();
 
@@ -897,6 +905,17 @@ mod tests {
         let simulation = &app.world().resource::<AuthoritativeSimulation>().simulation;
         assert_eq!(simulation.tick(), 0);
         assert_eq!(simulation.players().len(), 6);
+        let controls = app.world().resource::<DebugMenuState>();
+        let presentation = app.world().resource::<PresentationSamples>();
+        assert!(controls.controls_all_players());
+        for builder in simulation.builders() {
+            assert!(controls.can_control_builder(simulation, PlayerId(8), builder.id));
+            assert_eq!(
+                controls.controller_for_actor(simulation, PlayerId(8), builder.id),
+                builder.owner
+            );
+            assert!(presentation.current.builders.contains_key(&builder.id));
+        }
         assert_eq!(
             app.world().resource::<CameraFocusRequest>().0,
             simulation

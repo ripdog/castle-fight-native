@@ -42,8 +42,8 @@ impl PresentationSamples {
     }
 
     pub(crate) fn enqueue_network_tick(&mut self, mut snapshot: PresentationSnapshot) {
-        if let Some(team) = self.observer {
-            snapshot.restrict_to_team(team);
+        if let Some(observer) = self.observer {
+            snapshot.restrict_to_observer(observer);
         }
         self.enable_network_timeline();
         let timeline = self.network.as_mut().unwrap();
@@ -63,8 +63,8 @@ impl PresentationSamples {
     }
 
     pub(crate) fn enqueue_network_boundary(&mut self, mut snapshot: PresentationSnapshot) {
-        if let Some(team) = self.observer {
-            snapshot.restrict_to_team(team);
+        if let Some(observer) = self.observer {
+            snapshot.restrict_to_observer(observer);
         }
         self.enable_network_timeline();
         let timeline = self.network.as_mut().unwrap();

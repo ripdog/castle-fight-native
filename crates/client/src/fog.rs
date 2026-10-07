@@ -61,7 +61,7 @@ pub(crate) struct FogAnimation {
     layout: Option<(
         usize,
         usize,
-        castle_fight_sim::Team,
+        crate::bridge::ObserverVision,
         i32,
         castle_fight_sim::SimPoint,
     )>,
@@ -83,13 +83,14 @@ pub(crate) fn update_fog(
     mut images: ResMut<Assets<Image>>,
     cameras: Query<Entity, With<crate::presentation::RtsCamera>>,
 ) {
-    let (Some(fog), Some(team)) = (samples.current.fog.as_ref(), samples.current.observer) else {
+    let (Some(fog), Some(observer)) = (samples.current.fog.as_ref(), samples.current.observer)
+    else {
         for entity in &cameras {
             commands.entity(entity).remove::<FogUniform>();
         }
         return;
     };
-    let layout = (fog.width, fog.height, team, fog.cell_size, fog.origin);
+    let layout = (fog.width, fog.height, observer, fog.cell_size, fog.origin);
     let reset = animation.layout != Some(layout)
         || samples.current.tick < animation.tick
         || samples.revision() < animation.revision;
@@ -118,7 +119,7 @@ pub(crate) fn update_fog(
         }
     }
     if reset || samples.revision() != animation.revision {
-        let team = usize::from(team.0);
+        let team = usize::from(observer.team.0);
         for (index, value) in animation.target.iter_mut().enumerate() {
             *value = Vec2::new(
                 f32::from(fog.visible[team][index]),

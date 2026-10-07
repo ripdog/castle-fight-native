@@ -20,6 +20,7 @@ use crate::{
     AuthoritativeSimulation, ClientOptions, SelectedMatch, SimulationPlayback,
     bridge::{PresentationSamples, PresentationSnapshot},
     client_match_config, compatibility_identity_for_demo, create_demo_world_for_match_config,
+    debug_menu::DebugMenuState,
     default_worker_count,
     lobby::LobbyState,
     network::NetworkClient,
@@ -87,6 +88,7 @@ struct JoinAddressText;
 
 #[derive(Component, Clone, Copy)]
 enum MainMenuAction {
+    SinglePlayer,
     Host,
     JoinScreen,
     Connect,
@@ -136,7 +138,7 @@ fn spawn_main_menu(commands: &mut Commands, menu: &MainMenuState) {
                 label(
                     panel,
                     format!(
-                        "Native multiplayer  |  CF {} / {}",
+                        "Native  |  CF {} / {}",
                         menu.options.map_version, menu.options.release_revision
                     ),
                     14.0,
@@ -149,6 +151,7 @@ fn spawn_main_menu(commands: &mut Commands, menu: &MainMenuState) {
                             height: px(12.0),
                             ..default()
                         });
+                        button(panel, "SINGLE PLAYER", MainMenuAction::SinglePlayer);
                         button(panel, "HOST GAME", MainMenuAction::Host);
                         button(panel, "JOIN GAME", MainMenuAction::JoinScreen);
                         button(panel, "EXIT", MainMenuAction::Exit);
@@ -296,6 +299,7 @@ struct MenuGame<'w> {
     presentation: ResMut<'w, PresentationSamples>,
     selected_match: ResMut<'w, SelectedMatch>,
     playback: ResMut<'w, SimulationPlayback>,
+    debug_menu: ResMut<'w, DebugMenuState>,
 }
 
 fn handle_main_menu_buttons(
@@ -328,6 +332,16 @@ fn handle_main_menu_buttons(
         return;
     };
     match action {
+        MainMenuAction::SinglePlayer => {
+            game.debug_menu.set_single_player(true);
+            commands.insert_resource(LobbyState::new(
+                menu.options.clone(),
+                game.selected_match.local_player,
+                false,
+            ));
+            menu.active = false;
+            commands.entity(root).despawn();
+        }
         MainMenuAction::JoinScreen => {
             menu.screen = MainMenuScreen::Join;
             menu.error = None;
@@ -502,6 +516,7 @@ fn install_network_session(
         next_sequence,
     );
     game.authoritative.commands_enabled = false;
+    game.debug_menu.set_single_player(false);
     *game.presentation = PresentationSamples::new(PresentationSnapshot::capture(
         &game.authoritative.simulation,
     ))
@@ -552,6 +567,71 @@ fn resolve_server_addresses(input: &str) -> Result<Vec<SocketAddr>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn single_player_button_opens_an_offline_lobby_without_starting_the_match() {
+        let options = ClientOptions {
+            stress_units: None,
+            stress_visual: None,
+            health_bars: true,
+            perf_log: false,
+            profile_quicksave: None,
+            profile_screenshot: None,
+            profile_warmup: std::time::Duration::ZERO,
+            profile_duration: std::time::Duration::from_secs(1),
+            profile_paused: false,
+            profile: false,
+            render_experiment: crate::render_audit::RenderExperiment::Baseline,
+            map_version: castle_fight_sim::MapVersion::CASTLE_FIGHT_9_27,
+            release_revision: "r1".to_owned(),
+            match_seed: 1,
+            team_size: 1,
+            builder_rawcodes: [None; 9],
+            server: None,
+            list_map_versions: false,
+        };
+        let demo = crate::demo::create_demo_world(1, None);
+        let snapshot = PresentationSnapshot::capture(&demo.simulation);
+        let mut authoritative = AuthoritativeSimulation::new(demo.simulation, demo.content);
+        authoritative.commands_enabled = false;
+        let mut app = App::new();
+        app.insert_resource(MainMenuState::new(options))
+            .insert_resource(authoritative)
+            .insert_resource(PresentationSamples::new(snapshot))
+            .insert_resource(SelectedMatch {
+                content: demo.content,
+                direct_buildings: demo.direct_buildings,
+                local_player: PlayerId(0),
+            })
+            .insert_resource(SimulationPlayback { paused: true })
+            .init_resource::<DebugMenuState>()
+            .add_message::<AppExit>()
+            .add_message::<KeyboardInput>()
+            .add_plugins((MainMenuPlugin, crate::lobby::LobbyPlugin));
+        app.update();
+        let button = app
+            .world_mut()
+            .query::<(Entity, &MainMenuAction)>()
+            .iter(app.world())
+            .find_map(|(entity, action)| {
+                matches!(action, MainMenuAction::SinglePlayer).then_some(entity)
+            })
+            .unwrap();
+        *app.world_mut().get_mut::<Interaction>(button).unwrap() = Interaction::Pressed;
+        app.update();
+        assert!(!app.world().resource::<MainMenuState>().active());
+        assert!(app.world().resource::<LobbyState>().active());
+        assert!(
+            app.world()
+                .resource::<DebugMenuState>()
+                .controls_all_players()
+        );
+        assert!(app.world().resource::<SimulationPlayback>().paused);
+        let authoritative = app.world().resource::<AuthoritativeSimulation>();
+        assert!(!authoritative.is_networked());
+        assert!(!authoritative.commands_enabled);
+        assert_eq!(authoritative.simulation.tick(), 0);
+    }
 
     #[test]
     fn join_address_defaults_to_game_port() {
