@@ -206,3 +206,5 @@ Checksum traversal and snapshot capture share one canonical entity projection. R
 Native single-shot attack proxies retain source/owner, primary target, launch/destination points, launch/impact ticks and their complete versioned weapon/Freezing Breath profile in `NativeAction`. Status state also retains the exclusive frozen deadline and originating ability identity. Both live state and upgrade-precursor status participate in checksums and snapshots; client ice attachments follow this deadline without supplying gameplay timing.
 
 In-progress upgrades retain the precursor health-regeneration rate and fractional remainder alongside its other runtime state. Cancellation restores that phase exactly; activation consumes the authored building gameplay rate. Queued and constructing building definitions include the rate in their canonical definition hash.
+
+Native missile-applied stuns retain their source ability and an exclusive visual deadline independently of the combined stun action-disable deadline. These fields are canonical and transported; native dispel clears them with the stun. A longer unrelated disable can continue after the native art expires.

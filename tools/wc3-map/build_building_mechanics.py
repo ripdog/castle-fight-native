@@ -31,6 +31,8 @@ def build(map_version='9.27', revision='r1'):
     snow = next(r for r in building_rows if r['building_rawcode'] == 'h07W')
     launchers = [r for r in building_rows if r['building_rawcode'] in ('h048', 'h03L')]
     launcher_codes = ['h048', 'h04G', 'A04J', 'A04F', 'h03L', 'h04H', 'A04L', 'A04K']
+    mushroom = next(r for r in building_rows if r['building_rawcode'] == 'h047')
+    launcher_codes += ['h047', 'A06P', 'A0AK']
     shield = next(r for r in rows('runtime-system-mechanics.tsv') if r['system_id'] == 'targeted-negative-effect-shields')
     units = {r['rawcode']: r for r in rows('units.tsv') if r['rawcode'] in ('n00F', 'n00G')}
     protected = [r for r in rows('protected-ability-fields.tsv') if r['rawcode'] in ('A017', 'A018', 'A0HO', 'AM0{', *launcher_codes)]
@@ -55,7 +57,7 @@ def build(map_version='9.27', revision='r1'):
                      'CallbackSingle_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_ReengageRuntime',
                      'CallbackSingle_doAfter_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_doAfter_ReengageRuntime',
                      *snow['source_functions'].split(','),
-                     *(f for row in launchers for f in row['source_functions'].split(',')), 'tileR', 'tile_toVec2', 'vL', 'AI', 'unit_resetSpawnQueue', 'vM', 'ZE', 'EventListener_add_BuildingSpells_onEvent_add_BuildingSpells'):
+                     *(f for row in launchers for f in row['source_functions'].split(',')), *mushroom['source_functions'].split(','), 'dummyCastTargetWithVision', 'tileR', 'tile_toVec2', 'vL', 'AI', 'unit_resetSpawnQueue', 'vM', 'ZE', 'EventListener_add_BuildingSpells_onEvent_add_BuildingSpells'):
         start = script.index('function ' + function + '(')
         end = script.index('function ', start + 10)
         traces[function] = {'byte_offset': len(script[:start].encode()), 'source': script[start:end]}
@@ -82,9 +84,10 @@ def build(map_version='9.27', revision='r1'):
     terrain['snow_rawcode'] = snow_terrain.to_bytes(4, 'big').decode('ascii')
     return {'map_version': map_version, 'schema_version': 2, 'source_revision': revision,
             'extraction_git_tree': tree, 'source_sha256': sources,
-            'city': mechanics, 'launchers': launchers, 'snow': snow, 'snow_manual_cooldowns': {'Pcb': cooldowns[0], 'normal': cooldowns[1]},
+            'city': mechanics, 'launchers': launchers, 'mushroom': mushroom, 'snow': snow, 'snow_manual_cooldowns': {'Pcb': cooldowns[0], 'normal': cooldowns[1]},
             'terrain_grid': terrain, 'shield': shield, 'forms': units,
             'launcher_units': {r['rawcode']: r for r in rows('units.tsv') if r['rawcode'] in launcher_codes},
+            'target_vision': {'radius': re.search(r'getY\(\w+\),([\d.]+),true,false', traces['dummyCastTargetWithVision1']['source']).group(1) if 'getY' in traces['dummyCastTargetWithVision1']['source'] else re.search(r'\w+\[2\],([\d.]+),true,false', traces['dummyCastTargetWithVision1']['source']).group(1), 'duration': re.search(r'doAfter\(([\d.]+),', traces['dummyCastTargetWithVision1']['source']).group(1)},
             'launcher_vision': {'radius': re.search(r'getY\(\w+\),(\d+\.),true,false', traces['issueFrostLauncherOrder']['source']).group(1),
                                 'duration': re.search(r'doAfter\((\d+\.\d+),', traces['issueFrostLauncherOrder']['source']).group(1)}, 'protected': protected,
             'overheat_explosions': overheat_explosions,

@@ -1151,7 +1151,7 @@ impl Exporter {
         };
 
         Ok(VisualAssetManifest {
-            schema_version: 7,
+            schema_version: 8,
             castle_fight_catalog_version: CATALOG_VERSION,
             wc3_version: self.wc3_version.clone(),
             art_mode: "sd",

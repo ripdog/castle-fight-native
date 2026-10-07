@@ -54,6 +54,7 @@ pub enum NativeEffectImplementationId {
     WarcraftBuildingHexV1,
     WarcraftSnowveilV1,
     WarcraftHailstoneV1,
+    WarcraftBuildingBoltV1,
     WarcraftBarrageV1,
     WarcraftPersistentCarrierV1,
 }
@@ -88,6 +89,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftBuildingHexV1 => 24,
             Self::WarcraftSnowveilV1 => 25,
             Self::WarcraftHailstoneV1 => 26,
+            Self::WarcraftBuildingBoltV1 => 27,
             Self::WarcraftBarrageV1 => 64,
             Self::WarcraftPersistentCarrierV1 => 65,
         }
@@ -845,7 +847,10 @@ pub fn resolve_native_effect_requirements(
     version: MapVersion,
     roots: &[NativeEffectSource],
 ) -> Result<Vec<ResolvedNativeEffectBinding>, NativeEffectResolveError> {
-    let (launcher_roots, roots): (Vec<_>, Vec<_>) = roots.iter().copied().partition(|source| {
+    let (bolt_roots, roots): (Vec<_>, Vec<_>) = roots.iter().copied().partition(|source| {
+        crate::building_mechanics::building_bolt_source_for_version(*source, version)
+    });
+    let (launcher_roots, roots): (Vec<_>, Vec<_>) = roots.into_iter().partition(|source| {
         crate::building_mechanics::launcher_source_for_version(*source, version)
     });
     let (snow_roots, roots): (Vec<_>, Vec<_>) = roots
@@ -860,6 +865,9 @@ pub fn resolve_native_effect_requirements(
         resolved.extend(crate::building_mechanics::launcher_bindings_for_version(
             version,
         ));
+    }
+    if !bolt_roots.is_empty() {
+        resolved.extend(crate::building_mechanics::building_bolt_bindings_for_version(version));
     }
     if !snow_roots.is_empty() {
         resolved.extend(crate::building_mechanics::snow_bindings_for_version(
@@ -997,6 +1005,11 @@ pub fn native_effect_implementation_for(
         crate::building_mechanics::launcher_source_for_version(source, version)
     }) {
         return Some(NativeEffectImplementationId::WarcraftHailstoneV1);
+    }
+    if source.is_some_and(|source| {
+        crate::building_mechanics::building_bolt_source_for_version(source, version)
+    }) {
+        return Some(NativeEffectImplementationId::WarcraftBuildingBoltV1);
     }
     catalog().implementation_for(source_kind, source_key, version)
 }

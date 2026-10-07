@@ -767,13 +767,17 @@ mod tests {
         let mut checked = 0;
         for row in fields.records() {
             let row = row.unwrap();
-            if &row[column("category")] != "abilities" || &row[column("field_id")] != "abuf" {
+            if &row[column("category")] != "abilities"
+                || &row[column("field_id")] != "abuf"
+                || &row[column("level")] != "1"
+            {
                 continue;
             }
             let kind = match &row[column("base_rawcode")] {
                 "ACff" | "Afae" => "armor",
                 "Apxf" => "damage_over_time",
                 "Afrz" => "freeze",
+                "AHtb" | "ACtb" => "stun",
                 _ => continue,
             };
             let references: String =

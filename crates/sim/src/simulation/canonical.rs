@@ -1601,6 +1601,11 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         hash.write_u64(action.until_tick);
     }
     hash.write_u64(status.stunned_until_tick);
+    hash.write_u64(status.native_stun_until_tick);
+    hash.write_u8(u8::from(status.native_stun_ability.is_some()));
+    if let Some(a) = status.native_stun_ability {
+        hash.write_u32(a.0);
+    }
     hash.write_u64(status.rooted_until_tick);
     hash.write_u64(status.frozen_until_tick);
     hash.write_u8(status.frozen_ability.is_some() as u8);
@@ -2020,6 +2025,17 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
     hash.write_u8(ability.effect.stable_tag());
     match ability.effect {
         AbilityEffect::Hailstone(profile) => hash_hailstone_profile(hash, profile),
+        AbilityEffect::BuildingBolt(p) => {
+            hash.write_u16(p.map_version.major);
+            hash.write_u16(p.map_version.minor);
+            hash.write_u8(p.trigger_targets.bits());
+            hash.write_u8(u8::from(p.trigger_invulnerable));
+            hash.write_u8(u8::from(p.trigger_spell_immune));
+            hash_native_bolt_profile(hash, p.bolt);
+            hash.write_i32(p.child_range);
+            hash.write_i32(p.vision_radius);
+            hash.write_u16(p.vision_ticks);
+        }
         AbilityEffect::Snowfall { map_version } => {
             hash.write_u16(map_version.major);
             hash.write_u16(map_version.minor);

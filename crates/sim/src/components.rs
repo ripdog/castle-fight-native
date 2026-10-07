@@ -1056,7 +1056,7 @@ pub enum AbilityTargetPolicy {
     FlyingEnemyUnit,
     RandomEnemyUnitOrBuilding,
     /// Native Always Autocast debuffs consider any viable hostile in range.
-    HailstoneSpellTrigger,
+    NativeBuildingSpellTrigger,
     RandomEnemyDebuff,
 }
 
@@ -1076,7 +1076,7 @@ impl AbilityTargetPolicy {
             Self::NearestEnemyInCombat => 9,
             Self::FlyingEnemyUnit => 10,
             Self::RandomEnemyUnitOrBuilding => 11,
-            Self::HailstoneSpellTrigger => 12,
+            Self::NativeBuildingSpellTrigger => 12,
             Self::RandomEnemyDebuff => 20,
         }
     }
@@ -1186,6 +1186,7 @@ pub enum AbilityEffect {
     PhoenixFire(NativeBoltProfile),
     HealingWave(HealingWaveProfile),
     Hailstone(crate::building_mechanics::HailstoneProfile),
+    BuildingBolt(crate::building_mechanics::BuildingBoltProfile),
     Snowfall {
         map_version: crate::MapVersion,
     },
@@ -1237,6 +1238,7 @@ impl AbilityEffect {
             Self::FrostNova { .. } => 17,
             Self::Snowfall { .. } => 18,
             Self::Hailstone(_) => 19,
+            Self::BuildingBolt(_) => 20,
         }
     }
 }
@@ -1380,6 +1382,8 @@ pub struct StatusState {
     pub pending_attack: Option<PendingAttackState>,
     pub pending_cast: Option<PendingCastState>,
     pub stunned_until_tick: u64,
+    pub native_stun_until_tick: u64,
+    pub native_stun_ability: Option<AbilityId>,
     pub rooted_until_tick: u64,
     /// Freezing Breath additionally suspends native building activities.
     pub frozen_until_tick: u64,

@@ -3157,6 +3157,7 @@ fn prewarm_timed_wc3_effects(
                         | AbilityEffect::SolarStrike { .. }
                         | AbilityEffect::PhoenixFire(_)
                         | AbilityEffect::Hailstone(_)
+                        | AbilityEffect::BuildingBolt(_)
                         | AbilityEffect::Snowfall { .. }
                         | AbilityEffect::Hex { .. }
                         | AbilityEffect::Damage { .. }
@@ -4322,6 +4323,7 @@ fn sync_render_entities(
         for unit in samples.current.units.values().filter(|unit| {
             unit.stunned_until_tick > samples.current.tick
                 && unit.status.frozen_until_tick <= samples.current.tick
+                && unit.status.native_stun_until_tick <= samples.current.tick
         }) {
             if render_map.stun_effects.contains_key(&unit.id) {
                 continue;
@@ -4341,6 +4343,7 @@ fn sync_render_entities(
                 .stunned_until_tick
                 .is_some_and(|until| until > samples.current.tick)
                 && building.status.frozen_until_tick <= samples.current.tick
+                && building.status.native_stun_until_tick <= samples.current.tick
         }) {
             if render_map.stun_effects.contains_key(&building.id) {
                 continue;
@@ -5068,6 +5071,12 @@ fn status_visual_sources(
         )
         .chain(
             status
+                .native_stun_ability
+                .filter(move |_| tick < status.native_stun_until_tick)
+                .map(|a| (a.0, Wc3StatusVisualKind::Stun)),
+        )
+        .chain(
+            status
                 .frozen_ability
                 .filter(move |_| tick < status.frozen_until_tick)
                 .map(|a| (a.0, Wc3StatusVisualKind::Freeze)),
@@ -5087,6 +5096,12 @@ fn status_visual_is_active(
     kind: Wc3StatusVisualKind,
 ) -> bool {
     match kind {
+        Wc3StatusVisualKind::Stun => {
+            tick < status.native_stun_until_tick
+                && status
+                    .native_stun_ability
+                    .is_some_and(|a| a.0 == ability_rawcode)
+        }
         Wc3StatusVisualKind::Freeze => {
             tick < status.frozen_until_tick
                 && status
@@ -5260,16 +5275,17 @@ fn spawn_status_visuals(
 }
 
 fn entity_is_stunned(id: SimId, snapshot: &crate::bridge::PresentationSnapshot, tick: u64) -> bool {
-    snapshot
-        .units
-        .get(&id)
-        .is_some_and(|unit| unit.stunned_until_tick > tick && unit.status.frozen_until_tick <= tick)
-        || snapshot.buildings.get(&id).is_some_and(|building| {
-            building
-                .stunned_until_tick
-                .is_some_and(|until| until > tick)
-                && building.status.frozen_until_tick <= tick
-        })
+    snapshot.units.get(&id).is_some_and(|unit| {
+        unit.stunned_until_tick > tick
+            && unit.status.frozen_until_tick <= tick
+            && unit.status.native_stun_until_tick <= tick
+    }) || snapshot.buildings.get(&id).is_some_and(|building| {
+        building
+            .stunned_until_tick
+            .is_some_and(|until| until > tick)
+            && building.status.frozen_until_tick <= tick
+            && building.status.native_stun_until_tick <= tick
+    })
 }
 
 fn spawn_stun_effect(
@@ -7771,6 +7787,32 @@ mod tests {
         snapshot.buildings.remove(&id);
         assert!(!entity_status_visual_is_active(
             id, &snapshot, ability, kind
+        ));
+    }
+
+    #[test]
+    fn native_stun_visual_uses_its_own_identity_and_expiry() {
+        let status = castle_fight_sim::StatusState {
+            stunned_until_tick: 50,
+            native_stun_until_tick: 20,
+            native_stun_ability: Some(castle_fight_sim::AbilityId(123)),
+            ..Default::default()
+        };
+        assert_eq!(
+            status_visual_sources(&status, 19).collect::<Vec<_>>(),
+            [(123, Wc3StatusVisualKind::Stun)]
+        );
+        assert!(status_visual_is_active(
+            &status,
+            19,
+            123,
+            Wc3StatusVisualKind::Stun
+        ));
+        assert!(!status_visual_is_active(
+            &status,
+            20,
+            123,
+            Wc3StatusVisualKind::Stun
         ));
     }
 

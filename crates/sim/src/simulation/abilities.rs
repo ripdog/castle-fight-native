@@ -508,7 +508,14 @@ impl Simulation {
             let mut emit_cast_visual = true;
             match intent.target {
                 AbilityIntentTarget::Unit { index, .. } => {
-                    if matches!(intent.ability.effect, AbilityEffect::Hailstone(_)) {
+                    if let AbilityEffect::BuildingBolt(profile) = intent.ability.effect {
+                        metrics.effects += usize::from(self.cast_building_bolt(
+                            source,
+                            profile,
+                            intent.cast_sequence,
+                            units,
+                        ));
+                    } else if matches!(intent.ability.effect, AbilityEffect::Hailstone(_)) {
                         let result = self.cast_hailstone(
                             source,
                             intent.ability,
@@ -734,7 +741,14 @@ impl Simulation {
                     }
                 }
                 AbilityIntentTarget::Building { id, position } => {
-                    if matches!(intent.ability.effect, AbilityEffect::Hailstone(_)) {
+                    if let AbilityEffect::BuildingBolt(profile) = intent.ability.effect {
+                        metrics.effects += usize::from(self.cast_building_bolt(
+                            source,
+                            profile,
+                            intent.cast_sequence,
+                            units,
+                        ));
+                    } else if matches!(intent.ability.effect, AbilityEffect::Hailstone(_)) {
                         let result = self.cast_hailstone(
                             source,
                             intent.ability,
@@ -1213,7 +1227,7 @@ impl Simulation {
 
         let mut candidate_checks = 0usize;
         let target = match spellcasting.ability.target_policy {
-            AbilityTargetPolicy::HailstoneSpellTrigger => self.hailstone_trigger_target(
+            AbilityTargetPolicy::NativeBuildingSpellTrigger => self.native_building_trigger_target(
                 source,
                 spellcasting.ability,
                 state.cast_sequence,
@@ -1857,15 +1871,15 @@ impl Simulation {
                                     _ => true,
                                 }
                         }
-                        AbilityTargetPolicy::HailstoneSpellTrigger => {
-                            let AbilityEffect::Hailstone(profile) = ability.effect else {
+                        AbilityTargetPolicy::NativeBuildingSpellTrigger => {
+                            let Some((targets, _, _)) =
+                                super::building_spells::native_building_trigger(ability)
+                            else {
                                 return false;
                             };
-                            profile
-                                .trigger_targets
-                                .can_target_unit(target.movement_class)
+                            targets.can_target_unit(target.movement_class)
                                 && target.visible_to(source.team, self.next_tick)
-                                && self.hailstone_trigger_allowed(
+                                && self.native_building_trigger_allowed(
                                     source,
                                     ability,
                                     target.team,
@@ -1908,12 +1922,17 @@ impl Simulation {
                     }
             }
             AbilityIntentTarget::Building { id, position } => {
-                if let AbilityEffect::Hailstone(profile) = ability.effect {
+                if ability.target_policy == AbilityTargetPolicy::NativeBuildingSpellTrigger {
+                    let Some((targets, _, _)) =
+                        super::building_spells::native_building_trigger(ability)
+                    else {
+                        return false;
+                    };
                     return self.world.iter_entities().any(|e| {
                         e.get::<SimId>() == Some(&id)
-                            && profile.trigger_targets.can_target_buildings()
+                            && targets.can_target_buildings()
                             && self.visible_teams(position) & (1 << source.team.0) != 0
-                            && self.hailstone_trigger_allowed(
+                            && self.native_building_trigger_allowed(
                                 source,
                                 ability,
                                 e.get::<Team>().copied().unwrap_or(source.team),

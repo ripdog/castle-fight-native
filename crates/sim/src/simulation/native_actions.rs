@@ -182,10 +182,15 @@ impl Simulation {
                             } else {
                                 profile.stun_ticks
                             };
-                            target.status.stunned_until_tick = target
-                                .status
-                                .stunned_until_tick
-                                .max(self.next_tick + u64::from(duration));
+                            if duration > 0 {
+                                let expires = self.next_tick + u64::from(duration);
+                                target.status.stunned_until_tick =
+                                    target.status.stunned_until_tick.max(expires);
+                                if expires >= target.status.native_stun_until_tick {
+                                    target.status.native_stun_until_tick = expires;
+                                    target.status.native_stun_ability = Some(profile.ability);
+                                }
+                            }
                             if profile.damage_per_second > 0 {
                                 apply_native_fire_damage_over_time(
                                     &mut target.status,
@@ -337,6 +342,8 @@ pub(super) fn resolve_native_building_damage_over_time(
 
 fn cleanse_native_status(status: &mut StatusState) {
     status.stunned_until_tick = 0;
+    status.native_stun_until_tick = 0;
+    status.native_stun_ability = None;
     status.rooted_until_tick = 0;
     status.frozen_until_tick = 0;
     status.frozen_ability = None;

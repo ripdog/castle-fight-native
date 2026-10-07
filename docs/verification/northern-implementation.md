@@ -14,7 +14,7 @@ Northern is selectable for retained Castle Fight 9.27/r1 once Snowy Rocks is pro
 
 ## Remaining command-card order
 
-Chilling Mushroom; Icy Tower; World Freezer. This is an implementation checklist, not a claim that those entities are playable.
+Icy Tower; World Freezer. This is an implementation checklist, not a claim that those entities are playable.
 
 ## Icy Rocks / Polar Bear
 
@@ -121,3 +121,12 @@ The Northern proc audit also found a shared importer bug: `A03W` explicitly has 
 ## Ordinary building regeneration audit
 
 The Northern base-stat audit found that ordinary health regeneration was loaded from the retained unit table but was only attached for selected utility buildings. The same repair retires the older Arcane/Obelisk regeneration carriers so those rates apply once through the shared component. Production and tower definitions now expose the source-derived rate in their gameplay properties, and the shared lifecycle installs it for every promoted building. Zero-rate synthetic buildings remain valid. Completed construction starts the configured rate; deactivated construction has no live regeneration component. Upgrade cancellation restores the precursor's exact rate and fractional remainder through canonical/wire state. Bundle/checksum/snapshot shapes become 21/38/33. A synthetic fractional-rate cancellation/rejoin test and catalog-wide source comparisons cover this shared repair.
+
+
+## Chilling Mushroom
+
+- `h047` (base `hbla`) retains protected life and ordinary armor, health/mana regeneration, economy, construction/repair and source menu data. Its complete inventory is the native Parasite order `A06P`, whose ground/structure enemy trigger is independent of the later flying-unit selection. Parent resources are committed at the native spell effect, even if the callback finds no flying candidate.
+- `mushroomSpell` selects an alive enemy flying combat sapper in the source battlefield, rejecting `Avul` but permitting heroes and magic immunity during selection. `checkForShield` runs next, before the native child order: an intercept consumes the shield and can heal even a magic-immune target. The common interception helper preserves shield/Shredder/A070 precedence. Failure does not refund parent mana/cooldown.
+- The free `A0AK` Storm Bolt is released from the caster after source-authored temporary vision, obeys its own range/mask/immunity, homes through canonical native missile state and survives source destruction. Impact rechecks live immunity and uses independent normal/hero stun durations. **Tooltip disagreement:** the linked native child deals 200 spell damage; the parent/building tooltip advertises 150. The generated projection follows the child.
+- Native stuns retain a separate ability identity and visual deadline alongside the shared action-disable deadline. `B00X` is attached at its authored origin for the actual stun lifetime; generic stun stars yield to that native art. This source-specific presentation survives rejoin without controlling gameplay. The visual exporter now chooses the actual level-one buff rather than letting unused higher levels overwrite its art. Effect manifest schema becomes 8; bundle/checksum/snapshot become 22/39/34.
+- Shared synthetic fixtures distinguish ground/structure trigger from flying effect candidates, class/relation exclusions, shields before immunity, child range/native failure, live immunity after release, hero duration, source death and worker/wire continuation. Catalog-wide closure, source projection reproduction, strict checks and native art binding verification cover the entity. Standalone hailstones now also reject a foreign map version during wire decode.

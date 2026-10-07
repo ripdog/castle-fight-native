@@ -434,6 +434,8 @@ fn cleanse_native_effects(
 ) {
     let status = &mut unit.status;
     status.stunned_until_tick = 0;
+    status.native_stun_until_tick = 0;
+    status.native_stun_ability = None;
     status.rooted_until_tick = 0;
     status.frozen_until_tick = 0;
     status.frozen_ability = None;

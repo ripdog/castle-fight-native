@@ -49,6 +49,118 @@ pub struct HailstoneProfile {
     pub vision_ticks: u16,
 }
 
+/// A scripted building callback that selects a flying combat unit after parent commitment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct BuildingBoltProfile {
+    pub map_version: MapVersion,
+    pub trigger_targets: crate::AttackTargetMask,
+    pub trigger_invulnerable: bool,
+    pub trigger_spell_immune: bool,
+    pub bolt: crate::NativeBoltProfile,
+    pub child_range: i32,
+    pub vision_radius: i32,
+    pub vision_ticks: u16,
+}
+
+pub(crate) fn mushroom_spellcasting_for_version(version: MapVersion) -> SpellcastingProfile {
+    let data = evidence(version);
+    let row = &data["mushroom"];
+    let parent = row["ability_rawcode"].as_str().unwrap();
+    let code = row["building_rawcode"].as_str().unwrap();
+    let objects: Value =
+        serde_json::from_str(row["effect_objects_json"].as_str().unwrap()).unwrap();
+    let child = objects[0]["rawcode"].as_str().unwrap();
+    let parent_fields = &data["fields"][parent];
+    let child_fields = &data["fields"][child];
+    let unit = &data["fields"][code];
+    let number = |fields: &Value, key: &str| fields[key].as_f64().unwrap();
+    let world = |fields: &Value, key: &str| {
+        (number(fields, key) * f64::from(SUBUNITS_PER_WORLD_UNIT)).round() as i32
+    };
+    let protected = |code: &str, field: &str| {
+        data["protected"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["rawcode"] == code && r["field"] == field)
+            .unwrap()["runtime_value"]
+            .clone()
+    };
+    assert_eq!(protected(child, "mana_cost"), "0");
+    assert_eq!(protected(child, "cooldown"), "0.0");
+    let words = parent_fields["atar:1"].as_str().unwrap();
+    SpellcastingProfile {
+        mana: ManaProfile::per_second(
+            number(unit, "umpm:0") as i32,
+            0,
+            (number(unit, "umpr:0") * 10_000.0) as u32,
+        ),
+        ability: AutomaticAbilityProfile {
+            id: AbilityId(u32::from_be_bytes(parent.as_bytes().try_into().unwrap())),
+            mana_cost: protected(parent, "mana_cost")
+                .as_str()
+                .unwrap()
+                .parse()
+                .unwrap(),
+            cooldown_ticks: ticks(&protected(parent, "cooldown")),
+            range: world(parent_fields, "aran:1"),
+            target_policy: AbilityTargetPolicy::NativeBuildingSpellTrigger,
+            effect: AbilityEffect::BuildingBolt(BuildingBoltProfile {
+                map_version: version,
+                trigger_targets: source_mask(words),
+                trigger_invulnerable: words.split(',').any(|w| w == "invulnerable"),
+                trigger_spell_immune: words.split(',').any(|w| w == "magicimmune"),
+                bolt: crate::NativeBoltProfile {
+                    ability: AbilityId(u32::from_be_bytes(child.as_bytes().try_into().unwrap())),
+                    damage: number(child_fields, "Htb1:1") as i32,
+                    stun_ticks: (number(child_fields, "adur:1")
+                        * f64::from(CASTLE_FIGHT_SIMULATION_HZ))
+                    .ceil() as u16,
+                    hero_stun_ticks: (number(child_fields, "ahdu:1")
+                        * f64::from(CASTLE_FIGHT_SIMULATION_HZ))
+                    .ceil() as u16,
+                    damage_per_second: 0,
+                    duration_ticks: 0,
+                    speed_per_tick: world(child_fields, "amsp:0") / CASTLE_FIGHT_SIMULATION_HZ,
+                    cleanse: false,
+                    targets: source_mask(child_fields["atar:1"].as_str().unwrap()),
+                },
+                child_range: world(child_fields, "aran:1"),
+                vision_radius: (data["target_vision"]["radius"]
+                    .as_str()
+                    .unwrap()
+                    .parse::<f64>()
+                    .unwrap()
+                    * f64::from(SUBUNITS_PER_WORLD_UNIT)) as i32,
+                vision_ticks: ticks(&data["target_vision"]["duration"]),
+            }),
+        },
+    }
+}
+
+pub(crate) fn building_bolt_bindings_for_version(
+    version: MapVersion,
+) -> [crate::ResolvedNativeEffectBinding; 2] {
+    assert_eq!(version, MapVersion::CASTLE_FIGHT_9_27);
+    [
+        (crate::NativeEffectSourceKind::UnitAbility, *b"A06P"),
+        (crate::NativeEffectSourceKind::AbilityEffect, *b"A0AK"),
+    ]
+    .map(|(kind, code)| crate::ResolvedNativeEffectBinding {
+        source: crate::NativeEffectSource::new(kind, u32::from_be_bytes(code)),
+        implementation: crate::NativeEffectImplementationId::WarcraftBuildingBoltV1,
+    })
+}
+pub(crate) fn building_bolt_source_for_version(
+    source: crate::NativeEffectSource,
+    version: MapVersion,
+) -> bool {
+    version == MapVersion::CASTLE_FIGHT_9_27
+        && building_bolt_bindings_for_version(version)
+            .iter()
+            .any(|b| b.source == source)
+}
+
 fn source_mask(value: &str) -> crate::AttackTargetMask {
     let words = value.split(',').collect::<Vec<_>>();
     crate::AttackTargetMask::from_capabilities(
@@ -105,7 +217,7 @@ pub(crate) fn launcher_spellcasting_for_version(
             cooldown_ticks: ticks(&protected("cooldown")),
             range: (parent_fields["aran:1"].as_f64().unwrap() * f64::from(SUBUNITS_PER_WORLD_UNIT))
                 .round() as i32,
-            target_policy: AbilityTargetPolicy::HailstoneSpellTrigger,
+            target_policy: AbilityTargetPolicy::NativeBuildingSpellTrigger,
             effect: AbilityEffect::Hailstone(HailstoneProfile {
                 map_version: version,
                 dummy_rawcode: params["dummy_unit_id"].as_u64().unwrap() as u32,

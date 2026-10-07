@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 38;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 39;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -25,6 +25,7 @@ const AVOIDANCE_CLEAR_TICKS: u8 = 8;
 mod abilities;
 mod automatic_abilities;
 mod builder;
+mod building_bolts;
 mod building_spells;
 mod frost_launcher;
 mod snowveil;
@@ -3868,7 +3869,7 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         AbilityTargetPolicy::RandomEnemyUnit
         | AbilityTargetPolicy::NearestEnemyInCombat
         | AbilityTargetPolicy::FlyingEnemyUnit
-        | AbilityTargetPolicy::HailstoneSpellTrigger
+        | AbilityTargetPolicy::NativeBuildingSpellTrigger
         | AbilityTargetPolicy::RandomEnemyUnitOrBuilding
         | AbilityTargetPolicy::RandomEnemyDebuff
         | AbilityTargetPolicy::RandomGroundEnemyUnit
@@ -3883,11 +3884,18 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
     }
     match spellcasting.ability.effect {
+        AbilityEffect::BuildingBolt(p) => {
+            assert!(p.bolt.speed_per_tick > 0 && p.child_range > 0);
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::NativeBuildingSpellTrigger
+            );
+        }
         AbilityEffect::Hailstone(p) => {
             assert!(p.damage >= 0 && p.speed_per_tick > 0 && p.full_radius >= 0 && p.range > 0);
             assert_eq!(
                 spellcasting.ability.target_policy,
-                AbilityTargetPolicy::HailstoneSpellTrigger
+                AbilityTargetPolicy::NativeBuildingSpellTrigger
             );
         }
         AbilityEffect::Snowfall { map_version } => {

@@ -6,7 +6,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 33;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 34;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -143,8 +143,12 @@ impl SimulationSnapshot {
                     };
                     validate_content_version(version, content)?;
                 }
-                CanonicalEntity::NativeAction { .. }
-                | CanonicalEntity::Projectile(_)
+                CanonicalEntity::NativeAction { action, .. } => {
+                    if let crate::components::NativeAction::Hailstone(state) = action {
+                        validate_content_version(state.profile.map_version, content)?;
+                    }
+                }
+                CanonicalEntity::Projectile(_)
                 | CanonicalEntity::ReflectedProjectile(_)
                 | CanonicalEntity::BallisticProjectile(_)
                 | CanonicalEntity::LineProjectile(_)

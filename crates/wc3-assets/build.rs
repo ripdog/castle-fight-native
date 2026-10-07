@@ -566,6 +566,7 @@ fn load_visual_assets(
     let rawcode_col = header_index(&headers, "rawcode")?;
     let base_rawcode_col = header_index(&headers, "base_rawcode")?;
     let field_id = header_index(&headers, "field_id")?;
+    let level = header_index(&headers, "level")?;
     let value_type = header_index(&headers, "value_type")?;
     let base_value = header_index(&headers, "base_value_json")?;
     let recovered = header_index(&headers, "recovered_value_json")?;
@@ -617,7 +618,7 @@ fn load_visual_assets(
             ability_base_rawcodes
                 .entry(rawcode.to_owned())
                 .or_insert_with(|| base_rawcode.to_owned());
-            if field == "abuf" {
+            if field == "abuf" && row.get(level).unwrap_or_default() == "1" {
                 ability_buff_ids.insert(
                     rawcode.to_owned(),
                     parse_json_comma_list(row.get(recovered).unwrap_or_default()),
@@ -863,6 +864,7 @@ fn load_visual_assets(
             // Entangling Roots-family effects hold the target in place for the buff lifetime.
             "Aenr" => &["movement"],
             "Afrz" => &["freeze"],
+            "AHtb" | "ACtb" => &["stun"],
             // Frost Armor applies one persistent shield buff and one reactive slow buff.
             "ACf2" => &["armor", "movement"],
             // Inner Fire, Prayer, and Devotion Aura use a persistent target buff model.
@@ -1055,6 +1057,28 @@ fn append_building_script_visuals(
             .collect::<Vec<_>>();
         visuals.assets.extend(missiles);
     }
+    let row = &data["mushroom"];
+    let objects: serde_json::Value = serde_json::from_str(
+        row["effect_objects_json"]
+            .as_str()
+            .ok_or("mushroom effects")?,
+    )?;
+    let child = objects[0]["rawcode"].as_str().ok_or("mushroom child")?;
+    let building = row["building_rawcode"].as_str().ok_or("mushroom source")?;
+    let missiles = visuals
+        .assets
+        .iter()
+        .filter(|a| a.owner_kind == "abilities" && a.owner_rawcode == child && a.role == "missile")
+        .map(|asset| VisualAssetSpec {
+            owner_kind: asset.owner_kind.clone(),
+            owner_rawcode: asset.owner_rawcode.clone(),
+            source_unit_rawcode: Some(building.to_owned()),
+            role: asset.role.clone(),
+            model_path: asset.model_path.clone(),
+            missile_arc: asset.missile_arc,
+        })
+        .collect::<Vec<_>>();
+    visuals.assets.extend(missiles);
     Ok(())
 }
 

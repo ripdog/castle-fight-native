@@ -173,10 +173,34 @@ fn standalone_native_timer_and_control_versions_are_checked_without_source_ident
     };
     let content = castle_fight_content_bundle(CASTLE_FIGHT_DEFAULT_MAP_VERSION).unwrap();
     let foreign = MapVersion::new(99, 1);
-    for case in 0..4 {
+    for case in 0..5 {
         let mut simulation = Simulation::new(SimulationConfig::default(), 1);
         let id = simulation.allocate_id();
-        if case < 2 {
+        if case == 4 {
+            let AbilityEffect::Hailstone(mut profile) = crate::CastleFightTowerKind::FrostLauncher
+                .definition()
+                .spellcasting
+                .unwrap()
+                .ability
+                .effect
+            else {
+                unreachable!()
+            };
+            profile.map_version = foreign;
+            simulation.world.spawn((
+                id,
+                crate::components::NativeAction::Hailstone(crate::components::HailstoneState {
+                    source: SimId(100),
+                    team: Team(0),
+                    target: SimId(101),
+                    profile,
+                    origin: SimPoint::default(),
+                    destination: SimPoint::default(),
+                    launch_tick: 0,
+                    impact_tick: 10,
+                }),
+            ));
+        } else if case < 2 {
             let state = match case {
                 0 => NativeCarrierState::Carrier {
                     building: SimId(100),

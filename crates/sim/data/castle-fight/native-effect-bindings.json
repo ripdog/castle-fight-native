@@ -457,6 +457,8 @@
     {"source_kind":"unit-ability","source_key":"A04J","implementation":"warcraft-hailstone-v1","valid_from":"9.27","valid_through":"9.27","notes":"Script-selected native attack proxy."},
     {"source_kind":"ability-effect","source_key":"A04F","implementation":"warcraft-hailstone-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Freezing Breath on the proxy weapon."},
     {"source_kind":"unit-ability","source_key":"A04L","implementation":"warcraft-hailstone-v1","valid_from":"9.27","valid_through":"9.27","notes":"Greater launcher's script-selected native attack proxy."},
-    {"source_kind":"ability-effect","source_key":"A04K","implementation":"warcraft-hailstone-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native splash Freezing Breath on the greater proxy weapon."}
+    {"source_kind":"ability-effect","source_key":"A04K","implementation":"warcraft-hailstone-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native splash Freezing Breath on the greater proxy weapon."},
+    {"source_kind":"unit-ability","source_key":"A06P","implementation":"warcraft-building-bolt-v1","valid_from":"9.27","valid_through":"9.27","notes":"Independent ground/structure native trigger and shield-gated flying-sapper callback."},
+    {"source_kind":"ability-effect","source_key":"A0AK","implementation":"warcraft-building-bolt-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Storm Bolt with source-derived damage, missile and stun."}
   ]
 }

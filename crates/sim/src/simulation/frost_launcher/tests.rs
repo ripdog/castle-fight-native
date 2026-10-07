@@ -68,7 +68,7 @@ fn source(sim: &Simulation, id: SimId, profile: HailstoneProfile) -> AbilitySour
                 mana_cost: 1,
                 cooldown_ticks: 1,
                 range: 0,
-                target_policy: AbilityTargetPolicy::HailstoneSpellTrigger,
+                target_policy: AbilityTargetPolicy::NativeBuildingSpellTrigger,
                 effect: AbilityEffect::Hailstone(profile),
             },
         }),

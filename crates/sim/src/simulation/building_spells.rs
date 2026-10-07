@@ -71,7 +71,116 @@ pub struct BuildingSpellVisualEvent {
     pub kind: BuildingSpellVisualKind,
 }
 
+pub(super) fn native_building_trigger(
+    ability: AutomaticAbilityProfile,
+) -> Option<(AttackTargetMask, bool, bool)> {
+    match ability.effect {
+        AbilityEffect::Hailstone(p) => Some((
+            p.trigger_targets,
+            p.trigger_invulnerable,
+            p.trigger_spell_immune,
+        )),
+        AbilityEffect::BuildingBolt(p) => Some((
+            p.trigger_targets,
+            p.trigger_invulnerable,
+            p.trigger_spell_immune,
+        )),
+        _ => None,
+    }
+}
+
 impl Simulation {
+    pub(super) fn native_building_trigger_allowed(
+        &self,
+        source: AbilitySourceSnapshot,
+        ability: AutomaticAbilityProfile,
+        team: Team,
+        health: i32,
+        position: SimPoint,
+        flags: UnitClassifications,
+    ) -> bool {
+        let Some((_, invulnerable, spell_immune)) = native_building_trigger(ability) else {
+            return false;
+        };
+        health > 0
+            && team != source.team
+            && (!flags.invulnerable || invulnerable)
+            && (!flags.spell_immune || spell_immune)
+            && self.ability_source_distance_sq(source.origin, position) <= square_i32(ability.range)
+    }
+
+    pub(super) fn native_building_trigger_target(
+        &self,
+        source: AbilitySourceSnapshot,
+        ability: AutomaticAbilityProfile,
+        sequence: u64,
+        units: &[UnitSnapshot],
+        checks: &mut usize,
+    ) -> Option<AbilityIntentTarget> {
+        let (targets, _, _) = native_building_trigger(ability)?;
+        let mut candidates = Vec::new();
+        for (index, unit) in units.iter().enumerate() {
+            *checks += 1;
+            if targets.can_target_unit(unit.movement_class)
+                && self.native_building_trigger_allowed(
+                    source,
+                    ability,
+                    unit.team,
+                    unit.health,
+                    unit.position,
+                    unit.classifications,
+                )
+                && unit.visible_to(source.team, self.next_tick)
+            {
+                candidates.push((unit.id, AbilityIntentTarget::Unit { index, id: unit.id }));
+            }
+        }
+        if targets.can_target_buildings() {
+            for entity in self.world.iter_entities() {
+                let (Some(id), Some(team), Some(health), Some(footprint)) = (
+                    entity.get::<SimId>(),
+                    entity.get::<Team>(),
+                    entity.get::<Health>(),
+                    entity.get::<BuildingFootprint>(),
+                ) else {
+                    continue;
+                };
+                *checks += 1;
+                let position = footprint_center_point(*footprint, self.config.navigation_cell_size);
+                let flags = entity
+                    .get::<UnitClassifications>()
+                    .copied()
+                    .unwrap_or_default();
+                if self.native_building_trigger_allowed(
+                    source,
+                    ability,
+                    *team,
+                    health.current,
+                    position,
+                    flags,
+                ) && self.visible_teams(position) & (1 << source.team.0) != 0
+                {
+                    candidates.push((*id, AbilityIntentTarget::Building { id: *id, position }));
+                }
+            }
+        }
+        candidates
+            .into_iter()
+            .min_by_key(|(id, _)| {
+                (
+                    deterministic_ability_target_rank(
+                        self.config.match_seed,
+                        source.id,
+                        ability.id,
+                        sequence,
+                        *id,
+                    ),
+                    *id,
+                )
+            })
+            .map(|(_, target)| target)
+    }
+
     fn building_spell_target_version(&self, entity: Entity) -> MapVersion {
         self.world
             .entity(entity)
@@ -284,15 +393,14 @@ impl Simulation {
         })
     }
 
-    pub(super) fn resolve_building_hex(
+    pub(super) fn check_negative_building_shield(
         &mut self,
         target: &mut UnitSnapshot,
-        profile: HexEffectProfile,
+        version: MapVersion,
         caster: SimId,
         cast_sequence: u64,
     ) -> bool {
-        let entity =
-            self.building_spell_state_entity(target.id, target.entity, profile.map_version);
+        let entity = self.building_spell_state_entity(target.id, target.entity, version);
         let mut state = self
             .world
             .entity(entity)
@@ -343,7 +451,31 @@ impl Simulation {
                     position: target.position,
                     kind: BuildingSpellVisualKind::ShieldBlocked,
                 });
-        } else {
+        }
+        self.world.entity_mut(entity).insert(state);
+        refresh_building_spell_controls(&mut self.world, self.next_tick);
+        self.project_building_spell_control(target);
+        blocked
+    }
+
+    pub(super) fn resolve_building_hex(
+        &mut self,
+        target: &mut UnitSnapshot,
+        profile: HexEffectProfile,
+        caster: SimId,
+        cast_sequence: u64,
+    ) -> bool {
+        let entity =
+            self.building_spell_state_entity(target.id, target.entity, profile.map_version);
+        let blocked =
+            self.check_negative_building_shield(target, profile.map_version, caster, cast_sequence);
+        let mut state = self
+            .world
+            .entity(entity)
+            .get::<BuildingSpellTargetState>()
+            .unwrap()
+            .clone();
+        if !blocked {
             // Native immunity failure is separate from script selection/shield interception.
             // The recovered level-one target mask has no organic restriction: mechanical units
             // are not rejected just because the unmodified AOhx base mask includes organic.
