@@ -1288,7 +1288,8 @@ mod tests {
         sim.step();
         let rooted = sim.unit(target).unwrap();
         let rooted_position = rooted.position;
-        assert!(rooted.stunned_until_tick > sim.tick());
+        assert!(rooted.status.rooted_until_tick > sim.tick());
+        assert_eq!(rooted.stunned_until_tick, 0);
         let frozen_tick = sim.step();
         assert_eq!(frozen_tick.attacks_resolved, 0);
         for _ in 0..29 {

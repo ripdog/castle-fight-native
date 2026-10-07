@@ -2,7 +2,7 @@ use super::*;
 
 pub(super) struct AttackResolutionContext<'a> {
     pub(super) units: &'a mut [UnitSnapshot],
-    pub(super) buildings: &'a [BuildingSnapshot],
+    pub(super) buildings: &'a mut [BuildingSnapshot],
     pub(super) unit_health: &'a mut [i32],
     pub(super) building_health: &'a mut [i32],
     pub(super) cooldowns: &'a mut [u16],
@@ -49,7 +49,7 @@ impl Simulation {
             let Some(pending) = unit.status.pending_attack else {
                 continue;
             };
-            let cancelled = unit.status.is_stunned(completed_tick)
+            let cancelled = unit.status.attacks_disabled(completed_tick)
                 || unit.attacks_disabled
                 || unit.orders_suspended
                 || unit.target != Some(pending.target)
@@ -322,6 +322,8 @@ impl Simulation {
                                 completed_tick,
                                 units,
                                 unit_health,
+                                buildings,
+                                building_health,
                                 damage_rules: self.combat_rules.damage_rules,
                             },
                         );
@@ -784,7 +786,7 @@ impl Simulation {
                 .enumerate()
                 .filter_map(|(source_index, source)| {
                     if source.spawn_tick == self.next_tick
-                        || source.status.is_stunned(self.next_tick)
+                        || source.status.attacks_disabled(self.next_tick)
                         || source.attacks_disabled
                         || source.orders_suspended
                     {
@@ -879,7 +881,7 @@ impl Simulation {
                         || source.cooldown_remaining.unwrap_or(0) != 0
                         || source
                             .status
-                            .is_some_and(|status| self.next_tick < status.stunned_until_tick)
+                            .is_some_and(|status| status.attacks_disabled(self.next_tick))
                     {
                         return None;
                     }

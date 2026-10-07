@@ -42,6 +42,7 @@ pub enum NativeEffectImplementationId {
     WarcraftCleaveV1,
     WarcraftFrostAttackV1,
     WarcraftPulverizeV1,
+    WarcraftNativeAuraV1,
     WarcraftScriptedAutomaticV1,
     WarcraftHumanSupportV1,
     WarcraftHumanPassiveV1,
@@ -73,6 +74,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftCleaveV1 => 18,
             Self::WarcraftFrostAttackV1 => 20,
             Self::WarcraftPulverizeV1 => 21,
+            Self::WarcraftNativeAuraV1 => 22,
             Self::WarcraftScriptedAutomaticV1 => 19,
             Self::WarcraftHumanSupportV1 => 11,
             Self::WarcraftHumanPassiveV1 => 12,
@@ -483,6 +485,13 @@ struct TuningFile {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum TuningEffect {
+    NativeAura {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        radius_world: i32,
+        mana_regeneration_per_second_per_10k: u32,
+    },
     Pulverize {
         source_kind: String,
         source_key: String,
@@ -708,7 +717,8 @@ impl TuningEffect {
 
     fn source_kind(&self) -> &str {
         match self {
-            Self::Pulverize { source_kind, .. }
+            Self::NativeAura { source_kind, .. }
+            | Self::Pulverize { source_kind, .. }
             | Self::FrostAttack { source_kind, .. }
             | Self::ScriptedAutomatic { source_kind, .. }
             | Self::ElvenAutomatic { source_kind, .. }
@@ -730,7 +740,8 @@ impl TuningEffect {
 
     fn source_key(&self) -> &str {
         match self {
-            Self::Pulverize { source_key, .. }
+            Self::NativeAura { source_key, .. }
+            | Self::Pulverize { source_key, .. }
             | Self::FrostAttack { source_key, .. }
             | Self::ScriptedAutomatic { source_key, .. }
             | Self::ElvenAutomatic { source_key, .. }
@@ -752,7 +763,8 @@ impl TuningEffect {
 
     fn unit_rawcode(&self) -> Option<&str> {
         match self {
-            Self::Pulverize { unit_rawcode, .. }
+            Self::NativeAura { unit_rawcode, .. }
+            | Self::Pulverize { unit_rawcode, .. }
             | Self::FrostAttack { unit_rawcode, .. }
             | Self::ScriptedAutomatic { unit_rawcode, .. }
             | Self::ElvenAutomatic { unit_rawcode, .. }
@@ -785,6 +797,7 @@ impl TuningEffect {
             Self::Cleave { .. } => NativeEffectImplementationId::WarcraftCleaveV1,
             Self::FrostAttack { .. } => NativeEffectImplementationId::WarcraftFrostAttackV1,
             Self::Pulverize { .. } => NativeEffectImplementationId::WarcraftPulverizeV1,
+            Self::NativeAura { .. } => NativeEffectImplementationId::WarcraftNativeAuraV1,
             Self::Defend { .. } => NativeEffectImplementationId::WarcraftDefendV1,
             Self::Bash { .. } => NativeEffectImplementationId::WarcraftBashV1,
             Self::OrbSpellProc { .. } => NativeEffectImplementationId::WarcraftOrbSpellProcV1,
@@ -807,6 +820,7 @@ impl TuningEffect {
             Self::Cleave { .. } => "cleave",
             Self::FrostAttack { .. } => "frost-attack",
             Self::Pulverize { .. } => "pulverize",
+            Self::NativeAura { .. } => "native-aura",
             Self::Defend { .. } => "defend",
             Self::Bash { .. } => "bash",
             Self::OrbSpellProc { .. } => "orb-spell-proc",
@@ -887,7 +901,8 @@ fn native_unit_mechanics_from_tuning(
                         automatic_spell = Some(candidate);
                     }
                 }
-                TuningEffect::Pulverize { .. }
+                TuningEffect::NativeAura { .. }
+                | TuningEffect::Pulverize { .. }
                 | TuningEffect::FrostAttack { .. }
                 | TuningEffect::Feedback { .. }
                 | TuningEffect::SpellResistance { .. }
@@ -958,6 +973,18 @@ pub fn native_effect_implementation_for(
 
 fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUnitEffect {
     match effect {
+        TuningEffect::NativeAura {
+            source_key,
+            radius_world,
+            mana_regeneration_per_second_per_10k,
+            ..
+        } => PassiveUnitEffect::Aura(crate::components::AuraEffectProfile {
+            ability: AbilityId(rawcode(source_key).expect("aura source")),
+            radius: world(*radius_world),
+            armor_bonus_per_100: 0,
+            mana_regeneration_per_second_per_10k: *mana_regeneration_per_second_per_10k,
+            suspend_during_spell_cooldown: false,
+        }),
         TuningEffect::Pulverize {
             source_key,
             chance_per_10k,
@@ -1764,7 +1791,26 @@ mod tests {
         let spellcasting = troll.spellcasting.expect("Ice Troll must cast Frost Armor");
         assert_eq!(spellcasting.mana.maximum, 250);
         assert_eq!(spellcasting.mana.starting, 150);
-        assert_eq!(spellcasting.mana.regen_per_tick_per_10k, 500);
+        let TuningEffect::FrostArmor {
+            mana_regen_per_second_per_10k,
+            ..
+        } = catalog()
+            .tuning_9_27
+            .effects
+            .iter()
+            .find(|effect| effect.source_key() == "A03Z")
+            .unwrap()
+        else {
+            panic!("source Frost Armor tuning")
+        };
+        assert_eq!(
+            (0..CASTLE_FIGHT_SIMULATION_HZ as u64)
+                .map(|tick| spellcasting
+                    .mana
+                    .regeneration_at_tick(tick, CASTLE_FIGHT_SIMULATION_HZ as u32))
+                .sum::<u32>(),
+            *mana_regen_per_second_per_10k
+        );
         assert_eq!(spellcasting.ability.mana_cost, 35);
         assert_eq!(spellcasting.ability.cooldown_ticks, 240);
     }

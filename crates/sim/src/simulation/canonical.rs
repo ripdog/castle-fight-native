@@ -1540,6 +1540,7 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         hash.write_u64(action.until_tick);
     }
     hash.write_u64(status.stunned_until_tick);
+    hash.write_u64(status.rooted_until_tick);
     hash.write_u64(status.order_recovery_until_tick);
     hash.write_u64(status.ability_retreat_start_tick);
     hash.write_u64(status.ability_retreat_end_tick);
@@ -1984,6 +1985,27 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_u64(u64::from(modifier.0));
             hash.write_i32(i32::from(percent_delta));
             hash.write_u16(duration_ticks);
+        }
+        AbilityEffect::FrostNova {
+            ability,
+            radius,
+            primary_damage,
+            area_damage,
+            duration_ticks,
+            hero_duration_ticks,
+            movement_percent_delta,
+            attack_speed_percent_delta,
+            targets,
+        } => {
+            hash.write_u32(ability.0);
+            hash.write_i32(radius);
+            hash.write_i32(primary_damage);
+            hash.write_i32(area_damage);
+            hash.write_u16(duration_ticks);
+            hash.write_u16(hero_duration_ticks);
+            hash.write_i32(i32::from(movement_percent_delta));
+            hash.write_i32(i32::from(attack_speed_percent_delta));
+            hash.write_u8(targets.bits());
         }
         AbilityEffect::AreaDebuff {
             ability,

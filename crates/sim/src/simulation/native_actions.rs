@@ -333,6 +333,7 @@ pub(super) fn resolve_native_building_damage_over_time(
 
 fn cleanse_native_status(status: &mut StatusState) {
     status.stunned_until_tick = 0;
+    status.rooted_until_tick = 0;
     status.movement_modifier_count = 0;
     status
         .movement_modifiers

@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 33;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 34;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -1642,7 +1642,7 @@ impl Simulation {
         let phase_start = Instant::now();
         let native_carriers = self.resolve_native_carriers(TargetProjectileContext {
             units: &mut units,
-            buildings: &buildings,
+            buildings: &mut buildings,
             grid: &grid,
             unit_health: &mut unit_health,
             building_health: &mut building_health,
@@ -1653,7 +1653,7 @@ impl Simulation {
         });
         let target_projectiles = self.resolve_due_target_projectiles(TargetProjectileContext {
             units: &mut units,
-            buildings: &buildings,
+            buildings: &mut buildings,
             grid: &grid,
             unit_health: &mut unit_health,
             building_health: &mut building_health,
@@ -1678,7 +1678,7 @@ impl Simulation {
 
         let attack_resolution = self.resolve_attacks(AttackResolutionContext {
             units: &mut units,
-            buildings: &buildings,
+            buildings: &mut buildings,
             unit_health: &mut unit_health,
             building_health: &mut building_health,
             cooldowns: &mut cooldowns,
@@ -1733,7 +1733,7 @@ impl Simulation {
         let (line_impacts, line_effects, line_invalidations) =
             self.resolve_line_projectiles(TargetProjectileContext {
                 units: &mut units,
-                buildings: &buildings,
+                buildings: &mut buildings,
                 grid: &grid,
                 positions: &positions,
                 unit_health: &mut unit_health,
@@ -3890,6 +3890,34 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
             assert_ne!(percent_delta, 0);
             assert!(duration_ticks > 0);
         }
+        AbilityEffect::FrostNova {
+            radius,
+            primary_damage,
+            area_damage,
+            duration_ticks,
+            hero_duration_ticks,
+            movement_percent_delta,
+            attack_speed_percent_delta,
+            targets,
+            ..
+        } => {
+            assert!(
+                radius > 0
+                    && primary_damage >= 0
+                    && area_damage >= 0
+                    && duration_ticks > 0
+                    && hero_duration_ticks > 0
+            );
+            assert!(
+                (-100..=0).contains(&movement_percent_delta)
+                    && (-100..=0).contains(&attack_speed_percent_delta)
+            );
+            assert_eq!(targets, AttackTargetMask::AIR_AND_GROUND);
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::RandomGroundEnemyUnit
+            );
+        }
         AbilityEffect::AreaDebuff {
             radius,
             armor_delta_per_100,
@@ -4632,6 +4660,8 @@ struct PendingAttackEffectState<'a> {
     completed_tick: u64,
     units: &'a mut [UnitSnapshot],
     unit_health: &'a mut [i32],
+    buildings: &'a mut [BuildingSnapshot],
+    building_health: &'a mut [i32],
     damage_rules: DamageRules,
 }
 
@@ -4651,9 +4681,30 @@ fn apply_pending_attack_effects(
         completed_tick,
         units,
         unit_health,
+        buildings,
+        building_health,
         damage_rules,
     } = state;
     let TargetIndex::Unit(index) = target else {
+        let TargetIndex::Building(index) = target else {
+            unreachable!()
+        };
+        if let Some(TriggeredAttackEffect::EntanglingRoots(profile)) = effects.triggered_spell
+            && profile.targets.can_target_buildings()
+            && building_health[index] > 0
+            && !buildings[index].classifications.spell_immune
+            && !buildings[index].classifications.invulnerable
+            && !(profile.nonhero_only && buildings[index].classifications.hero)
+        {
+            let status = buildings[index].status.get_or_insert_default();
+            apply_roots_status(
+                status,
+                profile,
+                completed_tick,
+                buildings[index].classifications.hero,
+                false,
+            );
+        }
         return PendingAttackEffectResult::default();
     };
     if unit_health[index] <= 0 {
@@ -4760,38 +4811,48 @@ fn apply_pending_attack_effects(
                     && profile.targets.can_target_unit(units[index].movement_class)
                     && !(profile.nonhero_only && units[index].classifications.hero)
                 {
-                    let duration = if units[index].classifications.hero {
-                        profile.hero_duration_ticks
-                    } else {
-                        profile.duration_ticks
-                    };
-                    let expires_tick = completed_tick
-                        .checked_add(u64::from(duration))
-                        .expect("Entangling Roots expiry overflow");
-                    apply_timed_movement_modifier(
+                    let hero = units[index].classifications.hero;
+                    apply_roots_status(
                         &mut units[index].status,
-                        ModifierId(profile.ability.0),
-                        -100,
-                        expires_tick,
-                    );
-                    units[index].status.stunned_until_tick =
-                        units[index].status.stunned_until_tick.max(expires_tick);
-                    let dot_expires_tick = expires_tick
-                        .checked_add(1)
-                        .expect("Entangling Roots damage-over-time expiry overflow");
-                    apply_timed_damage_over_time(
-                        &mut units[index].status,
-                        ModifierId(profile.ability.0),
-                        profile.damage_per_second,
-                        u16::try_from(CASTLE_FIGHT_SIMULATION_HZ).expect("simulation Hz fits u16"),
+                        profile,
                         completed_tick,
-                        dot_expires_tick,
+                        hero,
+                        true,
                     );
                 }
             }
         }
     }
     result
+}
+
+fn apply_roots_status(
+    status: &mut StatusState,
+    profile: crate::EntanglingRootsEffectProfile,
+    tick: u64,
+    hero: bool,
+    movement: bool,
+) {
+    let duration = if hero {
+        profile.hero_duration_ticks
+    } else {
+        profile.duration_ticks
+    };
+    let expiry = tick
+        .checked_add(u64::from(duration))
+        .expect("roots expiry overflow");
+    if movement {
+        apply_timed_movement_modifier(status, ModifierId(profile.ability.0), -100, expiry);
+    }
+    status.rooted_until_tick = status.rooted_until_tick.max(expiry);
+    apply_timed_damage_over_time(
+        status,
+        ModifierId(profile.ability.0),
+        profile.damage_per_second,
+        u16::try_from(CASTLE_FIGHT_SIMULATION_HZ).expect("simulation frequency fits"),
+        tick,
+        expiry.checked_add(1).expect("roots DOT expiry overflow"),
+    );
 }
 
 fn apply_frost_attack(

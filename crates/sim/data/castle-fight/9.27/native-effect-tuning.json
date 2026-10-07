@@ -1040,6 +1040,127 @@
         "ability": "A03Y",
         "source": "resolved/object-fields.tsv"
       }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A044",
+      "unit_rawcode": "n014",
+      "spellcasting": {
+        "mana": {
+          "maximum": 320,
+          "starting": 240,
+          "regen_per_tick_per_10k": 2147513648
+        },
+        "ability": {
+          "id": 1093678132,
+          "mana_cost": 80,
+          "cooldown_ticks": 300,
+          "range": 768000,
+          "target_policy": "RandomGroundEnemyUnit",
+          "effect": {
+            "FrostNova": {
+              "ability": 1093678131,
+              "radius": 307200,
+              "primary_damage": 150,
+              "area_damage": 75,
+              "duration_ticks": 180,
+              "hero_duration_ticks": 90,
+              "movement_percent_delta": -30,
+              "attack_speed_percent_delta": -30,
+              "targets": 3
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 30000,
+      "effect_ability_rawcode": "A043",
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "ability-effect",
+      "source_key": "A043",
+      "unit_rawcode": "n014",
+      "spellcasting": {
+        "mana": {
+          "maximum": 320,
+          "starting": 240,
+          "regen_per_tick_per_10k": 2147513648
+        },
+        "ability": {
+          "id": 1093678131,
+          "mana_cost": 0,
+          "cooldown_ticks": 0,
+          "range": 0,
+          "target_policy": "RandomGroundEnemyUnit",
+          "effect": {
+            "FrostNova": {
+              "ability": 1093678131,
+              "radius": 307200,
+              "primary_damage": 150,
+              "area_damage": 75,
+              "duration_ticks": 180,
+              "hero_duration_ticks": 90,
+              "movement_percent_delta": -30,
+              "attack_speed_percent_delta": -30,
+              "targets": 3
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 30000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A046",
+      "unit_rawcode": "n014",
+      "kind": "orb-spell-proc",
+      "chance_per_10k": 2000,
+      "effect_ability_rawcode": "A045",
+      "targets": "air-ground-units-and-buildings",
+      "provenance": {
+        "ability": "A046",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A045",
+      "kind": "entangling-roots",
+      "damage_per_second": 30,
+      "duration_millis": 12500,
+      "hero_duration_millis": 3130,
+      "nonhero_only": true,
+      "targets": "air-ground-units-and-buildings",
+      "provenance": {
+        "ability": "A045",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A042",
+      "unit_rawcode": "n014",
+      "kind": "native-aura",
+      "radius_world": 800,
+      "mana_regeneration_per_second_per_10k": 5000,
+      "provenance": {
+        "ability": "A042",
+        "source": "resolved/object-fields.tsv"
+      }
     }
   ]
 }

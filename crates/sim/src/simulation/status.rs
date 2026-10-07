@@ -41,6 +41,43 @@ pub(super) fn apply_ability_effect_to_unit(
                 expires_tick,
             );
         }
+        AbilityEffect::FrostNova {
+            ability,
+            area_damage,
+            duration_ticks,
+            hero_duration_ticks,
+            movement_percent_delta,
+            attack_speed_percent_delta,
+            targets,
+            ..
+        } => {
+            if target.classifications.invulnerable
+                || target.classifications.spell_immune
+                || !targets.can_target_unit(target.movement_class)
+            {
+                return false;
+            }
+            let damage = damage_rules.apply_spell(area_damage, target.armor.armor_type);
+            let damage = spell_damage_after_defend(*target, damage, completed_tick);
+            target.health = target
+                .health
+                .checked_sub(damage)
+                .expect("Frost Nova damage overflow");
+            if target.health > 0 {
+                apply_frost_attack(
+                    target,
+                    crate::FrostAttackEffectProfile {
+                        ability,
+                        duration_ticks,
+                        hero_duration_ticks,
+                        movement_percent_delta,
+                        attack_speed_percent_delta,
+                        targets,
+                    },
+                    completed_tick,
+                );
+            }
+        }
         AbilityEffect::AreaDebuff {
             ability,
             armor_delta_per_100,

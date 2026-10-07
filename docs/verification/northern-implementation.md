@@ -14,7 +14,7 @@ Northern is selectable for retained Castle Fight 9.27/r1 once Snowy Rocks is pro
 
 ## Remaining command-card order
 
-Crystal Palace; alternate Snowveil Fountain / Frost Launcher and its upgrade; Chilling Mushroom; Icy Tower; World Freezer. This is an implementation checklist, not a claim that those entities are playable.
+Alternate Snowveil Fountain / Frost Launcher and its upgrade; Chilling Mushroom; Icy Tower; World Freezer. This is an implementation checklist, not a claim that those entities are playable.
 
 ## Icy Rocks / Polar Bear
 
@@ -80,3 +80,12 @@ The Northern proc audit also found a shared importer bug: `A03W` explicitly has 
 - Complete inventory is native Frost Breath `A03Y`. Its unit-only air/ground mask, normal/hero durations and map Misc slow rates consume the shared versioned Frost projection. No spell order, mana charge, scripted proxy, delay or special AI is attached.
 - Ballistic splash retains its Frost payload independently of the source lifetime and applies slow to live eligible impact victims. Moving the original selected target does not move the impact point. Air and ground victims are eligible; friendly, outside, dead, immune and invulnerable victims receive no slow. Structure weapon permission does not expand the ability's unit-only mask.
 - Shared synthetic flight tests prove splash center, a selected target leaving the impact area, hero expiry, ordinary weapon damage on a magic-immune victim without slow, allied/outside exclusions and in-flight wire restoration across workers. Existing splash geometry/falloff and catalog-wide closure tests also apply. Flight shape becomes bundle/checksum/snapshot 16/33/28.
+
+## Crystal Palace / Ice Queen
+
+- `h03S` produces `n014` (base `nhea`); all ordinary/protected weapon, stats, sapper/ward organic classification, corpse, production/build/repair and command-card data come from the catalog.
+- Complete inventory: assassination-target marker `A0CV`, visual Sphere `A04A`, Parasite order `A044` invoking Frost Nova `A043`, orb `A046` invoking roots `A045`, and native Brilliance Aura `A042`. The production building also retains visual Spheres `A04B`/`A04C` and its shared production channel marker; these have no authoritative combat effect.
+- Nova trigger is a ground enemy combat sapper. Unlike the earlier Parasite parents, this parent permits heroes. Protected parent resources/range apply; the child is free and immediate at the selected target. Native air/ground effect eligibility independently permits nearby heroes and non-sappers, and rejects immunity/invulnerability. Specific-target damage adds to area damage on the primary; the tooltip's primary-only wording does not replace native field composition. Slow uses native object durations and retained map Misc rates. Dummy recycling has no delayed gameplay effect or AI retreat.
+- The orb has separate structure permission and its own child tuning. Roots now retain a distinct attack/movement-disable deadline, allowing ordered spellcasting. Structure roots preserve weapon disable and periodic damage in existing authoritative building status. Neither ordinary weapon permission nor the parent proc bypasses the child's nonhero/immunity rules.
+- Brilliance is a friendly/self air/ground flat mana-regeneration aura, including native invulnerable recipients, with no percentage bonus or cast-cooldown suspension. Existing modifier identity prevents stacking from identical aura sources. Fractional regeneration retains its phase and remainder.
+- Synthetic fixtures prove target-centered Nova and extra primary damage, hero cast eligibility/duration, effect exclusions, structure roots and continued casting during roots, mana-aura range/relation/cooldown behavior, and wire continuation. Catalog closure includes the visual building identities. Client inspection distinguishes roots and shows mana/weapon modifiers. Bundle/checksum/snapshot become 17/34/29.

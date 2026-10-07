@@ -6,7 +6,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 28;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 29;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

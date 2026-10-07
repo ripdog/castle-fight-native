@@ -975,7 +975,7 @@ fn orb_child_nonhero_restriction_does_not_cancel_primary_hit_and_retains_hero_du
         sim.step();
         assert_eq!(sim.unit(hero).unwrap().health, 990);
         assert_eq!(
-            sim.unit(hero).unwrap().status.stunned_until_tick,
+            sim.unit(hero).unwrap().status.rooted_until_tick,
             if nonhero_only { 0 } else { 4 }
         );
         let mut restored = wire_restored(&sim, 4);
@@ -1083,7 +1083,8 @@ fn frost_attack_retains_independent_orb_payload_and_live_hero_immunity_after_res
                 frost.unwrap().expires_tick,
                 sim.tick() - 1 + if hero { 3 } else { 12 }
             );
-            assert_eq!(status.stunned_until_tick > sim.tick(), !hero);
+            assert_eq!(status.rooted_until_tick > sim.tick(), !hero);
+            assert_eq!(status.stunned_until_tick, 0);
         }
         for _ in 0..14 {
             sim.step();
@@ -1368,4 +1369,227 @@ fn frost_breath_splash_uses_live_impact_victims_and_restores_in_flight() {
         restored.step();
         assert_eq!(sim.checksum(), restored.checksum());
     }
+}
+
+#[test]
+fn frost_nova_uses_target_center_extra_primary_damage_and_allows_hero_trigger() {
+    let mut sim = simulation(1);
+    let caster = sim.spawn_unit_with_spellcasting(
+        unit(0, 20, 0, AttackDelivery::Melee),
+        SpellcastingProfile {
+            mana: ManaProfile::per_second(12, 12, 0),
+            ability: AutomaticAbilityProfile {
+                id: AbilityId(71),
+                mana_cost: 3,
+                cooldown_ticks: 1000,
+                range: 200 * SUBUNITS_PER_WORLD_UNIT,
+                target_policy: AbilityTargetPolicy::RandomGroundEnemyUnit,
+                effect: AbilityEffect::FrostNova {
+                    ability: AbilityId(72),
+                    radius: 50 * SUBUNITS_PER_WORLD_UNIT,
+                    primary_damage: 20,
+                    area_damage: 10,
+                    duration_ticks: 9,
+                    hero_duration_ticks: 3,
+                    movement_percent_delta: -25,
+                    attack_speed_percent_delta: -15,
+                    targets: AttackTargetMask::AIR_AND_GROUND,
+                },
+            },
+        },
+    );
+    let primary = sim.spawn_unit_with_properties(
+        unit(1, 180, 0, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            classifications: UnitClassifications {
+                combat_sapper: true,
+                hero: true,
+                ..UnitClassifications::default()
+            },
+            ..UnitGameplayProperties::default()
+        },
+    );
+    let air = sim.spawn_unit_with_properties(
+        unit(1, 200, 0, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            movement_class: MovementClass::Air,
+            ..UnitGameplayProperties::default()
+        },
+    );
+    let by_caster = sim.spawn_unit(unit(1, 40, 0, AttackDelivery::Melee));
+    let outside = sim.spawn_unit(unit(1, 231, 0, AttackDelivery::Melee));
+    let ally = sim.spawn_unit(unit(0, 200, 0, AttackDelivery::Melee));
+    let immune = sim.spawn_unit_with_properties(
+        unit(1, 200, 0, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            classifications: UnitClassifications {
+                spell_immune: true,
+                ..UnitClassifications::default()
+            },
+            ..UnitGameplayProperties::default()
+        },
+    );
+    sim.step();
+    assert_eq!(sim.unit(primary).unwrap().health, 970);
+    assert_eq!(sim.unit(air).unwrap().health, 990);
+    assert_eq!(
+        sim.unit(primary).unwrap().status.attack_speed_modifiers[0].expires_tick,
+        3
+    );
+    assert_eq!(
+        sim.unit(air).unwrap().status.attack_speed_modifiers[0].expires_tick,
+        9
+    );
+    for id in [by_caster, outside, ally, immune] {
+        assert_eq!(sim.unit(id).unwrap().health, 1000);
+        assert_eq!(sim.unit(id).unwrap().status.attack_speed_modifier_count, 0);
+    }
+    let event = sim
+        .ability_casts_last_tick()
+        .iter()
+        .find(|event| event.source == caster)
+        .unwrap();
+    assert_eq!(event.ability, AbilityId(72));
+    assert_eq!(
+        event.target_position,
+        Some(sim.unit(primary).unwrap().position)
+    );
+    assert_eq!(sim.unit(caster).unwrap().mana_current, Some(9));
+    let mut restored = wire_restored(&sim, 4);
+    for _ in 0..12 {
+        sim.step();
+        restored.step();
+        assert_eq!(sim.checksum(), restored.checksum());
+    }
+}
+
+#[test]
+fn roots_can_disable_structure_weapons_and_dot_without_interrupting_spellcasting() {
+    let mut sim = simulation(1);
+    let caster = sim.spawn_unit_with_properties(
+        unit(0, 20, 10, AttackDelivery::RangedInstant),
+        UnitGameplayProperties {
+            passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::TriggeredSpellProc(
+                crate::TriggeredSpellProcProfile {
+                    ability: AbilityId(81),
+                    chance_per_10k: 10_000,
+                    targets: AttackTargetMask::ALL,
+                    effect: TriggeredAttackEffect::EntanglingRoots(
+                        crate::EntanglingRootsEffectProfile {
+                            ability: AbilityId(82),
+                            damage_per_second: 2,
+                            duration_ticks: 35,
+                            hero_duration_ticks: 7,
+                            nonhero_only: true,
+                            targets: AttackTargetMask::ALL,
+                        },
+                    ),
+                },
+            )),
+            ..UnitGameplayProperties::default()
+        },
+    );
+    let building = sim.spawn_building(BuildingSpawn {
+        team: Team(1),
+        footprint: BuildingFootprint::new(3, 0, 1, 1),
+        health: 1000,
+        production: None,
+        attack: Some(AttackProfile {
+            damage: 100,
+            cooldown_ticks: 1,
+            delivery: AttackDelivery::RangedInstant,
+            range: 200 * SUBUNITS_PER_WORLD_UNIT,
+            acquisition_range: 200 * SUBUNITS_PER_WORLD_UNIT,
+        }),
+        spellcasting: Some(SpellcastingProfile {
+            mana: ManaProfile::per_second(10, 10, 0),
+            ability: AutomaticAbilityProfile {
+                id: AbilityId(83),
+                mana_cost: 0,
+                cooldown_ticks: 3,
+                range: 200 * SUBUNITS_PER_WORLD_UNIT,
+                target_policy: AbilityTargetPolicy::RandomEnemyUnit,
+                effect: AbilityEffect::Damage { amount: 1 },
+            },
+        }),
+    });
+    sim.step();
+    sim.step();
+    let view = sim.building(building).unwrap();
+    assert!(view.status.rooted_until_tick > sim.tick());
+    assert_eq!(view.stunned_until_tick.unwrap_or(0), 0);
+    assert_eq!(view.health, 990);
+    let health_before = sim.unit(caster).unwrap().health;
+    let mut restored = wire_restored(&sim, 4);
+    for _ in 0..30 {
+        sim.step();
+        restored.step();
+        assert_eq!(sim.checksum(), restored.checksum());
+    }
+    assert_eq!(sim.building(building).unwrap().health, 988);
+    assert_eq!(sim.unit(caster).unwrap().health, health_before - 10);
+}
+
+#[test]
+fn native_mana_aura_retains_fractional_regeneration_and_continues_during_cast_cooldown() {
+    let mut sim = simulation(1);
+    let mana = mana_profile(0);
+    let caster = sim.spawn_unit_with_properties_and_spellcasting(
+        unit(0, 20, 0, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            collision_radius: Some(CollisionRadius(0)),
+            passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Aura(
+                crate::components::AuraEffectProfile {
+                    ability: AbilityId(91),
+                    radius: 100 * SUBUNITS_PER_WORLD_UNIT,
+                    armor_bonus_per_100: 0,
+                    mana_regeneration_per_second_per_10k: 13_000,
+                    suspend_during_spell_cooldown: false,
+                },
+            )),
+            ..UnitGameplayProperties::default()
+        },
+        mana,
+    );
+    sim.world
+        .entity_mut(entity(&sim, caster))
+        .get_mut::<AutomaticAbilityState>()
+        .unwrap()
+        .ready_tick = 1000;
+    // The source needs no mana to provide the aura; every recipient keeps its own mana state.
+    let boundary = sim.spawn_unit_with_properties_and_spellcasting(
+        unit(0, 120, 0, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            collision_radius: Some(CollisionRadius(0)),
+            ..UnitGameplayProperties::default()
+        },
+        mana,
+    );
+    let outside = sim.spawn_unit_with_properties_and_spellcasting(
+        unit(0, 121, 0, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            collision_radius: Some(CollisionRadius(0)),
+            ..UnitGameplayProperties::default()
+        },
+        mana,
+    );
+    let enemy = sim.spawn_unit_with_properties_and_spellcasting(
+        unit(1, 120, 0, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            collision_radius: Some(CollisionRadius(0)),
+            ..UnitGameplayProperties::default()
+        },
+        mana,
+    );
+    sim.step();
+    let mut restored = wire_restored(&sim, 4);
+    for _ in 0..60 {
+        sim.step();
+        restored.step();
+        assert_eq!(sim.checksum(), restored.checksum());
+    }
+    assert_eq!(sim.unit(boundary).unwrap().mana_current, Some(2));
+    assert_eq!(sim.unit(outside).unwrap().mana_current, Some(0));
+    assert_eq!(sim.unit(enemy).unwrap().mana_current, Some(0));
+    assert!(sim.unit(caster).unwrap().health > 0);
 }

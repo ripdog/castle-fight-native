@@ -455,6 +455,54 @@ impl Simulation {
                                 metrics.effects += 1;
                             }
                         }
+                    } else if let AbilityEffect::FrostNova {
+                        ability,
+                        radius,
+                        primary_damage,
+                        area_damage,
+                        duration_ticks,
+                        hero_duration_ticks,
+                        movement_percent_delta,
+                        attack_speed_percent_delta,
+                        targets,
+                    } = intent.ability.effect
+                    {
+                        let center = units[index].position;
+                        let primary_id = units[index].id;
+                        for target in units.iter_mut() {
+                            if target.health <= 0
+                                || target.team == source.team
+                                || center.distance_sq(target.position) > square_i32(radius)
+                            {
+                                continue;
+                            }
+                            let effect = AbilityEffect::FrostNova {
+                                ability,
+                                radius,
+                                primary_damage: 0,
+                                area_damage: area_damage
+                                    .checked_add(if target.id == primary_id {
+                                        primary_damage
+                                    } else {
+                                        0
+                                    })
+                                    .expect("Nova total damage overflow"),
+                                duration_ticks,
+                                hero_duration_ticks,
+                                movement_percent_delta,
+                                attack_speed_percent_delta,
+                                targets,
+                            };
+                            if apply_ability_effect_to_unit(
+                                target,
+                                effect,
+                                source.team,
+                                self.next_tick,
+                                self.combat_rules.damage_rules,
+                            ) {
+                                metrics.effects += 1;
+                            }
+                        }
                     } else if let AbilityEffect::AreaStun { radius, .. }
                     | AbilityEffect::AreaDebuff { radius, .. } = intent.ability.effect
                     {
@@ -724,7 +772,8 @@ impl Simulation {
                 source: intent.source_id,
                 ability: match intent.ability.effect {
                     AbilityEffect::AreaStun { ability, .. }
-                    | AbilityEffect::AreaDebuff { ability, .. } => ability,
+                    | AbilityEffect::AreaDebuff { ability, .. }
+                    | AbilityEffect::FrostNova { ability, .. } => ability,
                     _ => intent.ability.id,
                 },
                 target: intent.target.cast_target(),
@@ -1139,11 +1188,14 @@ impl Simulation {
                 if candidate.health <= 0
                     || (matches!(
                         ability.effect,
-                        AbilityEffect::AreaStun { .. } | AbilityEffect::AreaDebuff { .. }
+                        AbilityEffect::AreaStun { .. }
+                            | AbilityEffect::AreaDebuff { .. }
+                            | AbilityEffect::FrostNova { .. }
                     ) && (!candidate.classifications.combat_sapper
                         || candidate.classifications.invulnerable
                         || candidate.classifications.spell_immune
-                        || candidate.classifications.hero))
+                        || (candidate.classifications.hero
+                            && !matches!(ability.effect, AbilityEffect::FrostNova { .. }))))
                     || (ability.target_policy == AbilityTargetPolicy::RandomGroundEnemyUnit
                         && candidate.movement_class != MovementClass::Ground)
                     || self.ability_source_distance_sq(source.origin, candidate.position) > range_sq
@@ -1494,7 +1546,11 @@ impl Simulation {
                                 && (ability.target_policy != AbilityTargetPolicy::FlyingEnemyUnit
                                     || (target.movement_class == MovementClass::Air
                                         && target.classifications.combat_sapper
-                                        && !target.classifications.hero))
+                                        && (!target.classifications.hero
+                                            || matches!(
+                                                ability.effect,
+                                                AbilityEffect::FrostNova { .. }
+                                            ))))
                                 && self.ability_source_distance_sq(source.origin, target.position)
                                     <= square_i32(ability.range)
                                 && match ability.effect {
@@ -1525,11 +1581,14 @@ impl Simulation {
                         AbilityTargetPolicy::RandomGroundEnemyUnit => {
                             (!matches!(
                                 ability.effect,
-                                AbilityEffect::AreaStun { .. } | AbilityEffect::AreaDebuff { .. }
+                                AbilityEffect::AreaStun { .. }
+                                    | AbilityEffect::AreaDebuff { .. }
+                                    | AbilityEffect::FrostNova { .. }
                             ) || (target.classifications.combat_sapper
                                 && !target.classifications.invulnerable
                                 && !target.classifications.spell_immune
-                                && !target.classifications.hero))
+                                && (!target.classifications.hero
+                                    || matches!(ability.effect, AbilityEffect::FrostNova { .. }))))
                                 && target.team != source.team
                                 && target.movement_class == MovementClass::Ground
                                 && self.ability_source_distance_sq(source.origin, target.position)

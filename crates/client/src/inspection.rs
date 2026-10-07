@@ -2209,14 +2209,39 @@ fn active_effect_badges(
         .iter()
         .filter(|modifier| modifier.expires_tick > tick)
     {
+        let mut changes = Vec::new();
+        if modifier.armor_bonus_per_100 != 0 {
+            changes.push(format!(
+                "Armor {}{}",
+                if modifier.armor_bonus_per_100 >= 0 {
+                    "+"
+                } else {
+                    ""
+                },
+                armor_points_label(i32::from(modifier.armor_bonus_per_100))
+            ));
+        }
+        if modifier.mana_regeneration_per_second_per_10k > 0 {
+            changes.push(format!(
+                "Mana +{}/s",
+                f64::from(modifier.mana_regeneration_per_second_per_10k) / 10_000.0
+            ));
+        }
+        if modifier.regeneration_per_second_per_10k > 0 {
+            changes.push(format!(
+                "Health +{}/s",
+                f64::from(modifier.regeneration_per_second_per_10k) / 10_000.0
+            ));
+        }
+        if modifier.damage_bonus_per_10k != 0 {
+            changes.push(format!(
+                "Damage {:+}%",
+                f64::from(modifier.damage_bonus_per_10k) / 100.0
+            ));
+        }
         let label = format!(
-            "Armor {}{} ({}s)",
-            if modifier.armor_bonus_per_100 >= 0 {
-                "+"
-            } else {
-                ""
-            },
-            armor_points_label(i32::from(modifier.armor_bonus_per_100)),
+            "{} ({}s)",
+            changes.join(", "),
             remaining(modifier.expires_tick)
         );
         effects.push(ActiveEffectBadgeData {
@@ -2225,7 +2250,7 @@ fn active_effect_badges(
                 role: UiStatusIconRole::Primary,
             },
             description: label,
-            beneficial: modifier.armor_bonus_per_100 >= 0,
+            beneficial: modifier.armor_bonus_per_100 >= 0 && modifier.damage_bonus_per_10k >= 0,
         });
     }
     append_damage_over_time_badges(&mut effects, &unit.status, tick);
@@ -2247,7 +2272,14 @@ fn append_damage_over_time_badges(
                 role: UiStatusIconRole::Primary,
             },
             description: format!(
-                "{} damage/pulse ({}s)",
+                "{}{} damage/pulse ({}s)",
+                if status.rooted_until_tick > tick
+                    && modifier.expires_tick == status.rooted_until_tick.saturating_add(1)
+                {
+                    "Rooted: "
+                } else {
+                    ""
+                },
                 modifier.damage_per_pulse,
                 modifier
                     .expires_tick
@@ -2876,7 +2908,14 @@ fn format_unit_inspector(unit: &UnitSample, tick: u64, samples: &PresentationSam
         attack_type_label(unit, samples),
         defense_type_label(unit, samples),
         format!("Attack cooldown: {} ticks", unit.cooldown_remaining),
-        format!("State: {}", stun_label(unit.stunned_until_tick, tick)),
+        format!(
+            "State: {}",
+            if unit.status.rooted_until_tick > tick {
+                "Rooted".to_owned()
+            } else {
+                stun_label(unit.stunned_until_tick, tick)
+            }
+        ),
     ];
     if let (Some(current), Some(maximum)) = (unit.mana_current, unit.mana_maximum) {
         lines.push(format!("Mana: {current}/{maximum}"));
@@ -3083,6 +3122,9 @@ fn armor_type_name(armor_type: ArmorType) -> &'static str {
 fn unit_order_label(unit: &UnitSample, tick: u64) -> String {
     if unit.stunned_until_tick > tick {
         return "Disabled/stunned".into();
+    }
+    if unit.status.rooted_until_tick > tick {
+        return "Rooted".into();
     }
     match (
         unit.target,

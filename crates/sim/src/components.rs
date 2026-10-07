@@ -1095,6 +1095,17 @@ pub enum AbilityEffect {
         percent_delta: i16,
         duration_ticks: u16,
     },
+    FrostNova {
+        ability: AbilityId,
+        radius: i32,
+        primary_damage: i32,
+        area_damage: i32,
+        duration_ticks: u16,
+        hero_duration_ticks: u16,
+        movement_percent_delta: i16,
+        attack_speed_percent_delta: i16,
+        targets: AttackTargetMask,
+    },
     AreaDebuff {
         ability: AbilityId,
         radius: i32,
@@ -1213,6 +1224,7 @@ impl AbilityEffect {
             Self::Hex { .. } => 14,
             Self::AreaStun { .. } => 15,
             Self::AreaDebuff { .. } => 16,
+            Self::FrostNova { .. } => 17,
         }
     }
 }
@@ -1335,6 +1347,7 @@ pub struct StatusState {
     pub action_animation: Option<ActionAnimationState>,
     pub pending_attack: Option<PendingAttackState>,
     pub stunned_until_tick: u64,
+    pub rooted_until_tick: u64,
     /// Independent script/order recovery, not a removable native stun buff.
     pub order_recovery_until_tick: u64,
     pub ability_retreat_start_tick: u64,
@@ -1392,6 +1405,11 @@ impl StatusState {
         self.armor_modifiers[..usize::from(self.armor_modifier_count)]
             .iter()
             .any(|modifier| modifier.revealed_to == Some(team) && tick < modifier.expires_tick)
+    }
+
+    #[must_use]
+    pub const fn attacks_disabled(self, tick: u64) -> bool {
+        tick < self.stunned_until_tick || tick < self.rooted_until_tick
     }
 
     #[must_use]

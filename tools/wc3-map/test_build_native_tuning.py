@@ -51,6 +51,19 @@ class NativeTuningProjectionTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             native.project_effect(recipe, {**fields, "targs1": "ground,enemy,nonhero"}, None, {}, {})
 
+    def test_proxy_nova_retains_specific_and_area_damage_and_target_delivery(self) -> None:
+        recipe = {"kind": "frost-nova", "source_key": "PARN", "source_kind": "unit-ability", "unit_rawcode": "UNIT"}
+        parent = {"cost1": "0", "cool1": "1", "rng1": "8"}
+        child = {"cost1": "0", "cool1": "0", "dataa1": "15", "datab1": "23", "area1": "7", "dur1": "0.4", "herodur1": "0.2", "targs1": "air,ground,enemies,neutral"}
+        mechanics = {"effect_key": "CHLD", "effect_fields": child, "effect_protected": {},
+            "mechanics_row": {"mechanic_kind": "dummy-target-ability-from-caster", "scheduled_delays_json": "[]"},
+            "misc": {"FrostMoveSpeedDecrease": "0.17", "FrostAttackSpeedDecrease": "0.23"}}
+        effect = native.project_effect(recipe, parent, {"mana_max": "20", "mana_start": "12", "mana_regen": "1.3"}, {}, mechanics)
+        nova = effect["spellcasting"]["ability"]["effect"]["FrostNova"]
+        self.assertEqual((nova["primary_damage"], nova["area_damage"], nova["duration_ticks"], nova["hero_duration_ticks"]), (23, 15, 12, 6))
+        with self.assertRaises(ValueError):
+            native.project_effect(recipe, parent, {"mana_max": "20", "mana_start": "12", "mana_regen": "1.3"}, {}, {**mechanics, "mechanics_row": {"mechanic_kind": "dummy-immediate-ability-from-caster", "scheduled_delays_json": "[]"}})
+
     def test_fixed_point_conversion_is_exact_not_float_rounded(self) -> None:
         self.assertEqual(native.scaled("0.1234", 10_000), 1234)
         self.assertEqual(native.scaled("0.123", 1000), 123)

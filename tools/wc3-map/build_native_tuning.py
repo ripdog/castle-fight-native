@@ -62,7 +62,7 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
 
     kind = recipe["kind"]
     effect: dict[str, Any] = dict(recipe)
-    if kind in {"war-stomp", "howl-of-terror"}:
+    if kind in {"war-stomp", "howl-of-terror", "frost-nova"}:
         return project_scripted_area(recipe, fields, unit, protected, mechanics)
     if kind in {"healing-wave", "solar-strike", "phoenix-fire"}:
         return project_elven_automatic(recipe, fields, unit, protected, mechanics)
@@ -85,6 +85,10 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         effect.update(chance_per_10k=number("DataA1", 100),
                       damage_multiplier_per_10k=number("DataB1", 10_000),
                       targets=unit_targets(fields["targs1"], allow_structures=True))
+    elif kind == "native-aura":
+        if number("DataB1") != 0 or set(fields["targs1"].split(",")) != {"air", "ground", "friend", "self", "vuln", "invu"}:
+            raise ValueError("native aura requires explicit percent/target semantics")
+        effect.update(radius_world=number("Area1"), mana_regeneration_per_second_per_10k=number("DataA1", 10_000))
     elif kind == "pulverize":
         if set(fields["targs1"].split(",")) - {"ground", "enemy", "enemies", "neutral"}:
             raise ValueError("unsupported native Pulverize mask")
@@ -133,7 +137,7 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         if len(set(chances)) != 1:
             raise ValueError("class-specific orb chances require a richer native primitive")
         effect.update(chance_per_10k=chances[0], effect_ability_rawcode=fields["unitid1"],
-                      targets=unit_targets(fields["targs1"]))
+                      targets=unit_targets(fields["targs1"], allow_structures=True))
     elif kind == "chain-lightning":
         effect.update(initial_damage=number("DataA1"), maximum_targets=number("DataB1"),
                       jump_radius_world=number("Area1"),
@@ -143,7 +147,7 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         effect.update(damage_per_second=number("DataA1"), duration_millis=number("Dur1", 1000),
                       hero_duration_millis=number("HeroDur1", 1000),
                       nonhero_only="nonhero" in fields["targs1"].split(","),
-                      targets=unit_targets(fields["targs1"]))
+                      targets=unit_targets(fields["targs1"], allow_structures=True))
     elif kind == "burning-oil":
         tokens = set(fields["targs1"].split(","))
         if number("DataE1") != 1 or "air" in tokens:
@@ -260,7 +264,8 @@ def project_scripted_area(recipe: dict[str, str], fields: dict[str, str], unit: 
     if recipe["kind"] == "war-stomp" and set(child_fields["targs1"].split(",")) != {"ground"}:
         raise ValueError("War Stomp needs explicit coverage for this effect mask")
     row = mechanics["mechanics_row"]
-    if row["mechanic_kind"] != "dummy-immediate-ability-from-caster" or json.loads(row["scheduled_delays_json"]):
+    expected = "dummy-target-ability-from-caster" if recipe["kind"] == "frost-nova" else "dummy-immediate-ability-from-caster"
+    if row["mechanic_kind"] != expected or json.loads(row["scheduled_delays_json"]):
         raise ValueError("area spell requires immediate caster-centered source control flow")
     def ticks(value: str) -> int:
         return int((Decimal(value) * 30).to_integral_value(rounding="ROUND_CEILING"))
@@ -280,6 +285,14 @@ def project_scripted_area(recipe: dict[str, str], fields: dict[str, str], unit: 
         effect = {"AreaDebuff": {"ability": fourcc(child), "radius": scaled(child_fields["area1"], 1024),
             "armor_delta_per_100": -scaled(child_fields["datab1"], 100), "damage_delta_per_10k": -scaled(child_fields["dataa1"], 10_000),
             "duration_ticks": ticks(child_fields["dur1"]), "hero_duration_ticks": ticks(child_fields["herodur1"]), "targets": 3}}
+    if recipe["kind"] == "frost-nova":
+        if set(child_fields["targs1"].split(",")) != {"air", "ground", "enemies", "neutral"}:
+            raise ValueError("unsupported Frost Nova effect mask")
+        effect = {"FrostNova": {"ability": fourcc(child), "radius": scaled(child_fields["area1"], 1024),
+            "primary_damage": scaled(child_fields["datab1"]), "area_damage": scaled(child_fields["dataa1"]),
+            "duration_ticks": ticks(child_fields["dur1"]), "hero_duration_ticks": ticks(child_fields["herodur1"]),
+            "movement_percent_delta": -scaled(mechanics["misc"]["FrostMoveSpeedDecrease"], 100),
+            "attack_speed_percent_delta": -scaled(mechanics["misc"]["FrostAttackSpeedDecrease"], 100), "targets": 3}}
     profile = {"mana": {"maximum": mana("mana_max"), "starting": mana("mana_start"),
         "regen_per_tick_per_10k": (1 << 31) | rate}, "ability": {"id": fourcc(recipe["source_key"]),
         "mana_cost": 0 if child_only else scaled(protected.get("mana_cost", fields["cost1"])),
@@ -337,9 +350,12 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
                 raise ValueError(f"recipe {key} is not in its source unit's extracted ability inventory")
         source = recipe["source_key"]
         spell = spell_mechanics.get(source)
-        if spell is None and recipe["kind"] in {"healing-wave", "solar-strike", "war-stomp", "howl-of-terror"}:
-            spell = next((row for row in spell_mechanics.values() if source in row["direct_map_rawcodes"].split(",")
-                or source in row["reachable_map_objects_json"]), None)
+        if spell is None and recipe["kind"] in {"healing-wave", "solar-strike", "war-stomp", "howl-of-terror", "frost-nova"}:
+            matches = [row for row in spell_mechanics.values() if row["unit_rawcode"] == recipe.get("unit_rawcode")
+                and source in spell_semantics[row["ability_rawcode"]]["effect_rawcodes"].split(",")]
+            if len(matches) != 1:
+                raise ValueError(f"proxy child {source} needs one semantic parent for its source unit")
+            spell = matches[0]
         detail = dict(mechanics.get(recipe.get("unit_rawcode", ""), {}))
         detail["misc"] = misc
         if spell is not None:

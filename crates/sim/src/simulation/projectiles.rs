@@ -7,7 +7,7 @@ pub(super) struct ChainLightningHopResolution {
 
 pub(super) struct TargetProjectileContext<'a> {
     pub(super) units: &'a mut [UnitSnapshot],
-    pub(super) buildings: &'a [BuildingSnapshot],
+    pub(super) buildings: &'a mut [BuildingSnapshot],
     pub(super) grid: &'a SpatialGrid,
     pub(super) unit_health: &'a mut [i32],
     pub(super) building_health: &'a mut [i32],
@@ -325,6 +325,8 @@ impl Simulation {
                                     completed_tick,
                                     units,
                                     unit_health,
+                                    buildings,
+                                    building_health,
                                     damage_rules: self.combat_rules.damage_rules,
                                 },
                             );
