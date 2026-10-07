@@ -168,6 +168,21 @@ def _action_duration_ticks(point: str, backswing: str, hz: int) -> int:
     return ticks
 
 
+def _action_timing_entry(rawcode: str, fields: dict[str, str], hz: int) -> dict[str, Any]:
+    cast_point_ticks = _action_duration_ticks(fields.get("ucpt", "-"), "0", hz)
+    result = {
+        "rawcode": rawcode,
+        "primary_attack_ticks": _action_duration_ticks(fields.get("udp1", "-"), fields.get("ubs1", "-"), hz),
+        "primary_attack_point_ticks": _action_duration_ticks(fields.get("udp1", "-"), "0", hz),
+        "secondary_attack_ticks": _action_duration_ticks(fields.get("udp2", "-"), fields.get("ubs2", "-"), hz),
+        "secondary_attack_point_ticks": _action_duration_ticks(fields.get("udp2", "-"), "0", hz),
+        "cast_ticks": _action_duration_ticks(fields.get("ucpt", "-"), fields.get("ucbs", "-"), hz),
+    }
+    if cast_point_ticks > 0:
+        result["cast_point_ticks"] = cast_point_ticks
+    return result
+
+
 def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]:
     extraction = release["extraction"]
     if extraction.get("status") != "retained":
@@ -385,14 +400,7 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
         "simulation_hz": simulation_hz,
         "spell_reveals": sorted(spell_reveals.values(), key=lambda reveal: reveal["rawcode"]),
         "action_timings": [
-            {
-                "rawcode": rawcode,
-                "primary_attack_ticks": _action_duration_ticks(fields.get("udp1", "-"), fields.get("ubs1", "-"), simulation_hz),
-                "primary_attack_point_ticks": _action_duration_ticks(fields.get("udp1", "-"), "0", simulation_hz),
-                "secondary_attack_ticks": _action_duration_ticks(fields.get("udp2", "-"), fields.get("ubs2", "-"), simulation_hz),
-                "secondary_attack_point_ticks": _action_duration_ticks(fields.get("udp2", "-"), "0", simulation_hz),
-                "cast_ticks": _action_duration_ticks(fields.get("ucpt", "-"), fields.get("ucbs", "-"), simulation_hz),
-            }
+            _action_timing_entry(rawcode, fields, simulation_hz)
             for rawcode, fields in sorted(action_fields.items())
         ],
         "bounce_weapons": sorted(bounce_weapons, key=lambda weapon: weapon["rawcode"]),

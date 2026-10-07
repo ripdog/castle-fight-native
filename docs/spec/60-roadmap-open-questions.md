@@ -333,7 +333,7 @@ Damage/armor classes are executable from extracted Castle Fight data. The sim lo
 Compatibility work still needs to establish:
 
 - exact Warcraft rounding/minimum-damage semantics at type/armor boundaries and a fixed-point representation for future fractional armor modifiers; current imported base armor is integral;
-- attack windup and backswing details;
+- any remaining Warcraft attack windup/backswing edge cases beyond the current extracted damage-point implementation;
 - exact canonical ordering for otherwise simultaneous strikes beyond the stable-ID fallback;
 - whether observed Castle Fight behavior requires revising the provisional guaranteed-hit travel/death rules;
 - whether observed Castle Fight behavior requires revising the provisional ballistic circular-zone, hostile-only splash, building-intersection, or travel rules;
@@ -342,7 +342,7 @@ Compatibility work still needs to establish:
 - whether Warcraft has any edge-case cliff-transition sampling behavior that differs from the current nearest-terrain-vertex `layerHeight` lookup; normal base/lane plateaus are already represented unambiguously by the extracted data;
 - target-retention/range hysteresis details;
 - splash/chain ordering;
-- compatibility-specific cast windup/channeling/interruption details beyond the current atomic automatic-cast slice;
+- compatibility-specific channeling/cancellation edge cases beyond the current extracted cast-point windup and authoritative pending-cast implementation;
 - whether observed Castle Fight mana regeneration timing requires revising the current regen-before-eligibility rule.
 
 These should become small executable fixtures as soon as decided.

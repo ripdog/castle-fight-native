@@ -109,6 +109,8 @@ pub struct ActionTimingProfile {
     pub secondary_attack_ticks: u16,
     pub secondary_attack_point_ticks: u16,
     pub cast_ticks: u16,
+    #[serde(default)]
+    pub cast_point_ticks: u16,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1342,6 +1344,26 @@ pub struct PendingAttackState {
     pub release_tick: u64,
 }
 
+/// Stable target identity retained while an ordered spell plays through its cast point.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PendingCastTarget {
+    Unit(SimId),
+    Building { id: SimId, position: SimPoint },
+    AllEnemyUnits,
+    AllFriendlyUnits,
+    Corpse { id: SimId, position: SimPoint },
+    Point(SimPoint),
+}
+
+/// Committed unit spell windup. Resources and gameplay effects resolve at `release_tick`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PendingCastState {
+    pub ability: AutomaticAbilityProfile,
+    pub cast_sequence: u64,
+    pub target: PendingCastTarget,
+    pub release_tick: u64,
+}
+
 pub const MAX_TIMED_ATTACK_SPEED_MODIFIERS: usize = 8;
 pub const MAX_TIMED_ARMOR_MODIFIERS: usize = 8;
 pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
@@ -1350,6 +1372,7 @@ pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
 pub struct StatusState {
     pub action_animation: Option<ActionAnimationState>,
     pub pending_attack: Option<PendingAttackState>,
+    pub pending_cast: Option<PendingCastState>,
     pub stunned_until_tick: u64,
     pub rooted_until_tick: u64,
     /// Independent script/order recovery, not a removable native stun buff.

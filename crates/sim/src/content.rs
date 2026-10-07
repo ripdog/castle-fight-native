@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r27";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r28";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 18;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 19;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1497,6 +1497,7 @@ impl CastleFightTowerDefinition {
                     secondary_attack_ticks: 0,
                     secondary_attack_point_ticks: 0,
                     cast_ticks: 0,
+                    cast_point_ticks: 0,
                 },
                 content: None,
                 corpse: None,
@@ -2154,6 +2155,7 @@ fn hash_unit_definition(hash: &mut ContentHash64, definition: CastleFightUnitDef
     hash.write_u16(definition.action_timing.secondary_attack_ticks);
     hash.write_u16(definition.action_timing.secondary_attack_point_ticks);
     hash.write_u16(definition.action_timing.cast_ticks);
+    hash.write_u16(definition.action_timing.cast_point_ticks);
     hash.write_u32(definition.build_time_ticks);
     hash.write_u32(definition.repair_time_ticks);
     hash.write_u8(definition.armor.armor_type.stable_tag());
@@ -4941,6 +4943,7 @@ mod tests {
                 unit.action_timing.secondary_attack_point_ticks
                     <= unit.action_timing.secondary_attack_ticks
             );
+            assert!(unit.action_timing.cast_point_ticks <= unit.action_timing.cast_ticks);
             let mut changed = unit;
             changed.action_timing.primary_attack_point_ticks += 1;
             let mut before = ContentHash64::new();

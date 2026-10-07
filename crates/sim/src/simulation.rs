@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 35;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 36;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -93,15 +93,15 @@ use crate::{
         MAX_TIMED_ATTACK_SPEED_MODIFIERS, MAX_TIMED_DAMAGE_OVER_TIME, MAX_TIMED_MOVEMENT_MODIFIERS,
         ManaState, MechanicalUnit, ModifierId, MovementClass, MovementProfile, NavigationGoal,
         NavigationState, Owner, PassiveUnitEffect, PassiveUnitEffects, PendingAttackEffects,
-        PlayerId, Position, ProductionActionTiming, ProductionAdditionalAutomaticAbilities,
-        ProductionArmorProfile, ProductionAttackTargets, ProductionCollisionRadius,
-        ProductionContentIdentity, ProductionCorpseProfile, ProductionDamageType,
-        ProductionHealthRegeneration, ProductionMovementClass, ProductionPassiveEffects,
-        ProductionProfile, ProductionSecondaryAttack, ProductionSpellcastingProfile,
-        ProductionState, ProductionUnitClassifications, ProductionUnitRepairMetadata,
-        ReflectedProjectile, RepairTimeTicks, ResolvedUnitDefinition, ResurrectionProfile,
-        RetaliationState, SecondaryAttackProfile, SecondaryResurrectionState, SimId, SpawnTick,
-        SpellcastingProfile, StatusState, TargetState, Team, TimedArmorModifier,
+        PendingCastState, PendingCastTarget, PlayerId, Position, ProductionActionTiming,
+        ProductionAdditionalAutomaticAbilities, ProductionArmorProfile, ProductionAttackTargets,
+        ProductionCollisionRadius, ProductionContentIdentity, ProductionCorpseProfile,
+        ProductionDamageType, ProductionHealthRegeneration, ProductionMovementClass,
+        ProductionPassiveEffects, ProductionProfile, ProductionSecondaryAttack,
+        ProductionSpellcastingProfile, ProductionState, ProductionUnitClassifications,
+        ProductionUnitRepairMetadata, ReflectedProjectile, RepairTimeTicks, ResolvedUnitDefinition,
+        ResurrectionProfile, RetaliationState, SecondaryAttackProfile, SecondaryResurrectionState,
+        SimId, SpawnTick, SpellcastingProfile, StatusState, TargetState, Team, TimedArmorModifier,
         TimedAttackSpeedModifier, TimedDamageOverTime, TriggeredAttackEffect, UnitClassifications,
         UnitGameplayProperties, UnitSpawn,
     },
@@ -3365,6 +3365,17 @@ enum AbilityIntentTarget {
 }
 
 impl AbilityIntentTarget {
+    const fn pending_cast_target(self) -> PendingCastTarget {
+        match self {
+            Self::Unit { id, .. } => PendingCastTarget::Unit(id),
+            Self::Building { id, position } => PendingCastTarget::Building { id, position },
+            Self::AllEnemyUnits => PendingCastTarget::AllEnemyUnits,
+            Self::AllFriendlyUnits => PendingCastTarget::AllFriendlyUnits,
+            Self::Corpse { id, position } => PendingCastTarget::Corpse { id, position },
+            Self::Point { position } => PendingCastTarget::Point(position),
+        }
+    }
+
     const fn sort_key(self) -> (u8, SimId) {
         match self {
             Self::Unit { id, .. } => (0, id),
@@ -3395,6 +3406,7 @@ struct AbilityIntent {
     target: AbilityIntentTarget,
     ability: AutomaticAbilityProfile,
     cast_sequence: u64,
+    completing_windup: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default)]

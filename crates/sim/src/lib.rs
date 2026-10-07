@@ -41,11 +41,11 @@ pub use components::{
     EvasionEffectProfile, FeedbackEffectProfile, FrostAttackEffectProfile, GameplayBundleIdentity,
     HealingWaveProfile, MAX_AUTOMATIC_ABILITIES, ManaProfile, ManaRegeneration, ModifierId,
     MovementClass, MovementProfile, NativeBoltProfile, Owner, PassiveUnitEffect,
-    PassiveUnitEffects, PendingAttackState, PlayerId, ProductionProfile, PulverizeEffectProfile,
-    ResolvedUnitDefinition, SecondaryAttackProfile, SecondaryResurrectionState, SimId,
-    SpellcastingProfile, SplashFalloffProfile, StatusState, Team, TriggeredAttackEffect,
-    TriggeredSpellProcProfile, UnitClassifications, UnitGameplayProperties, UnitSpawn,
-    UnitTemplate,
+    PassiveUnitEffects, PendingAttackState, PendingCastState, PendingCastTarget, PlayerId,
+    ProductionProfile, PulverizeEffectProfile, ResolvedUnitDefinition, SecondaryAttackProfile,
+    SecondaryResurrectionState, SimId, SpellcastingProfile, SplashFalloffProfile, StatusState,
+    Team, TriggeredAttackEffect, TriggeredSpellProcProfile, UnitClassifications,
+    UnitGameplayProperties, UnitSpawn, UnitTemplate,
 };
 pub use content::{
     CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION, CASTLE_FIGHT_CONTENT_REVISION_927,
@@ -1462,6 +1462,19 @@ mod tests {
         sim.step();
         assert_eq!(sim.unit(ally).unwrap().last_attacked_tick, Some(1));
         sim.step();
+        let release_tick = sim
+            .unit(caster)
+            .unwrap()
+            .status
+            .pending_cast
+            .expect("Frost Armor must wind up before its effect")
+            .release_tick;
+        assert_eq!(sim.unit(caster).unwrap().mana_current, Some(150));
+        assert!(sim.ability_casts_last_tick().is_empty());
+        while sim.tick() < release_tick {
+            assert_eq!(sim.step().ability_casts, 0);
+        }
+        assert_eq!(sim.step().ability_casts, 1);
         assert_eq!(sim.unit(caster).unwrap().mana_current, Some(115));
         assert!(sim.ability_casts_last_tick().iter().any(|event| {
             event.source == caster
@@ -1515,6 +1528,20 @@ mod tests {
             movement: MovementProfile { speed_per_tick: 0 },
         });
 
+        let windup = sim.step();
+        assert_eq!(windup.ability_casts, 0);
+        let release_tick = sim
+            .unit(caster)
+            .unwrap()
+            .status
+            .pending_cast
+            .expect("Warlock must commit its cast point before the spell effect")
+            .release_tick;
+        while sim.tick() < release_tick {
+            assert_eq!(sim.step().ability_casts, 0);
+            assert_eq!(sim.unit(caster).unwrap().position, start);
+        }
+        let cast_tick = sim.tick();
         let cast = sim.step();
         assert_eq!(cast.ability_casts, 1);
         assert_eq!(
@@ -1522,26 +1549,27 @@ mod tests {
             AbilityId(u32::from_be_bytes(*b"A00K"))
         );
         let after_cast = sim.unit(caster).unwrap();
-        assert_eq!(after_cast.status.ability_retreat_start_tick, 9);
-        assert_eq!(after_cast.status.ability_retreat_end_tick, 159);
+        let retreat_start = cast_tick + 9;
+        let retreat_end = retreat_start + 150;
+        let recovery_end = retreat_end + 198;
+        assert_eq!(after_cast.status.ability_retreat_start_tick, retreat_start);
+        assert_eq!(after_cast.status.ability_retreat_end_tick, retreat_end);
         assert_eq!(after_cast.stunned_until_tick, 0);
-        assert_eq!(after_cast.status.order_recovery_until_tick, 357);
-        assert_eq!(after_cast.ability_ready_tick, Some(360));
+        assert_eq!(after_cast.status.order_recovery_until_tick, recovery_end);
+        assert_eq!(after_cast.ability_ready_tick, Some(cast_tick + 360));
         assert_eq!(after_cast.target, None);
 
-        for _ in 0..8 {
+        while sim.tick() < retreat_start {
             sim.step();
+            assert_eq!(sim.unit(caster).unwrap().position, start);
         }
-        assert_eq!(sim.tick(), 9);
-        assert_eq!(sim.unit(caster).unwrap().position, start);
-
         sim.step();
         assert!(
             sim.unit(caster).unwrap().position.x < start.x,
             "Warlock must retreat toward its own western castle after the 0.3s channel pause"
         );
 
-        while sim.tick() < 159 {
+        while sim.tick() < retreat_end {
             sim.step();
         }
         let sleep_position = sim.unit(caster).unwrap().position;
@@ -1552,7 +1580,7 @@ mod tests {
             "Warlock must stop moving for the scripted 6.6s sleep window"
         );
 
-        while sim.tick() < 357 {
+        while sim.tick() < recovery_end {
             assert_eq!(sim.step().ability_casts, 0);
         }
         let brilliance_id = ModifierId(u32::from_be_bytes(*b"A00F"));
@@ -1587,7 +1615,7 @@ mod tests {
             "Warlock must resume advancing after its scripted recovery window"
         );
         assert!(
-            second_cast_tick.is_some_and(|tick| tick >= 360),
+            second_cast_tick.is_some_and(|tick| tick >= cast_tick + 360),
             "Warlock must re-engage and cast again once its 12s spell cycle is ready"
         );
     }
@@ -1621,6 +1649,18 @@ mod tests {
         let trigger = sim.spawn_unit(enemy(490));
         let behind = sim.spawn_unit(enemy(70));
         let beyond_caster = sim.spawn_unit(enemy(780));
+        assert_eq!(sim.step().ability_casts, 0);
+        let release_tick = sim
+            .unit(caster)
+            .unwrap()
+            .status
+            .pending_cast
+            .expect("Warlock Frost Nova must wait for the authored cast point")
+            .release_tick;
+        assert_eq!(sim.unit(trigger).unwrap().health, 1_000);
+        while sim.tick() < release_tick {
+            assert_eq!(sim.step().ability_casts, 0);
+        }
         assert_eq!(sim.step().ability_casts, 1);
         assert_eq!(sim.ability_casts_last_tick()[0].source, caster);
         assert_eq!(

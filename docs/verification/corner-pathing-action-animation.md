@@ -47,18 +47,35 @@ attack-to-cast preemption, and removal of paused action poses before walking; le
 an action uses an immediate transition so a residual action pose cannot slide.
 
 The action profile and state are included in content/canonical hashes, production,
-construction/upgrades, resurrection definitions, and snapshots. Compatibility is now
-content bundle schema 7, checksum schema 22, snapshot schema 17. Damage/spell effects
-retain their existing resolution phases; pre-effect windup is outside this change.
+construction/upgrades, resurrection definitions, and snapshots. The original 2026-10-06
+change shipped at content bundle schema 7, checksum schema 22, snapshot schema 17; at that
+point spell effects still resolved before the cast animation.
+
+### Cast-point extension — 2026-10-07
+
+Castle Fight 9.27/r1 content revision `cf-native-dev-slice-r28` now retains the extracted
+unit cast point (`ucpt`) separately from the point-plus-backswing duration. A positive cast
+point commits authoritative pending-cast state and starts the cast action immediately. The
+selected ability, sequence, target identity/point, and absolute release tick survive checksums,
+snapshots and rejoin. Mana/cooldown/effect commitment occurs at the cast point. Trigger-only
+AI predicates are not re-run after wind-up, while removed targets and incapacitated casters can
+still cancel release. Movement remains anchored through the backswing unless a scripted
+post-effect retreat truncates it. Building casts and zero-cast-point actions remain immediate.
+
+Magnataur `n016` now prefers its imported `Spell Slam` sequence over unrelated `Spell Attack`
+variants. Warlock `n005` uses the Medivh model's `Spell Attack` sequence; `Morph` and `Morph
+Alternate` are not cast candidates. Generic area-impact presentation no longer invents an
+extra burst for native `AreaStun` proxies such as Magnataur `A05D`, whose retained map object
+explicitly clears stock War Stomp caster art. The extension advances compatibility to content
+bundle schema 19, checksum schema 36, and snapshot schema 31.
 
 ## Validation
 
 - Required Cargo wrapper used for all compile-heavy checks.
-- `test --workspace --quiet`: 735 passed, four pre-existing asset/install-dependent
-  tests ignored; 404 simulation tests and 229 client tests passed.
+- `test --workspace --quiet`: 810 passed, five asset/GPU-dependent tests ignored;
+  447 simulation tests and 260 client tests passed.
 - `clippy --workspace --all-targets -- -D warnings`, formatting and diff checks passed.
-- Debug client/server binaries rebuilt successfully.
-- Eight runtime catalog generator tests, including reproducibility and exact rounding.
+- Nine runtime catalog generator tests, including supplement/source-manifest reproducibility and exact rounding.
 - Mechanic regressions cover attack/cast expiry, target death, failed casts, secondary
   attack timing, autocast preemption, fixed collision reservations, and wire restore
   across worker counts.

@@ -7,6 +7,79 @@ fn native_fire_buff_active(status: &StatusState, ability: AbilityId, tick: u64) 
 }
 
 impl Simulation {
+    fn restore_pending_cast_target(
+        &self,
+        target: PendingCastTarget,
+        units: &[UnitSnapshot],
+    ) -> Option<AbilityIntentTarget> {
+        match target {
+            PendingCastTarget::Unit(id) => {
+                find_unit_index(units, id).map(|index| AbilityIntentTarget::Unit { index, id })
+            }
+            PendingCastTarget::Building { id, position } => self
+                .world
+                .iter_entities()
+                .any(|entity| {
+                    entity.get::<SimId>() == Some(&id)
+                        && entity.get::<BuildingFootprint>().is_some()
+                        && entity
+                            .get::<Health>()
+                            .is_some_and(|health| health.current > 0)
+                })
+                .then_some(AbilityIntentTarget::Building { id, position }),
+            PendingCastTarget::AllEnemyUnits => Some(AbilityIntentTarget::AllEnemyUnits),
+            PendingCastTarget::AllFriendlyUnits => Some(AbilityIntentTarget::AllFriendlyUnits),
+            PendingCastTarget::Corpse { id, position } => self
+                .world
+                .iter_entities()
+                .any(|entity| {
+                    entity.get::<SimId>() == Some(&id)
+                        && entity.get::<Corpse>().is_some()
+                        && entity
+                            .get::<Position>()
+                            .is_some_and(|actual| actual.0 == position)
+                })
+                .then_some(AbilityIntentTarget::Corpse { id, position }),
+            PendingCastTarget::Point(position) => Some(AbilityIntentTarget::Point { position }),
+        }
+    }
+
+    fn pending_cast_target_is_present(
+        &self,
+        target: AbilityIntentTarget,
+        units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
+    ) -> bool {
+        match target {
+            AbilityIntentTarget::Unit { index, id } => units
+                .get(index)
+                .is_some_and(|unit| unit.id == id && unit.health > 0),
+            AbilityIntentTarget::Building { id, position } => find_building_index(buildings, id)
+                .is_some_and(|index| {
+                    let building = &buildings[index];
+                    building.health > 0
+                        && footprint_center_point(
+                            building.footprint,
+                            self.config.navigation_cell_size,
+                        ) == position
+                }),
+            AbilityIntentTarget::Corpse { id, position } => {
+                self.world.iter_entities().any(|entity| {
+                    entity.get::<SimId>() == Some(&id)
+                        && entity
+                            .get::<Corpse>()
+                            .is_some_and(|corpse| corpse.is_usable_at(self.next_tick))
+                        && entity
+                            .get::<Position>()
+                            .is_some_and(|actual| actual.0 == position)
+                })
+            }
+            AbilityIntentTarget::AllEnemyUnits
+            | AbilityIntentTarget::AllFriendlyUnits
+            | AbilityIntentTarget::Point { .. } => true,
+        }
+    }
+
     pub(super) fn resolve_automatic_abilities(
         &mut self,
         buildings: &mut [BuildingSnapshot],
@@ -14,6 +87,31 @@ impl Simulation {
         grid: &SpatialGrid,
     ) -> AbilityMetrics {
         let delayed_effects = self.resolve_delayed_secondary_resurrections(units);
+        let due_pending_casts = units
+            .iter()
+            .enumerate()
+            .filter_map(|(source_index, unit)| {
+                unit.status
+                    .pending_cast
+                    .filter(|pending| pending.release_tick <= self.next_tick)
+                    .map(|pending| (source_index, unit.id, pending))
+            })
+            .collect::<Vec<_>>();
+        let mut pending_intents = Vec::with_capacity(due_pending_casts.len());
+        for (source_index, source_id, pending) in due_pending_casts {
+            units[source_index].status.pending_cast = None;
+            let Some(target) = self.restore_pending_cast_target(pending.target, units) else {
+                continue;
+            };
+            pending_intents.push(AbilityIntent {
+                source: AbilitySourceIndex::Unit(source_index),
+                source_id,
+                target,
+                ability: pending.ability,
+                cast_sequence: pending.cast_sequence,
+                completing_windup: true,
+            });
+        }
         let additional_sources = self.additional_ability_sources(buildings, units);
         let additional_evaluations: Vec<_> = self.pool.install(|| {
             additional_sources
@@ -96,11 +194,15 @@ impl Simulation {
             effects: delayed_effects,
             ..AbilityMetrics::default()
         };
-        let mut intents: Vec<_> = building_evaluations
+        let mut intents: Vec<_> = pending_intents
             .into_iter()
-            .chain(unit_evaluations)
-            .chain(additional_evaluations)
-            .filter_map(|evaluation| evaluation.intent)
+            .chain(
+                building_evaluations
+                    .into_iter()
+                    .chain(unit_evaluations)
+                    .chain(additional_evaluations)
+                    .filter_map(|evaluation| evaluation.intent),
+            )
             .collect();
         intents.sort_unstable_by_key(|intent| {
             let (target_kind, target_id) = intent.target.sort_key();
@@ -116,7 +218,8 @@ impl Simulation {
         for intent in intents {
             if let AbilitySourceIndex::Unit(index) = intent.source
                 && (units[index].abilities_disabled
-                    || (units[index].status.is_casting(self.next_tick)
+                    || (!intent.completing_windup
+                        && units[index].status.is_casting(self.next_tick)
                         && !intent.ability.effect.ignores_order_interruptions())
                     || (units[index].orders_suspended
                         && !intent.ability.effect.ignores_order_interruptions()))
@@ -186,11 +289,42 @@ impl Simulation {
             };
             if state.cast_sequence != intent.cast_sequence
                 || state.ready_tick > self.next_tick
-                || (!state.autocast_enabled && !state.manual_cast_requested)
+                || (!intent.completing_windup
+                    && !state.autocast_enabled
+                    && !state.manual_cast_requested)
                 || mana < intent.ability.mana_cost
-                || !self.ability_target_is_valid(source, intent.target, intent.ability, units)
+                || (!intent.completing_windup
+                    && !self.ability_target_is_valid(source, intent.target, intent.ability, units))
+                || (intent.completing_windup
+                    && !self.pending_cast_target_is_present(intent.target, units, buildings))
             {
                 continue;
+            }
+
+            if let AbilitySourceIndex::Unit(index) = intent.source
+                && !intent.completing_windup
+                && !intent.ability.effect.ignores_order_interruptions()
+            {
+                let cast_point_ticks = units[index].action_timing.cast_point_ticks;
+                if cast_point_ticks > 0 {
+                    let cast_ticks = units[index].action_timing.cast_ticks;
+                    debug_assert!(cast_point_ticks <= cast_ticks);
+                    units[index].status.begin_action_animation(
+                        ActionAnimationKind::Cast,
+                        self.next_tick,
+                        cast_ticks,
+                    );
+                    units[index].status.pending_cast = Some(PendingCastState {
+                        ability: intent.ability,
+                        cast_sequence: intent.cast_sequence,
+                        target: intent.target.pending_cast_target(),
+                        release_tick: self
+                            .next_tick
+                            .checked_add(u64::from(cast_point_ticks))
+                            .expect("cast release tick overflow"),
+                    });
+                    continue;
+                }
             }
 
             let remaining_mana = mana
@@ -759,21 +893,36 @@ impl Simulation {
                 && !intent.ability.effect.ignores_order_interruptions()
             {
                 let source = &mut units[index];
-                let mut duration = source.action_timing.cast_ticks;
-                // An authored retreat order is the end of the visible cast interval. Fit the
-                // entire clip into that pause instead of delaying the map-script AI timeline.
-                if source.status.ability_retreat_start_tick > self.next_tick
-                    && source.status.ability_retreat_end_tick
-                        > source.status.ability_retreat_start_tick
-                {
-                    let pause = source.status.ability_retreat_start_tick - self.next_tick;
-                    duration = duration.min(u16::try_from(pause).unwrap_or(u16::MAX));
+                if intent.completing_windup {
+                    // Scripted post-effect orders can interrupt the cast backswing, but the
+                    // already-played windup remains anchored to the original cast start.
+                    if source.status.ability_retreat_start_tick > self.next_tick
+                        && source.status.ability_retreat_end_tick
+                            > source.status.ability_retreat_start_tick
+                        && let Some(action) = source.status.action_animation.as_mut()
+                        && action.kind == ActionAnimationKind::Cast
+                    {
+                        action.until_tick = action
+                            .until_tick
+                            .min(source.status.ability_retreat_start_tick);
+                    }
+                } else {
+                    let mut duration = source.action_timing.cast_ticks;
+                    // An authored retreat order is the end of the visible cast interval. Fit the
+                    // entire clip into that pause instead of delaying the map-script AI timeline.
+                    if source.status.ability_retreat_start_tick > self.next_tick
+                        && source.status.ability_retreat_end_tick
+                            > source.status.ability_retreat_start_tick
+                    {
+                        let pause = source.status.ability_retreat_start_tick - self.next_tick;
+                        duration = duration.min(u16::try_from(pause).unwrap_or(u16::MAX));
+                    }
+                    source.status.begin_action_animation(
+                        ActionAnimationKind::Cast,
+                        self.next_tick,
+                        duration,
+                    );
                 }
-                source.status.begin_action_animation(
-                    ActionAnimationKind::Cast,
-                    self.next_tick,
-                    duration,
-                );
             }
             self.last_ability_casts.push(AbilityCastEvent {
                 source: intent.source_id,
@@ -1184,6 +1333,7 @@ impl Simulation {
                 target,
                 ability: spellcasting.ability,
                 cast_sequence: state.cast_sequence,
+                completing_windup: false,
             }),
             candidate_checks,
         }

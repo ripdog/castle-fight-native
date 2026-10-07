@@ -1543,6 +1543,7 @@ fn hash_action_timing(hash: &mut Fnv64, timing: ActionTimingProfile) {
     hash.write_u16(timing.secondary_attack_ticks);
     hash.write_u16(timing.secondary_attack_point_ticks);
     hash.write_u16(timing.cast_ticks);
+    hash.write_u16(timing.cast_point_ticks);
 }
 
 fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
@@ -1550,6 +1551,37 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     if let Some(pending) = status.pending_attack {
         hash.write_u64(pending.target.0);
         hash.write_u64(pending.release_tick);
+    }
+    hash.write_u8(u8::from(status.pending_cast.is_some()));
+    if let Some(pending) = status.pending_cast {
+        hash_automatic_ability(hash, pending.ability);
+        hash.write_u64(pending.cast_sequence);
+        hash.write_u64(pending.release_tick);
+        match pending.target {
+            PendingCastTarget::Unit(id) => {
+                hash.write_u8(0);
+                hash.write_u64(id.0);
+            }
+            PendingCastTarget::Building { id, position } => {
+                hash.write_u8(1);
+                hash.write_u64(id.0);
+                hash.write_i32(position.x);
+                hash.write_i32(position.y);
+            }
+            PendingCastTarget::AllEnemyUnits => hash.write_u8(2),
+            PendingCastTarget::AllFriendlyUnits => hash.write_u8(3),
+            PendingCastTarget::Corpse { id, position } => {
+                hash.write_u8(4);
+                hash.write_u64(id.0);
+                hash.write_i32(position.x);
+                hash.write_i32(position.y);
+            }
+            PendingCastTarget::Point(position) => {
+                hash.write_u8(5);
+                hash.write_i32(position.x);
+                hash.write_i32(position.y);
+            }
+        }
     }
     hash.write_u8(u8::from(status.action_animation.is_some()));
     if let Some(action) = status.action_animation {

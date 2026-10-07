@@ -77,7 +77,7 @@ pub enum SimPhase {
 
 The initial ordering is gameplay-significant: pre-attack stuns/disables suppress ordinary attacks; death suppresses all later actions by that entity; and ballistic/siege impact queries use post-movement positions. Units created in `Production` are marked as spawned this tick and cannot create an ordinary attack intent until a later tick.
 
-Exact internal set names may evolve, but changing these visibility/precedence semantics is a simulation rules/version change.
+Exact internal set names may evolve, but changing these visibility/precedence semantics is a simulation rules/version change. `AbilityResolve` may commit an ordered unit spell without applying its effect immediately: a positive authored cast point creates authoritative pending-cast state whose absolute release tick is revisited by a later `AbilityResolve`. Due pending casts and newly evaluated intents still pass through canonical ability ordering; presentation animation never advances that deadline.
 
 Any dependency that affects authoritative results MUST be explicit. Default scheduler ordering MUST NOT be treated as a gameplay guarantee.
 

@@ -373,7 +373,9 @@ fn animation_score(name: &str, role: AnimationRole) -> Option<u8> {
         AnimationRole::Cast => match name.as_str() {
             "spell" => Some(0),
             "spell - 1" | "spell 1" => Some(1),
-            _ if name.starts_with("spell") => Some(2),
+            "spell slam" => Some(2),
+            _ if name.starts_with("spell slam") => Some(3),
+            _ if name.starts_with("spell") => Some(4),
             _ => None,
         },
         AnimationRole::Death => match name.as_str() {
@@ -686,6 +688,20 @@ mod tests {
         );
         assert_eq!(animation_score("Spell", AnimationRole::Cast), Some(0));
         assert_eq!(animation_score("Spell - 1", AnimationRole::Cast), Some(1));
+        assert!(
+            animation_score("Spell Slam", AnimationRole::Cast)
+                < animation_score("Spell Attack two", AnimationRole::Cast),
+            "slam-tagged spell sequences must win over unrelated spell variants"
+        );
+        assert_eq!(
+            animation_score("Spell Attack", AnimationRole::Cast),
+            Some(4)
+        );
+        assert_eq!(animation_score("Morph", AnimationRole::Cast), None);
+        assert_eq!(
+            animation_score("Morph Alternate", AnimationRole::Cast),
+            None
+        );
         assert_eq!(animation_score("Death", AnimationRole::Death), Some(0));
         assert_eq!(
             animation_score("Decay Flesh", AnimationRole::DecayFlesh),

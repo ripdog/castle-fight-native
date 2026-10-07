@@ -156,7 +156,7 @@ This optimization MUST preserve stable mapping for selection/inspection where ne
 
 Animation timing may be cosmetic unless a gameplay rule depends on a named animation phase.
 
-Authoritative attack windup/cooldown uses simulation ticks. Presentation should synchronize an attack animation to authoritative attack events, but the animation event itself must not cause damage.
+Authoritative attack and ordered-cast wind-up use simulation ticks. Presentation should synchronize attack/cast clips to the authoritative action interval, while damage/spell release comes from the simulation's committed attack/cast point rather than an animation keyframe or wall-clock clip completion.
 
 Correct direction:
 

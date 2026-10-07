@@ -618,6 +618,15 @@ struct AbilityAreaImpact {
 #[derive(Resource, Default)]
 struct AbilityAreaImpacts(Vec<AbilityAreaImpact>);
 
+fn generic_ability_area_impact_radius(effect: AbilityEffect) -> Option<i32> {
+    match effect {
+        AbilityEffect::AreaDamage { radius, .. }
+        | AbilityEffect::AreaDebuff { radius, .. }
+        | AbilityEffect::FrostNova { radius, .. } => Some(radius),
+        _ => None,
+    }
+}
+
 #[derive(Debug, Clone)]
 struct TimedWc3Effect {
     entity: Entity,
@@ -4031,10 +4040,10 @@ fn sync_render_entities(
             });
         }
 
-        if let AbilityEffect::AreaDamage { radius, .. }
-        | AbilityEffect::AreaStun { radius, .. }
-        | AbilityEffect::AreaDebuff { radius, .. }
-        | AbilityEffect::FrostNova { radius, .. } = cast.effect
+        // Area-stun proxies rely on their extracted WC3 visual bindings. Some, including the
+        // Magnataur's A05D War Stomp proxy, deliberately clear stock caster art; inventing the
+        // generic area burst here makes those casts look like unrelated spell explosions.
+        if let Some(radius) = generic_ability_area_impact_radius(cast.effect)
             && let Some(target_position) = cast.target_position
         {
             ability_impacts.0.push(AbilityAreaImpact {
@@ -6904,6 +6913,27 @@ mod tests {
 
     use super::*;
     use crate::bridge::PresentationSnapshot;
+
+    #[test]
+    fn generic_area_impact_does_not_invent_art_for_native_area_stuns() {
+        let stun = AbilityEffect::AreaStun {
+            ability: castle_fight_sim::AbilityId(1),
+            damage: 75,
+            radius: 250 * SUBUNITS_PER_WORLD_UNIT,
+            stun_ticks: 30,
+            hero_stun_ticks: 15,
+            targets: castle_fight_sim::AttackTargetMask::GROUND_UNITS,
+        };
+        assert_eq!(generic_ability_area_impact_radius(stun), None);
+        assert_eq!(
+            generic_ability_area_impact_radius(AbilityEffect::AreaDamage {
+                amount: 1,
+                radius: 17,
+                origin: castle_fight_sim::AreaDamageOrigin::Caster,
+            }),
+            Some(17)
+        );
+    }
 
     fn original_terrain() -> TerrainSurface {
         TerrainSurface::new(

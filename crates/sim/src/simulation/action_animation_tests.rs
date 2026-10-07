@@ -1,4 +1,5 @@
 use super::*;
+use crate::ActionAnimationState;
 
 fn configuration() -> SimulationConfig {
     SimulationConfig {
@@ -35,6 +36,7 @@ fn properties(movement_class: MovementClass) -> UnitGameplayProperties {
             primary_attack_ticks: 3,
             secondary_attack_ticks: 5,
             cast_ticks: 4,
+            cast_point_ticks: 0,
             ..ActionTimingProfile::default()
         },
         ..UnitGameplayProperties::default()
@@ -175,6 +177,59 @@ fn successful_cast_anchors_until_expiry_but_failed_cast_does_not() {
         assert_eq!(sim.step().checksum, restored.step().checksum);
         assert!(sim.unit(source).unwrap().position.x > 0);
     }
+}
+
+#[test]
+fn cast_point_delays_effect_and_survives_wire_restore() {
+    let mut sim = Simulation::new(configuration(), 1);
+    let mut unit = spawn(Team(0), SimPoint::new(0, 0));
+    unit.attack.range = 0;
+    unit.attack.acquisition_range = 0;
+    let mut props = properties(MovementClass::Ground);
+    props.action_timing.cast_ticks = 4;
+    props.action_timing.cast_point_ticks = 2;
+    let source = sim.spawn_unit_with_properties_and_spellcasting(unit, props, spellcasting(10));
+    let victim = target(&mut sim, MovementClass::Ground);
+
+    let start = sim.step();
+    assert_eq!(start.ability_casts, 0);
+    assert!(
+        sim.unit(victim).is_some(),
+        "spell damage must wait for the cast point"
+    );
+    let source_state = sim.unit(source).unwrap();
+    assert_eq!(source_state.position, SimPoint::new(0, 0));
+    assert_eq!(source_state.status.pending_cast.unwrap().release_tick, 2);
+    assert_eq!(
+        source_state.status.action_animation.unwrap(),
+        ActionAnimationState {
+            kind: ActionAnimationKind::Cast,
+            started_tick: 0,
+            until_tick: 4,
+        }
+    );
+
+    let mut restored = wire_restore(&sim);
+    let windup = sim.step();
+    assert_eq!(windup.checksum, restored.step().checksum);
+    assert_eq!(windup.ability_casts, 0);
+    assert!(sim.unit(victim).is_some());
+    assert_eq!(sim.unit(source).unwrap().position, SimPoint::new(0, 0));
+
+    let release = sim.step();
+    assert_eq!(release.checksum, restored.step().checksum);
+    assert_eq!(release.ability_casts, 1);
+    assert!(
+        sim.unit(victim).is_none(),
+        "spell damage must resolve at the cast point"
+    );
+    assert!(sim.unit(source).unwrap().status.pending_cast.is_none());
+    assert_eq!(sim.unit(source).unwrap().position, SimPoint::new(0, 0));
+
+    assert_eq!(sim.step().checksum, restored.step().checksum);
+    assert_eq!(sim.unit(source).unwrap().position, SimPoint::new(0, 0));
+    assert_eq!(sim.step().checksum, restored.step().checksum);
+    assert!(sim.unit(source).unwrap().position.x > 0);
 }
 
 #[test]
