@@ -1179,3 +1179,97 @@ fn pulverize_uses_caster_radii_independent_physical_proc_and_restored_rng() {
         }
     }
 }
+
+#[test]
+fn proxy_area_debuff_has_separate_trigger_mask_hero_expiry_and_signed_weapon_damage() {
+    let mut sim = simulation(1);
+    let profile = SpellcastingProfile {
+        mana: ManaProfile::per_second(12, 12, 0),
+        ability: AutomaticAbilityProfile {
+            id: AbilityId(51),
+            mana_cost: 3,
+            cooldown_ticks: 1000,
+            range: 100 * SUBUNITS_PER_WORLD_UNIT,
+            target_policy: AbilityTargetPolicy::RandomGroundEnemyUnit,
+            effect: AbilityEffect::AreaDebuff {
+                ability: AbilityId(52),
+                radius: 200 * SUBUNITS_PER_WORLD_UNIT,
+                armor_delta_per_100: -200,
+                damage_delta_per_10k: -2500,
+                duration_ticks: 6,
+                hero_duration_ticks: 2,
+                targets: AttackTargetMask::AIR_AND_GROUND,
+            },
+        },
+    };
+    let caster = sim.spawn_unit_with_spellcasting(unit(0, 20, 0, AttackDelivery::Melee), profile);
+    let primary = sim.spawn_unit_with_properties(
+        unit(1, 60, 100, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            classifications: UnitClassifications {
+                combat_sapper: true,
+                ..UnitClassifications::default()
+            },
+            ..UnitGameplayProperties::default()
+        },
+    );
+    let hero = sim.spawn_unit_with_properties(
+        unit(1, 200, 0, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            movement_class: MovementClass::Air,
+            classifications: UnitClassifications {
+                hero: true,
+                ..UnitClassifications::default()
+            },
+            ..UnitGameplayProperties::default()
+        },
+    );
+    let nonsapper = sim.spawn_unit(unit(1, 210, 0, AttackDelivery::Melee));
+    let outside = sim.spawn_unit(unit(1, 221, 0, AttackDelivery::Melee));
+    let ally = sim.spawn_unit(unit(0, 210, 0, AttackDelivery::Melee));
+    let immune = sim.spawn_unit_with_properties(
+        unit(1, 210, 0, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            classifications: UnitClassifications {
+                spell_immune: true,
+                ..UnitClassifications::default()
+            },
+            ..UnitGameplayProperties::default()
+        },
+    );
+    sim.step();
+    let event = sim
+        .ability_casts_last_tick()
+        .iter()
+        .find(|event| event.source == caster)
+        .unwrap();
+    assert_eq!(event.ability, AbilityId(52));
+    assert_eq!(event.target, AbilityCastTarget::Unit(primary));
+    assert_eq!(
+        event.target_position,
+        Some(sim.unit(caster).unwrap().position)
+    );
+    assert_eq!(sim.unit(caster).unwrap().mana_current, Some(9));
+    for (target, duration) in [(primary, 6), (hero, 2), (nonsapper, 6)] {
+        let modifier = sim.unit(target).unwrap().status.armor_modifiers[0];
+        assert_eq!(modifier.armor_bonus_per_100, -200);
+        assert_eq!(modifier.damage_bonus_per_10k, -2500);
+        assert_eq!(modifier.expires_tick, duration);
+    }
+    for target in [outside, ally, immune] {
+        assert_eq!(sim.unit(target).unwrap().status.armor_modifier_count, 0);
+    }
+    let mut restored = wire_restored(&sim, 4);
+    sim.step();
+    restored.step();
+    assert_eq!(sim.checksum(), restored.checksum());
+    assert_eq!(sim.unit(caster).unwrap().health, 925);
+    for _ in 0..7 {
+        sim.step();
+        restored.step();
+        assert_eq!(sim.checksum(), restored.checksum());
+    }
+    for target in [primary, hero, nonsapper] {
+        assert_eq!(sim.unit(target).unwrap().status.armor_modifier_count, 0);
+    }
+}

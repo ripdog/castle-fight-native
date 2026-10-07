@@ -334,6 +334,7 @@ impl Simulation {
                     origin: AreaDamageOrigin::Caster,
                     ..
                 } | AbilityEffect::AreaStun { .. }
+                    | AbilityEffect::AreaDebuff { .. }
             ) {
                 match source.origin {
                     AbilitySourceOrigin::Unit(position) => Some(position),
@@ -454,7 +455,9 @@ impl Simulation {
                                 metrics.effects += 1;
                             }
                         }
-                    } else if let AbilityEffect::AreaStun { radius, .. } = intent.ability.effect {
+                    } else if let AbilityEffect::AreaStun { radius, .. }
+                    | AbilityEffect::AreaDebuff { radius, .. } = intent.ability.effect
+                    {
                         let center = target_position.expect("caster-centered area effect");
                         for target in units.iter_mut() {
                             if target.health <= 0
@@ -719,7 +722,8 @@ impl Simulation {
             self.last_ability_casts.push(AbilityCastEvent {
                 source: intent.source_id,
                 ability: match intent.ability.effect {
-                    AbilityEffect::AreaStun { ability, .. } => ability,
+                    AbilityEffect::AreaStun { ability, .. }
+                    | AbilityEffect::AreaDebuff { ability, .. } => ability,
                     _ => intent.ability.id,
                 },
                 target: intent.target.cast_target(),
@@ -1132,11 +1136,13 @@ impl Simulation {
                 *candidate_checks += 1;
                 let candidate = &units[unit_index];
                 if candidate.health <= 0
-                    || (matches!(ability.effect, AbilityEffect::AreaStun { .. })
-                        && (!candidate.classifications.combat_sapper
-                            || candidate.classifications.invulnerable
-                            || candidate.classifications.spell_immune
-                            || candidate.classifications.hero))
+                    || (matches!(
+                        ability.effect,
+                        AbilityEffect::AreaStun { .. } | AbilityEffect::AreaDebuff { .. }
+                    ) && (!candidate.classifications.combat_sapper
+                        || candidate.classifications.invulnerable
+                        || candidate.classifications.spell_immune
+                        || candidate.classifications.hero))
                     || (ability.target_policy == AbilityTargetPolicy::RandomGroundEnemyUnit
                         && candidate.movement_class != MovementClass::Ground)
                     || self.ability_source_distance_sq(source.origin, candidate.position) > range_sq
@@ -1516,11 +1522,13 @@ impl Simulation {
                                     <= square_i32(ability.range)
                         }
                         AbilityTargetPolicy::RandomGroundEnemyUnit => {
-                            (!matches!(ability.effect, AbilityEffect::AreaStun { .. })
-                                || (target.classifications.combat_sapper
-                                    && !target.classifications.invulnerable
-                                    && !target.classifications.spell_immune
-                                    && !target.classifications.hero))
+                            (!matches!(
+                                ability.effect,
+                                AbilityEffect::AreaStun { .. } | AbilityEffect::AreaDebuff { .. }
+                            ) || (target.classifications.combat_sapper
+                                && !target.classifications.invulnerable
+                                && !target.classifications.spell_immune
+                                && !target.classifications.hero))
                                 && target.team != source.team
                                 && target.movement_class == MovementClass::Ground
                                 && self.ability_source_distance_sq(source.origin, target.position)

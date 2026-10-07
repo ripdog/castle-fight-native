@@ -1094,6 +1094,15 @@ pub enum AbilityEffect {
         percent_delta: i16,
         duration_ticks: u16,
     },
+    AreaDebuff {
+        ability: AbilityId,
+        radius: i32,
+        armor_delta_per_100: i16,
+        damage_delta_per_10k: i16,
+        duration_ticks: u16,
+        hero_duration_ticks: u16,
+        targets: AttackTargetMask,
+    },
     AreaStun {
         ability: AbilityId,
         damage: i32,
@@ -1202,6 +1211,7 @@ impl AbilityEffect {
             Self::PhoenixFire(_) => 13,
             Self::Hex { .. } => 14,
             Self::AreaStun { .. } => 15,
+            Self::AreaDebuff { .. } => 16,
         }
     }
 }
@@ -1265,7 +1275,7 @@ pub struct TimedArmorModifier {
     pub armor_bonus_per_100: i16,
     pub regeneration_per_second_per_10k: u32,
     pub mana_regeneration_per_second_per_10k: u32,
-    pub damage_bonus_per_10k: u16,
+    pub damage_bonus_per_10k: i16,
     pub expires_tick: u64,
     pub reactive_slow_duration_ticks: u16,
     pub reactive_movement_percent_delta: i16,

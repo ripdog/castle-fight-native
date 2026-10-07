@@ -3148,6 +3148,7 @@ fn prewarm_timed_wc3_effects(
                         | AbilityEffect::Damage { .. }
                         | AbilityEffect::Stun { .. }
                         | AbilityEffect::AreaStun { .. }
+                        | AbilityEffect::AreaDebuff { .. }
                         | AbilityEffect::AreaDamage { .. }
                         | AbilityEffect::Purification { .. }
                         | AbilityEffect::ArtilleryBombardment { .. } => None,
@@ -3945,8 +3946,9 @@ fn sync_render_entities(
             });
         }
 
-        if let AbilityEffect::AreaDamage { radius, .. } | AbilityEffect::AreaStun { radius, .. } =
-            cast.effect
+        if let AbilityEffect::AreaDamage { radius, .. }
+        | AbilityEffect::AreaStun { radius, .. }
+        | AbilityEffect::AreaDebuff { radius, .. } = cast.effect
             && let Some(target_position) = cast.target_position
         {
             ability_impacts.0.push(AbilityAreaImpact {

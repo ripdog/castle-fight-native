@@ -41,6 +41,39 @@ pub(super) fn apply_ability_effect_to_unit(
                 expires_tick,
             );
         }
+        AbilityEffect::AreaDebuff {
+            ability,
+            armor_delta_per_100,
+            damage_delta_per_10k,
+            duration_ticks,
+            hero_duration_ticks,
+            targets,
+            ..
+        } => {
+            if target.classifications.invulnerable
+                || target.classifications.spell_immune
+                || !targets.can_target_unit(target.movement_class)
+            {
+                return false;
+            }
+            let duration = if target.classifications.hero {
+                hero_duration_ticks
+            } else {
+                duration_ticks
+            };
+            apply_timed_armor_modifier(
+                &mut target.status,
+                TimedArmorModifier {
+                    id: ModifierId(ability.0),
+                    armor_bonus_per_100: armor_delta_per_100,
+                    damage_bonus_per_10k: damage_delta_per_10k,
+                    expires_tick: completed_tick
+                        .checked_add(u64::from(duration))
+                        .expect("area debuff expiry overflow"),
+                    ..TimedArmorModifier::default()
+                },
+            );
+        }
         AbilityEffect::AreaStun {
             damage,
             stun_ticks,
@@ -195,7 +228,8 @@ pub(super) fn apply_ability_effect_to_unit(
                     armor_bonus_per_100,
                     regeneration_per_second_per_10k: 0,
                     mana_regeneration_per_second_per_10k: 0,
-                    damage_bonus_per_10k,
+                    damage_bonus_per_10k: i16::try_from(damage_bonus_per_10k)
+                        .expect("Prayer damage modifier fits i16"),
                     revealed_to: None,
                     expires_tick: completed_tick + u64::from(duration_ticks),
                     reactive_slow_duration_ticks: 0,

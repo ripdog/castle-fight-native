@@ -14,7 +14,7 @@ Northern is selectable for retained Castle Fight 9.27/r1 once Snowy Rocks is pro
 
 ## Remaining command-card order
 
-Frost Claws; Azure Nest; Crystal Palace; alternate Snowveil Fountain / Frost Launcher and its upgrade; Chilling Mushroom; Icy Tower; World Freezer. This is an implementation checklist, not a claim that those entities are playable.
+Azure Nest; Crystal Palace; alternate Snowveil Fountain / Frost Launcher and its upgrade; Chilling Mushroom; Icy Tower; World Freezer. This is an implementation checklist, not a claim that those entities are playable.
 
 ## Icy Rocks / Polar Bear
 
@@ -65,3 +65,11 @@ The Northern proc audit also found a shared importer bug: `A03W` explicitly has 
 - Complete inventory is native Pulverize `A059`; no resource use, script delay, dummy, marker or AI override. Its probability, damage, full/half radii and ground-enemy mask are projected from retained object fields.
 - The native physical area proc rolls at released attacks separately from directed evasion, is centered on the attacker, and includes its primary target if within the appropriate radius. It bypasses ordinary armor points, retains the spell attack/armor table and permits magic immunity. It emits the native ability identity at the caster. Blizzard's [native ability description](https://classic.battle.net/war3/orc/units/tauren.shtml) identifies the attack-triggered area primitive; Castle Fight tuning comes exclusively from its retained object.
 - Shared synthetic fixtures distinguish caster versus primary center, inclusive radii/full/half falloff, zero/full probability, directed evasion, immunity, air/ally/structure exclusions and saved-state RNG continuation. Catalog closure and strict workspace checks cover the promotion. Profile shape becomes bundle/checksum/snapshot 14/31/26.
+
+## Frost Claws / Ancient Wandigoo
+
+- `h043` upgrades Ice Claws and produces `n013` (base `nwns`). Ordinary attacks, stats, organic sapper/ward classification, corpse handling, production/build/repair costs and timings remain catalog-owned.
+- Complete inventory: native Pulverize `A05A` and scripted Parasite parent `A05C` invoking Howl of Terror `A05B`. Pulverize consumes its own generated profile through the shared primitive.
+- `RK` selects an enemy ground combat sapper for the parent order; native parent restrictions exclude heroes, invulnerability and magic immunity. Parent range/resources use object/protected fields. The immediate helper casts the child at the caster, with independent air/ground enemy effect eligibility including heroes and non-sappers. There is no effect delay, parasite summon, DOT, retreat or child resource commitment.
+- Howl retains normal/hero durations, lowers armor and outgoing weapon damage, and replaces its own active modifier rather than stacking on repeated casts. Signed authoritative weapon modifiers coexist with existing positive support buffs; damage clamps at zero. The child identity and caster center reach presentation, while the parent owns mana/cooldown.
+- Shared proxy area tests prove trigger/effect differences, center, signed outgoing weapon damage, hero expiry, ally/immunity/outside exclusions, resources and worker/wire continuation. Generated closure covers both parent and child. Bundle/checksum/snapshot become 15/32/27.

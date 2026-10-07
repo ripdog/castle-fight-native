@@ -835,18 +835,21 @@ impl Simulation {
                         return None;
                     }
                     let mut attack = attack;
-                    let damage_bonus_per_10k: u32 = source.status.armor_modifiers
+                    let damage_bonus_per_10k: i32 = source.status.armor_modifiers
                         [..usize::from(source.status.armor_modifier_count)]
                         .iter()
                         .filter(|modifier| self.next_tick < modifier.expires_tick)
-                        .map(|modifier| u32::from(modifier.damage_bonus_per_10k))
+                        .map(|modifier| i32::from(modifier.damage_bonus_per_10k))
                         .sum();
-                    attack.damage = attack.damage.saturating_add(
-                        i32::try_from(
-                            i64::from(attack.damage) * i64::from(damage_bonus_per_10k) / 10_000,
+                    attack.damage = attack
+                        .damage
+                        .saturating_add(
+                            i32::try_from(
+                                i64::from(attack.damage) * i64::from(damage_bonus_per_10k) / 10_000,
+                            )
+                            .expect("buffed attack damage exceeds i32"),
                         )
-                        .expect("buffed attack damage exceeds i32"),
-                    );
+                        .max(0);
                     Some(AttackIntent {
                         source: AttackSourceIndex::Unit(source_index),
                         target,

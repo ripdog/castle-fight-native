@@ -62,7 +62,7 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
 
     kind = recipe["kind"]
     effect: dict[str, Any] = dict(recipe)
-    if kind == "war-stomp":
+    if kind in {"war-stomp", "howl-of-terror"}:
         return project_scripted_area(recipe, fields, unit, protected, mechanics)
     if kind in {"healing-wave", "solar-strike", "phoenix-fire"}:
         return project_elven_automatic(recipe, fields, unit, protected, mechanics)
@@ -257,7 +257,7 @@ def project_scripted_area(recipe: dict[str, str], fields: dict[str, str], unit: 
     child_protected = mechanics["effect_protected"]
     if scaled(child_protected.get("mana_cost", child_fields["cost1"])) != 0 or scaled(child_protected.get("cooldown", child_fields["cool1"])) != 0:
         raise ValueError("scripted area child requires separate non-free resource state")
-    if set(child_fields["targs1"].split(",")) != {"ground"}:
+    if recipe["kind"] == "war-stomp" and set(child_fields["targs1"].split(",")) != {"ground"}:
         raise ValueError("War Stomp needs explicit coverage for this effect mask")
     row = mechanics["mechanics_row"]
     if row["mechanic_kind"] != "dummy-immediate-ability-from-caster" or json.loads(row["scheduled_delays_json"]):
@@ -270,9 +270,16 @@ def project_scripted_area(recipe: dict[str, str], fields: dict[str, str], unit: 
         return 0 if unit[name].strip() in {"-", "", "_"} else scaled(unit[name], scale)
     rate = mana("mana_regen", 10_000)
     child_only = recipe["source_kind"] == "ability-effect"
-    effect = {"AreaStun": {"ability": fourcc(child), "damage": scaled(child_fields["dataa1"]),
-        "radius": scaled(child_fields["area1"], 1024), "stun_ticks": ticks(child_fields["dur1"]),
-        "hero_stun_ticks": ticks(child_fields["herodur1"]), "targets": 1}}
+    if recipe["kind"] == "war-stomp":
+        effect = {"AreaStun": {"ability": fourcc(child), "damage": scaled(child_fields["dataa1"]),
+            "radius": scaled(child_fields["area1"], 1024), "stun_ticks": ticks(child_fields["dur1"]),
+            "hero_stun_ticks": ticks(child_fields["herodur1"]), "targets": 1}}
+    if recipe["kind"] == "howl-of-terror":
+        if set(child_fields["targs1"].split(",")) != {"air", "ground", "enemy", "neutral"} or scaled(child_fields["datac1"]) != 0:
+            raise ValueError("unsupported Howl effect constraints")
+        effect = {"AreaDebuff": {"ability": fourcc(child), "radius": scaled(child_fields["area1"], 1024),
+            "armor_delta_per_100": -scaled(child_fields["datab1"], 100), "damage_delta_per_10k": -scaled(child_fields["dataa1"], 10_000),
+            "duration_ticks": ticks(child_fields["dur1"]), "hero_duration_ticks": ticks(child_fields["herodur1"]), "targets": 3}}
     profile = {"mana": {"maximum": mana("mana_max"), "starting": mana("mana_start"),
         "regen_per_tick_per_10k": (1 << 31) | rate}, "ability": {"id": fourcc(recipe["source_key"]),
         "mana_cost": 0 if child_only else scaled(protected.get("mana_cost", fields["cost1"])),
@@ -330,7 +337,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
                 raise ValueError(f"recipe {key} is not in its source unit's extracted ability inventory")
         source = recipe["source_key"]
         spell = spell_mechanics.get(source)
-        if spell is None and recipe["kind"] in {"healing-wave", "solar-strike", "war-stomp"}:
+        if spell is None and recipe["kind"] in {"healing-wave", "solar-strike", "war-stomp", "howl-of-terror"}:
             spell = next((row for row in spell_mechanics.values() if source in row["direct_map_rawcodes"].split(",")
                 or source in row["reachable_map_objects_json"]), None)
         detail = dict(mechanics.get(recipe.get("unit_rawcode", ""), {}))

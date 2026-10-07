@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 31;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 32;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -3888,6 +3888,28 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
             assert!((-100..=1_000).contains(&percent_delta));
             assert_ne!(percent_delta, 0);
             assert!(duration_ticks > 0);
+        }
+        AbilityEffect::AreaDebuff {
+            radius,
+            armor_delta_per_100,
+            damage_delta_per_10k,
+            duration_ticks,
+            hero_duration_ticks,
+            targets,
+            ..
+        } => {
+            assert!(
+                radius > 0
+                    && armor_delta_per_100 <= 0
+                    && (-10_000..=0).contains(&damage_delta_per_10k)
+                    && duration_ticks > 0
+                    && hero_duration_ticks > 0
+            );
+            assert_eq!(targets, AttackTargetMask::AIR_AND_GROUND);
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::RandomGroundEnemyUnit
+            );
         }
         AbilityEffect::AreaStun {
             damage,

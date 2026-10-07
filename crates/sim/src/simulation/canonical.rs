@@ -1576,7 +1576,7 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         hash.write_i32(i32::from(modifier.armor_bonus_per_100));
         hash.write_u64(u64::from(modifier.regeneration_per_second_per_10k));
         hash.write_u64(u64::from(modifier.mana_regeneration_per_second_per_10k));
-        hash.write_u16(modifier.damage_bonus_per_10k);
+        hash.write_i32(i32::from(modifier.damage_bonus_per_10k));
         hash.write_u64(modifier.expires_tick);
         hash.write_u16(modifier.reactive_slow_duration_ticks);
         hash.write_i32(i32::from(modifier.reactive_movement_percent_delta));
@@ -1976,6 +1976,23 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_u64(u64::from(modifier.0));
             hash.write_i32(i32::from(percent_delta));
             hash.write_u16(duration_ticks);
+        }
+        AbilityEffect::AreaDebuff {
+            ability,
+            radius,
+            armor_delta_per_100,
+            damage_delta_per_10k,
+            duration_ticks,
+            hero_duration_ticks,
+            targets,
+        } => {
+            hash.write_u32(ability.0);
+            hash.write_i32(radius);
+            hash.write_i32(i32::from(armor_delta_per_100));
+            hash.write_i32(i32::from(damage_delta_per_10k));
+            hash.write_u16(duration_ticks);
+            hash.write_u16(hero_duration_ticks);
+            hash.write_u8(targets.bits());
         }
         AbilityEffect::AreaStun {
             ability,

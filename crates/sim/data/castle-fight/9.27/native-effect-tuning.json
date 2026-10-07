@@ -932,6 +932,99 @@
         "ability": "A059",
         "source": "resolved/object-fields.tsv"
       }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A05A",
+      "unit_rawcode": "n013",
+      "kind": "pulverize",
+      "chance_per_10k": 3000,
+      "damage": 140,
+      "full_radius_world": 150,
+      "half_radius_world": 250,
+      "targets": "ground-units",
+      "provenance": {
+        "ability": "A05A",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A05C",
+      "unit_rawcode": "n013",
+      "spellcasting": {
+        "mana": {
+          "maximum": 100,
+          "starting": 75,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093678403,
+          "mana_cost": 30,
+          "cooldown_ticks": 510,
+          "range": 153600,
+          "target_policy": "RandomGroundEnemyUnit",
+          "effect": {
+            "AreaDebuff": {
+              "ability": 1093678402,
+              "radius": 870400,
+              "armor_delta_per_100": -400,
+              "damage_delta_per_10k": -3000,
+              "duration_ticks": 300,
+              "hero_duration_ticks": 75,
+              "targets": 3
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": "A05B",
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "ability-effect",
+      "source_key": "A05B",
+      "unit_rawcode": "n013",
+      "spellcasting": {
+        "mana": {
+          "maximum": 100,
+          "starting": 75,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093678402,
+          "mana_cost": 0,
+          "cooldown_ticks": 0,
+          "range": 0,
+          "target_policy": "RandomGroundEnemyUnit",
+          "effect": {
+            "AreaDebuff": {
+              "ability": 1093678402,
+              "radius": 870400,
+              "armor_delta_per_100": -400,
+              "damage_delta_per_10k": -3000,
+              "duration_ticks": 300,
+              "hero_duration_ticks": 75,
+              "targets": 3
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv"
+      }
     }
   ]
 }
