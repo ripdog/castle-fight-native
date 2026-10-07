@@ -53,8 +53,21 @@ pub(crate) struct NativeBoltState {
     pub impact_tick: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct HailstoneState {
+    pub source: SimId,
+    pub team: Team,
+    pub target: SimId,
+    pub profile: crate::building_mechanics::HailstoneProfile,
+    pub origin: SimPoint,
+    pub destination: SimPoint,
+    pub launch_tick: u64,
+    pub impact_tick: u64,
+}
+
 #[derive(Component, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum NativeAction {
     HealingWave(HealingWaveState),
     Bolt(NativeBoltState),
+    Hailstone(HailstoneState),
 }

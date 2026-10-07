@@ -118,6 +118,8 @@ impl Simulation {
         actions.sort_unstable_by_key(|(id, _, _)| *id);
         for (_, entity, action) in actions {
             match action {
+                // Splash attack proxies resolve in the shared post-movement impact phase.
+                NativeAction::Hailstone(_) => {}
                 NativeAction::Bolt(mut state) => {
                     let destination = find_unit_index(units, state.target)
                         .filter(|&index| units[index].health > 0)
@@ -336,6 +338,8 @@ pub(super) fn resolve_native_building_damage_over_time(
 fn cleanse_native_status(status: &mut StatusState) {
     status.stunned_until_tick = 0;
     status.rooted_until_tick = 0;
+    status.frozen_until_tick = 0;
+    status.frozen_ability = None;
     status.movement_modifier_count = 0;
     status
         .movement_modifiers

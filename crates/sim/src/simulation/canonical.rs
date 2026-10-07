@@ -317,6 +317,19 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(10);
                 hash.write_u64(id.0);
                 match action {
+                    NativeAction::Hailstone(state) => {
+                        hash.write_u8(2);
+                        hash.write_u64(state.source.0);
+                        hash.write_u8(state.team.0);
+                        hash.write_u64(state.target.0);
+                        hash_hailstone_profile(&mut hash, state.profile);
+                        hash.write_i32(state.origin.x);
+                        hash.write_i32(state.origin.y);
+                        hash.write_i32(state.destination.x);
+                        hash.write_i32(state.destination.y);
+                        hash.write_u64(state.launch_tick);
+                        hash.write_u64(state.impact_tick);
+                    }
                     NativeAction::Bolt(state) => {
                         hash.write_u8(1);
                         hash.write_u64(state.source.0);
@@ -1594,6 +1607,11 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     }
     hash.write_u64(status.stunned_until_tick);
     hash.write_u64(status.rooted_until_tick);
+    hash.write_u64(status.frozen_until_tick);
+    hash.write_u8(status.frozen_ability.is_some() as u8);
+    if let Some(ability) = status.frozen_ability {
+        hash.write_u32(ability.0);
+    }
     hash.write_u64(status.order_recovery_until_tick);
     hash.write_u64(status.ability_retreat_start_tick);
     hash.write_u64(status.ability_retreat_end_tick);
@@ -2005,6 +2023,7 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
     hash.write_u8(ability.target_policy.stable_tag());
     hash.write_u8(ability.effect.stable_tag());
     match ability.effect {
+        AbilityEffect::Hailstone(profile) => hash_hailstone_profile(hash, profile),
         AbilityEffect::Snowfall { map_version } => {
             hash.write_u16(map_version.major);
             hash.write_u16(map_version.minor);
@@ -2339,6 +2358,30 @@ impl Fnv64 {
     const fn finish(self) -> u64 {
         self.0
     }
+}
+
+fn hash_hailstone_profile(hash: &mut Fnv64, p: crate::building_mechanics::HailstoneProfile) {
+    hash.write_u16(p.map_version.major);
+    hash.write_u16(p.map_version.minor);
+    hash.write_u32(p.dummy_rawcode);
+    hash.write_u32(p.ability.0);
+    hash.write_i32(p.damage);
+    hash.write_i32(p.speed_per_tick);
+    hash.write_i32(p.range);
+    hash.write_i32(p.full_radius);
+    hash.write_u8(p.splash_targets.bits());
+    hash.write_u8(p.trigger_targets.bits());
+    hash.write_u8(u8::from(p.trigger_invulnerable));
+    hash.write_u8(u8::from(p.trigger_spell_immune));
+    hash.write_u8(p.freeze_targets.bits());
+    hash.write_u16(p.freeze_ticks);
+    hash.write_u16(p.hero_freeze_ticks);
+    for code in p.excluded_rawcodes {
+        hash.write_u32(code);
+    }
+    hash.write_u32(p.excluded_buff);
+    hash.write_i32(p.vision_radius);
+    hash.write_u16(p.vision_ticks);
 }
 
 #[cfg(test)]

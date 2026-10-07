@@ -773,6 +773,7 @@ mod tests {
             let kind = match &row[column("base_rawcode")] {
                 "ACff" | "Afae" => "armor",
                 "Apxf" => "damage_over_time",
+                "Afrz" => "freeze",
                 _ => continue,
             };
             let references: String =

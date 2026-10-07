@@ -26,6 +26,154 @@ pub(crate) fn canonical_projection_for_version(version: MapVersion) -> &'static 
     include_bytes!("../data/castle-fight/9.27/building-mechanics-r1.json")
 }
 
+/// A native single-shot, invulnerable/locust attack proxy. Its weapon and passive are distinct.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+pub struct HailstoneProfile {
+    pub map_version: MapVersion,
+    pub dummy_rawcode: u32,
+    pub ability: AbilityId,
+    pub damage: i32,
+    pub speed_per_tick: i32,
+    pub range: i32,
+    pub full_radius: i32,
+    pub splash_targets: crate::AttackTargetMask,
+    pub trigger_targets: crate::AttackTargetMask,
+    pub trigger_invulnerable: bool,
+    pub trigger_spell_immune: bool,
+    pub freeze_targets: crate::AttackTargetMask,
+    pub freeze_ticks: u16,
+    pub hero_freeze_ticks: u16,
+    pub excluded_rawcodes: [u32; 2],
+    pub excluded_buff: u32,
+    pub vision_radius: i32,
+    pub vision_ticks: u16,
+}
+
+fn source_mask(value: &str) -> crate::AttackTargetMask {
+    let words = value.split(',').collect::<Vec<_>>();
+    crate::AttackTargetMask::from_capabilities(
+        words.contains(&"ground"),
+        words.contains(&"air"),
+        words.contains(&"structure"),
+    )
+}
+
+pub(crate) fn launcher_spellcasting_for_version(
+    version: MapVersion,
+    rawcode: u32,
+) -> SpellcastingProfile {
+    let data = evidence(version);
+    let code = String::from_utf8(rawcode.to_be_bytes().to_vec()).unwrap();
+    let row = data["launchers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["building_rawcode"] == code)
+        .unwrap();
+    let parent = row["ability_rawcode"].as_str().unwrap();
+    let params: Value = serde_json::from_str(row["parameters_json"].as_str().unwrap()).unwrap();
+    let objects: Value =
+        serde_json::from_str(row["effect_objects_json"].as_str().unwrap()).unwrap();
+    let dummy_code = objects[0]["rawcode"].as_str().unwrap();
+    let unit = &data["launcher_units"][dummy_code];
+    let child = &objects[1]["ability_level1"];
+    let world = |v: &Value| {
+        (v.as_str().unwrap().trim().parse::<f64>().unwrap() * f64::from(SUBUNITS_PER_WORLD_UNIT))
+            .round() as i32
+    };
+    let fields = &data["fields"][&code];
+    let parent_fields = &data["fields"][parent];
+    let trigger_words = parent_fields["atar:1"].as_str().unwrap();
+    let protected = |field: &str| {
+        data["protected"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["rawcode"] == parent && r["field"] == field)
+            .unwrap()["runtime_value"]
+            .clone()
+    };
+    SpellcastingProfile {
+        mana: ManaProfile::per_second(
+            fields["umpm:0"].as_i64().unwrap() as i32,
+            0,
+            (fields["umpr:0"].as_f64().unwrap() * 10_000.0) as u32,
+        ),
+        ability: AutomaticAbilityProfile {
+            id: AbilityId(u32::from_be_bytes(parent.as_bytes().try_into().unwrap())),
+            mana_cost: protected("mana_cost").as_str().unwrap().parse().unwrap(),
+            cooldown_ticks: ticks(&protected("cooldown")),
+            range: (parent_fields["aran:1"].as_f64().unwrap() * f64::from(SUBUNITS_PER_WORLD_UNIT))
+                .round() as i32,
+            target_policy: AbilityTargetPolicy::HailstoneSpellTrigger,
+            effect: AbilityEffect::Hailstone(HailstoneProfile {
+                map_version: version,
+                dummy_rawcode: params["dummy_unit_id"].as_u64().unwrap() as u32,
+                ability: AbilityId(params["freeze_ability_id"].as_u64().unwrap() as u32),
+                damage: objects[0]["protected_unitstat"]["attack1_min"]
+                    .as_str()
+                    .unwrap()
+                    .parse::<f64>()
+                    .unwrap() as i32,
+                range: world(&objects[0]["protected_unitstat"]["attack1_range"]),
+                speed_per_tick: world(&unit["attack1_projectile_speed"])
+                    / CASTLE_FIGHT_SIMULATION_HZ,
+                full_radius: world(&unit["attack1_full_aoe"]),
+                splash_targets: source_mask(unit["attack1_splash_targets"].as_str().unwrap()),
+                trigger_targets: source_mask(trigger_words),
+                trigger_invulnerable: trigger_words.split(',').any(|w| w == "invulnerable"),
+                trigger_spell_immune: trigger_words.split(',').any(|w| w == "magicimmune"),
+                freeze_targets: source_mask(child["targets"].as_str().unwrap()),
+                freeze_ticks: ticks(&child["duration_normal"]),
+                hero_freeze_ticks: ticks(&child["duration_hero"]),
+                excluded_rawcodes: std::array::from_fn(|i| {
+                    params["excluded_unit_ids"][i].as_u64().unwrap() as u32
+                }),
+                excluded_buff: params["excluded_buff_id"].as_u64().unwrap() as u32,
+                vision_radius: world(&data["launcher_vision"]["radius"]),
+                vision_ticks: ticks(&data["launcher_vision"]["duration"]),
+            }),
+        },
+    }
+}
+
+pub(crate) fn launcher_regeneration_for_version(version: MapVersion, code: u32) -> Option<u32> {
+    if version != MapVersion::CASTLE_FIGHT_9_27 {
+        return None;
+    }
+    let code = String::from_utf8(code.to_be_bytes().to_vec()).ok()?;
+    let data = evidence(version);
+    data["launchers"]
+        .as_array()?
+        .iter()
+        .find(|r| r["building_rawcode"] == code)?;
+    Some((data["fields"][code]["uhpr:0"].as_f64()? * 10_000.0) as u32)
+}
+
+pub(crate) fn launcher_bindings_for_version(
+    version: MapVersion,
+) -> [crate::ResolvedNativeEffectBinding; 2] {
+    assert_eq!(version, MapVersion::CASTLE_FIGHT_9_27);
+    [
+        (crate::NativeEffectSourceKind::UnitAbility, *b"A04J"),
+        (crate::NativeEffectSourceKind::AbilityEffect, *b"A04F"),
+    ]
+    .map(|(kind, code)| crate::ResolvedNativeEffectBinding {
+        source: crate::NativeEffectSource::new(kind, u32::from_be_bytes(code)),
+        implementation: crate::NativeEffectImplementationId::WarcraftHailstoneV1,
+    })
+}
+
+pub(crate) fn launcher_source_for_version(
+    source: crate::NativeEffectSource,
+    version: MapVersion,
+) -> bool {
+    version == MapVersion::CASTLE_FIGHT_9_27
+        && launcher_bindings_for_version(version)
+            .iter()
+            .any(|b| b.source == source)
+}
+
 pub(crate) struct SnowveilProfile {
     pub rawcode: u32,
     pub manual_ability: AbilityId,

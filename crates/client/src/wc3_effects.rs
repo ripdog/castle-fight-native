@@ -206,6 +206,7 @@ pub struct Wc3AbilityVisual {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Wc3StatusVisualKind {
+    Freeze,
     Movement,
     Armor,
     AttackSpeed,
@@ -5867,7 +5868,7 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
         .map_err(|error| format!("failed reading {}: {error}", path.display()))?;
     let manifest: VisualManifest =
         serde_json::from_str(&json).map_err(|error| format!("invalid visual manifest: {error}"))?;
-    if manifest.schema_version != 6 {
+    if manifest.schema_version != 7 {
         return Err(format!(
             "unsupported visual asset manifest schema {}",
             manifest.schema_version
@@ -6108,6 +6109,7 @@ fn status_attachment_points(
 
 fn parse_status_visual_kind(value: &str) -> Result<Wc3StatusVisualKind, String> {
     match value {
+        "freeze" => Ok(Wc3StatusVisualKind::Freeze),
         "movement" => Ok(Wc3StatusVisualKind::Movement),
         "armor" => Ok(Wc3StatusVisualKind::Armor),
         "attack_speed" => Ok(Wc3StatusVisualKind::AttackSpeed),

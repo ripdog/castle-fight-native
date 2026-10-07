@@ -1728,10 +1728,12 @@ fn style_action_panel_buttons(
             PanelAction::Target(TargetingAction::SnowExplosion) => state
                 .actor
                 .and_then(|actor| authoritative.simulation.building(actor))
-                .and_then(|building| building.owner)
-                .is_none_or(|owner| {
-                    authoritative.simulation.snowveil_manual_ready_tick(owner)
-                        > authoritative.simulation.tick()
+                .is_none_or(|building| {
+                    building.status.frozen_until_tick > authoritative.simulation.tick()
+                        || building.owner.is_none_or(|owner| {
+                            authoritative.simulation.snowveil_manual_ready_tick(owner)
+                                > authoritative.simulation.tick()
+                        })
                 }),
             PanelAction::GjallarhornSpell => state
                 .actor
@@ -1744,7 +1746,8 @@ fn style_action_panel_buttons(
                         .expect("selected Gjallarhorn must retain its versioned spell")
                         .ability
                         .mana_cost;
-                    building.mana_current.unwrap_or(0) < mana_cost
+                    building.status.frozen_until_tick > authoritative.simulation.tick()
+                        || building.mana_current.unwrap_or(0) < mana_cost
                         || building
                             .ability_ready_tick
                             .is_some_and(|ready| ready > authoritative.simulation.tick())
@@ -2364,7 +2367,10 @@ fn building_upgrade_queue_is_clear(
         authoritative
             .simulation
             .building(actor)
-            .is_some_and(|building| building.production_queue.is_none_or(|count| count == 0))
+            .is_some_and(|building| {
+                building.status.frozen_until_tick <= authoritative.simulation.tick()
+                    && building.production_queue.is_none_or(|count| count == 0)
+            })
     };
     if state.members.is_empty() {
         state.actor.is_some_and(queue_is_clear)

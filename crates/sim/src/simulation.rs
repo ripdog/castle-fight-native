@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 36;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 37;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -26,6 +26,7 @@ mod abilities;
 mod automatic_abilities;
 mod builder;
 mod building_spells;
+mod frost_launcher;
 mod snowveil;
 use snowveil::SnowveilState;
 #[cfg(test)]
@@ -390,6 +391,7 @@ pub enum ProjectileViewKind {
         primary_impact_tick: u64,
     },
     Ballistic {
+        source_rawcode: Option<u32>,
         destination: SimPoint,
         impact_radius: i32,
     },
@@ -589,6 +591,7 @@ pub enum BuildingUpgradeError {
     SourceNotFound,
     NotOwner,
     SourceUnderConstruction,
+    SourceDisabled,
     ProductionQueueNotEmpty,
     SourceDefinitionMismatch,
     TeamMismatch,
@@ -1491,6 +1494,7 @@ impl Simulation {
         self.advance_building_spell_controls();
         self.advance_native_regeneration();
         let corpses_expired = self.expire_corpses();
+        self.pause_frozen_building_activities();
         self.advance_builders();
         self.advance_building_construction();
         let timers = phase_start.elapsed();
@@ -1731,6 +1735,15 @@ impl Simulation {
             next_defense_alerts: &mut next_defense_alerts,
             completed_tick,
         });
+        let (hailstone_impacts, hailstone_effects) = self.resolve_due_hailstone_impacts(
+            &mut units,
+            &mut buildings,
+            &positions,
+            &mut unit_health,
+            &mut building_health,
+        );
+        projectile_impacts += hailstone_impacts;
+        projectile_effects += hailstone_effects;
         projectile_entities_to_remove.extend(ballistic_impacts.projectile_entities_to_remove);
         projectile_impacts += ballistic_impacts.projectile_impacts;
         projectile_effects += ballistic_impacts.projectile_effects;
@@ -2189,7 +2202,13 @@ impl Simulation {
         self.world
             .iter_entities()
             .filter(|entity| {
-                entity.get::<GuaranteedHitProjectile>().is_some()
+                matches!(
+                    entity.get::<crate::components::NativeAction>(),
+                    Some(
+                        crate::components::NativeAction::Bolt(_)
+                            | crate::components::NativeAction::Hailstone(_)
+                    )
+                ) || entity.get::<GuaranteedHitProjectile>().is_some()
                     || entity.get::<ReflectedProjectile>().is_some()
                     || entity.get::<BallisticProjectile>().is_some()
                     || entity.get::<LineProjectile>().is_some()
@@ -2659,8 +2678,13 @@ impl Simulation {
         )>();
         let mut attempts: Vec<_> = query
             .iter(&self.world)
-            .filter(|(_, _, _, _, _, state, _, _, _, _, _, _, _, _, _)| {
-                state.queued != 0 && state.next_spawn_tick <= self.next_tick
+            .filter(|(entity, _, _, _, _, state, _, _, _, _, _, _, _, _, _)| {
+                !self
+                    .world
+                    .get::<StatusState>(*entity)
+                    .is_some_and(|s| self.next_tick < s.frozen_until_tick)
+                    && state.queued != 0
+                    && state.next_spawn_tick <= self.next_tick
             })
             .map(
                 |(
@@ -3845,6 +3869,7 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         AbilityTargetPolicy::RandomEnemyUnit
         | AbilityTargetPolicy::NearestEnemyInCombat
         | AbilityTargetPolicy::FlyingEnemyUnit
+        | AbilityTargetPolicy::HailstoneSpellTrigger
         | AbilityTargetPolicy::RandomEnemyUnitOrBuilding
         | AbilityTargetPolicy::RandomEnemyDebuff
         | AbilityTargetPolicy::RandomGroundEnemyUnit
@@ -3859,6 +3884,13 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
     }
     match spellcasting.ability.effect {
+        AbilityEffect::Hailstone(p) => {
+            assert!(p.damage >= 0 && p.speed_per_tick > 0 && p.full_radius >= 0 && p.range > 0);
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::HailstoneSpellTrigger
+            );
+        }
         AbilityEffect::Snowfall { map_version } => {
             assert_eq!(map_version, crate::MapVersion::CASTLE_FIGHT_9_27);
         }
@@ -4209,6 +4241,23 @@ fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option
         });
     }
     let id = *entity.get::<SimId>()?;
+    if let Some(crate::components::NativeAction::Hailstone(projectile)) =
+        entity.get::<crate::components::NativeAction>()
+    {
+        return Some(ProjectileView {
+            ability: Some(projectile.profile.ability),
+            id,
+            source: projectile.source,
+            launch_position: projectile.origin,
+            launch_tick: projectile.launch_tick,
+            impact_tick: projectile.impact_tick,
+            kind: ProjectileViewKind::Ballistic {
+                source_rawcode: Some(projectile.profile.dummy_rawcode),
+                destination: projectile.destination,
+                impact_radius: projectile.profile.full_radius,
+            },
+        });
+    }
     if let Some(crate::components::NativeAction::Bolt(projectile)) =
         entity.get::<crate::components::NativeAction>()
     {
@@ -4277,6 +4326,7 @@ fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option
             launch_tick: projectile.launch_tick,
             impact_tick: projectile.impact_tick,
             kind: ProjectileViewKind::Ballistic {
+                source_rawcode: None,
                 destination: projectile.destination,
                 impact_radius: projectile.impact_radius,
             },

@@ -3156,6 +3156,7 @@ fn prewarm_timed_wc3_effects(
                         AbilityEffect::HealingWave(_)
                         | AbilityEffect::SolarStrike { .. }
                         | AbilityEffect::PhoenixFire(_)
+                        | AbilityEffect::Hailstone(_)
                         | AbilityEffect::Snowfall { .. }
                         | AbilityEffect::Hex { .. }
                         | AbilityEffect::Damage { .. }
@@ -4318,12 +4319,10 @@ fn sync_render_entities(
         }
     }
     if let Some(stun_model) = wc3_visuals.stun() {
-        for unit in samples
-            .current
-            .units
-            .values()
-            .filter(|unit| unit.stunned_until_tick > samples.current.tick)
-        {
+        for unit in samples.current.units.values().filter(|unit| {
+            unit.stunned_until_tick > samples.current.tick
+                && unit.status.frozen_until_tick <= samples.current.tick
+        }) {
             if render_map.stun_effects.contains_key(&unit.id) {
                 continue;
             }
@@ -4341,6 +4340,7 @@ fn sync_render_entities(
             building
                 .stunned_until_tick
                 .is_some_and(|until| until > samples.current.tick)
+                && building.status.frozen_until_tick <= samples.current.tick
         }) {
             if render_map.stun_effects.contains_key(&building.id) {
                 continue;
@@ -5067,6 +5067,12 @@ fn status_visual_sources(
                 .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::AttackSpeed)),
         )
         .chain(
+            status
+                .frozen_ability
+                .filter(move |_| tick < status.frozen_until_tick)
+                .map(|a| (a.0, Wc3StatusVisualKind::Freeze)),
+        )
+        .chain(
             status.damage_over_time[..usize::from(status.damage_over_time_count)]
                 .iter()
                 .filter(move |modifier| modifier.expires_tick > tick)
@@ -5081,6 +5087,12 @@ fn status_visual_is_active(
     kind: Wc3StatusVisualKind,
 ) -> bool {
     match kind {
+        Wc3StatusVisualKind::Freeze => {
+            tick < status.frozen_until_tick
+                && status
+                    .frozen_ability
+                    .is_some_and(|a| a.0 == ability_rawcode)
+        }
         Wc3StatusVisualKind::Movement => {
             let count = usize::from(status.movement_modifier_count);
             status.movement_modifiers[..count]
@@ -5251,11 +5263,12 @@ fn entity_is_stunned(id: SimId, snapshot: &crate::bridge::PresentationSnapshot, 
     snapshot
         .units
         .get(&id)
-        .is_some_and(|unit| unit.stunned_until_tick > tick)
+        .is_some_and(|unit| unit.stunned_until_tick > tick && unit.status.frozen_until_tick <= tick)
         || snapshot.buildings.get(&id).is_some_and(|building| {
             building
                 .stunned_until_tick
                 .is_some_and(|until| until > tick)
+                && building.status.frozen_until_tick <= tick
         })
 }
 
@@ -5285,6 +5298,10 @@ fn projectile_source_rawcode(
     samples: &PresentationSamples,
 ) -> Option<u32> {
     if let ProjectileViewKind::Line {
+        source_rawcode: Some(rawcode),
+        ..
+    }
+    | ProjectileViewKind::Ballistic {
         source_rawcode: Some(rawcode),
         ..
     } = projectile.kind
@@ -7758,6 +7775,38 @@ mod tests {
     }
 
     #[test]
+    fn native_freeze_visual_uses_retained_identity_and_exclusive_expiry() {
+        let status = castle_fight_sim::StatusState {
+            frozen_until_tick: 20,
+            frozen_ability: Some(castle_fight_sim::AbilityId(123)),
+            ..Default::default()
+        };
+        assert_eq!(
+            status_visual_sources(&status, 19).collect::<Vec<_>>(),
+            [(123, Wc3StatusVisualKind::Freeze)]
+        );
+        assert!(status_visual_is_active(
+            &status,
+            19,
+            123,
+            Wc3StatusVisualKind::Freeze
+        ));
+        assert!(!status_visual_is_active(
+            &status,
+            19,
+            124,
+            Wc3StatusVisualKind::Freeze
+        ));
+        assert!(!status_visual_is_active(
+            &status,
+            20,
+            123,
+            Wc3StatusVisualKind::Freeze
+        ));
+        assert!(status_visual_sources(&status, 20).next().is_none());
+    }
+
+    #[test]
     fn unit_facing_uses_local_positive_z_as_forward() {
         let right = facing_rotation(Vec3::X);
         let forward = right * Vec3::Z;
@@ -7839,6 +7888,7 @@ mod tests {
             launch_tick: 0,
             impact_tick: 10,
             kind: ProjectileViewKind::Ballistic {
+                source_rawcode: None,
                 destination: SimPoint::new(100 * SUBUNITS_PER_WORLD_UNIT, 0),
                 impact_radius: 0,
             },

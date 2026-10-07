@@ -2,8 +2,8 @@ use bevy_ecs::prelude::Component;
 use std::collections::VecDeque;
 
 mod native_actions;
+pub(crate) use native_actions::{HailstoneState, HealingWaveState, NativeAction, NativeBoltState};
 pub use native_actions::{HealingWaveProfile, NativeBoltProfile};
-pub(crate) use native_actions::{HealingWaveState, NativeAction, NativeBoltState};
 mod automatic_abilities;
 mod mana;
 pub(crate) use automatic_abilities::compose_spellcasting_profiles;
@@ -1054,6 +1054,7 @@ pub enum AbilityTargetPolicy {
     FlyingEnemyUnit,
     RandomEnemyUnitOrBuilding,
     /// Native Always Autocast debuffs consider any viable hostile in range.
+    HailstoneSpellTrigger,
     RandomEnemyDebuff,
 }
 
@@ -1073,6 +1074,7 @@ impl AbilityTargetPolicy {
             Self::NearestEnemyInCombat => 9,
             Self::FlyingEnemyUnit => 10,
             Self::RandomEnemyUnitOrBuilding => 11,
+            Self::HailstoneSpellTrigger => 12,
             Self::RandomEnemyDebuff => 20,
         }
     }
@@ -1181,6 +1183,7 @@ pub enum AbilityEffect {
     },
     PhoenixFire(NativeBoltProfile),
     HealingWave(HealingWaveProfile),
+    Hailstone(crate::building_mechanics::HailstoneProfile),
     Snowfall {
         map_version: crate::MapVersion,
     },
@@ -1231,6 +1234,7 @@ impl AbilityEffect {
             Self::AreaDebuff { .. } => 16,
             Self::FrostNova { .. } => 17,
             Self::Snowfall { .. } => 18,
+            Self::Hailstone(_) => 19,
         }
     }
 }
@@ -1375,6 +1379,9 @@ pub struct StatusState {
     pub pending_cast: Option<PendingCastState>,
     pub stunned_until_tick: u64,
     pub rooted_until_tick: u64,
+    /// Freezing Breath additionally suspends native building activities.
+    pub frozen_until_tick: u64,
+    pub frozen_ability: Option<AbilityId>,
     /// Independent script/order recovery, not a removable native stun buff.
     pub order_recovery_until_tick: u64,
     pub ability_retreat_start_tick: u64,

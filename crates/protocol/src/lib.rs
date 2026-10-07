@@ -15,7 +15,7 @@ use castle_fight_sim::{
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-pub const PROTOCOL_SCHEMA_VERSION: u32 = 10;
+pub const PROTOCOL_SCHEMA_VERSION: u32 = 11;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub const MAX_RELEASE_REVISION_BYTES: usize = 64;
 pub const RECONNECT_TOKEN_BYTES: usize = 32;
@@ -1404,6 +1404,7 @@ pub enum WireBuildingUpgradeError {
     SourceNotFound,
     NotOwner,
     SourceUnderConstruction,
+    SourceDisabled,
     ProductionQueueNotEmpty,
     SourceDefinitionMismatch,
     TeamMismatch,
@@ -1418,6 +1419,7 @@ impl From<BuildingUpgradeError> for WireBuildingUpgradeError {
             BuildingUpgradeError::SourceNotFound => Self::SourceNotFound,
             BuildingUpgradeError::NotOwner => Self::NotOwner,
             BuildingUpgradeError::SourceUnderConstruction => Self::SourceUnderConstruction,
+            BuildingUpgradeError::SourceDisabled => Self::SourceDisabled,
             BuildingUpgradeError::ProductionQueueNotEmpty => Self::ProductionQueueNotEmpty,
             BuildingUpgradeError::SourceDefinitionMismatch => Self::SourceDefinitionMismatch,
             BuildingUpgradeError::TeamMismatch => Self::TeamMismatch,

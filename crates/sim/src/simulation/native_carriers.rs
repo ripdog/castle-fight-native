@@ -503,6 +503,8 @@ fn cleanse_native_effects(
     let status = &mut unit.status;
     status.stunned_until_tick = 0;
     status.rooted_until_tick = 0;
+    status.frozen_until_tick = 0;
+    status.frozen_ability = None;
     // Finite-lifetime modifiers and retained native buff identities are buffs.
     // Permanent grants carry the granting ability identity and use the exact removal list.
     let keep_modifier = |id: ModifierId, expires: u64| {

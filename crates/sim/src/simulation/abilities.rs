@@ -264,6 +264,15 @@ impl Simulation {
                 AbilitySourceIndex::Unit(index) => units[index].entity,
                 AbilitySourceIndex::Building(index) => buildings[index].entity,
             };
+            let frozen = match intent.source {
+                AbilitySourceIndex::Unit(i) => units[i].status.frozen_until_tick,
+                AbilitySourceIndex::Building(i) => {
+                    buildings[i].status.map_or(0, |s| s.frozen_until_tick)
+                }
+            };
+            if self.next_tick < frozen {
+                continue;
+            }
             let Some(source) = self.select_ability_source_slot(source, entity, intent.ability)
             else {
                 continue;
@@ -496,9 +505,19 @@ impl Simulation {
                     reveal.detects_invisible,
                 );
             }
+            let mut emit_cast_visual = true;
             match intent.target {
                 AbilityIntentTarget::Unit { index, .. } => {
-                    if let AbilityEffect::SolarStrike {
+                    if matches!(intent.ability.effect, AbilityEffect::Hailstone(_)) {
+                        let result = self.cast_hailstone(
+                            source,
+                            intent.ability,
+                            intent.cast_sequence,
+                            buildings,
+                        );
+                        emit_cast_visual = result.is_some();
+                        metrics.effects += usize::from(result == Some(true));
+                    } else if let AbilityEffect::SolarStrike {
                         profile,
                         radius,
                         maximum_targets,
@@ -715,17 +734,35 @@ impl Simulation {
                     }
                 }
                 AbilityIntentTarget::Building { id, position } => {
-                    let AbilityEffect::PhoenixFire(profile) = intent.ability.effect else {
-                        unreachable!("building spell target requires a directed bolt")
-                    };
-                    let origin = match source.origin {
-                        AbilitySourceOrigin::Unit(position) => position,
-                        AbilitySourceOrigin::Building(footprint) => {
-                            footprint_center_point(footprint, self.config.navigation_cell_size)
-                        }
-                    };
-                    self.launch_native_bolt(source.id, source.team, origin, id, position, profile);
-                    metrics.effects += 1;
+                    if matches!(intent.ability.effect, AbilityEffect::Hailstone(_)) {
+                        let result = self.cast_hailstone(
+                            source,
+                            intent.ability,
+                            intent.cast_sequence,
+                            buildings,
+                        );
+                        emit_cast_visual = result.is_some();
+                        metrics.effects += usize::from(result == Some(true));
+                    } else {
+                        let AbilityEffect::PhoenixFire(profile) = intent.ability.effect else {
+                            unreachable!("building spell target requires a directed bolt")
+                        };
+                        let origin = match source.origin {
+                            AbilitySourceOrigin::Unit(position) => position,
+                            AbilitySourceOrigin::Building(footprint) => {
+                                footprint_center_point(footprint, self.config.navigation_cell_size)
+                            }
+                        };
+                        self.launch_native_bolt(
+                            source.id,
+                            source.team,
+                            origin,
+                            id,
+                            position,
+                            profile,
+                        );
+                        metrics.effects += 1;
+                    }
                 }
                 AbilityIntentTarget::AllEnemyUnits => {
                     for target in units.iter_mut() {
@@ -924,18 +961,20 @@ impl Simulation {
                     );
                 }
             }
-            self.last_ability_casts.push(AbilityCastEvent {
-                source: intent.source_id,
-                ability: match intent.ability.effect {
-                    AbilityEffect::AreaStun { ability, .. }
-                    | AbilityEffect::AreaDebuff { ability, .. }
-                    | AbilityEffect::FrostNova { ability, .. } => ability,
-                    _ => intent.ability.id,
-                },
-                target: intent.target.cast_target(),
-                target_position,
-                effect: intent.ability.effect,
-            });
+            if emit_cast_visual {
+                self.last_ability_casts.push(AbilityCastEvent {
+                    source: intent.source_id,
+                    ability: match intent.ability.effect {
+                        AbilityEffect::AreaStun { ability, .. }
+                        | AbilityEffect::AreaDebuff { ability, .. }
+                        | AbilityEffect::FrostNova { ability, .. } => ability,
+                        _ => intent.ability.id,
+                    },
+                    target: intent.target.cast_target(),
+                    target_position,
+                    effect: intent.ability.effect,
+                });
+            }
             metrics.casts += 1;
         }
 
@@ -1174,6 +1213,13 @@ impl Simulation {
 
         let mut candidate_checks = 0usize;
         let target = match spellcasting.ability.target_policy {
+            AbilityTargetPolicy::HailstoneSpellTrigger => self.hailstone_trigger_target(
+                source,
+                spellcasting.ability,
+                state.cast_sequence,
+                units,
+                &mut candidate_checks,
+            ),
             AbilityTargetPolicy::RandomEnemyUnit
             | AbilityTargetPolicy::RandomGroundEnemyUnit
             | AbilityTargetPolicy::RandomEnemyDebuff => self
@@ -1708,7 +1754,11 @@ impl Simulation {
         best.map(|(_, _, unit_index)| unit_index)
     }
 
-    fn ability_source_distance_sq(&self, source: AbilitySourceOrigin, target: SimPoint) -> u64 {
+    pub(super) fn ability_source_distance_sq(
+        &self,
+        source: AbilitySourceOrigin,
+        target: SimPoint,
+    ) -> u64 {
         match source {
             AbilitySourceOrigin::Unit(position) => position.distance_sq(target),
             AbilitySourceOrigin::Building(footprint) => {
@@ -1807,6 +1857,23 @@ impl Simulation {
                                     _ => true,
                                 }
                         }
+                        AbilityTargetPolicy::HailstoneSpellTrigger => {
+                            let AbilityEffect::Hailstone(profile) = ability.effect else {
+                                return false;
+                            };
+                            profile
+                                .trigger_targets
+                                .can_target_unit(target.movement_class)
+                                && target.visible_to(source.team, self.next_tick)
+                                && self.hailstone_trigger_allowed(
+                                    source,
+                                    ability,
+                                    target.team,
+                                    target.health,
+                                    target.position,
+                                    target.classifications,
+                                )
+                        }
                         AbilityTargetPolicy::AllEnemyUnits => false,
                         AbilityTargetPolicy::AllFriendlyUnits
                         | AbilityTargetPolicy::RandomCorpse
@@ -1841,6 +1908,21 @@ impl Simulation {
                     }
             }
             AbilityIntentTarget::Building { id, position } => {
+                if let AbilityEffect::Hailstone(profile) = ability.effect {
+                    return self.world.iter_entities().any(|e| {
+                        e.get::<SimId>() == Some(&id)
+                            && profile.trigger_targets.can_target_buildings()
+                            && self.visible_teams(position) & (1 << source.team.0) != 0
+                            && self.hailstone_trigger_allowed(
+                                source,
+                                ability,
+                                e.get::<Team>().copied().unwrap_or(source.team),
+                                e.get::<Health>().map_or(0, |h| h.current),
+                                position,
+                                e.get::<UnitClassifications>().copied().unwrap_or_default(),
+                            )
+                    });
+                }
                 ability.target_policy == AbilityTargetPolicy::RandomEnemyUnitOrBuilding
                     && self.visible_teams(position) & (1 << source.team.0) != 0
                     && self.ability_source_distance_sq(source.origin, position)

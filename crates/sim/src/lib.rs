@@ -1952,6 +1952,7 @@ mod tests {
         assert_eq!(
             projectile[0].kind,
             ProjectileViewKind::Ballistic {
+                source_rawcode: None,
                 destination: target,
                 impact_radius: 320 * cell,
             }
@@ -4841,6 +4842,7 @@ mod tests {
         let ProjectileViewKind::Ballistic {
             destination,
             impact_radius,
+            ..
         } = projectile.kind
         else {
             panic!("expected ballistic projectile");

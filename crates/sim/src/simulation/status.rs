@@ -275,7 +275,8 @@ pub(super) fn apply_ability_effect_to_unit(
                 },
             );
         }
-        AbilityEffect::Snowfall { .. }
+        AbilityEffect::Hailstone(_)
+        | AbilityEffect::Snowfall { .. }
         | AbilityEffect::Hex { .. }
         | AbilityEffect::HolyFervour { .. }
         | AbilityEffect::Purification { .. }

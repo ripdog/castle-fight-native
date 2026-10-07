@@ -862,6 +862,7 @@ fn load_visual_assets(
         let status_kinds: &[&str] = match base_rawcode {
             // Entangling Roots-family effects hold the target in place for the buff lifetime.
             "Aenr" => &["movement"],
+            "Afrz" => &["freeze"],
             // Frost Armor applies one persistent shield buff and one reactive slow buff.
             "ACf2" => &["armor", "movement"],
             // Inner Fire, Prayer, and Devotion Aura use a persistent target buff model.
@@ -1003,6 +1004,56 @@ fn append_building_script_visuals(
                 missile_arc: None,
             });
         }
+    }
+    for row in data["launchers"]
+        .as_array()
+        .ok_or("missing launcher projection")?
+    {
+        let parent = row["ability_rawcode"]
+            .as_str()
+            .ok_or("launcher parent identity")?;
+        let building = row["building_rawcode"]
+            .as_str()
+            .ok_or("launcher source identity")?;
+        for path in data["script_art"]["frostLauncherSpell"]
+            .as_array()
+            .ok_or("missing launcher caster art")?
+        {
+            visuals.assets.push(VisualAssetSpec {
+                owner_kind: "abilities".to_owned(),
+                owner_rawcode: parent.to_owned(),
+                source_unit_rawcode: Some(building.to_owned()),
+                role: "caster".to_owned(),
+                model_path: path.as_str().ok_or("invalid launcher art")?.to_owned(),
+                missile_arc: None,
+            });
+        }
+        let objects: serde_json::Value = serde_json::from_str(
+            row["effect_objects_json"]
+                .as_str()
+                .ok_or("launcher effects")?,
+        )?;
+        let child = objects[1]["rawcode"]
+            .as_str()
+            .ok_or("launcher child identity")?;
+        let missiles = visuals
+            .assets
+            .iter()
+            .filter(|asset| {
+                asset.owner_kind == "abilities"
+                    && asset.owner_rawcode == child
+                    && asset.role == "missile"
+            })
+            .map(|asset| VisualAssetSpec {
+                owner_kind: asset.owner_kind.clone(),
+                owner_rawcode: asset.owner_rawcode.clone(),
+                source_unit_rawcode: Some(building.to_owned()),
+                role: asset.role.clone(),
+                model_path: asset.model_path.clone(),
+                missile_arc: asset.missile_arc,
+            })
+            .collect::<Vec<_>>();
+        visuals.assets.extend(missiles);
     }
     Ok(())
 }

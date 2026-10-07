@@ -2910,7 +2910,9 @@ fn format_unit_inspector(unit: &UnitSample, tick: u64, samples: &PresentationSam
         format!("Attack cooldown: {} ticks", unit.cooldown_remaining),
         format!(
             "State: {}",
-            if unit.status.rooted_until_tick > tick {
+            if unit.status.frozen_until_tick > tick {
+                "Frozen".to_owned()
+            } else if unit.status.rooted_until_tick > tick {
                 "Rooted".to_owned()
             } else {
                 stun_label(unit.stunned_until_tick, tick)
@@ -2942,6 +2944,10 @@ fn format_building_inspector(building: &BuildingSample, tick: u64) -> String {
         ),
         format!("Target: {}", target_label(building.target)),
     ];
+    if building.status.frozen_until_tick > tick {
+        lines.push("State: Frozen".into());
+    }
+
     if let (Some(started_tick), Some(complete_tick)) = (
         building.construction_started_tick,
         building.construction_complete_tick,
@@ -3120,6 +3126,9 @@ fn armor_type_name(armor_type: ArmorType) -> &'static str {
 }
 
 fn unit_order_label(unit: &UnitSample, tick: u64) -> String {
+    if unit.status.frozen_until_tick > tick {
+        return "Frozen".into();
+    }
     if unit.stunned_until_tick > tick {
         return "Disabled/stunned".into();
     }

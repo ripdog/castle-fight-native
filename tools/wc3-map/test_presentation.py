@@ -74,6 +74,12 @@ class NativeStatusDeliveryAuditTests(unittest.TestCase):
             self.assertEqual(len(self.audit(entries)[0]), 1)
         self.assertEqual(audit.audit_native_status_visuals(self.projection, self.fields, set(), {}), ([], []))
 
+    def test_freeze_requires_its_native_buff_binding(self):
+        self.fields[0]["base_rawcode"] = "Afrz"
+        entry = dict(self.binding, status_kind="freeze")
+        self.assertEqual(self.audit([entry]), ([], [entry]))
+        self.assertTrue(self.audit([])[0])
+
     def test_authored_attachment_changes_are_not_delivery_success(self):
         for invalid in (dict(self.binding, target_attachments=[]),
                         dict(self.binding, target_attachment_count=2)):

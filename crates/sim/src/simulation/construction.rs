@@ -453,6 +453,17 @@ impl Simulation {
                 remainder_per_10k_hz: 0,
             });
         }
+        if let Some(content) = properties.content
+            && let Some(rate) = crate::building_mechanics::launcher_regeneration_for_version(
+                content.map_version,
+                content.rawcode,
+            )
+        {
+            entity.insert(HealthRegeneration {
+                per_second_per_10k: rate,
+                remainder_per_10k_hz: 0,
+            });
+        }
         let entity_id = entity.id();
         self.start_native_carrier(entity_id);
     }
@@ -650,6 +661,12 @@ impl Simulation {
             .is_some()
         {
             return Err(BuildingUpgradeError::SourceUnderConstruction);
+        }
+        if runtime
+            .status
+            .is_some_and(|s| self.next_tick < s.frozen_until_tick)
+        {
+            return Err(BuildingUpgradeError::SourceDisabled);
         }
         if source_building.team != actual_team || target_building.team != actual_team {
             return Err(BuildingUpgradeError::TeamMismatch);
@@ -851,6 +868,11 @@ impl Simulation {
             resources.legendary_points_used =
                 resources.legendary_points_used - economy.legendary_points_cost + source_points;
         }
+        let active_freeze = self
+            .world
+            .get::<StatusState>(entity)
+            .copied()
+            .filter(|s| self.next_tick < s.frozen_until_tick);
         let outcome = if let Some(source) = construction.upgrade_from {
             self.world
                 .entity_mut(entity)
@@ -888,6 +910,21 @@ impl Simulation {
             }
             self.activate_building_entity(entity, source.building, source.properties);
             self.restore_building_runtime_state(entity, source.runtime);
+            if let Some(frozen) = active_freeze {
+                let mut status = self
+                    .world
+                    .get::<StatusState>(entity)
+                    .copied()
+                    .unwrap_or_default();
+                status.frozen_until_tick = frozen.frozen_until_tick;
+                status.frozen_ability = frozen.frozen_ability;
+                status.stunned_until_tick =
+                    status.stunned_until_tick.max(frozen.stunned_until_tick);
+                status.pending_attack = None;
+                status.pending_cast = None;
+                status.action_animation = None;
+                self.world.entity_mut(entity).insert(status);
+            }
             BuildingConstructionCancelOutcome::RevertedUpgrade
         } else {
             self.world.despawn(entity);

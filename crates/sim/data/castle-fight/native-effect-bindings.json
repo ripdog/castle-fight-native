@@ -453,6 +453,8 @@
     {"source_kind": "unit-ability", "source_key": "A04B", "implementation": "warcraft-marker-only-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "unit-ability", "source_key": "A04C", "implementation": "warcraft-marker-only-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "unit-ability", "source_key": "A0HO", "implementation": "warcraft-snowveil-v1", "valid_from": "9.27", "valid_through": "9.27"},
-    {"source_kind": "unit-ability", "source_key": "AM0{", "implementation": "warcraft-snowveil-v1", "valid_from": "9.27", "valid_through": "9.27"}
+    {"source_kind": "unit-ability", "source_key": "AM0{", "implementation": "warcraft-snowveil-v1", "valid_from": "9.27", "valid_through": "9.27"},
+    {"source_kind":"unit-ability","source_key":"A04J","implementation":"warcraft-hailstone-v1","valid_from":"9.27","valid_through":"9.27","notes":"Script-selected native attack proxy."},
+    {"source_kind":"ability-effect","source_key":"A04F","implementation":"warcraft-hailstone-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Freezing Breath on the proxy weapon."}
   ]
 }

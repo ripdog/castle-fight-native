@@ -29,14 +29,16 @@ def build(map_version='9.27', revision='r1'):
     building_rows = rows('building-spell-mechanics.tsv')
     mechanics = next(r for r in building_rows if r['building_rawcode'] == 'h00Z')
     snow = next(r for r in building_rows if r['building_rawcode'] == 'h07W')
+    launchers = [r for r in building_rows if r['building_rawcode'] in ('h048',)]
+    launcher_codes = ['h048', 'h04G', 'A04J', 'A04F']
     shield = next(r for r in rows('runtime-system-mechanics.tsv') if r['system_id'] == 'targeted-negative-effect-shields')
     units = {r['rawcode']: r for r in rows('units.tsv') if r['rawcode'] in ('n00F', 'n00G')}
-    protected = [r for r in rows('protected-ability-fields.tsv') if r['rawcode'] in ('A017', 'A018', 'A0HO', 'AM0{')]
+    protected = [r for r in rows('protected-ability-fields.tsv') if r['rawcode'] in ('A017', 'A018', 'A0HO', 'AM0{', *launcher_codes)]
     overheat_explosions = [r for r in rows('abilities.tsv') if r['rawcode'] == 'A09B']
     fields = rows('object-fields.tsv')
     selected = {code: {r['field_id'] + ':' + r['level']: json.loads(r['recovered_value_json'])
                        for r in fields if r['rawcode'] == code}
-                for code in ('h00Z', 'A017', 'A018', 'A09L', 'A070', 'BOhx', 'B01H', 'n00F', 'n00G', 'h07W', 'A0HO', 'AM0{')}
+                for code in ('h00Z', 'A017', 'A018', 'A09L', 'A070', 'BOhx', 'B01H', 'n00F', 'n00G', 'h07W', 'A0HO', 'AM0{', *launcher_codes)}
     markers = {r['rawcode']: r['abilities'].split(',') for r in rows('units.tsv')
                if any(a in r['abilities'].split(',') for a in ('A070', 'A08H', 'Avul')) or r['rawcode'] == 'h06B'}
     script_bytes = _retained_file_bytes(ROOT, tree, 'script/war3map.lua')
@@ -52,14 +54,15 @@ def build(map_version='9.27', revision='r1'):
                      'CallbackSingle_doAfter_ReengageRuntime_call_doAfter_ReengageRuntime',
                      'CallbackSingle_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_ReengageRuntime',
                      'CallbackSingle_doAfter_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_doAfter_ReengageRuntime',
-                     *snow['source_functions'].split(','), 'tileR', 'tile_toVec2', 'vL', 'AI'):
+                     *snow['source_functions'].split(','),
+                     *(f for row in launchers for f in row['source_functions'].split(',')), 'tileR', 'tile_toVec2', 'vL', 'AI', 'unit_resetSpawnQueue', 'vM', 'ZE', 'EventListener_add_BuildingSpells_onEvent_add_BuildingSpells'):
         start = script.index('function ' + function + '(')
         end = script.index('function ', start + 10)
         traces[function] = {'byte_offset': len(script[:start].encode()), 'source': script[start:end]}
     script_art = {function: [json.loads('"' + literal + '"')
                             for literal in re.findall(r'"(.*?)"', traces[function]['source'])
                             if literal.endswith('.mdl')]
-                  for function in ('checkForShield', 'Vd', 'Ed')}
+                  for function in ('checkForShield', 'Vd', 'Ed', 'frostLauncherSpell')}
     # The normalized summary reverses these names. Retain the actual callback assignment.
     initial = traces['FL']['source']
     callback = traces['ForGroupCallback_forUnitsOfPlayer_nullTimer_SnowveilFountain_callback_forUnitsOfPlayer_nullTimer_SnowveilFountain']['source']
@@ -79,8 +82,11 @@ def build(map_version='9.27', revision='r1'):
     terrain['snow_rawcode'] = snow_terrain.to_bytes(4, 'big').decode('ascii')
     return {'map_version': map_version, 'schema_version': 2, 'source_revision': revision,
             'extraction_git_tree': tree, 'source_sha256': sources,
-            'city': mechanics, 'snow': snow, 'snow_manual_cooldowns': {'Pcb': cooldowns[0], 'normal': cooldowns[1]},
-            'terrain_grid': terrain, 'shield': shield, 'forms': units, 'protected': protected,
+            'city': mechanics, 'launchers': launchers, 'snow': snow, 'snow_manual_cooldowns': {'Pcb': cooldowns[0], 'normal': cooldowns[1]},
+            'terrain_grid': terrain, 'shield': shield, 'forms': units,
+            'launcher_units': {r['rawcode']: r for r in rows('units.tsv') if r['rawcode'] in launcher_codes},
+            'launcher_vision': {'radius': re.search(r'getY\(\w+\),(\d+\.),true,false', traces['issueFrostLauncherOrder']['source']).group(1),
+                                'duration': re.search(r'doAfter\((\d+\.\d+),', traces['issueFrostLauncherOrder']['source']).group(1)}, 'protected': protected,
             'overheat_explosions': overheat_explosions,
             'fields': selected, 'target_markers': markers, 'script_traces': traces,
             'script_art': script_art}

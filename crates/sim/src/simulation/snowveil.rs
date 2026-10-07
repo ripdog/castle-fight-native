@@ -173,7 +173,10 @@ impl Simulation {
             .content
             .ok_or(BuildingCommandError::SourceCannotCast)?;
         let p = snowveil_for_version(content.map_version);
-        if content.rawcode != p.rawcode || source.construction_complete_tick.is_some() {
+        if content.rawcode != p.rawcode
+            || source.construction_complete_tick.is_some()
+            || self.next_tick < source.status.frozen_until_tick
+        {
             return Err(BuildingCommandError::SourceCannotCast);
         }
         let owner = source.owner.ok_or(BuildingCommandError::NotAuthorized)?;
