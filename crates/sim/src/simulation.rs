@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 37;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 38;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -1492,7 +1492,6 @@ impl Simulation {
         self.advance_cooldowns();
         self.resolve_shrine_revivals();
         self.advance_building_spell_controls();
-        self.advance_native_regeneration();
         let corpses_expired = self.expire_corpses();
         self.pause_frozen_building_activities();
         self.advance_builders();

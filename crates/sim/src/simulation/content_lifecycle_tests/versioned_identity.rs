@@ -151,11 +151,9 @@ fn activation_and_restoration_retain_carrier_and_regeneration_source_versions() 
         for entity in restored.world.iter_entities() {
             if let Some(state) = entity.get::<crate::native_carriers::NativeCarrierState>() {
                 let version = match state {
-                    crate::native_carriers::NativeCarrierState::Carrier { map_version, .. }
-                    | crate::native_carriers::NativeCarrierState::Regeneration {
-                        map_version,
-                        ..
-                    } => *map_version,
+                    crate::native_carriers::NativeCarrierState::Carrier { map_version, .. } => {
+                        *map_version
+                    }
                     crate::native_carriers::NativeCarrierState::Bolt(bolt) => bolt.map_version,
                 };
                 assert_eq!(version, properties.content.unwrap().map_version);
@@ -175,10 +173,10 @@ fn standalone_native_timer_and_control_versions_are_checked_without_source_ident
     };
     let content = castle_fight_content_bundle(CASTLE_FIGHT_DEFAULT_MAP_VERSION).unwrap();
     let foreign = MapVersion::new(99, 1);
-    for case in 0..5 {
+    for case in 0..4 {
         let mut simulation = Simulation::new(SimulationConfig::default(), 1);
         let id = simulation.allocate_id();
-        if case < 3 {
+        if case < 2 {
             let state = match case {
                 0 => NativeCarrierState::Carrier {
                     building: SimId(100),
@@ -188,12 +186,6 @@ fn standalone_native_timer_and_control_versions_are_checked_without_source_ident
                     map_version: foreign,
                     ready_tick: 10,
                     sequence: 0,
-                },
-                1 => NativeCarrierState::Regeneration {
-                    building: SimId(100),
-                    map_version: foreign,
-                    per_second_per_10k: 0,
-                    remainder: 0,
                 },
                 _ => NativeCarrierState::Bolt(NativeCarrierBolt {
                     source: SimId(100),
@@ -213,7 +205,7 @@ fn standalone_native_timer_and_control_versions_are_checked_without_source_ident
             };
             simulation.world.spawn((id, state));
         } else {
-            let callbacks = if case == 4 {
+            let callbacks = if case == 3 {
                 let AbilityEffect::Hex { mut profile } =
                     crate::building_mechanics::city_spellcasting_for_version(content.map_version)
                         .ability
@@ -234,7 +226,7 @@ fn standalone_native_timer_and_control_versions_are_checked_without_source_ident
                 id,
                 BuildingSpellTargetState {
                     target: SimId(100),
-                    version: if case == 3 {
+                    version: if case == 2 {
                         foreign
                     } else {
                         content.map_version

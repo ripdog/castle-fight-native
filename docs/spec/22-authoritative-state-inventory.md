@@ -111,7 +111,7 @@ The complete current building state is:
 - optional building spellcasting profile plus shared mana remainder/current value and primary automatic-ability ready/cast sequence/control flags;
 - optional `AdditionalAutomaticAbilities`, with the same profile/state coverage as units. In-progress upgrade cancellation preserves the complete precursor ability set and state; a successful definition replacement discards obsolete slots.
 
-Content identity includes its retained map version before activation, not a version inferred from a live rawcode or a process default. This identity participates in every live/cold hash and snapshot location, including original resurrection bodies, paid build orders, pending construction, production children, and saved upgrade precursors. Native carrier/regeneration state and delayed building-spell controls consume this identity; Hex profiles/callbacks also retain the source effect version.
+Content identity includes its retained map version before activation, not a version inferred from a live rawcode or a process default. This identity participates in every live/cold hash and snapshot location, including original resurrection bodies, paid build orders, pending construction, production children, and saved upgrade precursors. Native carrier state and delayed building-spell controls consume this identity; Hex profiles/callbacks also retain the source effect version.
 
 Production metadata is authoritative because it defines future spawned units. It must remain complete even when no produced unit is currently alive, including inside pending construction and saved upgrade precursors. Every ordinary or companion production spawn receives the complete definition set with fresh per-ability runtime state; producer metadata MUST NOT carry a previous child's cooldowns, sequences, or pending actions.
 
@@ -167,7 +167,7 @@ A snapshot is taken only at a defined completed boundary. Step 7 must not attemp
 
 `CANONICAL_CHECKSUM_SCHEMA_VERSION` in `crates/sim/src/simulation.rs` is the current compatibility boundary. The multi-ability design revision includes optional additional ability profiles/state, independent delayed secondary actions, and the originating ability identity for primary delayed resurrection. All such state is also covered inside saved upgrade-precursor runtime. The historical additions below remain included. Revision 2 added immutable configuration/combat identity, allocator state, audited optional presence, content rawcodes, canonical entity-shape validation, and duplicate-`SimId` rejection. Revision 3 retains that coverage and adds the authoritative state introduced by the Defender/production-upgrade slice:
 
-- fixed-point unit health-regeneration rate/remainder state;
+- fixed-point unit and building health-regeneration rate/remainder state;
 - persistent reflected-projectile state;
 - in-progress building-upgrade identity and the complete saved precursor runtime required for deterministic cancellation, including production timer, attack cooldown/target state, spawn tick, mana/ability state, and status state;
 - the associated production-unit regeneration/profile data needed to preserve future spawn semantics.
@@ -204,3 +204,5 @@ Checksum traversal and snapshot capture share one canonical entity projection. R
 `MatchReplay` schema revision 1 retains the driver's creation-time logical simulation snapshot, canonical tick/control record history, and one `(stream position, completed tick boundary, checksum)` checkpoint per record. Replay headers declare replay/snapshot/checksum schema revisions plus map/release, content gameplay identity, and simulation configuration identity. Optional seek points are full `MatchDriverSnapshot`s captured only at command-free canonical boundaries, so seeking restores both gameplay state and stream/deduplication continuity before replaying later records.
 
 Native single-shot attack proxies retain source/owner, primary target, launch/destination points, launch/impact ticks and their complete versioned weapon/Freezing Breath profile in `NativeAction`. Status state also retains the exclusive frozen deadline and originating ability identity. Both live state and upgrade-precursor status participate in checksums and snapshots; client ice attachments follow this deadline without supplying gameplay timing.
+
+In-progress upgrades retain the precursor health-regeneration rate and fractional remainder alongside its other runtime state. Cancellation restores that phase exactly; activation consumes the authored building gameplay rate. Queued and constructing building definitions include the rate in their canonical definition hash.

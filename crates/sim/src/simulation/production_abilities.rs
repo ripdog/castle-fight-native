@@ -263,3 +263,43 @@ fn pending_upgrade_preserves_precursor_definitions_on_cancel_and_replaces_them_o
         replacement
     );
 }
+
+#[test]
+fn fractional_building_regeneration_survives_pending_upgrade_restore_and_cancellation() {
+    let (source, mut source_properties) = factory(&[]);
+    source_properties.health_regen_per_second_per_10k = 75_000;
+    let (target, mut target_properties) = factory(&[]);
+    target_properties.construction_time_ticks = Some(4);
+    target_properties.health_regen_per_second_per_10k = 125_000;
+    let mut pending = simulation(1);
+    let id = pending.spawn_building_with_properties(source, source_properties);
+    let entity = pending
+        .world
+        .iter_entities()
+        .find(|e| e.get::<SimId>() == Some(&id))
+        .unwrap()
+        .id();
+    pending.world.get_mut::<Health>(entity).unwrap().current = 900;
+    pending.step();
+    let before = *pending.world.get::<HealthRegeneration>(entity).unwrap();
+    assert!(before.remainder_per_10k_hz > 0);
+    for _ in 0..2 {
+        pending
+            .cancel_production_unit_for_player(PlayerId(0), id)
+            .unwrap();
+    }
+    pending
+        .start_building_upgrade(id, source, source_properties, target, target_properties)
+        .unwrap();
+    let mut other = restored(&pending, 4);
+    pending.cancel_building_construction(Team(0), id).unwrap();
+    other.cancel_building_construction(Team(0), id).unwrap();
+    assert_eq!(
+        *pending.world.get::<HealthRegeneration>(entity).unwrap(),
+        before
+    );
+    for _ in 0..8 {
+        assert_eq!(pending.step().checksum, other.step().checksum);
+    }
+    assert!(pending.building(id).unwrap().health > 900);
+}

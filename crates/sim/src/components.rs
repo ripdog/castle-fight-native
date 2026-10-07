@@ -687,6 +687,7 @@ pub struct BuildingGameplayProperties {
     /// immediate; Castle Fight content supplies this from the versioned map object data.
     pub construction_time_ticks: Option<u32>,
     pub repair_time_ticks: Option<u32>,
+    pub health_regen_per_second_per_10k: u32,
     pub attack_targets: AttackTargetMask,
     pub damage_type: DamageType,
     pub armor: ArmorProfile,
@@ -915,6 +916,7 @@ pub(crate) struct BuildingRuntimeState {
     pub target: Option<TargetState>,
     pub spawn_tick: Option<SpawnTick>,
     pub mana: Option<ManaState>,
+    pub health_regeneration: Option<HealthRegeneration>,
     pub ability_state: Option<AutomaticAbilityState>,
     pub additional_abilities: Option<AdditionalAutomaticAbilities>,
     pub status: Option<StatusState>,

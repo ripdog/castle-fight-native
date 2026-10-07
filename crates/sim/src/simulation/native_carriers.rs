@@ -42,31 +42,15 @@ impl Simulation {
         }
         let profile = carrier_for_version(version).expect("registered carrier version");
         let building_id = *building.get::<SimId>().unwrap();
-        let arcane_rawcode = crate::content::CastleFightTowerKind::ArcaneTower
-            .definition_for_version(version)
-            .unwrap()
-            .rawcode;
-        let per_second_per_10k = if rawcode == arcane_rawcode {
-            profile.arcane_regeneration_per_second_per_10k
-        } else if rawcode == profile.building_rawcode {
-            profile.obelisk_regeneration_per_second_per_10k
-        } else {
+        if rawcode != profile.building_rawcode {
             return;
-        };
-        // Copy the launch origin/ownership before allocating the independent regeneration entity.
+        }
         let owner = building.get::<Owner>().map(|owner| owner.0);
         let team = *building.get::<Team>().unwrap();
         let position = footprint_center_point(
             *building.get::<BuildingFootprint>().unwrap(),
             self.config.navigation_cell_size,
         );
-        if !self.world.iter_entities().any(|entity| matches!(entity.get::<NativeCarrierState>(), Some(NativeCarrierState::Regeneration { building, .. }) if *building == building_id)) {
-            let id = self.allocate_id();
-            self.world.spawn((id, NativeCarrierState::Regeneration { building: building_id, map_version: version, per_second_per_10k, remainder: 0 }));
-        }
-        if rawcode != profile.building_rawcode {
-            return;
-        }
         if self.world.iter_entities().any(|entity| matches!(entity.get::<NativeCarrierState>(), Some(NativeCarrierState::Carrier { building, .. }) if *building == building_id)) { return }
         let state = NativeCarrierState::Carrier {
             building: building_id,
@@ -83,61 +67,10 @@ impl Simulation {
 
     pub(super) fn stop_native_carrier(&mut self, building_id: SimId) {
         let removals: Vec<_> = self.world.iter_entities().filter_map(|entity| {
-            matches!(entity.get::<NativeCarrierState>(), Some(NativeCarrierState::Carrier { building, .. } | NativeCarrierState::Regeneration { building, .. }) if *building == building_id).then_some(entity.id())
+            matches!(entity.get::<NativeCarrierState>(), Some(NativeCarrierState::Carrier { building, .. }) if *building == building_id).then_some(entity.id())
         }).collect();
         for entity in removals {
             self.world.despawn(entity);
-        }
-    }
-
-    pub(super) fn advance_native_regeneration(&mut self) {
-        let states: Vec<_> = self
-            .world
-            .iter_entities()
-            .filter_map(|entity| {
-                let NativeCarrierState::Regeneration {
-                    building,
-                    map_version,
-                    per_second_per_10k,
-                    remainder,
-                } = *entity.get::<NativeCarrierState>()?
-                else {
-                    return None;
-                };
-                Some((
-                    entity.id(),
-                    building,
-                    map_version,
-                    per_second_per_10k,
-                    remainder,
-                ))
-            })
-            .collect();
-        for (entity, building, map_version, per_second_per_10k, remainder) in states {
-            let target = self.world.iter_entities().find_map(|entity| {
-                (entity.get::<SimId>() == Some(&building)
-                    && entity.get::<Health>().is_some_and(|h| h.current > 0))
-                .then_some(entity.id())
-            });
-            let Some(target) = target else {
-                self.world.despawn(entity);
-                continue;
-            };
-            let denominator = 10_000 * CASTLE_FIGHT_SIMULATION_HZ as u32;
-            let total = remainder + per_second_per_10k;
-            let mut health = self.world.get_mut::<Health>(target).unwrap();
-            health.current = health
-                .current
-                .saturating_add((total / denominator) as i32)
-                .min(health.max);
-            self.world
-                .entity_mut(entity)
-                .insert(NativeCarrierState::Regeneration {
-                    building,
-                    map_version,
-                    per_second_per_10k,
-                    remainder: total % denominator,
-                });
         }
     }
 
@@ -256,7 +189,6 @@ impl Simulation {
         }
         for (entity, id, state) in states {
             match state {
-                NativeCarrierState::Regeneration { .. } => {}
                 NativeCarrierState::Carrier {
                     building,
                     owner,

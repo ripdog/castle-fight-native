@@ -137,19 +137,6 @@ pub(crate) fn launcher_spellcasting_for_version(
     }
 }
 
-pub(crate) fn launcher_regeneration_for_version(version: MapVersion, code: u32) -> Option<u32> {
-    if version != MapVersion::CASTLE_FIGHT_9_27 {
-        return None;
-    }
-    let code = String::from_utf8(code.to_be_bytes().to_vec()).ok()?;
-    let data = evidence(version);
-    data["launchers"]
-        .as_array()?
-        .iter()
-        .find(|r| r["building_rawcode"] == code)?;
-    Some((data["fields"][code]["uhpr:0"].as_f64()? * 10_000.0) as u32)
-}
-
 pub(crate) fn launcher_bindings_for_version(
     version: MapVersion,
 ) -> [crate::ResolvedNativeEffectBinding; 4] {

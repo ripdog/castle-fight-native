@@ -63,8 +63,6 @@ pub struct NativeCarrierProfile {
     /// Retained buff object identities, distinct from ability-granted permanent modifiers.
     pub native_buff_ids: Vec<u32>,
     pub holy_health_bonus: i32,
-    pub arcane_regeneration_per_second_per_10k: u32,
-    pub obelisk_regeneration_per_second_per_10k: u32,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -229,8 +227,6 @@ pub fn carrier_for_version(
             .collect(),
         native_buff_ids: p.native_buff_ids.clone(),
         holy_health_bonus: p.number("A03D", "Ilif") as i32,
-        arcane_regeneration_per_second_per_10k: (p.number("h014", "uhpr") * 10_000.0) as u32,
-        obelisk_regeneration_per_second_per_10k: (p.number("h005", "uhpr") * 10_000.0) as u32,
     }))
 }
 
@@ -249,12 +245,6 @@ pub(crate) enum NativeCarrierState {
         sequence: u64,
     },
     Bolt(NativeCarrierBolt),
-    Regeneration {
-        building: SimId,
-        map_version: MapVersion,
-        per_second_per_10k: u32,
-        remainder: u32,
-    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -441,29 +441,10 @@ impl Simulation {
         if building.attack.is_some() || building.spellcasting.is_some() {
             entity.insert(StatusState::default());
         }
-        if tower_kind == Some(crate::CastleFightTowerKind::GoldenShrineOfJustice) {
-            let version = properties
-                .content
-                .expect("retained shrine identity")
-                .map_version;
-            let shrine = crate::golden_shrine_definition_for_version(version)
-                .expect("registered shrine building baseline");
-            entity.insert(HealthRegeneration {
-                per_second_per_10k: shrine.building_health_regen_per_second_per_10k,
-                remainder_per_10k_hz: 0,
-            });
-        }
-        if let Some(content) = properties.content
-            && let Some(rate) = crate::building_mechanics::launcher_regeneration_for_version(
-                content.map_version,
-                content.rawcode,
-            )
-        {
-            entity.insert(HealthRegeneration {
-                per_second_per_10k: rate,
-                remainder_per_10k_hz: 0,
-            });
-        }
+        entity.insert(HealthRegeneration {
+            per_second_per_10k: properties.health_regen_per_second_per_10k,
+            remainder_per_10k_hz: 0,
+        });
         let entity_id = entity.id();
         self.start_native_carrier(entity_id);
     }
@@ -541,6 +522,14 @@ impl Simulation {
             }
             None => {
                 entity.remove::<SpawnTick>();
+            }
+        }
+        match runtime.health_regeneration {
+            Some(state) => {
+                entity.insert(state);
+            }
+            None => {
+                entity.remove::<HealthRegeneration>();
             }
         }
         match runtime.mana {
@@ -644,6 +633,7 @@ impl Simulation {
                         target: entity.get::<TargetState>().copied(),
                         spawn_tick: entity.get::<SpawnTick>().copied(),
                         mana: entity.get::<ManaState>().copied(),
+                        health_regeneration: entity.get::<HealthRegeneration>().copied(),
                         ability_state: entity.get::<AutomaticAbilityState>().copied(),
                         additional_abilities: entity.get::<AdditionalAutomaticAbilities>().copied(),
                         status: entity.get::<StatusState>().copied(),

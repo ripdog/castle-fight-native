@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r30";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r31";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 20;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 21;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1202,6 +1202,7 @@ pub struct CastleFightProductionDefinition {
     pub classifications: UnitClassifications,
     pub construction_time_ticks: u32,
     pub repair_time_ticks: u32,
+    pub health_regen_per_second_per_10k: u32,
     pub armor: ArmorProfile,
     pub spawn_interval_ticks: u16,
     pub footprint_size_cells: u16,
@@ -1250,6 +1251,7 @@ impl CastleFightProductionDefinition {
             }),
             construction_time_ticks: Some(self.construction_time_ticks),
             repair_time_ticks: Some(self.repair_time_ticks),
+            health_regen_per_second_per_10k: self.health_regen_per_second_per_10k,
             classifications: self.classifications,
             attack_targets: AttackTargetMask::ALL,
             damage_type: DamageType::Normal,
@@ -1457,6 +1459,7 @@ pub struct CastleFightTowerDefinition {
     pub classifications: UnitClassifications,
     pub construction_time_ticks: u32,
     pub repair_time_ticks: u32,
+    pub health_regen_per_second_per_10k: u32,
     pub armor: ArmorProfile,
     pub damage_type: DamageType,
     pub attack_targets: AttackTargetMask,
@@ -1491,6 +1494,7 @@ impl CastleFightTowerDefinition {
             }),
             construction_time_ticks: Some(self.construction_time_ticks),
             repair_time_ticks: Some(self.repair_time_ticks),
+            health_regen_per_second_per_10k: self.health_regen_per_second_per_10k,
             classifications: self.classifications,
             attack_targets: self.attack_targets,
             damage_type: self.damage_type,
@@ -2244,6 +2248,7 @@ fn hash_production_definition(
     hash_classifications(hash, definition.classifications);
     hash.write_u32(definition.construction_time_ticks);
     hash.write_u32(definition.repair_time_ticks);
+    hash.write_u32(definition.health_regen_per_second_per_10k);
     hash.write_u8(definition.armor.armor_type.stable_tag());
     hash.write_i32(i32::from(definition.armor.armor_points));
     hash.write_u16(definition.spawn_interval_ticks);
@@ -2293,6 +2298,7 @@ fn hash_tower_definition(hash: &mut ContentHash64, definition: CastleFightTowerD
     hash_classifications(hash, definition.classifications);
     hash.write_u32(definition.construction_time_ticks);
     hash.write_u32(definition.repair_time_ticks);
+    hash.write_u32(definition.health_regen_per_second_per_10k);
     hash.write_u8(definition.armor.armor_type.stable_tag());
     hash.write_i32(i32::from(definition.armor.armor_points));
     hash.write_u8(definition.damage_type.stable_tag());
@@ -4597,6 +4603,10 @@ fn extracted_tower_definition_927(
         economy: extracted_building_economy_927(rawcode),
         health: protected.map_or(building.health, |stats| stats.health),
         classifications: unit.target_classifications,
+        health_regen_per_second_per_10k: u32::try_from(
+            unit.health_regen_per_second_per_10k.unwrap_or(0),
+        )
+        .expect("building health regeneration must be nonnegative"),
         construction_time_ticks: building.construction_time_ticks,
         repair_time_ticks: unit
             .repair_time_ticks
@@ -4846,6 +4856,10 @@ fn production_definition(
         economy,
         building_health,
         classifications: building_unit.target_classifications,
+        health_regen_per_second_per_10k: u32::try_from(
+            building_unit.health_regen_per_second_per_10k.unwrap_or(0),
+        )
+        .expect("building health regeneration must be nonnegative"),
         construction_time_ticks: building.construction_time_ticks,
         repair_time_ticks: building_unit.repair_time_ticks.unwrap_or_else(|| {
             panic!("production building {rawcode:#010x} is missing retained repair time")
@@ -5761,6 +5775,29 @@ mod tests {
                 .split(',')
                 .any(|classification| classification == "mechanical");
             assert_eq!(definition.mechanical, extracted_mechanical);
+        }
+    }
+
+    #[test]
+    fn all_promoted_building_regeneration_rates_consume_retained_unit_metadata() {
+        let content = extracted_content_927();
+        let properties = CastleFightProductionKind::ALL
+            .iter()
+            .map(|kind| kind.definition().gameplay_properties())
+            .chain(
+                CastleFightTowerKind::ALL
+                    .iter()
+                    .map(|kind| kind.definition().gameplay_properties()),
+            );
+        for properties in properties {
+            let code = properties.content.unwrap().rawcode;
+            let expected = content.units[&code]
+                .health_regen_per_second_per_10k
+                .unwrap_or(0);
+            assert_eq!(
+                properties.health_regen_per_second_per_10k,
+                u32::try_from(expected).unwrap()
+            );
         }
     }
 

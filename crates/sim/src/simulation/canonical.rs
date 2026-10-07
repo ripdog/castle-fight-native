@@ -985,19 +985,6 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u64(bolt.position_tick);
                         hash.write_u64(bolt.impact_tick);
                     }
-                    NativeCarrierState::Regeneration {
-                        building,
-                        map_version,
-                        per_second_per_10k,
-                        remainder,
-                    } => {
-                        hash.write_u8(2);
-                        hash.write_u64(building.0);
-                        hash.write_u16(map_version.major);
-                        hash.write_u16(map_version.minor);
-                        hash.write_u32(per_second_per_10k);
-                        hash.write_u64(u64::from(remainder));
-                    }
                 }
             }
             CanonicalEntity::Builder(builder) => {
@@ -1442,6 +1429,14 @@ fn hash_building_runtime_state(hash: &mut Fnv64, runtime: BuildingRuntimeState) 
         }
         None => hash.write_u8(0),
     }
+    match runtime.health_regeneration {
+        Some(regeneration) => {
+            hash.write_u8(1);
+            hash.write_u32(regeneration.per_second_per_10k);
+            hash.write_u32(regeneration.remainder_per_10k_hz);
+        }
+        None => hash.write_u8(0),
+    }
     match runtime.mana {
         Some(mana) => {
             hash.write_u8(1);
@@ -1684,6 +1679,7 @@ fn hash_building_definition(
     hash_unit_classifications(hash, properties.classifications);
     hash_optional_u32(hash, properties.construction_time_ticks);
     hash_optional_u32(hash, properties.repair_time_ticks);
+    hash.write_u32(properties.health_regen_per_second_per_10k);
     hash.write_u8(properties.attack_targets.bits());
     hash.write_u8(properties.damage_type.stable_tag());
     hash.write_u8(properties.armor.armor_type.stable_tag());
