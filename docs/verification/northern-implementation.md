@@ -14,7 +14,7 @@ Northern is selectable for retained Castle Fight 9.27/r1 once Snowy Rocks is pro
 
 ## Remaining command-card order
 
-Greater Frost Launcher upgrade; Chilling Mushroom; Icy Tower; World Freezer. This is an implementation checklist, not a claim that those entities are playable.
+Chilling Mushroom; Icy Tower; World Freezer. This is an implementation checklist, not a claim that those entities are playable.
 
 ## Icy Rocks / Polar Bear
 
@@ -108,3 +108,11 @@ The Northern proc audit also found a shared importer bug: `A03W` explicitly has 
 - Freezing Breath `A04F`/`Bfrz` applies on eligible weapon victims. The base weapon has an empty secondary splash mask. Damage remains an ordinary armor-adjusted chaos attack; magic immunity prevents the freeze independently. The inherited ability area field is not used as a second spell radius: Blizzard documents native Freezing Breath as a passive hit effect with no separate AoE ([native description](https://classic.battle.net/war3/undead/units/frostwyrm.shtml)).
 - Freeze uses an exclusive native disable deadline and retained child identity. It interrupts attacks/cast windups, suppresses ordered and autonomous firing, and pauses remaining production/construction work. Mana/cooldown/passive-regeneration timers continue. Native `Bfrz` art is attached for precisely the authoritative freeze lifetime, including after rejoin. Presentation effect manifest schema advances to 7.
 - Shared synthetic tests cover in-flight wire restoration across workers, source destruction, delayed damage, base splash exclusions, independent parent/callback resource and immunity eligibility, castle/Power Armor/friendly selection exclusions, post-movement centers/footprint intersections, paused training, and independent splash mask/hero/immunity behavior. Generated projection reproduction, content closure and presentation binding checks apply. Bundle/checksum/snapshot schemas advance to 20/37/32; protocol 11 transports the frozen-upgrade rejection. Cancelling an upgrade preserves an incoming freeze.
+
+
+## Greater Frost Launcher
+
+- `h03L` (base `hbla`) is the source-owned upgrade of `h048`. Catalog and protected evidence supply its health, armor, economy, construction/repair data, mana regeneration, and `A04L` parent resources. Native and callback target selection remain independent, as in the base launcher.
+- `h04H` is its locust/invulnerable one-shot proxy. The versioned projection supplies its protected chaos weapon and ground/structure secondary splash mask, native missile speed and full splash radius. The direct weapon still selects a structure; live enemy ground units and intersecting structures can receive secondary damage. Air and allied victims are excluded.
+- `A04K`/`Bfrz` retains separate ordinary/hero freeze durations and native immunity restrictions. The inherited area field does not create a second AoE. Released flight survives destruction of the launcher, its upgrade, or its primary target; splash remains at the captured destination.
+- The shared launcher tests cover post-movement and footprint geometry, effect masks and hero/immunity distinctions, resource failures, interrupted actions, frozen building activities, and in-flight wire recovery. Catalog-wide closure covers both parent/proxy identities and the source-owned upgrade graph. No persistent state shape changes are needed.

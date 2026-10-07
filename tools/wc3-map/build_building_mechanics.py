@@ -29,8 +29,8 @@ def build(map_version='9.27', revision='r1'):
     building_rows = rows('building-spell-mechanics.tsv')
     mechanics = next(r for r in building_rows if r['building_rawcode'] == 'h00Z')
     snow = next(r for r in building_rows if r['building_rawcode'] == 'h07W')
-    launchers = [r for r in building_rows if r['building_rawcode'] in ('h048',)]
-    launcher_codes = ['h048', 'h04G', 'A04J', 'A04F']
+    launchers = [r for r in building_rows if r['building_rawcode'] in ('h048', 'h03L')]
+    launcher_codes = ['h048', 'h04G', 'A04J', 'A04F', 'h03L', 'h04H', 'A04L', 'A04K']
     shield = next(r for r in rows('runtime-system-mechanics.tsv') if r['system_id'] == 'targeted-negative-effect-shields')
     units = {r['rawcode']: r for r in rows('units.tsv') if r['rawcode'] in ('n00F', 'n00G')}
     protected = [r for r in rows('protected-ability-fields.tsv') if r['rawcode'] in ('A017', 'A018', 'A0HO', 'AM0{', *launcher_codes)]

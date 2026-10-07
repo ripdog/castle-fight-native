@@ -152,11 +152,13 @@ pub(crate) fn launcher_regeneration_for_version(version: MapVersion, code: u32) 
 
 pub(crate) fn launcher_bindings_for_version(
     version: MapVersion,
-) -> [crate::ResolvedNativeEffectBinding; 2] {
+) -> [crate::ResolvedNativeEffectBinding; 4] {
     assert_eq!(version, MapVersion::CASTLE_FIGHT_9_27);
     [
         (crate::NativeEffectSourceKind::UnitAbility, *b"A04J"),
         (crate::NativeEffectSourceKind::AbilityEffect, *b"A04F"),
+        (crate::NativeEffectSourceKind::UnitAbility, *b"A04L"),
+        (crate::NativeEffectSourceKind::AbilityEffect, *b"A04K"),
     ]
     .map(|(kind, code)| crate::ResolvedNativeEffectBinding {
         source: crate::NativeEffectSource::new(kind, u32::from_be_bytes(code)),
