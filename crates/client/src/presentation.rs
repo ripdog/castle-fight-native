@@ -627,6 +627,7 @@ struct TimedWc3Effect {
     fade_material: Option<Handle<StandardMaterial>>,
     pooled_lightning: bool,
     pooled_scene: Option<Wc3EffectPoolKey>,
+    owner_root: Option<Entity>,
 }
 
 #[derive(Debug, Clone)]
@@ -3455,7 +3456,16 @@ fn sync_render_entities(
             &world_instances,
         );
         if let Some(entry) = render_map.builders.remove(&id) {
-            commands.entity(entry.entity).despawn();
+            if let Some(root) = entry.model_root {
+                retire_attached_timed_wc3_effects(
+                    &mut commands,
+                    &mut timed_effects,
+                    &mut effect_pool,
+                    root,
+                    &world_instances,
+                );
+            }
+            commands.entity(entry.entity).try_despawn();
         }
     }
 
@@ -3490,7 +3500,16 @@ fn sync_render_entities(
                 })
             })
         {
-            commands.entity(entry.entity).despawn();
+            if let Some(root) = entry.model_root {
+                retire_attached_timed_wc3_effects(
+                    &mut commands,
+                    &mut timed_effects,
+                    &mut effect_pool,
+                    root,
+                    &world_instances,
+                );
+            }
+            commands.entity(entry.entity).try_despawn();
             continue;
         }
         let authoritative_corpse = samples
@@ -3514,7 +3533,16 @@ fn sync_render_entities(
             continue;
         }
 
-        commands.entity(entry.entity).despawn();
+        if let Some(root) = entry.model_root {
+            retire_attached_timed_wc3_effects(
+                &mut commands,
+                &mut timed_effects,
+                &mut effect_pool,
+                root,
+                &world_instances,
+            );
+        }
+        commands.entity(entry.entity).try_despawn();
         if authoritative_corpse.is_none()
             && let Some(unit) = samples.previous.units.get(&id)
         {
@@ -3552,7 +3580,16 @@ fn sync_render_entities(
                 .get(&id)
                 .is_some_and(|building| building.remembered)
         {
-            commands.entity(entry.entity).despawn();
+            if let Some(root) = entry.model_root {
+                retire_attached_timed_wc3_effects(
+                    &mut commands,
+                    &mut timed_effects,
+                    &mut effect_pool,
+                    root,
+                    &world_instances,
+                );
+            }
+            commands.entity(entry.entity).try_despawn();
             continue;
         }
         if samples
@@ -3563,7 +3600,16 @@ fn sync_render_entities(
         {
             // Cancelled construction disappears instead of playing a completed building's death
             // sequence. This also keeps an unfinished shell from leaving a fake corpse/remnant.
-            commands.entity(entry.entity).despawn();
+            if let Some(root) = entry.model_root {
+                retire_attached_timed_wc3_effects(
+                    &mut commands,
+                    &mut timed_effects,
+                    &mut effect_pool,
+                    root,
+                    &world_instances,
+                );
+            }
+            commands.entity(entry.entity).try_despawn();
             continue;
         }
         if let Some(rawcode) = entry.imported_rawcode
@@ -3577,7 +3623,16 @@ fn sync_render_entities(
             continue;
         }
 
-        commands.entity(entry.entity).despawn();
+        if let Some(root) = entry.model_root {
+            retire_attached_timed_wc3_effects(
+                &mut commands,
+                &mut timed_effects,
+                &mut effect_pool,
+                root,
+                &world_instances,
+            );
+        }
+        commands.entity(entry.entity).try_despawn();
         if let Some(building) = samples.previous.buildings.get(&id) {
             let (mut center, _) = metrics.footprint_center_size(building.footprint);
             center.y = building_terrain_height(&metrics, &terrain, building.footprint);
@@ -3626,7 +3681,16 @@ fn sync_render_entities(
             &world_instances,
         );
         if let Some(entry) = render_map.buildings.remove(&id) {
-            commands.entity(entry.entity).despawn();
+            if let Some(root) = entry.model_root {
+                retire_attached_timed_wc3_effects(
+                    &mut commands,
+                    &mut timed_effects,
+                    &mut effect_pool,
+                    root,
+                    &world_instances,
+                );
+            }
+            commands.entity(entry.entity).try_despawn();
         }
     }
 
@@ -3638,7 +3702,18 @@ fn sync_render_entities(
         .collect();
     for id in stale_corpses {
         if let Some(entity) = render_map.corpses.remove(&id) {
-            commands.entity(entity).despawn();
+            if let Some(root) = imported_roots.iter().find_map(|(root_entity, root)| {
+                (root.presentation_root == entity).then_some(root_entity)
+            }) {
+                retire_attached_timed_wc3_effects(
+                    &mut commands,
+                    &mut timed_effects,
+                    &mut effect_pool,
+                    root,
+                    &world_instances,
+                );
+            }
+            commands.entity(entity).try_despawn();
         }
     }
 
@@ -3705,6 +3780,7 @@ fn sync_render_entities(
             fade_material: None,
             pooled_lightning: false,
             pooled_scene,
+            owner_root: None,
         });
     }
 
@@ -3769,6 +3845,7 @@ fn sync_render_entities(
                 fade_material: Some(lightning_material),
                 pooled_lightning,
                 pooled_scene: None,
+                owner_root: None,
             });
             // Native Healing Wave target art appears at each authoritative endpoint,
             // not at the parent's earlier dummy/order cast. No inferred heal timing.
@@ -3798,6 +3875,7 @@ fn sync_render_entities(
                     fade_material: None,
                     pooled_lightning: false,
                     pooled_scene,
+                    owner_root: None,
                 });
             }
         }
@@ -3823,6 +3901,7 @@ fn sync_render_entities(
             fade_material: None,
             pooled_lightning: false,
             pooled_scene,
+            owner_root: None,
         });
     }
     for visual_event in &samples.current.building_spell_visuals {
@@ -3862,6 +3941,7 @@ fn sync_render_entities(
                 fade_material: None,
                 pooled_lightning: false,
                 pooled_scene,
+                owner_root: None,
             });
         }
     }
@@ -3947,6 +4027,7 @@ fn sync_render_entities(
                 fade_material: None,
                 pooled_lightning: false,
                 pooled_scene,
+                owner_root: None,
             });
         }
 
@@ -4017,6 +4098,7 @@ fn sync_render_entities(
                 fade_material: None,
                 pooled_lightning: false,
                 pooled_scene,
+                owner_root: owner_model_root,
             });
         }
     }
@@ -4040,7 +4122,16 @@ fn sync_render_entities(
                 .builders
                 .remove(&builder.id)
                 .expect("existing builder model entry");
-            commands.entity(entry.entity).despawn();
+            if let Some(root) = entry.model_root {
+                retire_attached_timed_wc3_effects(
+                    &mut commands,
+                    &mut timed_effects,
+                    &mut effect_pool,
+                    root,
+                    &world_instances,
+                );
+            }
+            commands.entity(entry.entity).try_despawn();
         }
         let position = sim_point_to_terrain_world(builder.position, &terrain)
             + Vec3::Y * (BUILDER_HEIGHT * 0.5);
@@ -4126,7 +4217,16 @@ fn sync_render_entities(
                 .units
                 .remove(&unit.id)
                 .expect("existing model entry");
-            commands.entity(entry.entity).despawn();
+            if let Some(root) = entry.model_root {
+                retire_attached_timed_wc3_effects(
+                    &mut commands,
+                    &mut timed_effects,
+                    &mut effect_pool,
+                    root,
+                    &world_instances,
+                );
+            }
+            commands.entity(entry.entity).try_despawn();
         }
         let position = unit_ground_position(unit.position, unit.movement_class, &terrain)
             + Vec3::Y * (unit_height(unit) * 0.5);
@@ -5024,6 +5124,45 @@ fn retire_target_status_visuals(
     }
 }
 
+fn retire_attached_timed_wc3_effects(
+    commands: &mut Commands,
+    effects: &mut TimedWc3Effects,
+    pool: &mut TimedWc3EffectPool,
+    owner_root: Entity,
+    ready: &Query<(), With<WorldInstance>>,
+) {
+    let mut retained = Vec::with_capacity(effects.0.len());
+    for effect in effects.0.drain(..) {
+        if effect.owner_root != Some(owner_root) {
+            retained.push(effect);
+            continue;
+        }
+        let effect_ready = ready.contains(effect.entity);
+        release_attached_timed_wc3_effect(commands, pool, effect, effect_ready);
+    }
+    effects.0 = retained;
+}
+
+fn release_attached_timed_wc3_effect(
+    commands: &mut Commands,
+    pool: &mut TimedWc3EffectPool,
+    effect: TimedWc3Effect,
+    ready: bool,
+) {
+    debug_assert!(!effect.pooled_lightning);
+    debug_assert!(effect.mesh.is_none());
+    debug_assert!(effect.fade_material.is_none());
+    if let Some(key) = effect.pooled_scene.filter(|_| ready) {
+        commands
+            .entity(effect.entity)
+            .remove::<(ChildOf, Wc3AttachToNode)>()
+            .insert_recursive::<Children>(Disabled);
+        pool.scenes.entry(key).or_default().push(effect.entity);
+    } else {
+        commands.entity(effect.entity).try_despawn();
+    }
+}
+
 fn release_status_visual(
     commands: &mut Commands,
     pool: &mut TimedWc3EffectPool,
@@ -5228,6 +5367,16 @@ fn age_timed_wc3_effects(
     let delta = time.delta_secs();
     for effect in &mut effects.0 {
         effect.remaining -= delta;
+        if commands.get_entity(effect.entity).is_err() {
+            if let Some(mesh) = effect.mesh.take() {
+                meshes.remove(mesh.id());
+            }
+            if let Some(material) = effect.fade_material.take() {
+                materials.remove(material.id());
+            }
+            effect.remaining = 0.0;
+            continue;
+        }
         if let Some(material_handle) = effect.fade_material.as_ref()
             && let Some(mut material) = materials.get_mut(material_handle)
         {
@@ -5250,7 +5399,7 @@ fn age_timed_wc3_effects(
                         .or_default()
                         .push(effect.entity);
                 } else {
-                    commands.entity(effect.entity).despawn();
+                    commands.entity(effect.entity).try_despawn();
                 }
             } else if effect.pooled_lightning {
                 let mesh = effect
@@ -5268,7 +5417,7 @@ fn age_timed_wc3_effects(
                     material,
                 });
             } else {
-                commands.entity(effect.entity).despawn();
+                commands.entity(effect.entity).try_despawn();
                 if let Some(mesh) = effect.mesh.take() {
                     meshes.remove(mesh.id());
                 }
@@ -7423,6 +7572,86 @@ mod tests {
             assert!(world.get_entity(owner).is_err());
             assert!(pool.scenes.is_empty());
         }
+    }
+
+    #[test]
+    fn pooled_attached_timed_effect_detaches_before_actor_teardown() {
+        let mut world = World::new();
+        let mut pool = TimedWc3EffectPool::default();
+        let key = Wc3EffectPoolKey {
+            scene: Handle::<WorldAsset>::default().id(),
+            playback: Wc3EffectPlayback::OneShot,
+        };
+        let owner = world.spawn_empty().id();
+        let node = world.spawn_empty().id();
+        let effect = world.spawn_empty().id();
+        world.entity_mut(owner).add_child(node);
+        world.entity_mut(node).add_child(effect);
+        world.entity_mut(effect).insert(Wc3AttachToNode {
+            owner_root: owner,
+            attachment_point: "hand left".to_owned(),
+        });
+
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let mut commands = Commands::new(&mut queue, &world);
+        release_attached_timed_wc3_effect(
+            &mut commands,
+            &mut pool,
+            TimedWc3Effect {
+                entity: effect,
+                remaining: 1.0,
+                lifetime: 1.0,
+                mesh: None,
+                fade_material: None,
+                pooled_lightning: false,
+                pooled_scene: Some(key),
+                owner_root: Some(owner),
+            },
+            true,
+        );
+        commands.entity(owner).despawn();
+        queue.apply(&mut world);
+
+        assert!(world.get_entity(owner).is_err());
+        assert!(world.get_entity(node).is_err());
+        assert!(world.get_entity(effect).is_ok());
+        assert!(world.get::<ChildOf>(effect).is_none());
+        assert!(world.get::<Wc3AttachToNode>(effect).is_none());
+        assert!(world.get::<Disabled>(effect).is_some());
+        assert_eq!(pool.scenes.get_mut(&key).unwrap().pop(), Some(effect));
+    }
+
+    #[test]
+    fn nonpoolable_attached_timed_effect_is_destroyed_before_actor_teardown() {
+        let mut world = World::new();
+        let mut pool = TimedWc3EffectPool::default();
+        let owner = world.spawn_empty().id();
+        let effect = world.spawn_empty().id();
+        world.entity_mut(owner).add_child(effect);
+
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let mut commands = Commands::new(&mut queue, &world);
+        release_attached_timed_wc3_effect(
+            &mut commands,
+            &mut pool,
+            TimedWc3Effect {
+                entity: effect,
+                remaining: 1.0,
+                lifetime: 1.0,
+                mesh: None,
+                fade_material: None,
+                pooled_lightning: false,
+                pooled_scene: None,
+                owner_root: Some(owner),
+            },
+            true,
+        );
+        commands.entity(owner).despawn();
+        queue.apply(&mut world);
+
+        assert!(world.get_entity(effect).is_err());
+        assert!(world.get_entity(owner).is_err());
+        assert!(pool.scenes.is_empty());
     }
 
     #[test]
