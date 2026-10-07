@@ -529,6 +529,14 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u16(building.footprint.height);
                 hash.write_i32(building.health.current);
                 hash.write_i32(building.health.max);
+                hash_passive_unit_effects(
+                    &mut hash,
+                    building
+                        .passive_effects
+                        .as_deref()
+                        .copied()
+                        .unwrap_or_default(),
+                );
                 if let Some(regeneration) = building.health_regeneration {
                     hash.write_u8(1);
                     hash.write_u32(regeneration.per_second_per_10k);
@@ -1268,6 +1276,7 @@ impl CanonicalUnit {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct CanonicalBuilding {
+    pub(super) passive_effects: Option<Box<PassiveUnitEffects>>,
     pub(super) id: SimId,
     pub(super) content: Option<ContentIdentity>,
     pub(super) owner: Option<PlayerId>,
@@ -1397,6 +1406,7 @@ fn hash_optional_u64(hash: &mut Fnv64, value: Option<u64>) {
 }
 
 fn hash_building_runtime_state(hash: &mut Fnv64, runtime: BuildingRuntimeState) {
+    hash_passive_unit_effects(hash, runtime.passive_effects);
     hash_unit_classifications(hash, runtime.classifications);
     match runtime.production {
         Some(production) => {
@@ -1681,6 +1691,7 @@ fn hash_building_definition(
     hash.write_u16(building.footprint.height);
     hash.write_i32(building.health);
     hash_content_identity(hash, properties.content);
+    hash_passive_unit_effects(hash, properties.passive_effects);
     hash_unit_classifications(hash, properties.classifications);
     hash_optional_u32(hash, properties.construction_time_ticks);
     hash_optional_u32(hash, properties.repair_time_ticks);

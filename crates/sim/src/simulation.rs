@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 39;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 40;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -3138,6 +3138,10 @@ impl Simulation {
                         !(attack.is_some() || spellcasting.is_some()) || status.is_some()
                     );
                     BuildingSnapshot {
+                        passive_effects: entity_ref
+                            .get::<PassiveUnitEffects>()
+                            .copied()
+                            .unwrap_or_default(),
                         snow_damage_taken_per_10k: 10_000,
                         map_version: entity_ref
                             .get::<ContentIdentity>()
@@ -3273,6 +3277,7 @@ impl UnitSnapshot {
 
 #[derive(Debug, Clone, Copy)]
 struct BuildingSnapshot {
+    passive_effects: PassiveUnitEffects,
     snow_damage_taken_per_10k: u16,
     map_version: Option<crate::MapVersion>,
     visible_teams: u8,

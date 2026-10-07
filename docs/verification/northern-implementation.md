@@ -14,7 +14,7 @@ Northern is selectable for retained Castle Fight 9.27/r1 once Snowy Rocks is pro
 
 ## Remaining command-card order
 
-Icy Tower; World Freezer. This is an implementation checklist, not a claim that those entities are playable.
+World Freezer. This is an implementation checklist, not a claim that those entities are playable.
 
 ## Icy Rocks / Polar Bear
 
@@ -130,3 +130,11 @@ The Northern base-stat audit found that ordinary health regeneration was loaded 
 - The free `A0AK` Storm Bolt is released from the caster after source-authored temporary vision, obeys its own range/mask/immunity, homes through canonical native missile state and survives source destruction. Impact rechecks live immunity and uses independent normal/hero stun durations. **Tooltip disagreement:** the linked native child deals 200 spell damage; the parent/building tooltip advertises 150. The generated projection follows the child.
 - Native stuns retain a separate ability identity and visual deadline alongside the shared action-disable deadline. `B00X` is attached at its authored origin for the actual stun lifetime; generic stun stars yield to that native art. This source-specific presentation survives rejoin without controlling gameplay. The visual exporter now chooses the actual level-one buff rather than letting unused higher levels overwrite its art. Effect manifest schema becomes 8; bundle/checksum/snapshot become 22/39/34.
 - Shared synthetic fixtures distinguish ground/structure trigger from flying effect candidates, class/relation exclusions, shields before immunity, child range/native failure, live immunity after release, hero duration, source death and worker/wire continuation. Catalog-wide closure, source projection reproduction, strict checks and native art binding verification cover the entity. Standalone hailstones now also reject a foreign map version during wire decode.
+
+
+## Icy Tower
+
+- `h03Q` (base `hbla`) retains its protected health and normal ballistic weapon, fortified armor, regeneration, economy and construction/repair/menu data through the catalog. The native weapon targets enemy air/ground units; it cannot target structures. Splash rings and falloff come from the actual object fields, including the outer quarter-damage ring rather than the tooltip's blanket half-damage description.
+- Complete inventory is passive Frost Breath `A03Y` and manual display-range marker `A09A`. Frost uses the shared versioned map Misc slow rates and independent normal/hero durations. No cast resources, proxy, delayed script or AI override is attached to its ordinary attack. Display Range uses the existing inspection/range presentation without a gameplay buff.
+- Building definitions and their live/precursor state now retain native weapon passives. The shared attack path carries Frost into the ballistic payload and source-owned splash falloff into impact. Damage remains a normal weapon hit, while live native immunity independently prevents Frost. Flight survives tower destruction and saved-game recovery.
+- The synthetic splash fixture now covers both unit and building sources, live passive recovery, source destruction, hero expiry and air/ground/allied/outside/immunity distinctions. Catalog-wide source and ability closure checks apply. Bundle/checksum/snapshot shapes become 23/40/35.

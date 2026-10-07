@@ -441,6 +441,7 @@ impl Simulation {
         if building.attack.is_some() || building.spellcasting.is_some() {
             entity.insert(StatusState::default());
         }
+        entity.insert(properties.passive_effects);
         entity.insert(HealthRegeneration {
             per_second_per_10k: properties.health_regen_per_second_per_10k,
             remainder_per_10k_hz: 0,
@@ -455,6 +456,7 @@ impl Simulation {
         let mut entity = self.world.entity_mut(entity);
         entity.remove::<BuildingEconomyProfile>();
         entity.remove::<HealthRegeneration>();
+        entity.remove::<PassiveUnitEffects>();
         entity.remove::<RepairTimeTicks>();
         entity.remove::<ProductionProfile>();
         entity.remove::<ProductionState>();
@@ -487,6 +489,7 @@ impl Simulation {
 
     fn restore_building_runtime_state(&mut self, entity: Entity, runtime: BuildingRuntimeState) {
         let mut entity = self.world.entity_mut(entity);
+        entity.insert(runtime.passive_effects);
         if runtime.classifications == UnitClassifications::default() {
             entity.remove::<UnitClassifications>();
         } else {
@@ -624,6 +627,10 @@ impl Simulation {
                     *entity.get::<Health>()?,
                     entity.get::<ContentIdentity>().copied(),
                     BuildingRuntimeState {
+                        passive_effects: entity
+                            .get::<PassiveUnitEffects>()
+                            .copied()
+                            .unwrap_or_default(),
                         classifications: entity
                             .get::<UnitClassifications>()
                             .copied()

@@ -1277,9 +1277,9 @@ fn proxy_area_debuff_has_separate_trigger_mask_hero_expiry_and_signed_weapon_dam
 
 #[test]
 fn frost_breath_splash_uses_live_impact_victims_and_restores_in_flight() {
-    let mut sim = simulation(1);
-    sim.spawn_unit_with_properties(
-        unit(
+    for building_source in [false, true] {
+        let mut sim = simulation(1);
+        let weapon = unit(
             0,
             20,
             10,
@@ -1287,87 +1287,114 @@ fn frost_breath_splash_uses_live_impact_victims_and_restores_in_flight() {
                 speed_per_tick: 10 * SUBUNITS_PER_WORLD_UNIT,
                 impact_radius: 20 * SUBUNITS_PER_WORLD_UNIT,
             },
-        ),
-        UnitGameplayProperties {
-            passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::FrostAttack(
-                crate::FrostAttackEffectProfile {
-                    ability: AbilityId(61),
-                    duration_ticks: 9,
-                    hero_duration_ticks: 3,
-                    movement_percent_delta: -25,
-                    attack_speed_percent_delta: -15,
-                    targets: AttackTargetMask::AIR_AND_GROUND,
-                },
-            )),
-            ..UnitGameplayProperties::default()
-        },
-    );
-    let primary = sim.spawn_unit(unit(1, 60, 0, AttackDelivery::Melee));
-    let ground = sim.spawn_unit(unit(1, 75, 0, AttackDelivery::Melee));
-    let hero = sim.spawn_unit_with_properties(
-        unit(1, 75, 0, AttackDelivery::Melee),
-        UnitGameplayProperties {
-            movement_class: MovementClass::Air,
-            classifications: UnitClassifications {
-                hero: true,
-                ..UnitClassifications::default()
-            },
-            ..UnitGameplayProperties::default()
-        },
-    );
-    let immune = sim.spawn_unit_with_properties(
-        unit(1, 75, 0, AttackDelivery::Melee),
-        UnitGameplayProperties {
-            classifications: UnitClassifications {
-                spell_immune: true,
-                ..UnitClassifications::default()
-            },
-            ..UnitGameplayProperties::default()
-        },
-    );
-    let ally = sim.spawn_unit(unit(0, 75, 0, AttackDelivery::Melee));
-    let outside = sim.spawn_unit(unit(1, 81, 0, AttackDelivery::Melee));
-    sim.step();
-    sim.step();
-    assert_eq!(
-        sim.unit(ground).unwrap().status.attack_speed_modifier_count,
-        0
-    );
-    sim.world
-        .entity_mut(entity(&sim, primary))
-        .get_mut::<Position>()
-        .unwrap()
-        .0
-        .x = 100 * SUBUNITS_PER_WORLD_UNIT;
-    let mut restored = wire_restored(&sim, 4);
-    for _ in 0..4 {
-        sim.step();
-        restored.step();
-        assert_eq!(sim.checksum(), restored.checksum());
-    }
-    for (target, duration) in [(ground, 9), (hero, 3)] {
-        let victim = sim.unit(target).unwrap();
-        assert_eq!(victim.health, 990);
-        assert_eq!(victim.status.attack_speed_modifiers[0].percent_delta, -15);
-        assert_eq!(
-            victim.status.attack_speed_modifiers[0].expires_tick,
-            sim.tick() - 1 + duration
         );
-    }
-    assert_eq!(sim.unit(immune).unwrap().health, 990);
-    for target in [primary, ally, outside, immune] {
+        let passive_effects = PassiveUnitEffects::single(PassiveUnitEffect::FrostAttack(
+            crate::FrostAttackEffectProfile {
+                ability: AbilityId(61),
+                duration_ticks: 9,
+                hero_duration_ticks: 3,
+                movement_percent_delta: -25,
+                attack_speed_percent_delta: -15,
+                targets: AttackTargetMask::AIR_AND_GROUND,
+            },
+        ));
+        let source = if building_source {
+            sim.spawn_building_with_properties(
+                BuildingSpawn {
+                    team: weapon.team,
+                    footprint: BuildingFootprint::new(0, 0, 1, 1),
+                    health: weapon.health,
+                    production: None,
+                    attack: Some(weapon.attack),
+                    spellcasting: None,
+                },
+                BuildingGameplayProperties {
+                    passive_effects,
+                    ..BuildingGameplayProperties::default()
+                },
+            )
+        } else {
+            sim.spawn_unit_with_properties(
+                weapon,
+                UnitGameplayProperties {
+                    passive_effects,
+                    ..UnitGameplayProperties::default()
+                },
+            )
+        };
+        // Retain live tower passives as well as the independently released missile payload.
+        sim = wire_restored(&sim, 2);
+        let primary = sim.spawn_unit(unit(1, 60, 0, AttackDelivery::Melee));
+        let ground = sim.spawn_unit(unit(1, 75, 0, AttackDelivery::Melee));
+        let hero = sim.spawn_unit_with_properties(
+            unit(1, 75, 0, AttackDelivery::Melee),
+            UnitGameplayProperties {
+                movement_class: MovementClass::Air,
+                classifications: UnitClassifications {
+                    hero: true,
+                    ..UnitClassifications::default()
+                },
+                ..UnitGameplayProperties::default()
+            },
+        );
+        let immune = sim.spawn_unit_with_properties(
+            unit(1, 75, 0, AttackDelivery::Melee),
+            UnitGameplayProperties {
+                classifications: UnitClassifications {
+                    spell_immune: true,
+                    ..UnitClassifications::default()
+                },
+                ..UnitGameplayProperties::default()
+            },
+        );
+        let ally = sim.spawn_unit(unit(0, 75, 0, AttackDelivery::Melee));
+        let outside = sim.spawn_unit(unit(1, 81, 0, AttackDelivery::Melee));
+        sim.step();
+        sim.step();
         assert_eq!(
-            sim.unit(target).unwrap().status.attack_speed_modifier_count,
+            sim.unit(ground).unwrap().status.attack_speed_modifier_count,
             0
         );
-    }
-    for target in [primary, ally, outside] {
-        assert_eq!(sim.unit(target).unwrap().health, 1000);
-    }
-    for _ in 0..10 {
-        sim.step();
-        restored.step();
-        assert_eq!(sim.checksum(), restored.checksum());
+        sim.world
+            .entity_mut(entity(&sim, primary))
+            .get_mut::<Position>()
+            .unwrap()
+            .0
+            .x = 100 * SUBUNITS_PER_WORLD_UNIT;
+        sim.world.despawn(entity(&sim, source));
+        let mut restored = wire_restored(&sim, 4);
+        for _ in 0..10 {
+            if sim.unit(ground).unwrap().health < 1000 {
+                break;
+            }
+            sim.step();
+            restored.step();
+            assert_eq!(sim.checksum(), restored.checksum());
+        }
+        for (target, duration) in [(ground, 9), (hero, 3)] {
+            let victim = sim.unit(target).unwrap();
+            assert_eq!(victim.health, 990);
+            assert_eq!(victim.status.attack_speed_modifiers[0].percent_delta, -15);
+            assert_eq!(
+                victim.status.attack_speed_modifiers[0].expires_tick,
+                sim.tick() - 1 + duration
+            );
+        }
+        assert_eq!(sim.unit(immune).unwrap().health, 990);
+        for target in [primary, ally, outside, immune] {
+            assert_eq!(
+                sim.unit(target).unwrap().status.attack_speed_modifier_count,
+                0
+            );
+        }
+        for target in [primary, ally, outside] {
+            assert_eq!(sim.unit(target).unwrap().health, 1000);
+        }
+        for _ in 0..10 {
+            sim.step();
+            restored.step();
+            assert_eq!(sim.checksum(), restored.checksum());
+        }
     }
 }
 

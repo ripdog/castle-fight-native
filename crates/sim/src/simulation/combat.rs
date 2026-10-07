@@ -937,7 +937,7 @@ impl Simulation {
                             .attack_targets
                             .expect("attack building target mask missing"),
                         damage_type: source.damage_type,
-                        passive_effects: PassiveUnitEffects::EMPTY,
+                        passive_effects: source.passive_effects,
                         attack_sequence: 0,
                         distance_sq,
                         completing_windup: false,

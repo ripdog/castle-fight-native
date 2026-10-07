@@ -6,7 +6,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 34;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 35;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -551,6 +551,11 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
                 Some(CanonicalEntity::Unit(unit))
             } else {
                 Some(CanonicalEntity::Building(CanonicalBuilding {
+                    passive_effects: entity
+                        .get::<PassiveUnitEffects>()
+                        .filter(|effects| effects.iter().next().is_some())
+                        .copied()
+                        .map(Box::new),
                     id,
                     content: entity.get::<ContentIdentity>().copied(),
                     owner: entity.get::<Owner>().map(|owner| owner.0),
@@ -813,6 +818,13 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                 {
                     entity.insert(ProductionAdditionalAutomaticAbilities(definitions));
                 }
+                entity.insert(
+                    building
+                        .passive_effects
+                        .as_deref()
+                        .copied()
+                        .unwrap_or_default(),
+                );
                 if let Some(attack) = building.attack {
                     entity.insert(attack);
                 }

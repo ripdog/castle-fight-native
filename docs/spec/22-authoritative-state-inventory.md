@@ -208,3 +208,5 @@ Native single-shot attack proxies retain source/owner, primary target, launch/de
 In-progress upgrades retain the precursor health-regeneration rate and fractional remainder alongside its other runtime state. Cancellation restores that phase exactly; activation consumes the authored building gameplay rate. Queued and constructing building definitions include the rate in their canonical definition hash.
 
 Native missile-applied stuns retain their source ability and an exclusive visual deadline independently of the combined stun action-disable deadline. These fields are canonical and transported; native dispel clears them with the stun. A longer unrelated disable can continue after the native art expires.
+
+Buildings retain their weapon passives in live, construction and upgrade precursor state. Released missile payloads own those effects independently of the source lifetime.

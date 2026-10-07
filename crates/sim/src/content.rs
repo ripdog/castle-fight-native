@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r32";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r33";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 22;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 23;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1244,6 +1244,7 @@ impl CastleFightProductionDefinition {
         );
         let unit = self.produced_unit.resolved();
         BuildingGameplayProperties {
+            passive_effects: PassiveUnitEffects::EMPTY,
             content: Some(ContentIdentity {
                 map_version: self.map_version,
                 rawcode: self.rawcode,
@@ -1453,6 +1454,7 @@ impl CastleFightTowerKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CastleFightTowerDefinition {
+    pub passive_effects: PassiveUnitEffects,
     pub rawcode: u32,
     pub name: &'static str,
     pub basic_tooltip: &'static str,
@@ -1492,6 +1494,7 @@ impl CastleFightTowerDefinition {
     #[must_use]
     pub const fn gameplay_properties(self) -> BuildingGameplayProperties {
         BuildingGameplayProperties {
+            passive_effects: self.passive_effects,
             content: Some(ContentIdentity {
                 map_version: self.map_version,
                 rawcode: self.rawcode,
@@ -2299,6 +2302,7 @@ fn hash_production_definition(
 }
 
 fn hash_tower_definition(hash: &mut ContentHash64, definition: CastleFightTowerDefinition) {
+    hash_passive_effects(hash, definition.passive_effects);
     hash.write_u16(definition.map_version.major);
     hash.write_u16(definition.map_version.minor);
     hash.write_u32(definition.rawcode);
@@ -4618,7 +4622,15 @@ fn extracted_tower_definition_927(
         .get(&rawcode)
         .unwrap_or_else(|| panic!("tower {rawcode:#010x} missing build hotkey"));
 
+    let abilities = &content.unit_abilities[&rawcode];
+    let mechanics = native_unit_mechanics_for(MapVersion::CASTLE_FIGHT_9_27, rawcode, abilities)
+        .expect("tower inventory uses retained native tuning");
+    let mut passive_effects = mechanics.passive_effects.iter().collect::<Vec<_>>();
+    if let Some(profile) = unit.splash_falloff {
+        passive_effects.push(PassiveUnitEffect::SplashFalloff(profile));
+    }
     CastleFightTowerDefinition {
+        passive_effects: PassiveUnitEffects::from_slice(&passive_effects),
         rawcode,
         name: building.name,
         basic_tooltip: building.basic_tooltip,

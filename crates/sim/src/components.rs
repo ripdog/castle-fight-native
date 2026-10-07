@@ -680,6 +680,7 @@ pub struct UnitGameplayProperties {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BuildingGameplayProperties {
+    pub passive_effects: PassiveUnitEffects,
     pub content: Option<ContentIdentity>,
     /// Intrinsic structure flags, independent of the classifications of produced children.
     pub classifications: UnitClassifications,
@@ -910,6 +911,7 @@ impl BuilderOrderQueue {
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize)]
 pub(crate) struct BuildingRuntimeState {
+    pub passive_effects: PassiveUnitEffects,
     pub classifications: UnitClassifications,
     pub production: Option<ProductionState>,
     pub attack_cooldown: Option<AttackCooldown>,

@@ -105,6 +105,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    IcyTower = 0x2100_000e => b"h03Q",
     ChillingMushroom = 0x2100_000d => b"h047",
     FrostLauncher = 0x2100_000b => b"h048",
     GreaterFrostLauncher = 0x2100_000c => b"h03L",
