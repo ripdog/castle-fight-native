@@ -884,7 +884,7 @@ impl Simulation {
         {
             return 0;
         }
-        let revived = self.resurrect_friendly_corpses(
+        let (revived, first_position) = self.resurrect_friendly_corpses_with_first_position(
             unit.team,
             AbilitySourceOrigin::Unit(unit.position),
             resurrection_radius,
@@ -902,6 +902,22 @@ impl Simulation {
                 .next_tick
                 .checked_add(u64::from(resurrection_cooldown_ticks))
                 .expect("secondary resurrection cooldown overflow");
+
+            if let Some((resurrection_ability, target_position)) = unit
+                .map_version
+                .and_then(|version| {
+                    crate::content::delayed_resurrection_ability_for_version(version, ability.id)
+                })
+                .zip(first_position)
+            {
+                self.last_ability_casts.push(AbilityCastEvent {
+                    source: unit.id,
+                    ability: resurrection_ability,
+                    target: AbilityCastTarget::Point(target_position),
+                    target_position: Some(target_position),
+                    effect: ability.effect,
+                });
+            }
         }
         revived
     }
@@ -913,8 +929,19 @@ impl Simulation {
         radius: i32,
         count: u8,
     ) -> usize {
+        self.resurrect_friendly_corpses_with_first_position(team, origin, radius, count)
+            .0
+    }
+
+    fn resurrect_friendly_corpses_with_first_position(
+        &mut self,
+        team: Team,
+        origin: AbilitySourceOrigin,
+        radius: i32,
+        count: u8,
+    ) -> (usize, Option<SimPoint>) {
         if count == 0 {
-            return 0;
+            return (0, None);
         }
         let radius_sq = square_i32(radius);
         let mut query = self.world.query::<(Entity, &SimId, &Corpse, &Position)>();
@@ -938,6 +965,7 @@ impl Simulation {
             .collect::<Vec<_>>();
         candidates.sort_unstable_by_key(|(distance, id, ..)| (*distance, *id));
         let mut revived = 0;
+        let mut first_position = None;
         for (_, _, entity, corpse, position) in candidates.into_iter().take(usize::from(count)) {
             let definition = corpse
                 .resurrection
@@ -961,9 +989,10 @@ impl Simulation {
                     .or(Some(corpse.source_unit)),
                 ..corpse.shrine_state
             });
+            first_position.get_or_insert(position);
             revived += 1;
         }
-        revived
+        (revived, first_position)
     }
 
     fn evaluate_automatic_ability(

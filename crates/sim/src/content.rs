@@ -4221,6 +4221,14 @@ pub(crate) fn unit_has_ability_927(rawcode: u32, ability: AbilityId) -> bool {
         .is_some_and(|abilities| abilities.contains(&ability.0))
 }
 
+pub(crate) fn delayed_resurrection_ability_for_version(
+    version: MapVersion,
+    parent: AbilityId,
+) -> Option<AbilityId> {
+    (version == MapVersion::CASTLE_FIGHT_9_27 && parent.0 == u32::from_be_bytes(*b"A03K"))
+        .then_some(AbilityId(u32::from_be_bytes(*b"A03H")))
+}
+
 fn extracted_building_economy_927(rawcode: u32) -> BuildingEconomyProfile {
     let (gold_cost, lumber_cost) = extracted_building_costs_927(rawcode);
     if rawcode == u32::from_be_bytes(*b"h008") {

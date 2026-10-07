@@ -723,13 +723,24 @@ fn load_visual_assets(
     let ability_column = header_index(&semantic_headers, "ability_rawcode")?;
     let unit_column = header_index(&semantic_headers, "unit_rawcode")?;
     let effects_column = header_index(&semantic_headers, "effect_rawcodes")?;
+    let parameters_column = header_index(&semantic_headers, "parameters_json")?;
     let mut bundled_art = BTreeSet::new();
     for row in semantics.records() {
         let row = row?;
         let parent = row.get(ability_column).unwrap_or_default();
         let unit = row.get(unit_column).unwrap_or_default();
+        let parameters: serde_json::Value =
+            serde_json::from_str(row.get(parameters_column).unwrap_or("{}"))?;
+        let delayed_resurrection = parameters["resurrection_precheck_delay_seconds"]
+            .as_f64()
+            .is_some_and(|delay| delay > 0.0)
+            .then(|| parameters["resurrection_ability_rawcode"].as_str())
+            .flatten();
         for child in row.get(effects_column).unwrap_or_default().split(',') {
-            if child == parent {
+            if child == parent || Some(child) == delayed_resurrection {
+                // Delayed resurrection is conditionally issued after its corpse precheck.
+                // Keep its art on the child ability so presentation can follow the
+                // authoritative secondary cast instead of every visible parent cast.
                 continue;
             }
             bundled_art.extend(

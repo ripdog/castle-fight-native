@@ -841,6 +841,28 @@ mod tests {
         for role in ["caster", "target"] {
             assert!(catalog.assets.iter().any(|asset| {
                 asset.owner_kind == "abilities"
+                    && asset.owner_rawcode == "A03H"
+                    && asset.source_unit_rawcode.is_none()
+                    && asset.role == role
+                    && asset
+                        .model_path
+                        .contains(r"Abilities\Spells\Human\Resurrect\")
+            }));
+        }
+        assert!(
+            catalog.assets.iter().all(|asset| {
+                !(asset.owner_kind == "abilities"
+                    && asset.owner_rawcode == "A03K"
+                    && asset.source_unit_rawcode.as_deref() == Some("h03C")
+                    && asset
+                        .model_path
+                        .contains(r"Abilities\Spells\Human\Resurrect\"))
+            }),
+            "Paladin Blessing must not inherit the delayed conditional Resurrection art"
+        );
+        for role in ["caster", "target"] {
+            assert!(catalog.assets.iter().any(|asset| {
+                asset.owner_kind == "abilities"
                     && asset.owner_rawcode == "A0HN"
                     && asset.source_unit_rawcode.as_deref() == Some("h07U")
                     && asset.role == role

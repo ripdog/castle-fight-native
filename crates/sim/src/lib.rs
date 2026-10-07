@@ -1779,6 +1779,16 @@ mod tests {
             sim.corpses().is_empty(),
             "Paladin must raise one eligible corpse after the scripted precheck delay"
         );
+        assert_eq!(sim.ability_casts_last_tick().len(), 1);
+        assert_eq!(
+            sim.ability_casts_last_tick()[0].ability,
+            AbilityId(u32::from_be_bytes(*b"A03H")),
+            "the delayed native resurrection order must be emitted only when it succeeds"
+        );
+        assert_eq!(
+            sim.ability_casts_last_tick()[0].target_position,
+            Some(SimPoint::new(650 * world, 0))
+        );
 
         let state = sim.unit(caster).unwrap();
         assert_eq!(
@@ -1789,6 +1799,79 @@ mod tests {
             state.mana_current.unwrap() < 10,
             "A03H must spend its separate 70 mana after the 66-mana Blessing"
         );
+    }
+
+    #[test]
+    fn paladin_resurrection_is_not_issued_without_an_eligible_nearby_corpse() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(
+            SimulationConfig {
+                navigation_min: NavCell::new(-1_000, -64),
+                navigation_max: NavCell::new(1_000, 64),
+                ..SimulationConfig::default()
+            },
+            1,
+        );
+        let paladin = CastleFightUnitKind::Paladin.definition();
+        let mut paladin_spellcasting = paladin.spellcasting.unwrap();
+        paladin_spellcasting.mana.starting = 140;
+        let caster = sim.spawn_unit_with_properties_and_spellcasting(
+            UnitSpawn::from_template(Team(0), SimPoint::new(500 * world, 0), paladin.template()),
+            paladin.gameplay_properties(),
+            paladin_spellcasting,
+        );
+
+        sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(600 * world, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: world,
+                acquisition_range: world,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        assert_eq!(sim.debug_damage_all_units(1), 2);
+        assert!(sim.corpses().is_empty());
+
+        let cast_tick = sim.tick();
+        assert_eq!(sim.step().ability_casts, 1);
+        assert_eq!(
+            sim.ability_casts_last_tick()[0].ability,
+            AbilityId(u32::from_be_bytes(*b"A03K"))
+        );
+        let mana_after_blessing = sim.unit(caster).unwrap().mana_current.unwrap();
+        let due_tick = sim
+            .unit(caster)
+            .unwrap()
+            .status
+            .secondary_resurrection_due_tick;
+        assert_eq!(due_tick, cast_tick + CASTLE_FIGHT_SIMULATION_HZ as u64);
+
+        while sim.tick() < due_tick {
+            sim.step();
+        }
+        sim.step();
+
+        let state = sim.unit(caster).unwrap();
+        assert_eq!(
+            state.status.secondary_resurrection_ready_tick, 0,
+            "a failed corpse precheck must not start the resurrection cooldown"
+        );
+        assert!(
+            state.mana_current.unwrap() >= mana_after_blessing,
+            "a failed corpse precheck must not spend the separate resurrection mana"
+        );
+        assert!(
+            sim.ability_casts_last_tick()
+                .iter()
+                .all(|cast| cast.ability != AbilityId(u32::from_be_bytes(*b"A03H"))),
+            "the native resurrection order must not be issued without an eligible corpse"
+        );
+        assert!(sim.corpses().is_empty());
     }
 
     #[test]
