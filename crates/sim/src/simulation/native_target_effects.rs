@@ -1606,6 +1606,10 @@ fn native_mana_aura_retains_fractional_regeneration_and_continues_during_cast_co
             collision_radius: Some(CollisionRadius(0)),
             passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Aura(
                 crate::components::AuraEffectProfile {
+                    damage_bonus_per_10k: 0,
+                    affects_melee: true,
+                    affects_ranged: true,
+                    linger_ticks: 0,
                     ability: AbilityId(91),
                     radius: 100 * SUBUNITS_PER_WORLD_UNIT,
                     armor_bonus_per_100: 0,
@@ -1658,4 +1662,115 @@ fn native_mana_aura_retains_fractional_regeneration_and_continues_during_cast_co
     assert_eq!(sim.unit(outside).unwrap().mana_current, Some(0));
     assert_eq!(sim.unit(enemy).unwrap().mana_current, Some(0));
     assert!(sim.unit(caster).unwrap().health > 0);
+}
+
+#[test]
+fn native_damage_aura_filters_weapon_class_and_does_not_stack_duplicate_sources() {
+    let mut sim = simulation(1);
+    let aura = crate::components::AuraEffectProfile {
+        ability: AbilityId(98),
+        radius: 100 * SUBUNITS_PER_WORLD_UNIT,
+        damage_bonus_per_10k: 1700,
+        armor_bonus_per_100: 0,
+        mana_regeneration_per_second_per_10k: 0,
+        affects_melee: true,
+        affects_ranged: false,
+        linger_ticks: 0,
+        suspend_during_spell_cooldown: false,
+    };
+    let properties = UnitGameplayProperties {
+        collision_radius: Some(CollisionRadius(0)),
+        passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Aura(aura)),
+        ..Default::default()
+    };
+    let source =
+        sim.spawn_unit_with_properties(unit(0, 20, 0, AttackDelivery::RangedInstant), properties);
+    sim.spawn_unit_with_properties(unit(0, 20, 0, AttackDelivery::RangedInstant), properties);
+    let melee = sim.spawn_unit_with_properties(
+        unit(0, 120, 100, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            collision_radius: Some(CollisionRadius(0)),
+            mechanical: true,
+            build_time_ticks: Some(13),
+            classifications: UnitClassifications {
+                invulnerable: true,
+                spell_immune: true,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    );
+    let ranged = sim.spawn_unit(unit(0, 120, 0, AttackDelivery::RangedInstant));
+    let outside = sim.spawn_unit_with_properties(
+        unit(0, 121, 0, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            collision_radius: Some(CollisionRadius(0)),
+            ..Default::default()
+        },
+    );
+    let enemy = sim.spawn_unit(unit(1, 140, 0, AttackDelivery::Melee));
+    sim.step();
+    sim.step();
+    let status = sim.unit(melee).unwrap().status;
+    assert_eq!(status.armor_modifier_count, 1);
+    assert_eq!(status.armor_modifiers[0].damage_bonus_per_10k, 1700);
+    assert_eq!(sim.unit(enemy).unwrap().health, 883);
+    for id in [source, ranged, outside, enemy] {
+        assert_eq!(sim.unit(id).unwrap().status.armor_modifier_count, 0);
+    }
+    let mut restored = wire_restored(&sim, 5);
+    let point = SimPoint::new(300 * SUBUNITS_PER_WORLD_UNIT, 20 * SUBUNITS_PER_WORLD_UNIT);
+    for simulation in [&mut sim, &mut restored] {
+        simulation
+            .world
+            .entity_mut(entity(simulation, melee))
+            .get_mut::<Position>()
+            .unwrap()
+            .0 = point;
+        simulation.step();
+        assert_eq!(
+            simulation.unit(melee).unwrap().status.armor_modifier_count,
+            0
+        );
+    }
+    assert_eq!(sim.checksum(), restored.checksum());
+}
+
+#[test]
+fn native_aura_keeps_its_authored_linger_after_source_removal_across_recovery() {
+    let mut sim = simulation(1);
+    let source = sim.spawn_unit_with_properties(
+        unit(0, 20, 0, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Aura(
+                crate::components::AuraEffectProfile {
+                    ability: AbilityId(99),
+                    radius: 100 * SUBUNITS_PER_WORLD_UNIT,
+                    damage_bonus_per_10k: 0,
+                    armor_bonus_per_100: 230,
+                    mana_regeneration_per_second_per_10k: 0,
+                    affects_melee: true,
+                    affects_ranged: true,
+                    linger_ticks: 7,
+                    suspend_during_spell_cooldown: false,
+                },
+            )),
+            ..Default::default()
+        },
+    );
+    let target = sim.spawn_unit(unit(0, 40, 0, AttackDelivery::RangedInstant));
+    sim.step();
+    let expiry = sim.unit(target).unwrap().status.armor_modifiers[0].expires_tick;
+    sim.world.despawn(entity(&sim, source));
+    let mut restored = wire_restored(&sim, 4);
+    while sim.next_tick < expiry {
+        assert_eq!(sim.unit(target).unwrap().status.armor_modifier_count, 1);
+        sim.step();
+        restored.step();
+        assert_eq!(sim.checksum(), restored.checksum());
+    }
+    sim.step();
+    restored.step();
+    assert_eq!(sim.unit(target).unwrap().status.armor_modifier_count, 0);
+    assert_eq!(sim.checksum(), restored.checksum());
 }

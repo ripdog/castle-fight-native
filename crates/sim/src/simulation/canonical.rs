@@ -1948,6 +1948,10 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                 hash.write_u8(profile.targets.bits());
             }
             PassiveUnitEffect::Aura(profile) => {
+                hash.write_i32(i32::from(profile.damage_bonus_per_10k));
+                hash.write_u8(u8::from(profile.affects_melee));
+                hash.write_u8(u8::from(profile.affects_ranged));
+                hash.write_u16(profile.linger_ticks);
                 hash.write_u8(8);
                 hash.write_u64(u64::from(profile.ability.0));
                 hash.write_i32(profile.radius);

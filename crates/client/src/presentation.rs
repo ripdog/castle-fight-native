@@ -45,7 +45,8 @@ use crate::{
         UnitVisualKind,
     },
     building_models::{
-        BuildingAnimationClip, BuildingModelSet, script_building_attachments_for_version,
+        BuildingAnimationClip, BuildingModelSet, native_building_attachments_for_version,
+        script_building_attachments_for_version,
     },
     control_modifier_pressed,
     particle_renderer::Wc3ParticleRenderPlugin,
@@ -4619,6 +4620,39 @@ fn sync_render_entities(
             (None, None)
         };
         if let Some(content) = building.content {
+            if let Some(model_root) = model_root {
+                for attachment in
+                    native_building_attachments_for_version(content.map_version, content.rawcode)
+                {
+                    let Ok(rawcode) = <[u8; 4]>::try_from(attachment.ability_rawcode.as_bytes())
+                    else {
+                        continue;
+                    };
+                    for point in &attachment.attachment_points {
+                        for visual in wc3_visuals.ability(u32::from_be_bytes(rawcode)) {
+                            if visual.anchor != Wc3AbilityVisualAnchor::Target {
+                                continue;
+                            }
+                            let effect = commands
+                                .spawn((
+                                    WorldAssetRoot(visual.model.scene.clone()),
+                                    Transform::IDENTITY,
+                                    visual.model.looping_emitter_source(),
+                                    Wc3RibbonSource::new(&visual.model.ribbons),
+                                    Wc3AttachToNode {
+                                        owner_root: model_root,
+                                        attachment_point: point.clone(),
+                                    },
+                                ))
+                                .id();
+                            if let Some(animation) = visual.model.looping_animation_source() {
+                                commands.entity(effect).insert(animation);
+                            }
+                            commands.entity(entity).add_child(effect);
+                        }
+                    }
+                }
+            }
             for attachment in
                 script_building_attachments_for_version(content.map_version, content.rawcode)
             {

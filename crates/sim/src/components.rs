@@ -506,6 +506,10 @@ pub struct CleaveEffectProfile {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuraEffectProfile {
+    pub damage_bonus_per_10k: i16,
+    pub affects_melee: bool,
+    pub affects_ranged: bool,
+    pub linger_ticks: u16,
     pub ability: AbilityId,
     pub radius: i32,
     pub armor_bonus_per_100: i16,

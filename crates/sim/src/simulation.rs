@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 47;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 48;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -1527,6 +1527,7 @@ impl Simulation {
         let mut topology = phase_start.elapsed();
 
         let phase_start = Instant::now();
+        self.refresh_native_mana_auras_for_timers();
         self.advance_cooldowns();
         self.resolve_shrine_revivals();
         self.advance_building_spell_controls();
@@ -2563,18 +2564,7 @@ impl Simulation {
                     let PassiveUnitEffect::Aura(profile) = effect else {
                         return None;
                     };
-                    if profile.suspend_during_spell_cooldown
-                        && unit.status.ability_retreat_end_tick > 0
-                        && self.next_tick
-                            < unit
-                                .status
-                                .ability_retreat_end_tick
-                                .checked_add(
-                                    u64::try_from(66 * CASTLE_FIGHT_SIMULATION_HZ / 10)
-                                        .expect("simulation Hz must be positive"),
-                                )
-                                .expect("Warlock aura recovery tick overflow")
-                    {
+                    if Self::passive_aura_suspended(&profile, &unit.status, self.next_tick) {
                         return None;
                     }
                     Some((unit.id, unit.team, unit.position, profile))
@@ -2585,6 +2575,8 @@ impl Simulation {
             for target in units.iter_mut() {
                 if target.health <= 0
                     || target.team != team
+                    || (target.attack.delivery == AttackDelivery::Melee && !profile.affects_melee)
+                    || (target.attack.delivery != AttackDelivery::Melee && !profile.affects_ranged)
                     || (profile.radius == 0 && target.id != source_id)
                     || position.distance_sq(target.position) > square_i32(profile.radius)
                 {
@@ -2599,13 +2591,102 @@ impl Simulation {
                         regeneration_per_second_per_10k: 0,
                         mana_regeneration_per_second_per_10k: profile
                             .mana_regeneration_per_second_per_10k,
-                        damage_bonus_per_10k: 0,
+                        damage_bonus_per_10k: profile.damage_bonus_per_10k,
                         damage_taken_bonus_per_10k: 0,
-                        expires_tick: self.next_tick + 2,
+                        expires_tick: self.next_tick + u64::from(profile.linger_ticks.max(1)),
                         reactive_slow_duration_ticks: 0,
                         reactive_movement_percent_delta: 0,
                         reactive_attack_speed_percent_delta: 0,
                         revealed_to: None,
+                    },
+                );
+            }
+        }
+    }
+
+    fn passive_aura_suspended(
+        profile: &crate::components::AuraEffectProfile,
+        status: &StatusState,
+        tick: u64,
+    ) -> bool {
+        profile.suspend_during_spell_cooldown
+            && status.ability_retreat_end_tick > 0
+            && tick
+                < status
+                    .ability_retreat_end_tick
+                    .checked_add(
+                        u64::try_from(66 * CASTLE_FIGHT_SIMULATION_HZ / 10)
+                            .expect("simulation Hz must be positive"),
+                    )
+                    .expect("Warlock aura recovery tick overflow")
+    }
+
+    // A zero-duration intrinsic mana aura must be sampled before regeneration, rather than
+    // relying on a modifier from the previous combat phase to survive an extra tick.
+    fn refresh_native_mana_auras_for_timers(&mut self) {
+        let tick = self.next_tick;
+        let mut query = self.world.query::<(
+            &SimId,
+            &Team,
+            &Position,
+            &Health,
+            &PassiveUnitEffects,
+            &StatusState,
+        )>();
+        let mut sources: Vec<_> = query
+            .iter(&self.world)
+            .filter(|(_, _, _, health, _, _)| health.current > 0)
+            .flat_map(|(id, team, position, _, effects, status)| {
+                effects.iter().filter_map(move |effect| {
+                    let PassiveUnitEffect::Aura(profile) = effect else {
+                        return None;
+                    };
+                    if profile.mana_regeneration_per_second_per_10k == 0 {
+                        return None;
+                    }
+                    if Self::passive_aura_suspended(&profile, status, tick) {
+                        return None;
+                    }
+                    Some((*id, *team, position.0, profile))
+                })
+            })
+            .collect();
+        sources.sort_unstable_by_key(|source| source.0);
+        if sources.is_empty() {
+            return;
+        }
+        let mut targets = self.world.query::<(
+            &SimId,
+            &Team,
+            &Position,
+            &Health,
+            &AttackProfile,
+            &mut StatusState,
+            &ManaState,
+        )>();
+        for (id, team, position, health, attack, mut status, _) in targets.iter_mut(&mut self.world)
+        {
+            purge_expired_status_modifiers(&mut status, tick);
+            for (source_id, source_team, source_position, profile) in &sources {
+                if health.current <= 0
+                    || team != source_team
+                    || (profile.radius == 0 && id != source_id)
+                    || position.0.distance_sq(*source_position) > square_i32(profile.radius)
+                    || (attack.delivery == AttackDelivery::Melee && !profile.affects_melee)
+                    || (attack.delivery != AttackDelivery::Melee && !profile.affects_ranged)
+                {
+                    continue;
+                }
+                apply_timed_armor_modifier(
+                    &mut status,
+                    TimedArmorModifier {
+                        id: ModifierId(profile.ability.0),
+                        armor_bonus_per_100: profile.armor_bonus_per_100,
+                        damage_bonus_per_10k: profile.damage_bonus_per_10k,
+                        mana_regeneration_per_second_per_10k: profile
+                            .mana_regeneration_per_second_per_10k,
+                        expires_tick: tick + u64::from(profile.linger_ticks.max(1)),
+                        ..TimedArmorModifier::default()
                     },
                 );
             }

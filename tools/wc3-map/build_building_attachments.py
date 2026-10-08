@@ -37,8 +37,38 @@ def build(release: dict) -> dict:
         entries.append({"building_rawcode": rawcode, "source_registration": registration,
             "source_factory": factory, "source_callback": callback,
             "visuals": [project_call(functions[callback])]})
+    fields = list(csv.DictReader(io.StringIO(catalog._retained_file_bytes(catalog.REPO_ROOT, tree, "resolved/object-fields.tsv").decode()), delimiter="\t"))
+    abilities, inventories = {}, {}
+    for row in fields:
+        if row["category"] == "abilities":
+            ability = abilities.setdefault(row["rawcode"], {"base": row["base_rawcode"]})
+            if row["level"] in {"0", "1"}:
+                ability[row["field_id"]] = json.loads(row["recovered_value_json"])
+        elif row["category"] == "units" and row["field_id"] == "uabi":
+            inventories[row["rawcode"]] = json.loads(row["recovered_value_json"])
+    buildings = list(csv.DictReader(io.StringIO(catalog._retained_file_bytes(catalog.REPO_ROOT, tree, "resolved/units.tsv").decode()), delimiter="\t"))
+    for building in buildings:
+        if building["is_building"] != "1":
+            continue
+        attachments = []
+        for rawcode in inventories.get(building["rawcode"], "").split(","):
+            ability = abilities.get(rawcode, {})
+            if ability.get("base") != "Asph" or not ability.get("atat"):
+                continue
+            count = int(ability["atac"])
+            points = [ability.get(f"ata{index}", "") for index in range(count)]
+            if not all(points):
+                raise ValueError("native Sphere attachment must retain every authored point")
+            attachments.append({"ability_rawcode": rawcode, "attachment_points": points})
+        if attachments:
+            entry = next((row for row in entries if row["building_rawcode"] == building["rawcode"]), None)
+            if entry is None:
+                entry = {"building_rawcode": building["rawcode"], "visuals": []}
+                entries.append(entry)
+            entry["native_abilities"] = attachments
+    entries.sort(key=lambda row: row["building_rawcode"])
     return {"schema_version": 1, "map_version": release["map_version"],
-        "source": {"git_tree": tree, "path": "script/war3map.lua", "placement_helper": "createAttachedBuildingEffect"},
+        "source": {"git_tree": tree, "path": "script/war3map.lua", "native_path": "resolved/object-fields.tsv", "placement_helper": "createAttachedBuildingEffect"},
         "buildings": entries}
 
 

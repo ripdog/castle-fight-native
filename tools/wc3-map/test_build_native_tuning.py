@@ -9,6 +9,14 @@ import build_runtime_catalog as catalog
 
 
 class NativeTuningProjectionTest(unittest.TestCase):
+    def test_native_damage_aura_retains_weapon_eligibility_and_linger(self) -> None:
+        recipe = {"kind": "native-aura", "source_kind": "unit-ability", "source_key": "TEST", "unit_rawcode": "UNIT"}
+        fields = {"targs1": "air,ground,friend,self,vuln,invu", "area1": "77", "dataa1": "0.17", "datab1": "1", "datac1": "0", "datad1": "0", "dur1": "0.25"}
+        output = native.project_effect(recipe, fields, None, {}, {"native_base": "AIar"})
+        self.assertEqual((output["damage_bonus_per_10k"], output["affects_melee"], output["affects_ranged"], output["linger_ticks"]), (1700, True, False, 8))
+        with self.assertRaisesRegex(ValueError, "weapon classes"):
+            native.project_effect(recipe, {**fields, "datad1": "1"}, None, {}, {"native_base": "AIar"})
+
     def test_poison_projects_class_mask_short_hero_expiry_and_nonlethal_damage_stacking(self) -> None:
         recipe = {"kind": "poison", "source_kind": "unit-ability", "source_key": "TEST", "unit_rawcode": "UNIT"}
         fields = {"targs1": "air,ground,organic", "dataa1": "19", "datab1": "0.15", "datac1": "0.1", "datad1": "1", "dur1": "4", "herodur1": "0.25"}

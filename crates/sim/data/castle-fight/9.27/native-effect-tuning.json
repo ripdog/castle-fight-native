@@ -4,6 +4,23 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A035",
+      "unit_rawcode": "o008",
+      "kind": "native-aura",
+      "radius_world": 900,
+      "damage_bonus_per_10k": 3000,
+      "armor_bonus_per_100": 0,
+      "mana_regeneration_per_second_per_10k": 0,
+      "affects_melee": true,
+      "affects_ranged": false,
+      "linger_ticks": 0,
+      "provenance": {
+        "ability": "A035",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A08I",
       "unit_rawcode": "n022",
       "kind": "bash",
@@ -1156,7 +1173,12 @@
       "unit_rawcode": "n014",
       "kind": "native-aura",
       "radius_world": 800,
+      "damage_bonus_per_10k": 0,
+      "armor_bonus_per_100": 0,
       "mana_regeneration_per_second_per_10k": 5000,
+      "affects_melee": true,
+      "affects_ranged": true,
+      "linger_ticks": 0,
       "provenance": {
         "ability": "A042",
         "source": "resolved/object-fields.tsv"

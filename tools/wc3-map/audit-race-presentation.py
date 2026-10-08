@@ -196,7 +196,7 @@ def audit_native_inventory_ownership(inventories, relevant, native_abilities):
 def audit_native_status_visuals(projection, fields, abilities, manifest):
     """Require source-linked persistent buff models, including native stock art and empty overrides."""
     recipes = {"Aenr": ("movement",), "ACf2": ("armor", "movement"),
-               "Ainf": ("armor",), "AIrr": ("armor",), "AHad": ("armor",),
+               "Ainf": ("armor",), "AIrr": ("armor",), "AHad": ("armor",), "AIar": ("armor",),
                "ACff": ("armor",), "Afae": ("armor",), "Ablo": ("attack_speed",),
                "Apxf": ("damage_over_time",), "Aven": ("damage_over_time", "damage_over_time"),
                "Afrz": ("freeze",), "AOae": ("movement",), "AHtb": ("stun",), "ACtb": ("stun",)}

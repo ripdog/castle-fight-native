@@ -544,6 +544,11 @@ enum TuningEffect {
         provenance: serde_json::Value,
     },
     NativeAura {
+        damage_bonus_per_10k: i16,
+        armor_bonus_per_100: i16,
+        affects_melee: bool,
+        affects_ranged: bool,
+        linger_ticks: u16,
         source_kind: String,
         source_key: String,
         unit_rawcode: String,
@@ -1168,14 +1173,23 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             })
         }
         TuningEffect::NativeAura {
+            damage_bonus_per_10k,
+            armor_bonus_per_100,
+            affects_melee,
+            affects_ranged,
+            linger_ticks,
             source_key,
             radius_world,
             mana_regeneration_per_second_per_10k,
             ..
         } => PassiveUnitEffect::Aura(crate::components::AuraEffectProfile {
+            damage_bonus_per_10k: *damage_bonus_per_10k,
+            affects_melee: *affects_melee,
+            affects_ranged: *affects_ranged,
+            linger_ticks: *linger_ticks,
             ability: AbilityId(rawcode(source_key).expect("aura source")),
             radius: world(*radius_world),
-            armor_bonus_per_100: 0,
+            armor_bonus_per_100: *armor_bonus_per_100,
             mana_regeneration_per_second_per_10k: *mana_regeneration_per_second_per_10k,
             suspend_during_spell_cooldown: false,
         }),

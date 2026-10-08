@@ -29,6 +29,14 @@ pub(crate) struct BuildingScriptAttachment {
 struct ScriptAttachmentBuilding {
     building_rawcode: String,
     visuals: Vec<BuildingScriptAttachment>,
+    #[serde(default)]
+    native_abilities: Vec<BuildingNativeAttachment>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct BuildingNativeAttachment {
+    pub ability_rawcode: String,
+    pub attachment_points: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -42,8 +50,35 @@ pub(crate) fn script_building_attachments_for_version(
     version: castle_fight_sim::MapVersion,
     rawcode: u32,
 ) -> &'static [BuildingScriptAttachment] {
+    building_attachment_projection(version)
+        .and_then(|projection| {
+            projection
+                .buildings
+                .iter()
+                .find(|building| building.building_rawcode.as_bytes() == rawcode.to_be_bytes())
+        })
+        .map_or(&[], |building| building.visuals.as_slice())
+}
+
+pub(crate) fn native_building_attachments_for_version(
+    version: castle_fight_sim::MapVersion,
+    rawcode: u32,
+) -> &'static [BuildingNativeAttachment] {
+    building_attachment_projection(version)
+        .and_then(|projection| {
+            projection
+                .buildings
+                .iter()
+                .find(|building| building.building_rawcode.as_bytes() == rawcode.to_be_bytes())
+        })
+        .map_or(&[], |building| building.native_abilities.as_slice())
+}
+
+fn building_attachment_projection(
+    version: castle_fight_sim::MapVersion,
+) -> Option<&'static ScriptAttachmentProjection> {
     if version != castle_fight_sim::MapVersion::CASTLE_FIGHT_9_27 {
-        return &[];
+        return None;
     }
     static PROJECTION: OnceLock<ScriptAttachmentProjection> = OnceLock::new();
     let projection = PROJECTION.get_or_init(|| {
@@ -55,11 +90,7 @@ pub(crate) fn script_building_attachments_for_version(
         assert_eq!(projection.map_version, "9.27");
         projection
     });
-    projection
-        .buildings
-        .iter()
-        .find(|building| building.building_rawcode.as_bytes() == rawcode.to_be_bytes())
-        .map_or(&[], |building| building.visuals.as_slice())
+    Some(projection)
 }
 
 #[derive(Resource, Default)]

@@ -186,9 +186,27 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
                       damage_multiplier_per_10k=number("DataB1", 10_000),
                       targets=unit_targets(fields["targs1"], allow_structures=True))
     elif kind == "native-aura":
-        if number("DataB1") != 0 or set(fields["targs1"].split(",")) != {"air", "ground", "friend", "self", "vuln", "invu"}:
-            raise ValueError("native aura requires explicit percent/target semantics")
-        effect.update(radius_world=number("Area1"), mana_regeneration_per_second_per_10k=number("DataA1", 10_000))
+        if set(fields["targs1"].split(",")) != {"air", "ground", "friend", "self", "vuln", "invu"}:
+            raise ValueError("native aura requires explicit target semantics")
+        base = mechanics["native_base"]
+        damage, armor, mana, melee, ranged = 0, 0, 0, True, True
+        if base == "AIar":
+            if number("DataD1") != 0 or number("DataB1") not in {0, 1} or number("DataC1") not in {0, 1}:
+                raise ValueError("native damage aura requires percent damage and explicit weapon classes")
+            damage, melee, ranged = number("DataA1", 10_000), bool(number("DataB1")), bool(number("DataC1"))
+        elif base == "AHad":
+            if number("DataB1") != 0:
+                raise ValueError("native armor aura requires flat armor")
+            armor = number("DataA1", 100)
+        elif base in {"ACba", "AHab"}:
+            if number("DataB1") != 0:
+                raise ValueError("native mana aura requires flat regeneration")
+            mana = number("DataA1", 10_000)
+        else:
+            raise ValueError(f"unsupported native aura base {base}")
+        effect.update(radius_world=number("Area1"), damage_bonus_per_10k=damage, armor_bonus_per_100=armor,
+            mana_regeneration_per_second_per_10k=mana, affects_melee=melee, affects_ranged=ranged,
+            linger_ticks=int((Decimal(fields["dur1"]) * 30).to_integral_value(rounding="ROUND_CEILING")))
     elif kind == "pulverize":
         if set(fields["targs1"].split(",")) - {"ground", "enemy", "enemies", "neutral"}:
             raise ValueError("unsupported native Pulverize mask")
@@ -524,6 +542,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
                 damage_threshold_handler=functions["DamageListener_addListener_TrollBlood_onEvent_addListener_TrollBlood"],
                 ability_levels=ability_levels[source], git_tree=tree)
         detail["misc"] = misc
+        detail["native_base"] = ability_bases[source]
         if spell is not None:
             semantics = spell_semantics[spell["ability_rawcode"]]
             effect_key = semantics["effect_rawcodes"].split(",")[0]

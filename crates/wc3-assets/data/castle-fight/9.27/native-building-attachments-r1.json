@@ -4,9 +4,115 @@
   "source": {
     "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
     "path": "script/war3map.lua",
+    "native_path": "resolved/object-fields.tsv",
     "placement_helper": "createAttachedBuildingEffect"
   },
   "buildings": [
+    {
+      "building_rawcode": "h025",
+      "visuals": [],
+      "native_abilities": [
+        {
+          "ability_rawcode": "A02A",
+          "attachment_points": [
+            "origin",
+            "first",
+            "second"
+          ]
+        }
+      ]
+    },
+    {
+      "building_rawcode": "h032",
+      "visuals": [],
+      "native_abilities": [
+        {
+          "ability_rawcode": "A02Y",
+          "attachment_points": [
+            "sprite,first",
+            "sprite,second",
+            "sprite,third"
+          ]
+        }
+      ]
+    },
+    {
+      "building_rawcode": "h035",
+      "visuals": [],
+      "native_abilities": [
+        {
+          "ability_rawcode": "A036",
+          "attachment_points": [
+            "sprite,first",
+            "sprite,second"
+          ]
+        }
+      ]
+    },
+    {
+      "building_rawcode": "h036",
+      "visuals": [],
+      "native_abilities": [
+        {
+          "ability_rawcode": "A037",
+          "attachment_points": [
+            "sprite,first",
+            "sprite,second"
+          ]
+        }
+      ]
+    },
+    {
+      "building_rawcode": "h03S",
+      "visuals": [],
+      "native_abilities": [
+        {
+          "ability_rawcode": "A04C",
+          "attachment_points": [
+            "origin"
+          ]
+        },
+        {
+          "ability_rawcode": "A04B",
+          "attachment_points": [
+            "sprite,first",
+            "origin"
+          ]
+        }
+      ]
+    },
+    {
+      "building_rawcode": "h04M",
+      "visuals": [],
+      "native_abilities": [
+        {
+          "ability_rawcode": "A051",
+          "attachment_points": [
+            "sprite,first",
+            "sprite,second",
+            "sprite,third",
+            "sprite,fourth",
+            "hand,left",
+            "hand,right"
+          ]
+        }
+      ]
+    },
+    {
+      "building_rawcode": "h04W",
+      "visuals": [],
+      "native_abilities": [
+        {
+          "ability_rawcode": "A04M",
+          "attachment_points": [
+            "sprite,first",
+            "sprite,second",
+            "sprite,third",
+            "sprite,fourth"
+          ]
+        }
+      ]
+    },
     {
       "building_rawcode": "h06I",
       "source_registration": "UK",
@@ -22,6 +128,34 @@
             -60.0
           ],
           "scale": 1.7
+        }
+      ]
+    },
+    {
+      "building_rawcode": "h092",
+      "visuals": [],
+      "native_abilities": [
+        {
+          "ability_rawcode": "A08N",
+          "attachment_points": [
+            "sprite,first",
+            "sprite,second"
+          ]
+        }
+      ]
+    },
+    {
+      "building_rawcode": "h09Y",
+      "visuals": [],
+      "native_abilities": [
+        {
+          "ability_rawcode": "A04M",
+          "attachment_points": [
+            "sprite,first",
+            "sprite,second",
+            "sprite,third",
+            "sprite,fourth"
+          ]
         }
       ]
     }
