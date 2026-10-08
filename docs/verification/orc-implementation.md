@@ -36,3 +36,9 @@ Validation: all 472 simulation tests, nine runtime-catalog projection tests, for
 - Native spell behavior is identified by the [Blizzard Priest reference](https://classic.battle.net/war3/human/units/priest.shtml); all Castle Fight tuning comes from retained 9.27/r1 evidence.
 
 Validation: all 477 simulation tests, 16 native projection tests, formatting and strict workspace/all-target Clippy passed (`.local-tools/orc-validation/shaman-*.log`). The synthetic cast-windup fixture also proves that combat ending during a pending cast does not cancel an otherwise valid recipient, while a competing buff does prevent duplicate resource commitment at release.
+
+## Blood Shaman Tent / Blood Shaman
+
+- Entity/source: `h07Q` (base `hbla`) upgrades Shamanic Tent and produces `o00G` (base `oshm`). Its retained command-card position precedes Infostealer's Place, although the script registers those branches in reverse order. All ordinary/protected ranged magic combat, stats, construction, training, repair, economy, organic sapper/ward classification and raisable/decaying corpse data consume the catalog.
+- Complete inventory: assassination-target marker `A0CV` and default-autocast Inner Fire `A0GT`, projected from the source `Ainf` fields and protected cooldown. It uses the same `B009` family as Shaman. The stronger armor, outgoing damage and regeneration bundle cannot stack with the weaker one; an existing family prevents automatic recasts regardless of its granting ability. No special script handler, dummy, delayed callback or AI override.
+- Trigger, release, resources, mana clock, native target semantics and presentation use the shared Shaman mechanic. Synthetic family-replacement and competing-caster tests cover the cross-ability interaction; catalog-wide ability and production closure covers both upgrades. No new authoritative shape.

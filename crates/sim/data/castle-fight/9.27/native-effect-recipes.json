@@ -62,6 +62,7 @@
     {"source_kind": "unit-ability", "source_key": "A02V", "unit_rawcode": "o004", "kind": "critical-strike"},
     {"source_kind": "unit-ability", "source_key": "A02W", "unit_rawcode": "o005", "kind": "critical-strike"},
     {"source_kind": "unit-ability", "source_key": "A02P", "unit_rawcode": "o005", "kind": "pulverize"},
-    {"source_kind": "unit-ability", "source_key": "A02M", "unit_rawcode": "o003", "kind": "inner-fire"}
+    {"source_kind": "unit-ability", "source_key": "A02M", "unit_rawcode": "o003", "kind": "inner-fire"},
+    {"source_kind": "unit-ability", "source_key": "A0GT", "unit_rawcode": "o00G", "kind": "inner-fire"}
   ]
 }
