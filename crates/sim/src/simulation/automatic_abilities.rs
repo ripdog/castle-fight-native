@@ -441,6 +441,7 @@ mod tests {
             range: 10 * SUBUNITS_PER_WORLD_UNIT,
             target_policy: AbilityTargetPolicy::WoundedFriendlyUnit,
             effect: AbilityEffect::HolyAid {
+                native_buff: None,
                 modifier: ModifierId(id),
                 healing: 0,
                 armor_bonus_per_100: 0,

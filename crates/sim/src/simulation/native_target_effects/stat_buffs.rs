@@ -16,6 +16,7 @@ fn profile() -> SpellcastingProfile {
                     rawcode: 72,
                     positive: true,
                     stealable: true,
+                    organic_only: false,
                 },
                 armor_bonus_per_100: 300,
                 damage_bonus_per_10k: 5000,

@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "map_version": "9.27",
   "effects": [
     {
@@ -1226,7 +1226,8 @@
               "buff": {
                 "rawcode": 1110454329,
                 "positive": true,
-                "stealable": true
+                "stealable": true,
+                "organic_only": false
               },
               "armor_bonus_per_100": 400,
               "damage_bonus_per_10k": 2000,
@@ -1269,7 +1270,8 @@
               "buff": {
                 "rawcode": 1110454329,
                 "positive": true,
-                "stealable": true
+                "stealable": true,
+                "organic_only": false
               },
               "armor_bonus_per_100": 500,
               "damage_bonus_per_10k": 4000,
@@ -1288,6 +1290,152 @@
         "unit": "resolved/units.tsv",
         "protected": "resolved/protected-ability-fields.tsv"
       }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0A6",
+      "unit_rawcode": "o00F",
+      "spellcasting": {
+        "mana": {
+          "maximum": 400,
+          "starting": 200,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093681462,
+          "mana_cost": 40,
+          "cooldown_ticks": 300,
+          "range": 716800,
+          "target_policy": "NativeBuffDonor",
+          "effect": {
+            "SpellSteal": {
+              "recipient_radius": 716800
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv"
+      }
     }
-  ]
+  ],
+  "buff_families": [
+    {
+      "source_key": "A00W",
+      "buff": {
+        "rawcode": 1114005861,
+        "positive": false,
+        "stealable": true,
+        "organic_only": true
+      }
+    },
+    {
+      "source_key": "A02M",
+      "buff": {
+        "rawcode": 1110454329,
+        "positive": true,
+        "stealable": true,
+        "organic_only": false
+      }
+    },
+    {
+      "source_key": "A03E",
+      "buff": {
+        "rawcode": 1110454345,
+        "positive": true,
+        "stealable": true,
+        "organic_only": false
+      }
+    },
+    {
+      "source_key": "A03F",
+      "buff": {
+        "rawcode": 1110454344,
+        "positive": true,
+        "stealable": true,
+        "organic_only": false
+      }
+    },
+    {
+      "source_key": "A03I",
+      "buff": {
+        "rawcode": 1110454346,
+        "positive": true,
+        "stealable": true,
+        "organic_only": false
+      }
+    },
+    {
+      "source_key": "A03M",
+      "buff": {
+        "rawcode": 1110454346,
+        "positive": true,
+        "stealable": true,
+        "organic_only": false
+      }
+    },
+    {
+      "source_key": "A03Z",
+      "buff": {
+        "rawcode": 1112893025,
+        "positive": true,
+        "stealable": true,
+        "organic_only": false
+      }
+    },
+    {
+      "source_key": "A040",
+      "buff": {
+        "rawcode": 1112893025,
+        "positive": true,
+        "stealable": true,
+        "organic_only": false
+      }
+    },
+    {
+      "source_key": "A0B7",
+      "buff": {
+        "rawcode": 1110454837,
+        "positive": true,
+        "stealable": true,
+        "organic_only": false
+      }
+    },
+    {
+      "source_key": "A0B8",
+      "buff": {
+        "rawcode": 1110454837,
+        "positive": true,
+        "stealable": true,
+        "organic_only": false
+      }
+    },
+    {
+      "source_key": "A0GT",
+      "buff": {
+        "rawcode": 1110454329,
+        "positive": true,
+        "stealable": true,
+        "organic_only": false
+      }
+    },
+    {
+      "source_key": "A0I2",
+      "buff": {
+        "rawcode": 1110454346,
+        "positive": true,
+        "stealable": true,
+        "organic_only": true
+      }
+    }
+  ],
+  "buff_family_source": {
+    "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+    "path": "resolved/object-fields.tsv"
+  }
 }

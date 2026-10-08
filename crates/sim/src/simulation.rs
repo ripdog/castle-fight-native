@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 42;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 43;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -52,6 +52,7 @@ mod movement;
 mod native_actions;
 #[cfg(test)]
 mod native_actions_tests;
+mod native_buff_transfer;
 mod native_carriers;
 #[cfg(test)]
 mod native_target_effects;
@@ -3918,6 +3919,7 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         | AbilityTargetPolicy::RandomEnemyUnitOrBuilding
         | AbilityTargetPolicy::RandomEnemyDebuff
         | AbilityTargetPolicy::FriendlyUnitInCombat
+        | AbilityTargetPolicy::NativeBuffDonor
         | AbilityTargetPolicy::RandomGroundEnemyUnit
         | AbilityTargetPolicy::RecentlyAttackedFriendlyUnit
         | AbilityTargetPolicy::WoundedFriendlyUnit
@@ -3930,6 +3932,13 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
     }
     match spellcasting.ability.effect {
+        AbilityEffect::SpellSteal { recipient_radius } => {
+            assert!(recipient_radius >= 0);
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::NativeBuffDonor
+            );
+        }
         AbilityEffect::StatBuff {
             buff,
             duration_ticks,
@@ -4113,6 +4122,7 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
             ));
         }
         AbilityEffect::FrostArmor {
+            native_buff: _,
             modifier: _,
             armor_bonus_per_100,
             armor_duration_ticks,
@@ -4131,6 +4141,7 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
             );
         }
         AbilityEffect::HolyAid {
+            native_buff: _,
             healing,
             armor_bonus_per_100,
             regeneration_per_second_per_10k: _,
@@ -4160,6 +4171,7 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
             );
         }
         AbilityEffect::Prayer {
+            native_buff: _,
             healing,
             mana_restored,
             armor_bonus_per_100,

@@ -1062,6 +1062,8 @@ pub enum AbilityTargetPolicy {
     RandomEnemyDebuff,
     /// Native positive autocast buffs select unbuffed allies engaged in combat.
     FriendlyUnitInCombat,
+    /// Native Spell Steal selects a transferable hostile buff or friendly debuff.
+    NativeBuffDonor,
 }
 
 impl AbilityTargetPolicy {
@@ -1083,6 +1085,7 @@ impl AbilityTargetPolicy {
             Self::NativeBuildingSpellTrigger => 12,
             Self::RandomEnemyDebuff => 20,
             Self::FriendlyUnitInCombat => 21,
+            Self::NativeBuffDonor => 22,
         }
     }
 }
@@ -1095,6 +1098,9 @@ pub enum AreaDamageOrigin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AbilityEffect {
+    SpellSteal {
+        recipient_radius: i32,
+    },
     StatBuff {
         modifier: ModifierId,
         buff: NativeBuffIdentity,
@@ -1150,6 +1156,7 @@ pub enum AbilityEffect {
         origin: AreaDamageOrigin,
     },
     FrostArmor {
+        native_buff: Option<NativeBuffIdentity>,
         modifier: ModifierId,
         armor_bonus_per_100: i16,
         armor_duration_ticks: u16,
@@ -1158,6 +1165,7 @@ pub enum AbilityEffect {
         attack_speed_percent_delta: i16,
     },
     HolyAid {
+        native_buff: Option<NativeBuffIdentity>,
         modifier: ModifierId,
         healing: i32,
         armor_bonus_per_100: i16,
@@ -1171,6 +1179,7 @@ pub enum AbilityEffect {
         resurrection_delay_ticks: u16,
     },
     Prayer {
+        native_buff: Option<NativeBuffIdentity>,
         modifier: ModifierId,
         healing: i32,
         mana_restored: i32,
@@ -1210,6 +1219,7 @@ pub enum AbilityEffect {
         profile: crate::building_mechanics::HexEffectProfile,
     },
     FaerieFire {
+        native_buff: Option<NativeBuffIdentity>,
         modifier: ModifierId,
         armor_reduction_per_100: i16,
         duration_ticks: u16,
@@ -1235,6 +1245,7 @@ impl AbilityEffect {
     pub const fn stable_tag(self) -> u8 {
         match self {
             Self::StatBuff { .. } => 22,
+            Self::SpellSteal { .. } => 23,
             Self::Damage { .. } => 0,
             Self::Stun { .. } => 1,
             Self::ModifyMovementSpeedPercent { .. } => 2,
@@ -1336,6 +1347,7 @@ pub struct NativeBuffIdentity {
     pub rawcode: u32,
     pub positive: bool,
     pub stealable: bool,
+    pub organic_only: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

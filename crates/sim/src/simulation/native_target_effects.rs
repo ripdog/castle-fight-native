@@ -4,6 +4,7 @@ use crate::components::{
     CriticalStrikeEffectProfile, EvasionEffectProfile, FeedbackEffectProfile, ManaProfile,
 };
 
+mod buff_transfer;
 mod stat_buffs;
 
 fn unit(team: u8, x: i32, damage: i32, delivery: AttackDelivery) -> UnitSpawn {
@@ -402,6 +403,7 @@ fn faerie_profile() -> SpellcastingProfile {
             range: 100 * SUBUNITS_PER_WORLD_UNIT,
             target_policy: AbilityTargetPolicy::NearestEnemyInCombat,
             effect: AbilityEffect::FaerieFire {
+                native_buff: None,
                 modifier: ModifierId(4),
                 armor_reduction_per_100: 400,
                 duration_ticks: 8,

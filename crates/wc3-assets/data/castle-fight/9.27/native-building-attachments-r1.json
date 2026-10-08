@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "map_version": "9.27",
+  "source": {
+    "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+    "path": "script/war3map.lua",
+    "placement_helper": "createAttachedBuildingEffect"
+  },
+  "buildings": [
+    {
+      "building_rawcode": "h06I",
+      "source_registration": "UK",
+      "source_factory": "by:create984",
+      "source_callback": "BuildingAttachmentHandler_registerBuildingAttach_RaceOrc_call_registerBuildingAttach_RaceOrc",
+      "visuals": [
+        {
+          "model_path": "Doodads\\Cityscape\\Props\\MagicRunes\\MagicRunes0.mdl",
+          "yaw_degrees": 270.0,
+          "offset_world": [
+            0.0,
+            0.0,
+            -60.0
+          ],
+          "scale": 1.7
+        }
+      ]
+    }
+  ]
+}

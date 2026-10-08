@@ -305,7 +305,10 @@ impl Simulation {
                     && !state.manual_cast_requested)
                 || mana < intent.ability.mana_cost
                 || ((!intent.completing_windup
-                    || matches!(intent.ability.effect, AbilityEffect::StatBuff { .. }))
+                    || matches!(
+                        intent.ability.effect,
+                        AbilityEffect::StatBuff { .. } | AbilityEffect::SpellSteal { .. }
+                    ))
                     && !self.ability_target_is_valid(
                         source,
                         intent.target,
@@ -518,7 +521,14 @@ impl Simulation {
             let mut emit_cast_visual = true;
             match intent.target {
                 AbilityIntentTarget::Unit { index, .. } => {
-                    if let AbilityEffect::WorldFreezer(profile) = intent.ability.effect {
+                    if matches!(intent.ability.effect, AbilityEffect::SpellSteal { .. }) {
+                        metrics.effects += usize::from(self.transfer_native_buff(
+                            source,
+                            intent.ability,
+                            index,
+                            units,
+                        ));
+                    } else if let AbilityEffect::WorldFreezer(profile) = intent.ability.effect {
                         self.start_world_freezer(source, profile);
                         metrics.effects += 1;
                     } else if let AbilityEffect::BuildingBolt(profile) = intent.ability.effect {
@@ -1310,6 +1320,22 @@ impl Simulation {
                     index,
                     id: units[index].id,
                 }),
+            AbilityTargetPolicy::NativeBuffDonor => units
+                .iter()
+                .enumerate()
+                .filter_map(|(index, target)| {
+                    candidate_checks += 1;
+                    self.native_buff_transfer_plan(source, spellcasting.ability, index, units)
+                        .map(|_| {
+                            (
+                                self.ability_source_distance_sq(source.origin, target.position),
+                                target.id,
+                                index,
+                            )
+                        })
+                })
+                .min()
+                .map(|(_, id, index)| AbilityIntentTarget::Unit { index, id }),
             AbilityTargetPolicy::FriendlyUnitInCombat => units
                 .iter()
                 .enumerate()
@@ -1751,7 +1777,11 @@ impl Simulation {
     ) -> Option<usize> {
         let previous_tick = self.next_tick.saturating_sub(1);
         let modifier = match ability.effect {
-            AbilityEffect::FrostArmor { modifier, .. } => Some(modifier),
+            AbilityEffect::FrostArmor {
+                modifier,
+                native_buff,
+                ..
+            } => Some((modifier, native_buff)),
             _ => None,
         };
         let range_sq = square_i32(ability.range);
@@ -1767,11 +1797,13 @@ impl Simulation {
                 {
                     return None;
                 }
-                if modifier.is_some_and(|modifier| {
-                    candidate.status.armor_modifiers
-                        [..usize::from(candidate.status.armor_modifier_count)]
-                        .iter()
-                        .any(|active| active.id == modifier && self.next_tick < active.expires_tick)
+                if modifier.is_some_and(|(modifier, native_buff)| {
+                    super::status::timed_armor_effect_active(
+                        &candidate.status,
+                        modifier,
+                        native_buff,
+                        self.next_tick,
+                    )
                 }) {
                     return None;
                 }
@@ -1988,15 +2020,16 @@ impl Simulation {
                                 && target.retaliation.attacked_tick
                                     == Some(self.next_tick.saturating_sub(1))
                                 && match ability.effect {
-                                    AbilityEffect::FrostArmor { modifier, .. } => {
-                                        !target.status.armor_modifiers
-                                            [..usize::from(target.status.armor_modifier_count)]
-                                            .iter()
-                                            .any(|active| {
-                                                active.id == modifier
-                                                    && self.next_tick < active.expires_tick
-                                            })
-                                    }
+                                    AbilityEffect::FrostArmor {
+                                        modifier,
+                                        native_buff,
+                                        ..
+                                    } => !super::status::timed_armor_effect_active(
+                                        &target.status,
+                                        modifier,
+                                        native_buff,
+                                        self.next_tick,
+                                    ),
                                     _ => true,
                                 }
                         }
@@ -2008,6 +2041,9 @@ impl Simulation {
                                 && self.ability_source_distance_sq(source.origin, target.position)
                                     <= square_i32(ability.range)
                         }
+                        AbilityTargetPolicy::NativeBuffDonor => self
+                            .native_buff_transfer_plan(source, ability, index, units)
+                            .is_some(),
                         AbilityTargetPolicy::FriendlyUnitInCombat => self
                             .friendly_stat_buff_target_is_valid(
                                 source,

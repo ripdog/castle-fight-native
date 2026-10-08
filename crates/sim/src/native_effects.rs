@@ -309,7 +309,7 @@ impl NativeEffectCatalog {
 
         let tuning_9_27: TuningFile = serde_json::from_str(TUNING_9_27_JSON)
             .map_err(|error| format!("invalid Castle Fight 9.27 native-effect tuning: {error}"))?;
-        if tuning_9_27.schema_version != 2 {
+        if tuning_9_27.schema_version != 3 {
             return Err(format!(
                 "unsupported native-effect tuning schema {}",
                 tuning_9_27.schema_version
@@ -487,7 +487,28 @@ struct BindingRecord {
 struct TuningFile {
     schema_version: u32,
     map_version: String,
+    buff_families: Vec<NativeBuffRecord>,
     effects: Vec<TuningEffect>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct NativeBuffRecord {
+    source_key: String,
+    buff: crate::NativeBuffIdentity,
+}
+
+/// Source-owned family metadata also covers native child buffs cast by script.
+pub(crate) fn native_buff_for_version(
+    version: MapVersion,
+    source: u32,
+) -> Option<crate::NativeBuffIdentity> {
+    native_buff_from_tuning(catalog().tuning(version)?, source)
+}
+
+fn native_buff_from_tuning(tuning: &TuningFile, source: u32) -> Option<crate::NativeBuffIdentity> {
+    tuning.buff_families.iter().find_map(|record| {
+        (rawcode(&record.source_key).ok() == Some(source)).then_some(record.buff)
+    })
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -924,7 +945,7 @@ fn native_unit_mechanics_from_tuning(
                 | TuningEffect::ElvenAutomatic { .. }
                 | TuningEffect::FrostArmor { .. }
                 | TuningEffect::FaerieFire { .. } => {
-                    let candidate = build_spellcasting(effect);
+                    let candidate = build_spellcasting(tuning, effect);
                     if let Some(existing) = automatic_spell {
                         assert_eq!(
                             existing,
@@ -1324,7 +1345,7 @@ fn build_triggered_effect(effect: &TuningEffect) -> TriggeredAttackEffect {
     }
 }
 
-fn build_spellcasting(effect: &TuningEffect) -> SpellcastingProfile {
+fn build_spellcasting(tuning: &TuningFile, effect: &TuningEffect) -> SpellcastingProfile {
     if let TuningEffect::ScriptedAutomatic {
         spellcasting,
         mana_regen_per_second_per_10k,
@@ -1383,6 +1404,7 @@ fn build_spellcasting(effect: &TuningEffect) -> SpellcastingProfile {
                     AbilityTargetPolicy::NearestEnemyInCombat
                 },
                 effect: AbilityEffect::FaerieFire {
+                    native_buff: native_buff_from_tuning(tuning, id),
                     modifier: ModifierId(id),
                     armor_reduction_per_100: *armor_reduction_per_100,
                     duration_ticks: exact_millis_to_ticks(*duration_millis, "Faerie Fire duration"),
@@ -1425,6 +1447,10 @@ fn build_spellcasting(effect: &TuningEffect) -> SpellcastingProfile {
             range: world(*range_world),
             target_policy: AbilityTargetPolicy::RecentlyAttackedFriendlyUnit,
             effect: AbilityEffect::FrostArmor {
+                native_buff: native_buff_from_tuning(
+                    tuning,
+                    rawcode(source_key).expect("Frost Armor source"),
+                ),
                 modifier: ModifierId(rawcode(source_key).expect("validated Frost Armor rawcode")),
                 armor_bonus_per_100: *armor_bonus_per_100,
                 armor_duration_ticks: exact_millis_to_ticks(
@@ -1628,7 +1654,8 @@ mod tests {
                 valid_versions: MapVersionRange::exactly(MapVersion::CASTLE_FIGHT_9_27),
             }],
             tuning_9_27: TuningFile {
-                schema_version: 2,
+                schema_version: 3,
+                buff_families: Vec::new(),
                 map_version: "9.27".to_owned(),
                 effects: vec![TuningEffect::OrbSpellProc {
                     source_kind: "ability-effect".to_owned(),
@@ -1713,7 +1740,8 @@ mod tests {
         let unit = u32::from_be_bytes(*b"TEST");
         let abilities = [u32::from_be_bytes(*b"F002"), u32::from_be_bytes(*b"F001")];
         let mut tuning = TuningFile {
-            schema_version: 2,
+            schema_version: 3,
+            buff_families: Vec::new(),
             map_version: "9.27".to_owned(),
             effects: vec![frost("F002", 100), frost("F001", 100)],
         };

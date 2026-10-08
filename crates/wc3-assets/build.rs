@@ -187,6 +187,38 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
         building_mechanics_path.display()
     );
     append_building_script_visuals(&mut visuals, &building_mechanics_path)?;
+    let attachment_path = manifest_dir.join(format!(
+        "data/castle-fight/{catalog_version}/native-building-attachments-r1.json"
+    ));
+    println!("cargo:rerun-if-changed={}", attachment_path.display());
+    let attachments: serde_json::Value = serde_json::from_slice(&fs::read(attachment_path)?)?;
+    if attachments["schema_version"] != 1 || attachments["map_version"] != catalog_version {
+        return Err("building attachment projection schema/version mismatch".into());
+    }
+    for building in attachments["buildings"]
+        .as_array()
+        .ok_or("building attachments")?
+    {
+        for visual in building["visuals"]
+            .as_array()
+            .ok_or("building attachment visuals")?
+        {
+            visuals.assets.push(VisualAssetSpec {
+                owner_kind: "systems".to_owned(),
+                owner_rawcode: building["building_rawcode"]
+                    .as_str()
+                    .ok_or("building attachment source")?
+                    .to_owned(),
+                source_unit_rawcode: None,
+                role: "attachment".to_owned(),
+                model_path: visual["model_path"]
+                    .as_str()
+                    .ok_or("building attachment model")?
+                    .to_owned(),
+                missile_arc: None,
+            });
+        }
+    }
     let ui = load_ui_assets(&object_fields_path, &map_skin_path)?;
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR"));
     fs::write(

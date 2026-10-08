@@ -5895,7 +5895,7 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
         };
         let visual = resolve_visual_model(gltf, model, asset_server)?;
         match (binding.owner_kind.as_str(), binding.role.as_str()) {
-            ("systems", "resurrection") => {
+            ("systems", "resurrection" | "attachment") => {
                 system_models.insert(system_model_identity(&binding.source_model), visual);
             }
             ("units", "attack1_projectile") => {

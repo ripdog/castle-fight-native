@@ -9,6 +9,22 @@ import build_runtime_catalog as catalog
 
 
 class NativeTuningProjectionTest(unittest.TestCase):
+    def test_native_transfer_projects_independent_geometry_resources_and_buff_provenance(self) -> None:
+        recipe = {"kind": "spell-steal", "source_kind": "unit-ability", "source_key": "TEST", "unit_rawcode": "UNIT"}
+        fields = {"targs1": "air,ground,enemies,friend,self,sapper,ward", "rng1": "120", "area1": "80", "cost1": "9999", "cool1": "99"}
+        unit = {"mana_max": "20", "mana_start": "10", "mana_regen": "0.8"}
+        profile = native.project_effect(recipe, fields, unit, {"mana_cost": "4", "cooldown": "3"}, {})["spellcasting"]
+        self.assertEqual(profile["ability"]["mana_cost"], 4)
+        self.assertEqual(profile["ability"]["cooldown_ticks"], 90)
+        self.assertLess(profile["ability"]["effect"]["SpellSteal"]["recipient_radius"], profile["ability"]["range"])
+        with self.assertRaisesRegex(ValueError, "native unit mask"):
+            native.project_effect(recipe, {**fields, "targs1": fields["targs1"] + ",structure"}, unit, {}, {})
+        buff_fields = {"buffid1": "BUFF", "targs1": "air,ground,friend,organic", "hero": "1"}
+        identity = native.buff_identity(buff_fields, positive=True)
+        self.assertFalse(identity["stealable"])
+        self.assertTrue(identity["organic_only"])
+        self.assertEqual(identity["rawcode"], int.from_bytes(b"BUFF", "big"))
+
     def test_native_stat_buff_projection_preserves_exact_mana_clock_and_rejects_extra_target_qualifiers(self) -> None:
         recipe = {"kind": "inner-fire", "source_kind": "unit-ability", "source_key": "TEST", "unit_rawcode": "UNIT"}
         fields = {"targs1": "air,ground,friend,neutral,self", "buffid1": "BUFF", "cost1": "4", "cool1": "9",

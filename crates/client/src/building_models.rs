@@ -2,6 +2,7 @@ use std::{
     collections::BTreeMap,
     fs,
     path::{Component, Path},
+    sync::OnceLock,
 };
 
 use bevy::{gltf::Gltf, prelude::*};
@@ -15,6 +16,51 @@ use crate::{
 const BUILDING_MODEL_MANIFEST: &str = "wc3/buildings/manifest.json";
 const BUILDING_MODEL_ASSET_PREFIX: &str = "wc3/buildings";
 const BUILDING_MODEL_MANIFEST_SCHEMA_VERSION: u32 = 5;
+
+#[derive(Debug, Deserialize)]
+pub(crate) struct BuildingScriptAttachment {
+    pub model_path: String,
+    pub yaw_degrees: f32,
+    pub offset_world: [f32; 3],
+    pub scale: f32,
+}
+
+#[derive(Deserialize)]
+struct ScriptAttachmentBuilding {
+    building_rawcode: String,
+    visuals: Vec<BuildingScriptAttachment>,
+}
+
+#[derive(Deserialize)]
+struct ScriptAttachmentProjection {
+    schema_version: u32,
+    map_version: String,
+    buildings: Vec<ScriptAttachmentBuilding>,
+}
+
+pub(crate) fn script_building_attachments_for_version(
+    version: castle_fight_sim::MapVersion,
+    rawcode: u32,
+) -> &'static [BuildingScriptAttachment] {
+    if version != castle_fight_sim::MapVersion::CASTLE_FIGHT_9_27 {
+        return &[];
+    }
+    static PROJECTION: OnceLock<ScriptAttachmentProjection> = OnceLock::new();
+    let projection = PROJECTION.get_or_init(|| {
+        let projection: ScriptAttachmentProjection = serde_json::from_str(include_str!(
+            "../../wc3-assets/data/castle-fight/9.27/native-building-attachments-r1.json"
+        ))
+        .expect("retained building attachment projection");
+        assert_eq!(projection.schema_version, 1);
+        assert_eq!(projection.map_version, "9.27");
+        projection
+    });
+    projection
+        .buildings
+        .iter()
+        .find(|building| building.building_rawcode.as_bytes() == rawcode.to_be_bytes())
+        .map_or(&[], |building| building.visuals.as_slice())
+}
 
 #[derive(Resource, Default)]
 pub struct BuildingModelSet {

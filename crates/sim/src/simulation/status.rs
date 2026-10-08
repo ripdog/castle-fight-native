@@ -1,5 +1,22 @@
 use super::*;
 
+pub(super) fn timed_armor_effect_active(
+    status: &StatusState,
+    id: ModifierId,
+    family: Option<crate::NativeBuffIdentity>,
+    tick: u64,
+) -> bool {
+    status.armor_modifiers[..usize::from(status.armor_modifier_count)]
+        .iter()
+        .any(|active| {
+            tick < active.expires_tick
+                && (active.id == id
+                    || family
+                        .zip(active.native_buff)
+                        .is_some_and(|(expected, current)| expected.rawcode == current.rawcode))
+        })
+}
+
 pub(super) fn apply_ability_effect_to_unit(
     target: &mut UnitSnapshot,
     effect: AbilityEffect,
@@ -186,6 +203,7 @@ pub(super) fn apply_ability_effect_to_unit(
             unreachable!("native delivery requires authoritative action state")
         }
         AbilityEffect::FaerieFire {
+            native_buff,
             modifier,
             armor_reduction_per_100,
             duration_ticks,
@@ -203,6 +221,7 @@ pub(super) fn apply_ability_effect_to_unit(
                 &mut target.status,
                 TimedArmorModifier {
                     id: modifier,
+                    native_buff,
                     armor_bonus_per_100: -armor_reduction_per_100,
                     expires_tick: completed_tick
                         .checked_add(u64::from(duration))
@@ -213,6 +232,7 @@ pub(super) fn apply_ability_effect_to_unit(
             );
         }
         AbilityEffect::FrostArmor {
+            native_buff,
             modifier,
             armor_bonus_per_100,
             armor_duration_ticks,
@@ -227,7 +247,7 @@ pub(super) fn apply_ability_effect_to_unit(
                 &mut target.status,
                 TimedArmorModifier {
                     id: modifier,
-                    native_buff: None,
+                    native_buff,
                     armor_bonus_per_100,
                     regeneration_per_second_per_10k: 0,
                     mana_regeneration_per_second_per_10k: 0,
@@ -241,6 +261,7 @@ pub(super) fn apply_ability_effect_to_unit(
             );
         }
         AbilityEffect::HolyAid {
+            native_buff,
             modifier,
             healing,
             armor_bonus_per_100,
@@ -262,7 +283,7 @@ pub(super) fn apply_ability_effect_to_unit(
                 &mut target.status,
                 TimedArmorModifier {
                     id: modifier,
-                    native_buff: None,
+                    native_buff,
                     armor_bonus_per_100,
                     regeneration_per_second_per_10k,
                     mana_regeneration_per_second_per_10k: 0,
@@ -276,6 +297,7 @@ pub(super) fn apply_ability_effect_to_unit(
             );
         }
         AbilityEffect::Prayer {
+            native_buff,
             modifier,
             healing,
             mana_restored,
@@ -295,7 +317,7 @@ pub(super) fn apply_ability_effect_to_unit(
                 &mut target.status,
                 TimedArmorModifier {
                     id: modifier,
-                    native_buff: None,
+                    native_buff,
                     armor_bonus_per_100,
                     regeneration_per_second_per_10k: 0,
                     mana_regeneration_per_second_per_10k: 0,
@@ -309,7 +331,8 @@ pub(super) fn apply_ability_effect_to_unit(
                 },
             );
         }
-        AbilityEffect::WorldFreezer(_)
+        AbilityEffect::SpellSteal { .. }
+        | AbilityEffect::WorldFreezer(_)
         | AbilityEffect::BuildingBolt(_)
         | AbilityEffect::Hailstone(_)
         | AbilityEffect::Snowfall { .. }

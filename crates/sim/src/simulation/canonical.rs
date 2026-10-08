@@ -1672,6 +1672,7 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
             hash.write_u32(buff.rawcode);
             hash.write_u8(u8::from(buff.positive));
             hash.write_u8(u8::from(buff.stealable));
+            hash.write_u8(u8::from(buff.organic_only));
         } else {
             hash.write_u8(0);
         }
@@ -2053,7 +2054,24 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
     hash.write_i32(ability.range);
     hash.write_u8(ability.target_policy.stable_tag());
     hash.write_u8(ability.effect.stable_tag());
+    let native_buff = match ability.effect {
+        AbilityEffect::FaerieFire { native_buff, .. }
+        | AbilityEffect::FrostArmor { native_buff, .. }
+        | AbilityEffect::HolyAid { native_buff, .. }
+        | AbilityEffect::Prayer { native_buff, .. } => native_buff,
+        _ => None,
+    };
+    if let Some(buff) = native_buff {
+        hash.write_u8(1);
+        hash.write_u32(buff.rawcode);
+        hash.write_u8(u8::from(buff.positive));
+        hash.write_u8(u8::from(buff.stealable));
+        hash.write_u8(u8::from(buff.organic_only));
+    } else {
+        hash.write_u8(0);
+    }
     match ability.effect {
+        AbilityEffect::SpellSteal { recipient_radius } => hash.write_i32(recipient_radius),
         AbilityEffect::StatBuff {
             modifier,
             buff,
@@ -2068,6 +2086,7 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_u32(buff.rawcode);
             hash.write_u8(u8::from(buff.positive));
             hash.write_u8(u8::from(buff.stealable));
+            hash.write_u8(u8::from(buff.organic_only));
             hash.write_i32(i32::from(armor_bonus_per_100));
             hash.write_i32(i32::from(damage_bonus_per_10k));
             hash.write_u32(regeneration_per_second_per_10k);
@@ -2098,6 +2117,7 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
         }
         AbilityEffect::Hex { profile } => hash_hex_profile(hash, profile),
         AbilityEffect::FaerieFire {
+            native_buff: _,
             modifier,
             armor_reduction_per_100,
             duration_ticks,
@@ -2196,6 +2216,7 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             });
         }
         AbilityEffect::FrostArmor {
+            native_buff: _,
             modifier,
             armor_bonus_per_100,
             armor_duration_ticks,
@@ -2211,6 +2232,7 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_i32(i32::from(attack_speed_percent_delta));
         }
         AbilityEffect::HolyAid {
+            native_buff: _,
             modifier,
             healing,
             armor_bonus_per_100,
@@ -2236,6 +2258,7 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_u16(resurrection_delay_ticks);
         }
         AbilityEffect::Prayer {
+            native_buff: _,
             modifier,
             healing,
             mana_restored,

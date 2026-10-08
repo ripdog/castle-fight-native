@@ -44,7 +44,9 @@ use crate::{
         BuilderSample, BuildingSample, BuildingVisualKind, PresentationSamples, UnitSample,
         UnitVisualKind,
     },
-    building_models::{BuildingAnimationClip, BuildingModelSet},
+    building_models::{
+        BuildingAnimationClip, BuildingModelSet, script_building_attachments_for_version,
+    },
     control_modifier_pressed,
     particle_renderer::Wc3ParticleRenderPlugin,
     performance_ui::{
@@ -3043,6 +3045,18 @@ fn spawn_persistent_unit_attachments(
     }
 }
 
+fn building_script_attachment_transform(
+    visual: &crate::building_models::BuildingScriptAttachment,
+    building_visual_height: f32,
+) -> Transform {
+    let [x, y, z] = visual.offset_world;
+    Transform {
+        translation: Vec3::new(x, z - building_visual_height * 0.5, -y),
+        rotation: Quat::from_rotation_y(visual.yaw_degrees.to_radians() + WC3_MODEL_FACING_OFFSET),
+        scale: Vec3::splat(visual.scale),
+    }
+}
+
 fn invalidate_wc3_effect_pool_assets(
     mut commands: Commands,
     mut events: MessageReader<AssetEvent<WorldAsset>>,
@@ -3208,7 +3222,8 @@ fn prewarm_timed_wc3_effects(
                             duration_ticks,
                             ..
                         } => Some((modifier.0, duration_ticks)),
-                        AbilityEffect::HealingWave(_)
+                        AbilityEffect::SpellSteal { .. }
+                        | AbilityEffect::HealingWave(_)
                         | AbilityEffect::SolarStrike { .. }
                         | AbilityEffect::PhoenixFire(_)
                         | AbilityEffect::Hailstone(_)
@@ -4493,6 +4508,29 @@ fn sync_render_entities(
             );
             (None, None)
         };
+        if let Some(content) = building.content {
+            for attachment in
+                script_building_attachments_for_version(content.map_version, content.rawcode)
+            {
+                let Some(model) = wc3_visuals.system_model(&attachment.model_path) else {
+                    continue;
+                };
+                let visual = commands
+                    .spawn((
+                        WorldAssetRoot(model.scene.clone()),
+                        building_script_attachment_transform(attachment, visual_height),
+                        model.looping_emitter_source(),
+                        Wc3RibbonSource::new(&model.ribbons),
+                    ))
+                    .id();
+                if let Some(animation) = model.looping_animation_source() {
+                    commands.entity(visual).insert(animation);
+                }
+                // Attach to the presentation root so death/upgrade removal clears
+                // decorations even when the native building model becomes a remnant.
+                commands.entity(entity).add_child(visual);
+            }
+        }
         render_map.buildings.insert(
             building.id,
             PresentedEntry {
@@ -7024,6 +7062,27 @@ mod tests {
     use castle_fight_sim::{AttackProfile, CorpseDefinitionId, NavCell, Team, TerrainElevationMap};
 
     use super::*;
+
+    #[test]
+    fn building_script_attachment_preserves_world_geometry_without_model_scale_inheritance() {
+        let visual = crate::building_models::BuildingScriptAttachment {
+            model_path: "synthetic.mdl".to_owned(),
+            yaw_degrees: 90.0,
+            offset_world: [12.0, -34.0, -20.0],
+            scale: 0.5,
+        };
+        let transform = building_script_attachment_transform(&visual, 40.0);
+        assert_eq!(transform.translation, Vec3::new(12.0, -40.0, 34.0));
+        assert_eq!(transform.scale, Vec3::splat(0.5));
+        assert!(transform.rotation.abs_diff_eq(Quat::IDENTITY, 0.0001));
+        assert!(
+            script_building_attachments_for_version(
+                castle_fight_sim::MapVersion::CASTLE_FIGHT_9_32,
+                u32::from_be_bytes(*b"h06I")
+            )
+            .is_empty()
+        );
+    }
     use crate::bridge::PresentationSnapshot;
 
     #[test]

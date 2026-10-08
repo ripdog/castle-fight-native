@@ -33,6 +33,15 @@ def scaled(value: str | int | float, scale: int = 1) -> int:
     return int(number)
 
 
+def buff_identity(fields: dict[str, str], *, positive: bool) -> dict[str, Any]:
+    buff = fields["buffid1"].split(",")[0]
+    if len(buff) != 4:
+        raise ValueError("native transferable effect requires a buff identity")
+    return {"rawcode": int.from_bytes(buff.encode("ascii"), "big"),
+        "positive": positive, "stealable": fields.get("hero", "0") == "0",
+        "organic_only": not positive or "organic" in fields["targs1"].split(",")}
+
+
 def unit_targets(value: str, *, allow_structures: bool = False) -> str:
     tokens = set(value.split(","))
     if "structure" in tokens and not allow_structures:
@@ -62,7 +71,23 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
 
     kind = recipe["kind"]
     effect: dict[str, Any] = dict(recipe)
-    if kind == "inner-fire":
+    if kind in {"inner-fire", "spell-steal"}:
+        if kind == "spell-steal":
+            if unit is None or set(fields["targs1"].split(",")) != {"air", "ground", "enemies", "friend", "self", "sapper", "ward"}:
+                raise ValueError("Spell Steal requires the audited native unit mask")
+            identity = int.from_bytes(recipe["source_key"].encode("ascii"), "big")
+            rate = scaled(unit["mana_regen"], 10_000)
+            return {"kind": "scripted-automatic", "source_kind": recipe["source_kind"],
+                "source_key": recipe["source_key"], "unit_rawcode": recipe["unit_rawcode"],
+                "spellcasting": {"mana": {"maximum": scaled(unit["mana_max"]), "starting": scaled(unit["mana_start"]),
+                    "regen_per_tick_per_10k": (1 << 31) | rate}, "ability": {"id": identity,
+                    "mana_cost": scaled(protected.get("mana_cost", fields["cost1"])),
+                    "cooldown_ticks": scaled(protected.get("cooldown", fields["cool1"]), 30),
+                    "range": number("Rng1", 1024), "target_policy": "NativeBuffDonor",
+                    "effect": {"SpellSteal": {"recipient_radius": number("Area1", 1024)}}}},
+                "mana_regen_per_second_per_10k": rate, "effect_ability_rawcode": None,
+                "provenance": {"source": "resolved/object-fields.tsv", "unit": "resolved/units.tsv",
+                    "protected": "resolved/protected-ability-fields.tsv"}}
         if unit is None or set(fields["targs1"].split(",")) != {"air", "ground", "friend", "neutral", "self"}:
             raise ValueError("Inner Fire requires the audited native friendly unit mask")
         identity = int.from_bytes(recipe["source_key"].encode("ascii"), "big")
@@ -79,7 +104,7 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
                 "cooldown_ticks": tick(protected.get("cooldown", fields["cool1"])),
                 "range": number("Rng1", 1024), "target_policy": "FriendlyUnitInCombat",
                 "effect": {"StatBuff": {"modifier": identity,
-                    "buff": {"rawcode": int.from_bytes(buff.encode("ascii"), "big"), "positive": True, "stealable": True},
+                    "buff": buff_identity(fields, positive=True),
                     "armor_bonus_per_100": number("DataB1", 100), "damage_bonus_per_10k": number("DataA1", 10_000),
                     "regeneration_per_second_per_10k": number("DataD1", 10_000),
                     "duration_ticks": tick(fields["dur1"]), "hero_duration_ticks": tick(fields["herodur1"]),
@@ -339,8 +364,10 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         return catalog._retained_file_bytes(repo_root, tree, path)
 
     abilities: dict[str, dict[str, str]] = {}
+    ability_bases: dict[str, str] = {}
     for row in rows(retained("resolved/object-fields.tsv")):
         if row["category"] == "abilities" and row["level"] in {"0", "1"}:
+            ability_bases[row["rawcode"]] = row["base_rawcode"]
             field = row["source_field"].lower()
             if field:
                 abilities.setdefault(row["rawcode"], {})[field] = scalar(row["recovered_value_json"])
@@ -376,8 +403,8 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             if unit is None or recipe["source_key"] not in unit["abilities"].split(","):
                 raise ValueError(f"recipe {key} is not in its source unit's extracted ability inventory")
         source = recipe["source_key"]
-        if recipe["kind"] == "inner-fire" and default_autocast.get(recipe.get("unit_rawcode")) != source:
-            raise ValueError("Inner Fire source must retain default-active autocast")
+        if recipe["kind"] in {"inner-fire", "spell-steal"} and default_autocast.get(recipe.get("unit_rawcode")) != source:
+            raise ValueError("native buff source must retain default-active autocast")
         spell = spell_mechanics.get(source)
         if spell is None and recipe["kind"] in {"healing-wave", "solar-strike", "war-stomp", "howl-of-terror", "frost-nova"}:
             matches = [row for row in spell_mechanics.values() if row["unit_rawcode"] == recipe.get("unit_rawcode")
@@ -393,7 +420,10 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             detail.update(effect_key=effect_key, effect_fields=abilities[effect_key],
                 effect_protected=protected.get(effect_key, {}), mechanics_row=spell, semantics_row=semantics)
         effects.append(project_effect(recipe, abilities[source], unit, protected.get(source, {}), detail))
-    return {"schema_version": 2, "map_version": release["map_version"], "effects": effects}
+    families = [{"source_key": key, "buff": buff_identity(abilities[key], positive=base != "ACff")}
+        for key, base in sorted(ability_bases.items()) if base in {"Ainf", "ACf2", "ACff", "AIrr"}]
+    return {"schema_version": 3, "map_version": release["map_version"], "effects": effects,
+        "buff_families": families, "buff_family_source": {"git_tree": tree, "path": "resolved/object-fields.tsv"}}
 
 
 def main() -> None:
