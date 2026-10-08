@@ -41,7 +41,7 @@ From the client's main menu, choose **Single Player**, **Host Game**, or **Join 
 
 ## Build from source
 
-Requirements: Rust **1.98.1** (automatically selected by `rust-toolchain.toml`), a C/C++ build toolchain, and on Linux the development packages for **ALSA** and **udev** (for example, `libasound2-dev`, `libudev-dev`, and `pkg-config` on Ubuntu).
+Requirements: Rust **1.98.1** (automatically selected by `rust-toolchain.toml`), a C/C++ build toolchain, and on Linux the development packages for **ALSA**, **udev**, **Wayland**, and **xkbcommon** (for example, `libasound2-dev`, `libudev-dev`, `libwayland-dev`, `libxkbcommon-dev`, and `pkg-config` on Ubuntu).
 
 ```sh
 git clone https://github.com/ripdog/castle-fight-native.git
