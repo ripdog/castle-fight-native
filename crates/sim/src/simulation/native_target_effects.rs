@@ -1186,6 +1186,37 @@ fn pulverize_uses_caster_radii_independent_physical_proc_and_restored_rng() {
 }
 
 #[test]
+fn lethal_release_proc_still_completes_the_attack_cycle() {
+    let mut sim = simulation(1);
+    let caster = sim.spawn_unit_with_properties(
+        unit(0, 20, 10, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Pulverize(
+                crate::PulverizeEffectProfile {
+                    ability: AbilityId(41),
+                    chance_per_10k: 10_000,
+                    damage: 1000,
+                    full_radius: 40 * SUBUNITS_PER_WORLD_UNIT,
+                    half_radius: 40 * SUBUNITS_PER_WORLD_UNIT,
+                    targets: AttackTargetMask::GROUND_UNITS,
+                },
+            )),
+            ..UnitGameplayProperties::default()
+        },
+    );
+    let victim = sim.spawn_unit(unit(1, 40, 0, AttackDelivery::Melee));
+    sim.step();
+    sim.step();
+    assert!(sim.unit(victim).is_none());
+    assert_eq!(sim.unit(caster).unwrap().cooldown_remaining, 1000);
+    assert!(
+        sim.attacks_last_tick()
+            .iter()
+            .any(|event| event.source == caster)
+    );
+}
+
+#[test]
 fn proxy_area_debuff_has_separate_trigger_mask_hero_expiry_and_signed_weapon_damage() {
     let mut sim = simulation(1);
     let profile = SpellcastingProfile {

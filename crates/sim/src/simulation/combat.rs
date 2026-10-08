@@ -225,7 +225,15 @@ impl Simulation {
                     .checked_add(bonus_damage)
                     .expect("attack plus passive bonus damage overflowed");
                 match intent.attack.delivery {
-                    AttackDelivery::Melee | AttackDelivery::RangedInstant => {
+                    AttackDelivery::Melee | AttackDelivery::RangedInstant
+                        if target_is_alive(
+                            intent.target_id,
+                            units,
+                            buildings,
+                            unit_health,
+                            building_health,
+                        ) =>
+                    {
                         let applied = apply_damage_to_target(
                             intent.target,
                             intent.source_id,
@@ -351,6 +359,9 @@ impl Simulation {
                             );
                         }
                     }
+                    // A release proc can kill the primary victim before the weapon hit.
+                    // Preserve the completed attack cycle without postmortem hit effects.
+                    AttackDelivery::Melee | AttackDelivery::RangedInstant => {}
                     AttackDelivery::RangedGuaranteedHit { speed_per_tick } => {
                         let travel_ticks =
                             projectile_travel_ticks(intent.distance_sq, speed_per_tick);
