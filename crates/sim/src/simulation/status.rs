@@ -101,7 +101,7 @@ pub(super) fn apply_ability_effect_to_unit(
         } => {
             if target.classifications.invulnerable
                 || target.classifications.spell_immune
-                || !targets.can_target_unit(target.movement_class)
+                || !targets.can_target_unit(target.target_movement_class())
             {
                 return false;
             }
@@ -137,7 +137,7 @@ pub(super) fn apply_ability_effect_to_unit(
         } => {
             if target.classifications.invulnerable
                 || target.classifications.spell_immune
-                || !targets.can_target_unit(target.movement_class)
+                || !targets.can_target_unit(target.target_movement_class())
             {
                 return false;
             }
@@ -169,7 +169,7 @@ pub(super) fn apply_ability_effect_to_unit(
         } => {
             if target.classifications.invulnerable
                 || target.classifications.spell_immune
-                || !targets.can_target_unit(target.movement_class)
+                || !targets.can_target_unit(target.target_movement_class())
             {
                 return false;
             }
@@ -335,7 +335,8 @@ pub(super) fn apply_ability_effect_to_unit(
                 },
             );
         }
-        AbilityEffect::SpellSteal { .. }
+        AbilityEffect::Ensnare { .. }
+        | AbilityEffect::SpellSteal { .. }
         | AbilityEffect::WorldFreezer(_)
         | AbilityEffect::BuildingBolt(_)
         | AbilityEffect::Hailstone(_)
@@ -349,6 +350,9 @@ pub(super) fn apply_ability_effect_to_unit(
 }
 
 pub(super) fn purge_expired_status_modifiers(status: &mut StatusState, tick: u64) {
+    if status.ensnare.is_some_and(|net| tick >= net.expires_tick) {
+        status.ensnare = None;
+    }
     if status
         .action_animation
         .is_some_and(|action| tick >= action.until_tick)

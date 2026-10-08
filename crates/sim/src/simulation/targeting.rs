@@ -257,7 +257,7 @@ impl Simulation {
                 let candidate = &units[index];
                 if candidate.health <= 0
                     || !candidate.visible_to(source.team, self.next_tick)
-                    || !attack_targets.can_target_unit(candidate.movement_class)
+                    || !attack_targets.can_target_unit(candidate.target_movement_class())
                 {
                     return;
                 }
@@ -326,7 +326,7 @@ impl Simulation {
             return target.team != source.team
                 && target.health > 0
                 && target.visible_to(source.team, self.next_tick)
-                && attack_targets.can_target_unit(target.movement_class)
+                && attack_targets.can_target_unit(target.target_movement_class())
                 && point_to_footprint_distance_sq(
                     target.position,
                     source.footprint,
@@ -365,6 +365,7 @@ impl Simulation {
         let partition = if source.movement_class == MovementClass::Ground
             && matches!(source.attack.delivery, AttackDelivery::Melee)
             && !source.attack_targets.can_target_unit(MovementClass::Air)
+            && !units.iter().any(|unit| unit.status.ensnare.is_some())
         {
             SpatialPartition::new(enemy_team, component?)
         } else {
@@ -381,7 +382,7 @@ impl Simulation {
                 if candidate.health <= 0
                     || !source
                         .attack_targets
-                        .can_target_unit(candidate.movement_class)
+                        .can_target_unit(candidate.target_movement_class())
                 {
                     return;
                 }
@@ -513,7 +514,9 @@ impl Simulation {
             return source.team != target.team
                 && target.health > 0
                 && target.visible_to(source.team, self.next_tick)
-                && source.attack_targets.can_target_unit(target.movement_class)
+                && source
+                    .attack_targets
+                    .can_target_unit(target.target_movement_class())
                 && source.position.distance_sq(target.position) <= retaliation_range_sq;
         }
         if let Some(index) = find_building_index(buildings, target_id) {
@@ -790,11 +793,13 @@ impl Simulation {
             || target.health <= 0
             || !target.visible_to(source.team, self.next_tick)
             || distance_sq > pursuit_limit_sq
-            || !source.attack_targets.can_target_unit(target.movement_class)
+            || !source
+                .attack_targets
+                .can_target_unit(target.target_movement_class())
         {
             return false;
         }
-        let Some((attack, _, _)) = source.attack_for_unit(target.movement_class) else {
+        let Some((attack, _, _)) = source.attack_for_unit(target.target_movement_class()) else {
             return false;
         };
         let in_attack_range = attack.in_range(distance_sq);

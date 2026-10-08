@@ -1,5 +1,37 @@
 use super::*;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct EnsnareProfile {
+    pub ability: AbilityId,
+    pub duration_ticks: u16,
+    pub hero_duration_ticks: u16,
+    pub range: i32,
+    pub speed_per_tick: i32,
+    pub lowering_ticks: u16,
+    pub air_height: i32,
+    pub melee_range: i32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EnsnareState {
+    pub profile: EnsnareProfile,
+    pub applied_tick: u64,
+    pub expires_tick: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct EnsnareMissileState {
+    pub source: SimId,
+    pub team: Team,
+    pub target: SimId,
+    pub profile: EnsnareProfile,
+    pub launch_position: SimPoint,
+    pub launch_tick: u64,
+    pub position: SimPoint,
+    pub position_tick: u64,
+    pub impact_tick: u64,
+}
+
 /// Native bounce effects retain their own target history, independently of weapon/projectile state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct HealingWaveProfile {
@@ -67,6 +99,7 @@ pub(crate) struct HailstoneState {
 
 #[derive(Component, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum NativeAction {
+    Ensnare(EnsnareMissileState),
     HealingWave(HealingWaveState),
     Bolt(NativeBoltState),
     Hailstone(HailstoneState),

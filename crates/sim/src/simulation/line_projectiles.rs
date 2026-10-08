@@ -81,7 +81,7 @@ impl Simulation {
                 for (index, unit) in units.iter().enumerate() {
                     if unit.team != p.source_team
                         && unit_health[index] > 0
-                        && spill_targets.can_target_unit(unit.movement_class)
+                        && spill_targets.can_target_unit(unit.target_movement_class())
                         && !p.hit_targets.contains(&unit.id)
                         && unit.id != p.target
                         && let Some(dot) = line_point_hit(

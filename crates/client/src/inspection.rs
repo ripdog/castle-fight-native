@@ -2146,6 +2146,16 @@ fn active_effect_badges(
     let Some(unit) = samples.current.units.get(&id) else {
         return effects;
     };
+    if let Some(net) = unit.status.ensnare.filter(|net| tick < net.expires_tick) {
+        effects.push(ActiveEffectBadgeData {
+            icon: UiIconKey::StatusEffect {
+                ability: net.profile.ability.0,
+                role: UiStatusIconRole::Secondary,
+            },
+            description: format!("Ensnared ({}s)", remaining(net.expires_tick)),
+            beneficial: false,
+        });
+    }
     if unit.status.stunned_until_tick > tick {
         effects.push(ActiveEffectBadgeData {
             icon: catalog.stun_buff,
@@ -2920,6 +2930,8 @@ fn format_unit_inspector(unit: &UnitSample, tick: u64, samples: &PresentationSam
             "State: {}",
             if unit.status.frozen_until_tick > tick {
                 "Frozen".to_owned()
+            } else if unit.status.ensnare.is_some() {
+                "Ensnared".to_owned()
             } else if unit.status.rooted_until_tick > tick {
                 "Rooted".to_owned()
             } else {

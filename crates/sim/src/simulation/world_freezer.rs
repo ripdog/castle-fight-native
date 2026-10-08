@@ -220,7 +220,7 @@ impl Simulation {
                 if u.health > 0
                     && u.team != orb.team
                     && !u.classifications.invulnerable
-                    && p.aura_targets.can_target_unit(u.movement_class)
+                    && p.aura_targets.can_target_unit(u.target_movement_class())
                     && position.distance_sq(u.position) <= square_i32(p.aura_radius)
                 {
                     // Identical aura identity refreshes rather than stacking for overlapping orbs.
@@ -300,7 +300,7 @@ impl Simulation {
         } else {
             p.ground
         };
-        if bolt.targets.can_target_unit(target.movement_class) {
+        if bolt.targets.can_target_unit(target.target_movement_class()) {
             self.launch_native_bolt(
                 orb.id,
                 orb.team,
@@ -312,7 +312,9 @@ impl Simulation {
         }
         if target.movement_class == MovementClass::Ground
             && (!p.roots.nonhero_only || !target.classifications.hero)
-            && p.roots.targets.can_target_unit(target.movement_class)
+            && p.roots
+                .targets
+                .can_target_unit(target.target_movement_class())
         {
             apply_roots_status(
                 &mut target.status,
@@ -353,7 +355,7 @@ impl Simulation {
                     && !u.classifications.spell_immune
                     && !field_fire_buff_active(&u.status, p, self.next_tick)
                     && u.visible_to(orb.team, self.next_tick)
-                    && fire.targets.can_target_unit(u.movement_class)
+                    && fire.targets.can_target_unit(u.target_movement_class())
                     && position.distance_sq(u.position) <= square_i32(p.fire_radius)
             })
             .map(|u| (u.id, u.position));

@@ -101,7 +101,7 @@ impl Simulation {
                     let primary = match intent.target {
                         TargetIndex::Unit(target) => units[index]
                             .primary_attack_targets()
-                            .can_target_unit(units[target].movement_class),
+                            .can_target_unit(units[target].target_movement_class()),
                         TargetIndex::Building(_) => {
                             units[index].primary_attack_targets().can_target_buildings()
                         }
@@ -177,7 +177,9 @@ impl Simulation {
                     if target.team == intent.source_team
                         || unit_health[index] <= 0
                         || target.classifications.invulnerable
-                        || !profile.targets.can_target_unit(target.movement_class)
+                        || !profile
+                            .targets
+                            .can_target_unit(target.target_movement_class())
                         || distance > square_i32(profile.half_radius)
                     {
                         continue;
@@ -276,9 +278,9 @@ impl Simulation {
                                 for index in 0..target_count {
                                     let target = if index < units.len() {
                                         if units[index].team == intent.source_team
-                                            || !profile
-                                                .targets
-                                                .can_target_unit(units[index].movement_class)
+                                            || !profile.targets.can_target_unit(
+                                                units[index].target_movement_class(),
+                                            )
                                             || unit_health[index] <= 0
                                             || target_position.distance_sq(positions[index])
                                                 > square_i32(profile.radius)
@@ -582,8 +584,8 @@ impl Simulation {
             return false;
         };
         if chance == 0
-            || units[source_index].movement_class == MovementClass::Air
-            || units[target_index].movement_class == MovementClass::Air
+            || units[source_index].target_movement_class() == MovementClass::Air
+            || units[target_index].target_movement_class() == MovementClass::Air
         {
             return false;
         }
@@ -663,9 +665,9 @@ impl Simulation {
             match effect {
                 PassiveUnitEffect::CriticalStrike(profile) => {
                     let target_matches = match intent.target {
-                        TargetIndex::Unit(index) => {
-                            profile.targets.can_target_unit(units[index].movement_class)
-                        }
+                        TargetIndex::Unit(index) => profile
+                            .targets
+                            .can_target_unit(units[index].target_movement_class()),
                         TargetIndex::Building(_) => profile.targets.can_target_buildings(),
                     };
                     if profile.chance_per_10k == 0 || !target_matches {
@@ -691,9 +693,9 @@ impl Simulation {
                 }
                 PassiveUnitEffect::Bash(profile) => {
                     let target_matches = match intent.target {
-                        TargetIndex::Unit(index) => {
-                            profile.targets.can_target_unit(units[index].movement_class)
-                        }
+                        TargetIndex::Unit(index) => profile
+                            .targets
+                            .can_target_unit(units[index].target_movement_class()),
                         TargetIndex::Building(_) => profile.targets.can_target_buildings(),
                     };
                     if !target_matches || profile.chance_per_10k == 0 {
@@ -722,9 +724,9 @@ impl Simulation {
                 }
                 PassiveUnitEffect::TriggeredSpellProc(profile) => {
                     let target_matches = match intent.target {
-                        TargetIndex::Unit(index) => {
-                            profile.targets.can_target_unit(units[index].movement_class)
-                        }
+                        TargetIndex::Unit(index) => profile
+                            .targets
+                            .can_target_unit(units[index].target_movement_class()),
                         TargetIndex::Building(_) => profile.targets.can_target_buildings(),
                     };
                     if !target_matches || profile.chance_per_10k == 0 {
@@ -755,7 +757,10 @@ impl Simulation {
                     let TargetIndex::Unit(index) = intent.target else {
                         continue;
                     };
-                    if profile.targets.can_target_unit(units[index].movement_class) {
+                    if profile
+                        .targets
+                        .can_target_unit(units[index].target_movement_class())
+                    {
                         assert!(
                             on_hit.feedback.replace(profile).is_none(),
                             "multiple Feedback payloads are unsupported"
@@ -830,7 +835,7 @@ impl Simulation {
                     let (target, distance_sq, attack, attack_targets, damage_type) =
                         if let Some(index) = find_unit_index(units, target_id) {
                             let (attack, targets, damage_type) =
-                                source.attack_for_unit(units[index].movement_class)?;
+                                source.attack_for_unit(units[index].target_movement_class())?;
                             (
                                 TargetIndex::Unit(index),
                                 source.position.distance_sq(units[index].position),
@@ -908,33 +913,34 @@ impl Simulation {
                     let attack_targets = source
                         .attack_targets
                         .expect("attack building target mask missing");
-                    let (target, distance_sq) =
-                        if let Some(index) = find_unit_index(units, target_id) {
-                            if !attack_targets.can_target_unit(units[index].movement_class) {
-                                return None;
-                            }
-                            (
-                                TargetIndex::Unit(index),
-                                point_to_footprint_distance_sq(
-                                    units[index].position,
-                                    source.footprint,
-                                    self.config.navigation_cell_size,
-                                ),
-                            )
-                        } else {
-                            if !attack_targets.can_target_buildings() {
-                                return None;
-                            }
-                            let index = find_building_index(buildings, target_id)?;
-                            (
-                                TargetIndex::Building(index),
-                                footprint_to_footprint_distance_sq(
-                                    source.footprint,
-                                    buildings[index].footprint,
-                                    self.config.navigation_cell_size,
-                                ),
-                            )
-                        };
+                    let (target, distance_sq) = if let Some(index) =
+                        find_unit_index(units, target_id)
+                    {
+                        if !attack_targets.can_target_unit(units[index].target_movement_class()) {
+                            return None;
+                        }
+                        (
+                            TargetIndex::Unit(index),
+                            point_to_footprint_distance_sq(
+                                units[index].position,
+                                source.footprint,
+                                self.config.navigation_cell_size,
+                            ),
+                        )
+                    } else {
+                        if !attack_targets.can_target_buildings() {
+                            return None;
+                        }
+                        let index = find_building_index(buildings, target_id)?;
+                        (
+                            TargetIndex::Building(index),
+                            footprint_to_footprint_distance_sq(
+                                source.footprint,
+                                buildings[index].footprint,
+                                self.config.navigation_cell_size,
+                            ),
+                        )
+                    };
                     if !attack.in_range(distance_sq) {
                         return None;
                     }
@@ -986,7 +992,9 @@ impl Simulation {
                     if target.health <= 0
                         || target.team == source.team
                         || target.id == intent.target_id
-                        || !intent.attack_targets.can_target_unit(target.movement_class)
+                        || !intent
+                            .attack_targets
+                            .can_target_unit(target.target_movement_class())
                     {
                         return None;
                     }

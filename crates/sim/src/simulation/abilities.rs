@@ -307,7 +307,9 @@ impl Simulation {
                 || ((!intent.completing_windup
                     || matches!(
                         intent.ability.effect,
-                        AbilityEffect::StatBuff { .. } | AbilityEffect::SpellSteal { .. }
+                        AbilityEffect::StatBuff { .. }
+                            | AbilityEffect::SpellSteal { .. }
+                            | AbilityEffect::Ensnare { .. }
                     ))
                     && !self.ability_target_is_valid(
                         source,
@@ -521,7 +523,21 @@ impl Simulation {
             let mut emit_cast_visual = true;
             match intent.target {
                 AbilityIntentTarget::Unit { index, .. } => {
-                    if matches!(intent.ability.effect, AbilityEffect::SpellSteal { .. }) {
+                    if let AbilityEffect::Ensnare {
+                        profile,
+                        search_radius,
+                        maximum_targets,
+                    } = intent.ability.effect
+                    {
+                        metrics.effects += self.cast_ensnare(
+                            source,
+                            index,
+                            profile,
+                            search_radius,
+                            maximum_targets,
+                            units,
+                        );
+                    } else if matches!(intent.ability.effect, AbilityEffect::SpellSteal { .. }) {
                         metrics.effects += usize::from(self.transfer_native_buff(
                             source,
                             intent.ability,
@@ -562,7 +578,7 @@ impl Simulation {
                             .filter(|target| {
                                 target.health > 0
                                     && target.team != source.team
-                                    && target.movement_class == MovementClass::Air
+                                    && target.target_movement_class() == MovementClass::Air
                                     && target.classifications.combat_sapper
                                     && !target.classifications.invulnerable
                                     && center.distance_sq(target.position) <= square_i32(radius)
@@ -1511,7 +1527,7 @@ impl Simulation {
                         || (candidate.classifications.hero
                             && !matches!(ability.effect, AbilityEffect::FrostNova { .. }))))
                     || (ability.target_policy == AbilityTargetPolicy::RandomGroundEnemyUnit
-                        && candidate.movement_class != MovementClass::Ground)
+                        && candidate.target_movement_class() != MovementClass::Ground)
                     || self.ability_source_distance_sq(source.origin, candidate.position) > range_sq
                     || (ability.target_policy == AbilityTargetPolicy::RandomEnemyDebuff
                         && !self.faerie_fire_target_is_valid(source, ability, candidate, units))
@@ -1551,9 +1567,10 @@ impl Simulation {
                 || target.classifications.spell_immune
                 || !self.native_target_visible(source, ability, target)
                 || (ability.target_policy == AbilityTargetPolicy::FlyingEnemyUnit
-                    && (target.movement_class != MovementClass::Air
+                    && (target.target_movement_class() != MovementClass::Air
                         || !target.classifications.combat_sapper
-                        || target.classifications.hero))
+                        || (target.classifications.hero
+                            && !matches!(ability.effect, AbilityEffect::Ensnare { .. }))))
                 || self.ability_source_distance_sq(source.origin, target.position)
                     > square_i32(ability.range)
             {
@@ -1561,7 +1578,9 @@ impl Simulation {
             }
             if let AbilityEffect::PhoenixFire(profile) = ability.effect
                 && (!target.visible_to(source.team, self.next_tick)
-                    || !profile.targets.can_target_unit(target.movement_class)
+                    || !profile
+                        .targets
+                        .can_target_unit(target.target_movement_class())
                     || native_fire_buff_active(&target.status, profile.ability, self.next_tick))
             {
                 continue;
@@ -1714,7 +1733,7 @@ impl Simulation {
                 victim.health > 0
                     && victim.team != candidate.team
                     && candidate
-                        .attack_for_unit(victim.movement_class)
+                        .attack_for_unit(victim.target_movement_class())
                         .is_some_and(|(attack, _, _)| {
                             candidate.position.distance_sq(victim.position)
                                 <= square_i32(attack.range)
@@ -1838,7 +1857,7 @@ impl Simulation {
                     && candidate.health < candidate.health_max
                     && candidate.team == source.team
                     && !candidate.mechanical
-                    && candidate.movement_class == MovementClass::Ground
+                    && candidate.target_movement_class() == MovementClass::Ground
                     && self.ability_source_distance_sq(source.origin, candidate.position)
                         <= range_sq)
                     .then_some((candidate.health, candidate.id, index))
@@ -1926,12 +1945,13 @@ impl Simulation {
                                 && !target.classifications.invulnerable
                                 && !target.classifications.spell_immune
                                 && (ability.target_policy != AbilityTargetPolicy::FlyingEnemyUnit
-                                    || (target.movement_class == MovementClass::Air
+                                    || (target.target_movement_class() == MovementClass::Air
                                         && target.classifications.combat_sapper
                                         && (!target.classifications.hero
                                             || matches!(
                                                 ability.effect,
                                                 AbilityEffect::FrostNova { .. }
+                                                    | AbilityEffect::Ensnare { .. }
                                             ))))
                                 && self.ability_source_distance_sq(source.origin, target.position)
                                     <= square_i32(ability.range)
@@ -1940,7 +1960,7 @@ impl Simulation {
                                         target.visible_to(source.team, self.next_tick)
                                             && profile
                                                 .targets
-                                                .can_target_unit(target.movement_class)
+                                                .can_target_unit(target.target_movement_class())
                                             && !target.status.damage_over_time[..usize::from(
                                                 target.status.damage_over_time_count,
                                             )]
@@ -1972,7 +1992,7 @@ impl Simulation {
                                 && (!target.classifications.hero
                                     || matches!(ability.effect, AbilityEffect::FrostNova { .. }))))
                                 && target.team != source.team
-                                && target.movement_class == MovementClass::Ground
+                                && target.target_movement_class() == MovementClass::Ground
                                 && self.ability_source_distance_sq(source.origin, target.position)
                                     <= square_i32(ability.range)
                         }
@@ -2002,7 +2022,7 @@ impl Simulation {
                             else {
                                 return false;
                             };
-                            targets.can_target_unit(target.movement_class)
+                            targets.can_target_unit(target.target_movement_class())
                                 && target.visible_to(source.team, self.next_tick)
                                 && self.native_building_trigger_allowed(
                                     source,
@@ -2041,7 +2061,7 @@ impl Simulation {
                             target.team == source.team
                                 && target.health < target.health_max
                                 && !target.mechanical
-                                && target.movement_class == MovementClass::Ground
+                                && target.target_movement_class() == MovementClass::Ground
                                 && self.ability_source_distance_sq(source.origin, target.position)
                                     <= square_i32(ability.range)
                         }

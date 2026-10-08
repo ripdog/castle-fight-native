@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 44;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 45;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -1186,6 +1186,15 @@ impl Simulation {
             let movement_class = *target_entity
                 .get::<MovementClass>()
                 .expect("unit attack target missing movement class");
+            let movement_class = if target_entity.get::<StatusState>().is_some_and(|status| {
+                status
+                    .ensnare
+                    .is_some_and(|net| self.next_tick < net.expires_tick)
+            }) {
+                MovementClass::Ground
+            } else {
+                movement_class
+            };
             if !attack_targets.can_target_unit(movement_class) {
                 return Err(BuildingCommandError::InvalidTargetType);
             }
@@ -2219,6 +2228,7 @@ impl Simulation {
                     entity.get::<crate::components::NativeAction>(),
                     Some(
                         crate::components::NativeAction::Bolt(_)
+                            | crate::components::NativeAction::Ensnare(_)
                             | crate::components::NativeAction::Hailstone(_)
                     )
                 ) || entity.get::<GuaranteedHitProjectile>().is_some()
@@ -3082,7 +3092,11 @@ impl Simulation {
                         position: position.0,
                         health: health.current,
                         health_max: health.max,
-                        attack: *attack,
+                        attack: native_actions::ensnare::ensnared_attack(
+                            *attack,
+                            movement_class,
+                            *status,
+                        ),
                         action_timing: *entity_ref
                             .get::<ActionTimingProfile>()
                             .expect("unit action timing missing"),
@@ -3267,6 +3281,14 @@ struct UnitSnapshot {
 }
 
 impl UnitSnapshot {
+    fn target_movement_class(&self) -> MovementClass {
+        if self.status.ensnare.is_some() {
+            MovementClass::Ground
+        } else {
+            self.movement_class
+        }
+    }
+
     fn visible_to(&self, team: Team, tick: u64) -> bool {
         self.team == team
             || self.status.is_revealed_to(team, tick)
@@ -3934,6 +3956,16 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
     }
     match spellcasting.ability.effect {
+        AbilityEffect::Ensnare {
+            profile,
+            search_radius,
+            maximum_targets,
+        } => {
+            assert!(profile.duration_ticks > 0 && profile.hero_duration_ticks > 0);
+            assert!(profile.range >= 0 && profile.speed_per_tick > 0);
+            assert!(profile.air_height >= 0 && profile.melee_range >= 0);
+            assert!(search_radius >= 0 && maximum_targets > 0);
+        }
         AbilityEffect::SpellSteal { recipient_radius } => {
             assert!(recipient_radius >= 0);
             assert_eq!(
@@ -4351,6 +4383,21 @@ fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option
             },
         });
     }
+    if let Some(crate::components::NativeAction::Ensnare(projectile)) =
+        entity.get::<crate::components::NativeAction>()
+    {
+        return Some(ProjectileView {
+            ability: Some(projectile.profile.ability),
+            id,
+            source: projectile.source,
+            launch_position: projectile.position,
+            launch_tick: projectile.position_tick,
+            impact_tick: projectile.impact_tick,
+            kind: ProjectileViewKind::GuaranteedHit {
+                target: projectile.target,
+            },
+        });
+    }
     if let Some(crate::components::NativeAction::Bolt(projectile)) =
         entity.get::<crate::components::NativeAction>()
     {
@@ -4508,7 +4555,11 @@ fn unit_view_from_entity(
         })
         .flatten();
     let status = *entity.get::<StatusState>()?;
-    let attack = *entity.get::<AttackProfile>()?;
+    let attack = native_actions::ensnare::ensnared_attack(
+        *entity.get::<AttackProfile>()?,
+        *entity.get::<MovementClass>()?,
+        status,
+    );
     Some(UnitView {
         id: *entity.get::<SimId>()?,
         content: entity.get::<ContentIdentity>().copied(),
@@ -4904,13 +4955,17 @@ fn apply_pending_attack_effects(
     if let Some(profile) = effects.frost
         && !units[index].classifications.spell_immune
         && !units[index].classifications.invulnerable
-        && profile.targets.can_target_unit(units[index].movement_class)
+        && profile
+            .targets
+            .can_target_unit(units[index].target_movement_class())
     {
         apply_frost_attack(&mut units[index], profile, completed_tick);
     }
     if let Some(profile) = effects.feedback
         && !units[index].classifications.spell_immune
-        && profile.targets.can_target_unit(units[index].movement_class)
+        && profile
+            .targets
+            .can_target_unit(units[index].target_movement_class())
     {
         let drained = if let Some(mana) = units[index].mana_current.as_mut() {
             let drained = (*mana).min(profile.maximum_mana_drained).max(0);
@@ -4999,7 +5054,9 @@ fn apply_pending_attack_effects(
             TriggeredAttackEffect::EntanglingRoots(profile) => {
                 if !units[index].classifications.spell_immune
                     && !units[index].classifications.invulnerable
-                    && profile.targets.can_target_unit(units[index].movement_class)
+                    && profile
+                        .targets
+                        .can_target_unit(units[index].target_movement_class())
                     && !(profile.nonhero_only && units[index].classifications.hero)
                 {
                     let hero = units[index].classifications.hero;

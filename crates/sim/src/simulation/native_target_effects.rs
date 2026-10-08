@@ -5,6 +5,7 @@ use crate::components::{
 };
 
 mod buff_transfer;
+mod ensnare;
 mod kill_berserk;
 mod stat_buffs;
 

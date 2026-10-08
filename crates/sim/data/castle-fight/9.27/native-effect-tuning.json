@@ -1337,6 +1337,96 @@
         "unit": "resolved/units.tsv",
         "protected": "resolved/protected-ability-fields.tsv"
       }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A06I",
+      "unit_rawcode": "n01O",
+      "spellcasting": {
+        "mana": {
+          "maximum": 0,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147483648
+        },
+        "ability": {
+          "id": 1093678665,
+          "mana_cost": 0,
+          "cooldown_ticks": 240,
+          "range": 614400,
+          "target_policy": "FlyingEnemyUnit",
+          "effect": {
+            "Ensnare": {
+              "profile": {
+                "ability": 1093678664,
+                "duration_ticks": 480,
+                "hero_duration_ticks": 94,
+                "range": 819200,
+                "speed_per_tick": 40960,
+                "lowering_ticks": 18,
+                "air_height": 204800,
+                "melee_range": 131072
+              },
+              "search_radius": 0,
+              "maximum_targets": 1
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 0,
+      "effect_ability_rawcode": "A06H",
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "semantics": "resolved/unit-spell-semantics.tsv"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "ability-effect",
+      "source_key": "A06H",
+      "unit_rawcode": "n01O",
+      "spellcasting": {
+        "mana": {
+          "maximum": 0,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147483648
+        },
+        "ability": {
+          "id": 1093678664,
+          "mana_cost": 0,
+          "cooldown_ticks": 0,
+          "range": 0,
+          "target_policy": "FlyingEnemyUnit",
+          "effect": {
+            "Ensnare": {
+              "profile": {
+                "ability": 1093678664,
+                "duration_ticks": 480,
+                "hero_duration_ticks": 94,
+                "range": 819200,
+                "speed_per_tick": 40960,
+                "lowering_ticks": 18,
+                "air_height": 204800,
+                "melee_range": 131072
+              },
+              "search_radius": 0,
+              "maximum_targets": 1
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 0,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "semantics": "resolved/unit-spell-semantics.tsv"
+      }
     }
   ],
   "buff_families": [

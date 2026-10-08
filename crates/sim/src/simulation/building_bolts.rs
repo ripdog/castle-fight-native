@@ -66,7 +66,10 @@ impl Simulation {
         if (target.classifications.invisible && !target.visible_to(source.team, self.next_tick))
             || target.classifications.spell_immune
             || target.classifications.invulnerable
-            || !profile.bolt.targets.can_target_unit(target.movement_class)
+            || !profile
+                .bolt
+                .targets
+                .can_target_unit(target.target_movement_class())
             || origin.distance_sq(target.position) > square_i32(profile.child_range)
         {
             return false;

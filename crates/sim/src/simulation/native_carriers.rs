@@ -106,7 +106,9 @@ impl Simulation {
                     && unit.team != intent.source_team
                     && unit.visible_to(intent.source_team, tick)
                     && !unit.classifications.invulnerable
-                    && profile.targets.can_target_unit(unit.movement_class)
+                    && profile
+                        .targets
+                        .can_target_unit(unit.target_movement_class())
                     && intent.source_position.distance_sq(unit.position)
                         <= square_i32(profile.range)
             })
@@ -211,7 +213,9 @@ impl Simulation {
                                 && unit.visible_to(team, completed_tick)
                                 && !unit.classifications.spell_immune
                                 && !unit.classifications.invulnerable
-                                && profile.targets.can_target_unit(unit.movement_class)
+                                && profile
+                                    .targets
+                                    .can_target_unit(unit.target_movement_class())
                                 && !unit.status.damage_over_time
                                     [..usize::from(unit.status.damage_over_time_count)]
                                     .iter()
@@ -437,6 +441,7 @@ fn cleanse_native_effects(
     status.native_stun_until_tick = 0;
     status.native_stun_ability = None;
     status.rooted_until_tick = 0;
+    status.ensnare = None;
     status.frozen_until_tick = 0;
     status.frozen_ability = None;
     // Finite-lifetime modifiers and retained native buff identities are buffs.

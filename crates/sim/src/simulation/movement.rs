@@ -167,6 +167,7 @@ impl Simulation {
         let movement_speed = effective_movement_speed(unit);
         if unit_health[index] <= 0
             || movement_speed == 0
+            || unit.status.ensnare.is_some()
             || unit.status.is_performing_action(self.next_tick)
         {
             return MovementDecision::stationary(current);
@@ -198,7 +199,8 @@ impl Simulation {
                 if unit_health[target_index] <= 0 {
                     return None;
                 }
-                let (attack, _, _) = unit.attack_for_unit(units[target_index].movement_class)?;
+                let (attack, _, _) =
+                    unit.attack_for_unit(units[target_index].target_movement_class())?;
                 let target_position = units[target_index].position;
                 let approach_range = unit
                     .spellcasting
@@ -681,7 +683,7 @@ impl Simulation {
                         return None;
                     }
                     let (attack, _, _) =
-                        unit.attack_for_unit(units[target_index].movement_class)?;
+                        unit.attack_for_unit(units[target_index].target_movement_class())?;
                     let target_position = units[target_index].position;
                     if current.distance_sq(target_position) <= attack.range_sq() {
                         attack_goal = Some(current);
@@ -883,7 +885,10 @@ impl Simulation {
                 .par_iter()
                 .enumerate()
                 .map(|(index, unit)| {
-                    if unit_health[index] <= 0 || unit.status.is_performing_action(self.next_tick) {
+                    if unit_health[index] <= 0
+                        || unit.status.ensnare.is_some()
+                        || unit.status.is_performing_action(self.next_tick)
+                    {
                         return desired_positions[index];
                     }
                     let desired = desired_positions[index];

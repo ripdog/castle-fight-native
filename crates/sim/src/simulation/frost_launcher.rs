@@ -142,7 +142,9 @@ impl Simulation {
             if target.health <= 0
                 || target.team == state.team
                 || target.classifications.invulnerable
-                || !p.splash_targets.can_target_unit(target.movement_class)
+                || !p
+                    .splash_targets
+                    .can_target_unit(target.target_movement_class())
                 || state.destination.distance_sq(target.position) > square_i32(p.full_radius)
             {
                 continue;
@@ -162,7 +164,8 @@ impl Simulation {
             ));
             if target.health > 0
                 && !target.classifications.spell_immune
-                && p.freeze_targets.can_target_unit(target.movement_class)
+                && p.freeze_targets
+                    .can_target_unit(target.target_movement_class())
             {
                 freeze(
                     &mut target.status,

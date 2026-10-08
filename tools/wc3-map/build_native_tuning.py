@@ -71,6 +71,8 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
 
     kind = recipe["kind"]
     effect: dict[str, Any] = dict(recipe)
+    if kind == "ensnare":
+        return project_ensnare(recipe, fields, unit, protected, mechanics)
     if kind == "kill-berserk":
         trace = mechanics["kill_mechanics"]
         if not (trace["victim_requires_combat_sapper"] and trace["killer_must_not_be_structure"] and trace["resume_attack_immediately"]):
@@ -369,6 +371,46 @@ def project_scripted_area(recipe: dict[str, str], fields: dict[str, str], unit: 
             "protected": "resolved/protected-ability-fields.tsv", "script": "resolved/unit-spell-mechanics.tsv"}}
 
 
+def project_ensnare(recipe, fields, unit, protected, mechanics):
+    row = mechanics["mechanics_row"]
+    semantic = mechanics["semantics_row"]
+    child = mechanics["effect_key"]
+    effect_fields = mechanics["effect_fields"]
+    if unit is None or row["target_mode_label"] != "enemy-flying-combat-sapper" or json.loads(row["scheduled_delays_json"]):
+        raise ValueError("net parent requires immediate flying combat-target dispatch")
+    if set(effect_fields["targs1"].split(",")) != {"air", "enemies", "mechanical", "neutral", "organic"} or effect_fields["missilehoming"] != "1":
+        raise ValueError("unsupported native net delivery/mask")
+    tick = lambda value: int((Decimal(str(value)) * 30).to_integral_value(rounding="ROUND_CEILING"))
+    raw = lambda value: int.from_bytes(value.encode("ascii"), "big")
+    mana = lambda field, scale=1: 0 if unit[field].strip() in {"-", "", "_"} else scaled(unit[field], scale)
+    trace = json.loads(semantic["parameters_json"])
+    if row["mechanic_kind"] == "dummy-target-ability-from-caster":
+        if trace["delivery_sites"][0]["callee"] != "dummyCastTargetFrom":
+            raise ValueError("single net must originate at its caster")
+        radius, maximum = 0, 1
+    elif row["mechanic_kind"] == "delegated-helper":
+        if trace["delivery_sites"][0]["callee"] != "dummyCastTargetWithVision" or trace["target_predicate"] != "alive-combat-sapper;enemy;flying":
+            raise ValueError("unsupported bounded net helper")
+        radius, maximum = scaled(trace["search_radius"], 1024), trace["max_targets"]
+    else:
+        raise ValueError("unsupported net script path")
+    child_only = recipe["source_kind"] == "ability-effect"
+    profile = {"ability": raw(child), "duration_ticks": tick(effect_fields["dur1"]), "hero_duration_ticks": tick(effect_fields["herodur1"]),
+        "range": scaled(effect_fields["rng1"], 1024), "speed_per_tick": int(Decimal(effect_fields["missilespeed"]) * 1024 / 30),
+        "lowering_ticks": tick(effect_fields["dataa1"]), "air_height": scaled(effect_fields["datab1"], 1024),
+        "melee_range": scaled(effect_fields["datac1"], 1024)}
+    rate = mana("mana_regen", 10_000)
+    return {"kind": "scripted-automatic", "source_kind": recipe["source_kind"], "source_key": recipe["source_key"], "unit_rawcode": recipe["unit_rawcode"],
+        "spellcasting": {"mana": {"maximum": mana("mana_max"), "starting": mana("mana_start"), "regen_per_tick_per_10k": (1 << 31) | rate},
+            "ability": {"id": raw(recipe["source_key"]), "mana_cost": 0 if child_only else scaled(protected.get("mana_cost", fields["cost1"])),
+                "cooldown_ticks": 0 if child_only else tick(protected.get("cooldown", fields["cool1"])),
+                "range": 0 if child_only else scaled(fields["rng1"], 1024), "target_policy": "FlyingEnemyUnit",
+                "effect": {"Ensnare": {"profile": profile, "search_radius": radius, "maximum_targets": maximum}}}},
+        "mana_regen_per_second_per_10k": rate, "effect_ability_rawcode": None if child_only else child,
+        "provenance": {"source": "resolved/object-fields.tsv", "unit": "resolved/units.tsv", "protected": "resolved/protected-ability-fields.tsv",
+            "script": "resolved/unit-spell-mechanics.tsv", "semantics": "resolved/unit-spell-semantics.tsv"}}
+
+
 def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, Any]) -> dict[str, Any]:
     if recipes["schema_version"] != 1:
         raise ValueError("unsupported native recipe schema")
@@ -422,7 +464,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         if recipe["kind"] in {"inner-fire", "spell-steal"} and default_autocast.get(recipe.get("unit_rawcode")) != source:
             raise ValueError("native buff source must retain default-active autocast")
         spell = spell_mechanics.get(source)
-        if spell is None and recipe["kind"] in {"healing-wave", "solar-strike", "war-stomp", "howl-of-terror", "frost-nova"}:
+        if spell is None and recipe["kind"] in {"healing-wave", "solar-strike", "war-stomp", "howl-of-terror", "frost-nova", "ensnare"}:
             matches = [row for row in spell_mechanics.values() if row["unit_rawcode"] == recipe.get("unit_rawcode")
                 and source in spell_semantics[row["ability_rawcode"]]["effect_rawcodes"].split(",")]
             if len(matches) != 1:

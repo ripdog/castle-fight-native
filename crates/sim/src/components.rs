@@ -2,8 +2,10 @@ use bevy_ecs::prelude::Component;
 use std::collections::VecDeque;
 
 mod native_actions;
-pub(crate) use native_actions::{HailstoneState, HealingWaveState, NativeAction, NativeBoltState};
-pub use native_actions::{HealingWaveProfile, NativeBoltProfile};
+pub(crate) use native_actions::{
+    EnsnareMissileState, HailstoneState, HealingWaveState, NativeAction, NativeBoltState,
+};
+pub use native_actions::{EnsnareProfile, EnsnareState, HealingWaveProfile, NativeBoltProfile};
 mod automatic_abilities;
 mod mana;
 pub(crate) use automatic_abilities::compose_spellcasting_profiles;
@@ -1108,6 +1110,11 @@ pub enum AreaDamageOrigin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AbilityEffect {
+    Ensnare {
+        profile: EnsnareProfile,
+        search_radius: i32,
+        maximum_targets: u8,
+    },
     SpellSteal {
         recipient_radius: i32,
     },
@@ -1254,6 +1261,7 @@ impl AbilityEffect {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::Ensnare { .. } => 24,
             Self::StatBuff { .. } => 22,
             Self::SpellSteal { .. } => 23,
             Self::Damage { .. } => 0,
@@ -1429,6 +1437,7 @@ pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
 
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusState {
+    pub ensnare: Option<EnsnareState>,
     pub action_animation: Option<ActionAnimationState>,
     pub pending_attack: Option<PendingAttackState>,
     pub pending_cast: Option<PendingCastState>,

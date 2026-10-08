@@ -9,6 +9,23 @@ import build_runtime_catalog as catalog
 
 
 class NativeTuningProjectionTest(unittest.TestCase):
+    def test_net_projects_separate_trigger_range_native_flight_and_hero_duration(self) -> None:
+        recipe = {"kind": "ensnare", "source_kind": "unit-ability", "source_key": "TEST", "unit_rawcode": "UNIT"}
+        fields = {"rng1": "100", "cost1": "9999", "cool1": "99"}
+        child = {"rng1": "200", "dur1": "4", "herodur1": "0.15", "missilespeed": "300", "missilehoming": "1",
+            "dataa1": "0.1", "datab1": "80", "datac1": "60", "targs1": "air,enemies,mechanical,neutral,organic"}
+        unit = {"mana_max": "-", "mana_start": "-", "mana_regen": "-"}
+        mechanics = {"mechanics_row": {"target_mode_label": "enemy-flying-combat-sapper", "scheduled_delays_json": "[]",
+            "mechanic_kind": "dummy-target-ability-from-caster"}, "semantics_row": {"parameters_json": json.dumps({"delivery_sites": [{"callee": "dummyCastTargetFrom"}]})},
+            "effect_key": "NET1", "effect_fields": child}
+        ability = native.project_effect(recipe, fields, unit, {"cooldown": "2", "mana_cost": "0"}, mechanics)["spellcasting"]["ability"]
+        net = ability["effect"]["Ensnare"]["profile"]
+        self.assertLess(ability["range"], net["range"])
+        self.assertEqual((net["hero_duration_ticks"], net["lowering_ticks"], net["speed_per_tick"]), (5, 3, 10 * 1024))
+        self.assertEqual((ability["mana_cost"], ability["cooldown_ticks"]), (0, 60))
+        with self.assertRaisesRegex(ValueError, "delivery/mask"):
+            native.project_effect(recipe, fields, unit, {}, {**mechanics, "effect_fields": {**child, "targs1": "ground,enemies"}})
+
     def test_kill_berserk_reconciles_death_handler_predicates_and_native_resources(self) -> None:
         recipe = {"kind": "kill-berserk", "source_kind": "unit-ability", "source_key": "TEST", "unit_rawcode": "UNIT"}
         fields = {"dur1": "7", "dataa1": "0.25", "datab1": "2", "datac1": "0.1", "cost1": "0", "cool1": "99"}

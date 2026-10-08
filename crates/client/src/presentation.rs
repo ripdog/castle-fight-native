@@ -3320,7 +3320,8 @@ fn prewarm_timed_wc3_effects(
                             duration_ticks,
                             ..
                         } => Some((modifier.0, duration_ticks)),
-                        AbilityEffect::SpellSteal { .. }
+                        AbilityEffect::Ensnare { .. }
+                        | AbilityEffect::SpellSteal { .. }
                         | AbilityEffect::HealingWave(_)
                         | AbilityEffect::SolarStrike { .. }
                         | AbilityEffect::PhoenixFire(_)
@@ -5267,10 +5268,17 @@ fn status_visual_sources(
     status: &castle_fight_sim::StatusState,
     tick: u64,
 ) -> impl Iterator<Item = (u32, Wc3StatusVisualKind)> + '_ {
-    status.movement_modifiers[..usize::from(status.movement_modifier_count)]
-        .iter()
-        .filter(move |modifier| modifier.expires_tick > tick)
-        .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::Movement))
+    status
+        .ensnare
+        .filter(move |net| tick < net.expires_tick)
+        .map(|net| (net.profile.ability.0, Wc3StatusVisualKind::Movement))
+        .into_iter()
+        .chain(
+            status.movement_modifiers[..usize::from(status.movement_modifier_count)]
+                .iter()
+                .filter(move |modifier| modifier.expires_tick > tick)
+                .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::Movement)),
+        )
         .chain(
             status.armor_modifiers[..usize::from(status.armor_modifier_count)]
                 .iter()
@@ -5323,6 +5331,11 @@ fn status_visual_is_active(
                     .is_some_and(|a| a.0 == ability_rawcode)
         }
         Wc3StatusVisualKind::Movement => {
+            if status.ensnare.is_some_and(|net| {
+                net.profile.ability.0 == ability_rawcode && tick < net.expires_tick
+            }) {
+                return true;
+            }
             let count = usize::from(status.movement_modifier_count);
             status.movement_modifiers[..count]
                 .iter()
@@ -6992,13 +7005,24 @@ fn unit_sample_ground_position_lerp(
         current.status.action_animation,
         alpha,
     );
-    unit_ground_position_lerp(
+    let mut position = unit_ground_position_lerp(
         previous.position,
         current.position,
         current.movement_class,
         alpha,
         terrain,
-    )
+    );
+    if current.movement_class == MovementClass::Air
+        && let Some(net) = current.status.ensnare
+    {
+        let tick = samples.previous.tick as f64
+            + samples.current.tick.saturating_sub(samples.previous.tick) as f64 * f64::from(alpha);
+        let progress = ((tick - net.applied_tick as f64)
+            / f64::from(net.profile.lowering_ticks.max(1)))
+        .clamp(0.0, 1.0) as f32;
+        position.y -= unit_visual_altitude(MovementClass::Air) * progress;
+    }
+    position
 }
 
 fn unit_ground_position_lerp(
@@ -7026,8 +7050,17 @@ pub(crate) fn unit_visual_center_lerp(
     alpha: f32,
     terrain: &TerrainSurface,
 ) -> Vec3 {
-    unit_ground_position_lerp(previous, current, unit.movement_class, alpha, terrain)
-        + Vec3::Y * (unit_height(unit) * 0.5)
+    unit_ground_position_lerp(
+        previous,
+        current,
+        if unit.status.ensnare.is_some() {
+            MovementClass::Ground
+        } else {
+            unit.movement_class
+        },
+        alpha,
+        terrain,
+    ) + Vec3::Y * (unit_height(unit) * 0.5)
 }
 
 fn unit_render_scale(unit: &UnitSample) -> f32 {

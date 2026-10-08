@@ -110,7 +110,7 @@ impl Simulation {
                         && state
                             .profile
                             .targets
-                            .can_target_unit(candidate.movement_class)
+                            .can_target_unit(candidate.target_movement_class())
                         && !state.hit_targets[..hit_count].contains(&candidate.id)
                         && origin.distance_sq(positions[*candidate_index]) <= radius_sq
                 })
@@ -595,7 +595,8 @@ impl Simulation {
                     |unit_index| {
                         candidate_checks += 1;
                         if unit_health[unit_index] > 0
-                            && splash_targets.can_target_unit(units[unit_index].movement_class)
+                            && splash_targets
+                                .can_target_unit(units[unit_index].target_movement_class())
                             && snapshot
                                 .projectile
                                 .destination
@@ -685,7 +686,9 @@ impl Simulation {
                             && unit_health[index] > 0
                             && !units[index].classifications.spell_immune
                             && !units[index].classifications.invulnerable
-                            && profile.targets.can_target_unit(units[index].movement_class)
+                            && profile
+                                .targets
+                                .can_target_unit(units[index].target_movement_class())
                         {
                             apply_frost_attack(&mut units[index], profile, completed_tick);
                         }
@@ -1054,7 +1057,7 @@ impl Simulation {
                 let candidate = &context.units[unit_index];
                 if !projectile
                     .target_mask
-                    .can_target_unit(candidate.movement_class)
+                    .can_target_unit(candidate.target_movement_class())
                     || candidate.id == projectile.target
                     || impact_position.distance_sq(candidate.position) > range_sq
                 {

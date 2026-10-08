@@ -126,7 +126,7 @@ impl Simulation {
         let mut candidates = Vec::new();
         for (index, unit) in units.iter().enumerate() {
             *checks += 1;
-            if targets.can_target_unit(unit.movement_class)
+            if targets.can_target_unit(unit.target_movement_class())
                 && self.native_building_trigger_allowed(
                     source,
                     ability,

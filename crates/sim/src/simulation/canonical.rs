@@ -335,6 +335,20 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u64(state.launch_tick);
                         hash.write_u64(state.impact_tick);
                     }
+                    NativeAction::Ensnare(state) => {
+                        hash.write_u8(3);
+                        hash.write_u64(state.source.0);
+                        hash.write_u8(state.team.0);
+                        hash.write_u64(state.target.0);
+                        hash_ensnare_profile(&mut hash, state.profile);
+                        hash.write_i32(state.launch_position.x);
+                        hash.write_i32(state.launch_position.y);
+                        hash.write_i32(state.position.x);
+                        hash.write_i32(state.position.y);
+                        hash.write_u64(state.launch_tick);
+                        hash.write_u64(state.position_tick);
+                        hash.write_u64(state.impact_tick);
+                    }
                     NativeAction::Bolt(state) => {
                         hash.write_u8(1);
                         hash.write_u64(state.source.0);
@@ -1628,6 +1642,12 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         hash.write_u32(a.0);
     }
     hash.write_u64(status.rooted_until_tick);
+    hash.write_u8(u8::from(status.ensnare.is_some()));
+    if let Some(net) = status.ensnare {
+        hash_ensnare_profile(hash, net.profile);
+        hash.write_u64(net.applied_tick);
+        hash.write_u64(net.expires_tick);
+    }
     hash.write_u64(status.frozen_until_tick);
     hash.write_u8(status.frozen_ability.is_some() as u8);
     if let Some(ability) = status.frozen_ability {
@@ -2080,6 +2100,15 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
         hash.write_u8(0);
     }
     match ability.effect {
+        AbilityEffect::Ensnare {
+            profile,
+            search_radius,
+            maximum_targets,
+        } => {
+            hash_ensnare_profile(hash, profile);
+            hash.write_i32(search_radius);
+            hash.write_u8(maximum_targets);
+        }
         AbilityEffect::SpellSteal { recipient_radius } => hash.write_i32(recipient_radius),
         AbilityEffect::StatBuff {
             modifier,
@@ -2333,6 +2362,17 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_u8(u8::from(burning_oil.target_buildings));
         }
     }
+}
+
+fn hash_ensnare_profile(hash: &mut Fnv64, profile: crate::components::EnsnareProfile) {
+    hash.write_u32(profile.ability.0);
+    hash.write_u16(profile.duration_ticks);
+    hash.write_u16(profile.hero_duration_ticks);
+    hash.write_i32(profile.range);
+    hash.write_i32(profile.speed_per_tick);
+    hash.write_u16(profile.lowering_ticks);
+    hash.write_i32(profile.air_height);
+    hash.write_i32(profile.melee_range);
 }
 
 fn hash_native_bolt_profile(hash: &mut Fnv64, profile: crate::components::NativeBoltProfile) {

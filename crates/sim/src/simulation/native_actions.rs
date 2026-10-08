@@ -4,6 +4,8 @@ use crate::components::{
     TimedMovementModifier,
 };
 
+pub(super) mod ensnare;
+
 // Warcraft's native Healing Wave bounce interval is 250 ms. Derive each deadline
 // from the original cast, using ceiling at 30 Hz, rather than accumulating rounded hops.
 fn healing_wave_due_tick(start: u64, jump: u8) -> u64 {
@@ -118,6 +120,7 @@ impl Simulation {
         actions.sort_unstable_by_key(|(id, _, _)| *id);
         for (_, entity, action) in actions {
             match action {
+                NativeAction::Ensnare(state) => self.advance_ensnare(entity, state, units),
                 // Splash attack proxies resolve in the shared post-movement impact phase.
                 NativeAction::Hailstone(_) => {}
                 NativeAction::Bolt(mut state) => {
@@ -163,7 +166,9 @@ impl Simulation {
                             || target.team == state.team
                             || target.classifications.spell_immune
                             || target.classifications.invulnerable
-                            || !profile.targets.can_target_unit(target.movement_class)
+                            || !profile
+                                .targets
+                                .can_target_unit(target.target_movement_class())
                         {
                             continue;
                         }
@@ -345,6 +350,7 @@ fn cleanse_native_status(status: &mut StatusState) {
     status.native_stun_until_tick = 0;
     status.native_stun_ability = None;
     status.rooted_until_tick = 0;
+    status.ensnare = None;
     status.frozen_until_tick = 0;
     status.frozen_ability = None;
     status.movement_modifier_count = 0;
