@@ -96,3 +96,11 @@ Validation: all 496 simulation tests, 20 native projection tests, formatting and
 - Verification: synthetic poison fixtures cover separate attackers, same-source refresh, nonstacking slows, impact versus launch, masks/immunity/classification, source death, hero expiry, health floor, cleanse/reapplication, target retention and recovery across workers. Catalog-wide production/ability closure, source projection tests and native-art audits cover the promotion. The [native Envenomed Spears experiments](https://github.com/Cokemonkey11/wc3-ability-doc/blob/main/sources/screwthetrees-wc3-editor-ability-insight-document/2023-11-14.md) establish attacker stacking, refresh, nonlethal flags and acquisition preference; all Castle Fight values come from retained 9.27/r1 evidence. Periodic sampling follows the engine's whole-second native damage contract; no separate experimental fractional-pulse claim is made.
 
 Validation: the 500-test simulation suite passed; the final five focused poison tests also passed, including a lethal triggered-spell interaction. All 21 tuning projection tests, 73 asset tests, 16 presentation audit tests, formatting and strict workspace/all-target Clippy passed (`.local-tools/orc-validation/wyvern-*.log`).
+
+## Kodo Farm / Kodo
+
+- Entity/source: `h02K` (base `hbla`) produces `o007` (base `okod`), command-card root A. Ordinary/protected ground melee piercing weapon, independent structure targeting, stats, movement/acquisition/collision, construction/training/repair/economy and upgrade relationships consume retained projections. The organic combat sapper/ward creates a raisable, decaying corpse.
+- Complete inventory: unit and building explicitly remove their inherited base abilities. Native War Drums and Devour are absent; there is no cast, aura, proxy, hidden grant, callback, resource cost or unit AI override. `UK`, `xO` and metadata registration establish production/catalog identities rather than additional gameplay.
+- Verification: shared ordinary weapon/production/corpse tests and catalog-wide source/ability closure cover promotion. No authoritative shape changes.
+
+Validation: all 49 content and lifecycle tests, formatting and strict workspace/all-target Clippy passed (`.local-tools/orc-validation/kodo-*.log`).
