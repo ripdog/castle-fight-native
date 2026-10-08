@@ -64,6 +64,7 @@
     {"source_kind": "unit-ability", "source_key": "A02P", "unit_rawcode": "o005", "kind": "pulverize"},
     {"source_kind": "unit-ability", "source_key": "A02M", "unit_rawcode": "o003", "kind": "inner-fire"},
     {"source_kind": "unit-ability", "source_key": "A0GT", "unit_rawcode": "o00G", "kind": "inner-fire"},
+    {"source_kind": "unit-ability", "source_key": "A02I", "unit_rawcode": "n00V", "kind": "kill-berserk"},
     {"source_kind": "unit-ability", "source_key": "A0A6", "unit_rawcode": "o00F", "kind": "spell-steal"}
   ]
 }

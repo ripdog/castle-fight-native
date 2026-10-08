@@ -195,7 +195,11 @@ impl Simulation {
                         .apply_spell(damage, target.armor.armor_type);
                     unit_health[index] = unit_health[index]
                         .checked_sub(scale_damage_per_10k(
-                            damage,
+                            super::native_kill_effects::damage_after_native_incoming(
+                                target,
+                                damage,
+                                completed_tick,
+                            ),
                             target.snow_damage_taken_per_10k,
                         ))
                         .expect("Pulverize damage overflow");
@@ -772,7 +776,8 @@ impl Simulation {
                     );
                     on_hit.splash_falloff = Some(profile);
                 }
-                PassiveUnitEffect::Pulverize(_)
+                PassiveUnitEffect::KillBerserk(_)
+                | PassiveUnitEffect::Pulverize(_)
                 | PassiveUnitEffect::Evasion(_)
                 | PassiveUnitEffect::Defend(_)
                 | PassiveUnitEffect::Cleave(_)

@@ -467,6 +467,7 @@ fn cleanse_native_effects(
     status.damage_over_time_count = 0;
     passive_baseline.retain(|effect| {
         let ability = match effect {
+            PassiveUnitEffect::KillBerserk(p) => Some(p.ability),
             PassiveUnitEffect::Bash(p) => Some(p.ability),
             PassiveUnitEffect::CriticalStrike(p) => Some(p.ability),
             PassiveUnitEffect::Evasion(p) => Some(p.ability),

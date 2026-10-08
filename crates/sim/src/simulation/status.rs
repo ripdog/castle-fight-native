@@ -152,6 +152,7 @@ pub(super) fn apply_ability_effect_to_unit(
                     id: ModifierId(ability.0),
                     armor_bonus_per_100: armor_delta_per_100,
                     damage_bonus_per_10k: damage_delta_per_10k,
+                    damage_taken_bonus_per_10k: 0,
                     expires_tick: completed_tick
                         .checked_add(u64::from(duration))
                         .expect("area debuff expiry overflow"),
@@ -252,6 +253,7 @@ pub(super) fn apply_ability_effect_to_unit(
                     regeneration_per_second_per_10k: 0,
                     mana_regeneration_per_second_per_10k: 0,
                     damage_bonus_per_10k: 0,
+                    damage_taken_bonus_per_10k: 0,
                     expires_tick,
                     reactive_slow_duration_ticks: slow_duration_ticks,
                     reactive_movement_percent_delta: movement_percent_delta,
@@ -288,6 +290,7 @@ pub(super) fn apply_ability_effect_to_unit(
                     regeneration_per_second_per_10k,
                     mana_regeneration_per_second_per_10k: 0,
                     damage_bonus_per_10k: 0,
+                    damage_taken_bonus_per_10k: 0,
                     revealed_to: None,
                     expires_tick: completed_tick + u64::from(duration_ticks),
                     reactive_slow_duration_ticks: 0,
@@ -323,6 +326,7 @@ pub(super) fn apply_ability_effect_to_unit(
                     mana_regeneration_per_second_per_10k: 0,
                     damage_bonus_per_10k: i16::try_from(damage_bonus_per_10k)
                         .expect("Prayer damage modifier fits i16"),
+                    damage_taken_bonus_per_10k: 0,
                     revealed_to: None,
                     expires_tick: completed_tick + u64::from(duration_ticks),
                     reactive_slow_duration_ticks: 0,
@@ -612,6 +616,8 @@ pub(super) fn resolve_periodic_unit_statuses(
         let spell_damage_taken_per_10k =
             active_defend_profile(unit.passive_effects, unit.spawn_tick, completed_tick)
                 .map(|profile| profile.spell_damage_taken_per_10k);
+        let incoming_factor =
+            super::native_kill_effects::native_incoming_damage_factor(&unit.status, completed_tick);
         for index in 0..count {
             let effect = &mut unit.status.damage_over_time[index];
             while completed_tick >= effect.next_pulse_tick
@@ -635,7 +641,7 @@ pub(super) fn resolve_periodic_unit_statuses(
                 unit.health = unit
                     .health
                     .checked_sub(scale_damage_per_10k(
-                        adjusted,
+                        scale_damage_per_10k(adjusted, incoming_factor),
                         unit.snow_damage_taken_per_10k,
                     ))
                     .expect("damage-over-time health arithmetic overflow");

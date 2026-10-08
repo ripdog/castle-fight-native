@@ -570,6 +570,7 @@ pub(crate) struct ProductionUnitClassifications(pub UnitClassifications);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PassiveUnitEffect {
+    KillBerserk(KillBerserkProfile),
     Bash(BashEffectProfile),
     CriticalStrike(CriticalStrikeEffectProfile),
     SplashFalloff(SplashFalloffProfile),
@@ -583,6 +584,15 @@ pub enum PassiveUnitEffect {
     Feedback(FeedbackEffectProfile),
     FrostAttack(FrostAttackEffectProfile),
     Pulverize(PulverizeEffectProfile),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KillBerserkProfile {
+    pub ability: AbilityId,
+    pub duration_ticks: u16,
+    pub movement_percent_delta: i16,
+    pub attack_speed_percent_delta: i16,
+    pub damage_taken_bonus_per_10k: i16,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1333,6 +1343,7 @@ pub struct TimedArmorModifier {
     pub regeneration_per_second_per_10k: u32,
     pub mana_regeneration_per_second_per_10k: u32,
     pub damage_bonus_per_10k: i16,
+    pub damage_taken_bonus_per_10k: i16,
     pub expires_tick: u64,
     pub reactive_slow_duration_ticks: u16,
     pub reactive_movement_percent_delta: i16,

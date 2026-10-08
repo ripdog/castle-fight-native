@@ -143,6 +143,7 @@ fn native_buff_family_revalidates_competing_casters_and_replaces_the_whole_bundl
             armor_bonus_per_100: 100,
             regeneration_per_second_per_10k: 0,
             damage_bonus_per_10k: 1000,
+            damage_taken_bonus_per_10k: 0,
             expires_tick: 2,
             ..prior
         },

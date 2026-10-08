@@ -5,6 +5,7 @@ use crate::components::{
 };
 
 mod buff_transfer;
+mod kill_berserk;
 mod stat_buffs;
 
 fn unit(team: u8, x: i32, damage: i32, delivery: AttackDelivery) -> UnitSpawn {

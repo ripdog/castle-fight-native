@@ -71,6 +71,19 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
 
     kind = recipe["kind"]
     effect: dict[str, Any] = dict(recipe)
+    if kind == "kill-berserk":
+        trace = mechanics["kill_mechanics"]
+        if not (trace["victim_requires_combat_sapper"] and trace["killer_must_not_be_structure"] and trace["resume_attack_immediately"]):
+            raise ValueError("native kill Berserk requires its audited death-handler predicates")
+        if scaled(protected.get("cooldown", fields["cool1"])) != 0 or scaled(protected.get("mana_cost", fields["cost1"])) != 0:
+            raise ValueError("kill Berserk requires explicit native resource support for non-free orders")
+        if trace["berserk_ability_id"] != int.from_bytes(recipe["source_key"].encode(), "big") or trace["berserk_base_order"] != "berserk":
+            raise ValueError("death handler must issue this native Berserk ability")
+        effect.update(duration_ticks=number("Dur1", 30), movement_percent_delta=number("DataA1", 100),
+            attack_speed_percent_delta=number("DataB1", 100), damage_taken_bonus_per_10k=number("DataC1", 10_000),
+            provenance={"source": "resolved/object-fields.tsv", "protected": "resolved/protected-ability-fields.tsv",
+                "death_handler": "resolved/production-unit-special-mechanics.tsv"})
+        return effect
     if kind in {"inner-fire", "spell-steal"}:
         if kind == "spell-steal":
             if unit is None or set(fields["targs1"].split(",")) != {"air", "ground", "enemies", "friend", "self", "sapper", "ward"}:
@@ -383,6 +396,9 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "automatic-defend-state-maintenance"
     }
+    kill_mechanics = {row["unit_rawcode"]: json.loads(row["parameters_json"])
+        for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
+        if row["mechanic_kind"] == "kill-triggered-native-berserk"}
     spell_mechanics = {row["ability_rawcode"]: row for row in rows(retained("resolved/unit-spell-mechanics.tsv"))}
     spell_semantics = {row["ability_rawcode"]: row for row in rows(retained("resolved/unit-spell-semantics.tsv"))}
     misc = dict(line.split("=", 1) for line in retained("war3mapMisc.txt").decode().splitlines() if "=" in line and not line.startswith("//"))
@@ -413,6 +429,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
                 raise ValueError(f"proxy child {source} needs one semantic parent for its source unit")
             spell = matches[0]
         detail = dict(mechanics.get(recipe.get("unit_rawcode", ""), {}))
+        detail["kill_mechanics"] = kill_mechanics.get(recipe.get("unit_rawcode", ""))
         detail["misc"] = misc
         if spell is not None:
             semantics = spell_semantics[spell["ability_rawcode"]]

@@ -875,7 +875,11 @@ impl Simulation {
                             && position.distance_sq(target.position) <= square_i32(radius)
                         {
                             target.health = target.health.saturating_sub(scale_damage_per_10k(
-                                damage,
+                                super::native_kill_effects::damage_after_native_incoming(
+                                    target,
+                                    damage,
+                                    self.next_tick,
+                                ),
                                 target.snow_damage_taken_per_10k,
                             ));
                             metrics.effects += 1;

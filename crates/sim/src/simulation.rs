@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 43;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 44;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -54,6 +54,7 @@ mod native_actions;
 mod native_actions_tests;
 mod native_buff_transfer;
 mod native_carriers;
+mod native_kill_effects;
 #[cfg(test)]
 mod native_target_effects;
 #[cfg(test)]
@@ -2570,6 +2571,7 @@ impl Simulation {
                         mana_regeneration_per_second_per_10k: profile
                             .mana_regeneration_per_second_per_10k,
                         damage_bonus_per_10k: 0,
+                        damage_taken_bonus_per_10k: 0,
                         expires_tick: self.next_tick + 2,
                         reactive_slow_duration_ticks: 0,
                         reactive_movement_percent_delta: 0,
@@ -3617,7 +3619,7 @@ struct BounceSearchContext<'a> {
 
 struct DamageTargetState<'a> {
     damage_rules: DamageRules,
-    units: &'a [UnitSnapshot],
+    units: &'a mut [UnitSnapshot],
     buildings: &'a [BuildingSnapshot],
     unit_positions: &'a [SimPoint],
     unit_health: &'a mut [i32],
@@ -4744,6 +4746,7 @@ fn spell_damage_after_defend(unit: UnitSnapshot, damage: i32, completed_tick: u6
         .map_or(damage, |profile| {
             scale_damage_per_10k(damage, profile.spell_damage_taken_per_10k)
         });
+    let damage = native_kill_effects::damage_after_native_incoming(&unit, damage, completed_tick);
     let damage = scale_damage_per_10k(damage, unit.snow_damage_taken_per_10k);
     unit.passive_effects.iter().fold(damage, |damage, effect| {
         if let PassiveUnitEffect::SpellResistance(profile) = effect {
@@ -4776,11 +4779,26 @@ fn apply_damage_to_target(
             );
             state.unit_health[index] = state.unit_health[index]
                 .checked_sub(scale_damage_per_10k(
-                    adjusted_damage,
+                    native_kill_effects::damage_after_native_incoming(
+                        &state.units[index],
+                        adjusted_damage,
+                        completed_tick,
+                    ),
                     state.units[index].snow_damage_taken_per_10k,
                 ))
                 .expect("unit damage arithmetic overflowed validated bounds");
-            let source_is_unit = find_unit_index(state.units, source_id).is_some();
+            let source_index = find_unit_index(state.units, source_id);
+            if state.unit_health[index] <= 0
+                && state.units[index].classifications.combat_sapper
+                && let Some(source_index) = source_index
+                && state.unit_health[source_index] > 0
+            {
+                native_kill_effects::activate_kill_berserk(
+                    &mut state.units[source_index],
+                    completed_tick,
+                );
+            }
+            let source_is_unit = source_index.is_some();
             let recorded_attacker_is_building = state.attackers_this_tick[index]
                 .is_some_and(|attacker| find_building_index(state.buildings, attacker).is_some());
             if state.attackers_this_tick[index].is_none()

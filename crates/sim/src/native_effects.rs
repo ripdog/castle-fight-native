@@ -28,6 +28,7 @@ const TUNING_9_27_JSON: &str = include_str!("../data/castle-fight/9.27/native-ef
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum NativeEffectImplementationId {
+    WarcraftKillBerserkV1,
     WarcraftMarkerOnlyV1,
     WarcraftZeroDamageBarrageV1,
     WarcraftEvasionV1,
@@ -64,6 +65,7 @@ impl NativeEffectImplementationId {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::WarcraftKillBerserkV1 => 66,
             Self::WarcraftMarkerOnlyV1 => 0,
             Self::WarcraftZeroDamageBarrageV1 => 1,
             Self::WarcraftEvasionV1 => 2,
@@ -514,6 +516,17 @@ fn native_buff_from_tuning(tuning: &TuningFile, source: u32) -> Option<crate::Na
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum TuningEffect {
+    KillBerserk {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        duration_ticks: u16,
+        movement_percent_delta: i16,
+        attack_speed_percent_delta: i16,
+        damage_taken_bonus_per_10k: i16,
+        #[allow(dead_code)]
+        provenance: serde_json::Value,
+    },
     NativeAura {
         source_kind: String,
         source_key: String,
@@ -746,7 +759,8 @@ impl TuningEffect {
 
     fn source_kind(&self) -> &str {
         match self {
-            Self::NativeAura { source_kind, .. }
+            Self::KillBerserk { source_kind, .. }
+            | Self::NativeAura { source_kind, .. }
             | Self::Pulverize { source_kind, .. }
             | Self::FrostAttack { source_kind, .. }
             | Self::ScriptedAutomatic { source_kind, .. }
@@ -769,7 +783,8 @@ impl TuningEffect {
 
     fn source_key(&self) -> &str {
         match self {
-            Self::NativeAura { source_key, .. }
+            Self::KillBerserk { source_key, .. }
+            | Self::NativeAura { source_key, .. }
             | Self::Pulverize { source_key, .. }
             | Self::FrostAttack { source_key, .. }
             | Self::ScriptedAutomatic { source_key, .. }
@@ -792,7 +807,8 @@ impl TuningEffect {
 
     fn unit_rawcode(&self) -> Option<&str> {
         match self {
-            Self::NativeAura { unit_rawcode, .. }
+            Self::KillBerserk { unit_rawcode, .. }
+            | Self::NativeAura { unit_rawcode, .. }
             | Self::Pulverize { unit_rawcode, .. }
             | Self::FrostAttack { unit_rawcode, .. }
             | Self::ScriptedAutomatic { unit_rawcode, .. }
@@ -826,6 +842,7 @@ impl TuningEffect {
             Self::Cleave { .. } => NativeEffectImplementationId::WarcraftCleaveV1,
             Self::FrostAttack { .. } => NativeEffectImplementationId::WarcraftFrostAttackV1,
             Self::Pulverize { .. } => NativeEffectImplementationId::WarcraftPulverizeV1,
+            Self::KillBerserk { .. } => NativeEffectImplementationId::WarcraftKillBerserkV1,
             Self::NativeAura { .. } => NativeEffectImplementationId::WarcraftNativeAuraV1,
             Self::Defend { .. } => NativeEffectImplementationId::WarcraftDefendV1,
             Self::Bash { .. } => NativeEffectImplementationId::WarcraftBashV1,
@@ -849,6 +866,7 @@ impl TuningEffect {
             Self::Cleave { .. } => "cleave",
             Self::FrostAttack { .. } => "frost-attack",
             Self::Pulverize { .. } => "pulverize",
+            Self::KillBerserk { .. } => "kill-berserk",
             Self::NativeAura { .. } => "native-aura",
             Self::Defend { .. } => "defend",
             Self::Bash { .. } => "bash",
@@ -958,7 +976,8 @@ fn native_unit_mechanics_from_tuning(
                         automatic_spell = Some(candidate);
                     }
                 }
-                TuningEffect::NativeAura { .. }
+                TuningEffect::KillBerserk { .. }
+                | TuningEffect::NativeAura { .. }
                 | TuningEffect::Pulverize { .. }
                 | TuningEffect::FrostAttack { .. }
                 | TuningEffect::Feedback { .. }
@@ -1050,6 +1069,28 @@ pub fn native_effect_implementation_for(
 
 fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUnitEffect {
     match effect {
+        TuningEffect::KillBerserk {
+            source_key,
+            duration_ticks,
+            movement_percent_delta,
+            attack_speed_percent_delta,
+            damage_taken_bonus_per_10k,
+            ..
+        } => {
+            assert!(
+                *duration_ticks > 0
+                    && *movement_percent_delta >= 0
+                    && *attack_speed_percent_delta >= 0
+                    && *damage_taken_bonus_per_10k >= 0
+            );
+            PassiveUnitEffect::KillBerserk(crate::components::KillBerserkProfile {
+                ability: AbilityId(rawcode(source_key).expect("Berserk source")),
+                duration_ticks: *duration_ticks,
+                movement_percent_delta: *movement_percent_delta,
+                attack_speed_percent_delta: *attack_speed_percent_delta,
+                damage_taken_bonus_per_10k: *damage_taken_bonus_per_10k,
+            })
+        }
         TuningEffect::NativeAura {
             source_key,
             radius_world,

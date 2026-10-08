@@ -472,6 +472,8 @@
     {"source_kind": "unit-ability", "source_key": "A02P", "implementation": "warcraft-pulverize-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "unit-ability", "source_key": "A02M", "implementation": "warcraft-scripted-automatic-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "unit-ability", "source_key": "A0GT", "implementation": "warcraft-scripted-automatic-v1", "valid_from": "9.27", "valid_through": "9.27"},
+    {"source_kind": "unit-ability", "source_key": "A07K", "implementation": "warcraft-marker-only-v1", "valid_from": "9.27", "valid_through": "9.27"},
+    {"source_kind": "unit-ability", "source_key": "A02I", "implementation": "warcraft-kill-berserk-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "unit-ability", "source_key": "A0A6", "implementation": "warcraft-scripted-automatic-v1", "valid_from": "9.27", "valid_through": "9.27"}
   ]
 }

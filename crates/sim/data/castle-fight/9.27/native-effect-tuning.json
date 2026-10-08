@@ -1292,6 +1292,21 @@
       }
     },
     {
+      "source_kind": "unit-ability",
+      "source_key": "A02I",
+      "unit_rawcode": "n00V",
+      "kind": "kill-berserk",
+      "duration_ticks": 180,
+      "movement_percent_delta": 25,
+      "attack_speed_percent_delta": 200,
+      "damage_taken_bonus_per_10k": 1000,
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "death_handler": "resolved/production-unit-special-mechanics.tsv"
+      }
+    },
+    {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
       "source_key": "A0A6",

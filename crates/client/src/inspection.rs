@@ -2239,6 +2239,12 @@ fn active_effect_badges(
                 f64::from(modifier.damage_bonus_per_10k) / 100.0
             ));
         }
+        if modifier.damage_taken_bonus_per_10k != 0 {
+            changes.push(format!(
+                "Damage received {:+}%",
+                f64::from(modifier.damage_taken_bonus_per_10k) / 100.0
+            ));
+        }
         let label = format!(
             "{} ({}s)",
             changes.join(", "),
@@ -2250,7 +2256,9 @@ fn active_effect_badges(
                 role: UiStatusIconRole::Primary,
             },
             description: label,
-            beneficial: modifier.armor_bonus_per_100 >= 0 && modifier.damage_bonus_per_10k >= 0,
+            beneficial: modifier.armor_bonus_per_100 >= 0
+                && modifier.damage_bonus_per_10k >= 0
+                && modifier.damage_taken_bonus_per_10k <= 0,
         });
     }
     append_damage_over_time_badges(&mut effects, &unit.status, tick);

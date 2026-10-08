@@ -9,6 +9,19 @@ import build_runtime_catalog as catalog
 
 
 class NativeTuningProjectionTest(unittest.TestCase):
+    def test_kill_berserk_reconciles_death_handler_predicates_and_native_resources(self) -> None:
+        recipe = {"kind": "kill-berserk", "source_kind": "unit-ability", "source_key": "TEST", "unit_rawcode": "UNIT"}
+        fields = {"dur1": "7", "dataa1": "0.25", "datab1": "2", "datac1": "0.1", "cost1": "0", "cool1": "99"}
+        trace = {"victim_requires_combat_sapper": True, "killer_must_not_be_structure": True,
+            "resume_attack_immediately": True, "berserk_ability_id": int.from_bytes(b"TEST", "big"), "berserk_base_order": "berserk"}
+        projected = native.project_effect(recipe, fields, None, {"cooldown": "0"}, {"kill_mechanics": trace})
+        self.assertEqual(projected["duration_ticks"], 210)
+        self.assertEqual(projected["damage_taken_bonus_per_10k"], 1000)
+        with self.assertRaisesRegex(ValueError, "non-free orders"):
+            native.project_effect(recipe, fields, None, {"cooldown": "0", "mana_cost": "1"}, {"kill_mechanics": trace})
+        with self.assertRaisesRegex(ValueError, "death-handler predicates"):
+            native.project_effect(recipe, fields, None, {"cooldown": "0"}, {"kill_mechanics": {**trace, "victim_requires_combat_sapper": False}})
+
     def test_native_transfer_projects_independent_geometry_resources_and_buff_provenance(self) -> None:
         recipe = {"kind": "spell-steal", "source_kind": "unit-ability", "source_key": "TEST", "unit_rawcode": "UNIT"}
         fields = {"targs1": "air,ground,enemies,friend,self,sapper,ward", "rng1": "120", "area1": "80", "cost1": "9999", "cool1": "99"}
