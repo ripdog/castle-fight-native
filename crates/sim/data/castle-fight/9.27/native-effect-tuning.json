@@ -4,6 +4,17 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A08O",
+      "unit_rawcode": "o00B",
+      "kind": "spell-resistance",
+      "damage_taken_per_10k": 2000,
+      "provenance": {
+        "ability": "A08O",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A034",
       "unit_rawcode": "o006",
       "kind": "native-aura",

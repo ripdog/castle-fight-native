@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind": "unit-ability", "source_key": "A08O", "unit_rawcode": "o00B", "kind": "spell-resistance"},
     {"source_kind": "unit-ability", "source_key": "A034", "unit_rawcode": "o006", "kind": "native-aura"},
     {"source_kind": "unit-ability", "source_key": "A035", "unit_rawcode": "o008", "kind": "native-aura"},
     {"source_kind": "unit-ability", "source_key": "A08I", "unit_rawcode": "n022", "kind": "bash"},

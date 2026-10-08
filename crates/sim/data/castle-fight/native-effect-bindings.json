@@ -485,6 +485,9 @@
     {"source_kind": "unit-ability", "source_key": "A035", "implementation": "warcraft-native-aura-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "unit-ability", "source_key": "A036", "implementation": "warcraft-marker-only-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Native Sphere presentation attachment; this production building has no weapon."},
     {"source_kind": "unit-ability", "source_key": "A034", "implementation": "warcraft-native-aura-v1", "valid_from": "9.27", "valid_through": "9.27"},
-    {"source_kind": "unit-ability", "source_key": "A037", "implementation": "warcraft-marker-only-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Native Sphere presentation attachment on a production building without a weapon."}
+    {"source_kind": "unit-ability", "source_key": "A037", "implementation": "warcraft-marker-only-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Native Sphere presentation attachment on a production building without a weapon."},
+    {"source_kind": "unit-ability", "source_key": "A08O", "implementation": "warcraft-spell-resistance-v1", "valid_from": "9.27", "valid_through": "9.27"},
+    {"source_kind": "unit-ability", "source_key": "A08P", "implementation": "warcraft-marker-only-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Zero-payload, zero-radius native Slow Aura with no recipient mask; retains unit decoration."},
+    {"source_kind": "unit-ability", "source_key": "A08N", "implementation": "warcraft-marker-only-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Native Sphere presentation attachment on a production building without a weapon."}
   ]
 }

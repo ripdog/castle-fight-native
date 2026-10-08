@@ -122,3 +122,12 @@ Validation: 502 simulation checks passed in the full run, followed by all 49 con
 - Verification: shared native aura weapon/mask/boundary/duplicate-source/linger/recovery fixtures and catalog-wide native ability/production/source closure cover this upgrade.
 
 Validation: all 49 content/lifecycle tests and 22 tuning projection tests, formatting and strict workspace/all-target Clippy passed (`.local-tools/orc-validation/defensive-kodo-*.log`).
+
+## Spellbreaker Kodo Farm / Spellbreaker Kodo Rider
+
+- Entity/source: `h092` (base `hbla`) is the final Kodo Farm branch to the right and produces `o00B` (base `okod`). All ordinary/protected piercing missile combat, separate air/ground/structure permissions, stats, movement/acquisition/collision, construction/training/repair/economy and organic sapper/ward raisable/decaying corpse behavior consume retained catalog data.
+- Complete inventory: native spell resistance `A08O` (base `AIsr`), and `A08P` (base `Aasl`) with zero speed payload, zero area and no recipient mask. The latter retains its source presentation attachment without inventing a slowing aura. Building `A08N` (base `Asph`) uses both source sprite attachments, with no weapon to consume its inherited missile art. No active spell, proxy, delayed callback, resource cost or AI override is registered.
+- Resistance reduces qualifying spell damage through the shared native incoming-damage primitive; it is not general spell immunity and does not prevent debuffs. `hasNoPowerArmorExclusion` references `A08O` as an exclusion identity; that identity remains in content closure for the currently unpromoted Power Plant system. No unrelated Power Armor grant is inferred. Native unit/building visual projections and retained icons apply. No new authoritative shape.
+- Verification: reusable resistance, spell/periodic/incoming-modifier and snapshot tests cover the mechanic; catalog-wide source/ability/production closure covers the complete inventory.
+
+Validation: all 49 content/lifecycle tests and 22 tuning projection tests, formatting and strict workspace/all-target Clippy passed (`.local-tools/orc-validation/spellbreaker-kodo-*.log`).
