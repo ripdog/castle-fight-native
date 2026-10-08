@@ -544,9 +544,26 @@ impl TerrainTextureLayout {
     }
 }
 
+// Released binaries look for their bundled assets beside the executable. Keep the
+// source-tree fallback for `cargo run` and developer profiling builds.
 #[must_use]
 pub fn client_asset_root() -> PathBuf {
+    if let Some(override_path) = std::env::var_os("CASTLE_FIGHT_ASSETS_DIR") {
+        return PathBuf::from(override_path);
+    }
+
+    if let Ok(executable) = std::env::current_exe()
+        && let Some(bundled) = bundled_asset_root(&executable)
+    {
+        return bundled;
+    }
+
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets")
+}
+
+fn bundled_asset_root(executable: &Path) -> Option<PathBuf> {
+    let bundled = executable.parent()?.join("assets");
+    (bundled.join("shaders").is_dir() && bundled.join("ui").is_dir()).then_some(bundled)
 }
 
 impl TerrainTextureSet {
@@ -854,6 +871,23 @@ mod tests {
     use castle_fight_sim::SimPoint;
 
     use super::*;
+
+    #[test]
+    fn distribution_assets_are_resolved_next_to_executable() {
+        let root = std::env::temp_dir().join(format!(
+            "castle-fight-assets-root-test-{}",
+            std::process::id()
+        ));
+        let assets = root.join("assets");
+        fs::create_dir_all(assets.join("shaders")).unwrap();
+        assert_eq!(bundled_asset_root(&root.join("castle-fight-client")), None);
+        fs::create_dir_all(assets.join("ui")).unwrap();
+        assert_eq!(
+            bundled_asset_root(&root.join("castle-fight-client")),
+            Some(assets)
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
 
     fn original_terrain() -> TerrainSurface {
         TerrainSurface::new(

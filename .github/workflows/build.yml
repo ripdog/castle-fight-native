@@ -1,0 +1,67 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  binaries:
+    name: ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux-x86_64
+            executable_suffix: ''
+          - os: windows-2022
+            platform: windows-x86_64
+            executable_suffix: '.exe'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.98.1'
+
+      - name: Cache Rust builds
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libasound2-dev libudev-dev
+
+      - name: Compile release binaries
+        run: cargo build --release --locked -p castle-fight-client -p castle-fight-server -p castle-fight-wc3-assets
+
+      - name: Package binaries and game data
+        shell: bash
+        run: |
+          set -euo pipefail
+          package="dist/castle-fight-native-${{ matrix.platform }}"
+          mkdir -p "$package/assets" "$package/maps"
+          for binary in castle-fight-client castle-fight-server cf-wc3-assets; do
+            cp "target/release/$binary${{ matrix.executable_suffix }}" "$package/"
+          done
+          cp -R assets/shaders assets/ui "$package/assets/"
+          cp docs/original_map/5329_Castle_Fight_DE_beta9.27_w3p.w3x "$package/maps/castle-fight-9.27.w3x"
+          cp README.md LICENSE-MIT LICENSE-APACHE "$package/"
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: castle-fight-native-${{ matrix.platform }}
+          path: dist/castle-fight-native-${{ matrix.platform }}/
+          if-no-files-found: error
+          retention-days: 14
