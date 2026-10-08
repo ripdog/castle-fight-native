@@ -11,7 +11,10 @@ import re
 import build_runtime_catalog as catalog
 
 # Source identities only. Model, geometry and scale belong to retained script.
-RECIPES = [("h06I", "UK", "by:create984", "BuildingAttachmentHandler_registerBuildingAttach_RaceOrc_call_registerBuildingAttach_RaceOrc")]
+RECIPES = [
+    ("h06I", "UK", "by:create984", "BuildingAttachmentHandler_registerBuildingAttach_RaceOrc_call_registerBuildingAttach_RaceOrc"),
+    ("h04A", "wK", "Eu:create848", "BuildingAttachmentHandler_registerBuildingAttach_RaceElemental_call_registerBuildingAttach_RaceElemental9"),
+]
 
 
 def project_call(body: str) -> dict:
@@ -22,6 +25,23 @@ def project_call(body: str) -> dict:
     number = lambda value: float(value.strip("()"))
     return {"model_path": json.loads(model), "yaw_degrees": number(yaw),
         "offset_world": [number(x), number(y), number(z)], "scale": number(scale)}
+
+
+def project_calls(body: str) -> list[dict]:
+    match = re.fullmatch(r'function (\w+)\((\w+),(\w+)\)(.*)end', body)
+    if match is None:
+        raise ValueError("building decoration needs an audited direct callback")
+    callback, first, building, calls = match.groups()
+    scalar = r'-?\d+(?:\.\d*)?'
+    number = rf'(?:{scalar}|\({scalar}\))'
+    model = r'"(?:[^"\\]|\\.)*"'
+    pattern = r'attachBuildingEffect\(' + re.escape(building) + ',' + ','.join(
+        [number, number, number, model, number, number]) + r'\)'
+    # Match each literal call, then reject every unconsumed operation/control branch.
+    parts = re.findall(pattern, calls)
+    if not parts or ''.join(parts) != calls:
+        raise ValueError("building decoration needs only audited direct attachment calls")
+    return [project_call(f'function {callback}({first},{building}){call}end') for call in parts]
 
 
 def build(release: dict) -> dict:
@@ -36,7 +56,7 @@ def build(release: dict) -> dict:
             raise ValueError("building decoration factory does not match retained registration")
         entries.append({"building_rawcode": rawcode, "source_registration": registration,
             "source_factory": factory, "source_callback": callback,
-            "visuals": [project_call(functions[callback])]})
+            "visuals": project_calls(functions[callback])})
     fields = list(csv.DictReader(io.StringIO(catalog._retained_file_bytes(catalog.REPO_ROOT, tree, "resolved/object-fields.tsv").decode()), delimiter="\t"))
     abilities, inventories = {}, {}
     for row in fields:

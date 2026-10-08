@@ -21,6 +21,23 @@ class BuildingAttachmentsTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             projection.project_call(body.replace('attachBuildingEffect', 'attachBuildingEffectColor'))
 
+    def test_multiple_calls_preserve_order_zero_scale_and_reject_other_operations(self):
+        first = 'attachBuildingEffect(b,270.,0.,28.,"One.mdl",0.,0.)'
+        second = 'attachBuildingEffect(b,90.,(-12.),(-34.),"Two.mdl",0.2,(-20.))'
+        body = f'function Handler(a,b){first}{second}end'
+        visuals = projection.project_calls(body)
+        self.assertEqual([row['model_path'] for row in visuals], ['One.mdl', 'Two.mdl'])
+        self.assertEqual([row['scale'] for row in visuals], [0, 0.2])
+        self.assertEqual(visuals[1]['offset_world'], [-12, -34, -20])
+        for invalid in (
+            body.replace(first, 'if flag then ' + first + 'end'),
+            body.replace('270.', 'dynamicYaw'),
+            body.replace(second, second.replace('(b,', '(a,')),
+            body.replace(second, 'otherOperation(b)'),
+        ):
+            with self.assertRaises(ValueError):
+                projection.project_calls(invalid)
+
 
 if __name__ == '__main__':
     unittest.main()

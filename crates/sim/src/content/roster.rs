@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    LesserElementalOfWind = 0x1000_0030 => b"o00C",
     Footman = 0x1000_0001 => b"hfoo",
     Defender = 0x1000_0002 => b"h03A",
     Sniper = 0x1000_0007 => b"hrif",
@@ -83,6 +84,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    TrappedGale = 0x2000_0030 => b"h04A",
     Barracks = 0x2000_0001 => b"h000",
     Stronghold = 0x2000_0002 => b"h039",
     SniperNest = 0x2000_0007 => b"h003",
