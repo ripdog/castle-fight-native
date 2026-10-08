@@ -7,6 +7,7 @@ use crate::components::{
 pub(super) mod acid_bomb;
 pub(super) mod ensnare;
 pub(super) mod poison;
+pub(super) mod stasis;
 
 // Warcraft's native Healing Wave bounce interval is 250 ms. Derive each deadline
 // from the original cast, using ceiling at 30 Hz, rather than accumulating rounded hops.
@@ -121,7 +122,11 @@ impl Simulation {
             .collect::<Vec<_>>();
         actions.sort_unstable_by_key(|(id, _, _)| *id);
         for (_, entity, action) in actions {
+            if self.world.get::<NativeAction>(entity).is_none() {
+                continue;
+            }
             match action {
+                NativeAction::StasisTrap(state) => self.advance_stasis_trap(entity, state, units),
                 NativeAction::AcidBomb(state) => self.advance_acid_bomb(entity, state, units),
                 NativeAction::Poison(state) => self.advance_poison(entity, state, units),
                 NativeAction::Ensnare(state) => self.advance_ensnare(entity, state, units),

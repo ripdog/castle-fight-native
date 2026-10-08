@@ -11,6 +11,7 @@ mod damage_threshold;
 mod ensnare;
 mod kill_berserk;
 mod poison;
+mod stasis;
 mod stat_buffs;
 
 fn unit(team: u8, x: i32, damage: i32, delivery: AttackDelivery) -> UnitSpawn {

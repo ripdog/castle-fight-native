@@ -322,6 +322,22 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(10);
                 hash.write_u64(id.0);
                 match action {
+                    NativeAction::StasisTrap(state) => {
+                        hash.write_u8(6);
+                        hash.write_u64(state.source.0);
+                        hash.write_u8(state.team.0);
+                        hash.write_i32(state.position.x);
+                        hash.write_i32(state.position.y);
+                        for word in state.profile.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                        hash.write_u64(state.armed_tick);
+                        hash.write_u8(u8::from(state.detonation_tick.is_some()));
+                        if let Some(tick) = state.detonation_tick {
+                            hash.write_u64(tick);
+                        }
+                        hash.write_u64(state.expires_tick);
+                    }
                     NativeAction::AcidBomb(state) => {
                         hash.write_u8(5);
                         hash.write_u64(state.source.0);
@@ -2240,6 +2256,11 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_i32(autocast_range);
         }
         AbilityEffect::Hailstone(profile) => hash_hailstone_profile(hash, profile),
+        AbilityEffect::BuildingStasis(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         AbilityEffect::BuildingPermanentGrant(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);

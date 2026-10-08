@@ -1,6 +1,61 @@
 use super::*;
 
 impl Simulation {
+    /// Counts completed buildings and reserved upgrade targets from authoritative identity state.
+    pub fn building_type_limit_available_for_player(
+        &self,
+        owner: PlayerId,
+        version: crate::MapVersion,
+        rawcode: u32,
+    ) -> bool {
+        let Some(limit) =
+            crate::building_mechanics::building_type_limit_for_version(version, rawcode)
+        else {
+            return true;
+        };
+        self.building_type_count_for_player(owner, version, rawcode) < usize::from(limit)
+    }
+
+    fn building_type_count_for_player(
+        &self,
+        owner: PlayerId,
+        version: crate::MapVersion,
+        rawcode: u32,
+    ) -> usize {
+        self.world
+            .iter_entities()
+            .filter(|entity| {
+                entity
+                    .get::<Owner>()
+                    .is_some_and(|actual| actual.0 == owner)
+            })
+            .map(|entity| {
+                let building = usize::from(
+                    entity.get::<BuildingFootprint>().is_some()
+                        && entity
+                            .get::<Health>()
+                            .is_some_and(|health| health.current > 0)
+                        && entity.get::<ContentIdentity>().is_some_and(|identity| {
+                            identity.map_version == version && identity.rawcode == rawcode
+                        }),
+                );
+                building
+                    + entity.get::<BuilderOrderQueue>().map_or(0, |queue| {
+                        queue
+                            .0
+                            .iter()
+                            .filter_map(BuilderOrder::build)
+                            .filter(|build| {
+                                build.properties.content.is_some_and(|identity| {
+                                    identity.map_version == version && identity.rawcode == rawcode
+                                })
+                            })
+                            .count()
+                    })
+            })
+            .sum()
+    }
+
     pub fn spawn_building(&mut self, building: BuildingSpawn) -> SimId {
         self.spawn_building_with_properties(building, BuildingGameplayProperties::default())
     }
@@ -693,6 +748,15 @@ impl Simulation {
             return Err(BuildingUpgradeError::ProductionQueueNotEmpty);
         }
 
+        if let Some(content) = target_properties.content
+            && !self.building_type_limit_available_for_player(
+                actual_owner,
+                content.map_version,
+                content.rawcode,
+            )
+        {
+            return Err(BuildingUpgradeError::TypeLimitReached);
+        }
         let resources = &mut self
             .player_state_mut(actual_owner)
             .expect("building owner must exist")

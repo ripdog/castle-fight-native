@@ -209,7 +209,7 @@ build/construction time if present
 
 The footprint is authoritative and MUST NOT be derived from the visual mesh bounds.
 
-Legendary point cost is versioned building economy data. A point is reserved when an order or upgrade is purchased, transferred when an upgrade replaces its precursor, and released when that order is canceled or the building is removed. Affordability MUST include the point cap as well as gold and lumber.
+Legendary point cost is versioned building economy data. A point is reserved when an order or upgrade is purchased, transferred when an upgrade replaces its precursor, and released when that order is canceled or the building is removed. Affordability MUST include the point cap as well as gold and lumber. Native per-player technology limits remain a separate versioned constraint: completed live buildings and reserved construction/upgrade target identities count toward their type cap. The owning player, rather than the team or delegated controller, owns that reservation. Cancellation or removal releases it, and failed purchases leave resources and state unchanged.
 
 This is critical for deterministic placement/navigation/caging.
 

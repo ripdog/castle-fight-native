@@ -8,6 +8,11 @@ use crate::{
     version::MapVersion,
 };
 mod orc;
+mod stasis;
+pub use stasis::{BuildingStasisProfile, building_type_limit_for_version};
+pub(crate) use stasis::{
+    stasis_bindings_for_version, stasis_source_for_version, stasis_spellcasting_for_version,
+};
 mod world_freezer;
 pub use orc::{BuildingAcidBombProfile, BuildingPermanentGrantProfile};
 pub(crate) use orc::{

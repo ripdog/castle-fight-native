@@ -161,6 +161,7 @@ pub(crate) struct HailstoneState {
 
 #[derive(Component, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum NativeAction {
+    StasisTrap(StasisTrapState),
     AcidBomb(AcidBombMissileState),
     Poison(PoisonState),
     Ensnare(EnsnareMissileState),
@@ -176,5 +177,17 @@ pub(crate) struct PoisonState {
     pub generation: SimId,
     pub profile: PoisonProfile,
     pub next_pulse_tick: u64,
+    pub expires_tick: u64,
+}
+
+/// The source map hides this native summoned ward; its gameplay clocks outlive the dummy.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct StasisTrapState {
+    pub source: SimId,
+    pub team: Team,
+    pub position: SimPoint,
+    pub profile: crate::building_mechanics::BuildingStasisProfile,
+    pub armed_tick: u64,
+    pub detonation_tick: Option<u64>,
     pub expires_tick: u64,
 }

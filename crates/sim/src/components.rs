@@ -9,7 +9,7 @@ pub use native_grants::{
 mod native_actions;
 pub(crate) use native_actions::{
     AcidBombMissileState, EnsnareMissileState, HailstoneState, HealingWaveState, NativeAction,
-    NativeBoltState, PoisonState,
+    NativeBoltState, PoisonState, StasisTrapState,
 };
 pub use native_actions::{
     AcidBombProfile, AcidBombStatus, EnsnareProfile, EnsnareState, HealingWaveProfile,
@@ -1188,6 +1188,7 @@ pub enum AreaDamageOrigin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AbilityEffect {
+    BuildingStasis(crate::building_mechanics::BuildingStasisProfile),
     BuildingPermanentGrant(crate::building_mechanics::BuildingPermanentGrantProfile),
     BuildingAcidBomb(crate::building_mechanics::BuildingAcidBombProfile),
     Ensnare {
@@ -1341,6 +1342,7 @@ impl AbilityEffect {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::BuildingStasis(_) => 27,
             Self::BuildingPermanentGrant(_) => 26,
             Self::BuildingAcidBomb(_) => 25,
             Self::Ensnare { .. } => 24,

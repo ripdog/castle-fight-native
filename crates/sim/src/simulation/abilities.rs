@@ -544,6 +544,10 @@ impl Simulation {
                             index,
                             units,
                         ));
+                    } else if let AbilityEffect::BuildingStasis(profile) = intent.ability.effect {
+                        self.start_stasis_trap(source, profile, buildings);
+                        metrics.effects += 1;
+                        emit_cast_visual = false;
                     } else if let AbilityEffect::WorldFreezer(profile) = intent.ability.effect {
                         self.start_world_freezer(source, profile);
                         metrics.effects += 1;
@@ -800,7 +804,11 @@ impl Simulation {
                     }
                 }
                 AbilityIntentTarget::Building { id, position } => {
-                    if let AbilityEffect::WorldFreezer(profile) = intent.ability.effect {
+                    if let AbilityEffect::BuildingStasis(profile) = intent.ability.effect {
+                        self.start_stasis_trap(source, profile, buildings);
+                        metrics.effects += 1;
+                        emit_cast_visual = false;
+                    } else if let AbilityEffect::WorldFreezer(profile) = intent.ability.effect {
                         self.start_world_freezer(source, profile);
                         metrics.effects += 1;
                     } else if let AbilityEffect::BuildingPermanentGrant(profile) =

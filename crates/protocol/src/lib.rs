@@ -15,7 +15,7 @@ use castle_fight_sim::{
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-pub const PROTOCOL_SCHEMA_VERSION: u32 = 11;
+pub const PROTOCOL_SCHEMA_VERSION: u32 = 12;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub const MAX_RELEASE_REVISION_BYTES: usize = 64;
 pub const RECONNECT_TOKEN_BYTES: usize = 32;
@@ -1353,6 +1353,7 @@ impl From<BuilderCommandError> for WireBuilderCommandError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum WireBuilderBuildError {
+    TypeLimitReached,
     Builder { reason: WireBuilderCommandError },
     TeamMismatch,
     MissingBuildingIdentity,
@@ -1365,6 +1366,7 @@ pub enum WireBuilderBuildError {
 impl From<BuilderBuildError> for WireBuilderBuildError {
     fn from(value: BuilderBuildError) -> Self {
         match value {
+            BuilderBuildError::TypeLimitReached => Self::TypeLimitReached,
             BuilderBuildError::Builder(reason) => Self::Builder {
                 reason: reason.into(),
             },
@@ -1401,6 +1403,7 @@ impl From<BuildingConstructionCancelError> for WireConstructionCancelError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum WireBuildingUpgradeError {
+    TypeLimitReached,
     SourceNotFound,
     NotOwner,
     SourceUnderConstruction,
@@ -1416,6 +1419,7 @@ pub enum WireBuildingUpgradeError {
 impl From<BuildingUpgradeError> for WireBuildingUpgradeError {
     fn from(value: BuildingUpgradeError) -> Self {
         match value {
+            BuildingUpgradeError::TypeLimitReached => Self::TypeLimitReached,
             BuildingUpgradeError::SourceNotFound => Self::SourceNotFound,
             BuildingUpgradeError::NotOwner => Self::NotOwner,
             BuildingUpgradeError::SourceUnderConstruction => Self::SourceUnderConstruction,

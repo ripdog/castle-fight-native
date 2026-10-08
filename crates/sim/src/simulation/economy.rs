@@ -98,6 +98,30 @@ impl Simulation {
     }
 
     #[must_use]
+    pub fn can_afford_building_upgrade_for_player(
+        &self,
+        player: PlayerId,
+        building: SimId,
+        mut economy: BuildingEconomyProfile,
+    ) -> bool {
+        let Some(source_points) = self.world.iter_entities().find_map(|entity| {
+            (entity.get::<SimId>() == Some(&building)
+                && entity.get::<Owner>() == Some(&Owner(player))
+                && entity.get::<BuildingFootprint>().is_some())
+            .then(|| {
+                entity
+                    .get::<BuildingEconomyProfile>()
+                    .map(|source| source.legendary_points_cost)
+            })
+            .flatten()
+        }) else {
+            return false;
+        };
+        economy.legendary_points_cost = economy.legendary_points_cost.saturating_sub(source_points);
+        self.can_afford_building_for_player(player, economy)
+    }
+
+    #[must_use]
     pub fn can_afford_building(&self, team: Team, economy: BuildingEconomyProfile) -> bool {
         self.unique_player_for_team(team)
             .is_some_and(|player| self.can_afford_building_for_player(player, economy))

@@ -806,7 +806,7 @@ mod tests {
                 "Apxf" | "Aven" | "ACvs" | "Abof" | "ANab" => "damage_over_time",
                 "Afrz" => "freeze",
                 "AOae" => "movement",
-                "AHtb" | "ACtb" => "stun",
+                "Asta" | "AHtb" | "ACtb" => "stun",
                 _ => continue,
             };
             let references: String =

@@ -72,6 +72,29 @@ class BuildingMechanicsProjectionTests(unittest.TestCase):
         self.assertIn(target['attachment'], source)
         self.assertEqual([target['path'], caster['path']], data['script_art']['ceremonialTotemSpell'])
 
+    def test_native_trap_closure_keeps_separate_clocks_hidden_identity_and_type_caps(self):
+        import re
+        data = MODULE.build()
+        row = data['stasis']
+        params = json.loads(row['parameters_json'])
+        child = params['effect_ability_id'].to_bytes(4, 'big').decode()
+        fields = data['fields'][child]
+        control = data['stasis_control']
+        self.assertEqual(control['hidden_ward_rawcode'], fields['Stau:1'])
+        callback = data['script_traces'][row['source_functions']]['source']
+        self.assertIn(str(params['effect_ability_id']), callback)
+        self.assertEqual(float(control['dummy_seconds']), float(params['carrier_or_dummy_lifetime_seconds']))
+        self.assertIn('unit_getPos', callback)
+        self.assertIn('false', data['script_traces']['code__onEnter_doAfter_StasisTrap']['source'])
+        self.assertIn('"stand"', data['script_traces']['CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities']['source'])
+        limits = data['building_type_limits']
+        predicate = data['script_traces']['isSingleLimitBuilding']['source']
+        self.assertEqual(set(limits), {int(n).to_bytes(4, 'big').decode() for n in re.findall(r'==([0-9]+)', predicate)})
+        self.assertNotIn('h02O', limits)
+        linked = json.loads(row['effect_objects_json'])[0]['ability_level1']
+        self.assertEqual(fields['atar:1'], linked['targets'])
+        self.assertEqual(str(fields['ahdu:1']), linked['duration_hero'])
+
     def test_unsupported_version_does_not_reuse_an_older_recipe(self):
         with self.assertRaisesRegex(ValueError, "do not support"):
             MODULE.build("9.32")

@@ -358,6 +358,7 @@ pub(super) fn apply_ability_effect_to_unit(
         AbilityEffect::Ensnare { .. }
         | AbilityEffect::SpellSteal { .. }
         | AbilityEffect::WorldFreezer(_)
+        | AbilityEffect::BuildingStasis(_)
         | AbilityEffect::BuildingPermanentGrant(_)
         | AbilityEffect::BuildingAcidBomb(_)
         | AbilityEffect::BuildingBolt(_)

@@ -95,17 +95,25 @@ fn catalog_construction_round_trips_before_activation_and_continues_across_worke
 #[test]
 fn catalog_upgrade_wire_restore_and_cancellation_preserve_the_precursor_definition() {
     let content = castle_fight_content_bundle(CASTLE_FIGHT_DEFAULT_MAP_VERSION).unwrap();
-    for source_kind in CastleFightProductionKind::ALL {
-        let source = content.production_building(source_kind).unwrap();
+    for source_kind in CastleFightProductionKind::ALL
+        .into_iter()
+        .map(crate::CastleFightBuildingKind::Production)
+        .chain(
+            crate::CastleFightTowerKind::ALL
+                .into_iter()
+                .map(crate::CastleFightBuildingKind::Tower),
+        )
+    {
         for target_kind in source_kind
             .upgrade_targets_for_version(content.map_version)
             .unwrap()
         {
-            let target = content.production_building(target_kind).unwrap();
-            let size = source.footprint_size_cells;
+            let size = source_kind.footprint_size_cells(content).unwrap();
             let footprint = BuildingFootprint::new(12, 12, size, size);
-            let source_building = source.spawn(Team(0), footprint);
-            let source_properties = source.gameplay_properties();
+            let (source_building, source_properties) =
+                building_fixture(content, source_kind, footprint);
+            let (target_building, target_properties) =
+                building_fixture(content, target_kind, footprint);
             let mut original = Simulation::new(SimulationConfig::default(), 1);
             original.debug_grant_player_resources_for(PlayerId(0), u32::MAX / 2, u32::MAX / 2);
             let id = original.spawn_building_for_player_with_properties(
@@ -120,14 +128,13 @@ fn catalog_upgrade_wire_restore_and_cancellation_preserve_the_precursor_definiti
                 .find(|entity| entity.get::<SimId>() == Some(&id))
                 .unwrap()
                 .id();
-            original
-                .world
-                .get_mut::<ProductionState>(entity)
-                .unwrap()
-                .queued = 0;
+            if let Some(mut state) = original.world.get_mut::<ProductionState>(entity) {
+                state.queued = 0;
+            }
             let resources = &mut original.player_state_mut(PlayerId(0)).unwrap().resources;
             resources.legendary_points_cap = u16::MAX;
-            resources.legendary_points_used = source.economy.legendary_points_cost;
+            resources.legendary_points_used =
+                source_properties.economy.unwrap().legendary_points_cost;
             let precursor_checksum = original.checksum();
             let precursor_resources = original.player_resources_for(PlayerId(0)).unwrap();
             original
@@ -136,14 +143,14 @@ fn catalog_upgrade_wire_restore_and_cancellation_preserve_the_precursor_definiti
                     id,
                     source_building,
                     source_properties,
-                    target.spawn(Team(0), footprint),
-                    target.gameplay_properties(),
+                    target_building,
+                    target_properties,
                 )
                 .unwrap();
             let mut restored = wire_restore(&original, 4);
             assert_eq!(
                 restored.building(id).unwrap().content.unwrap().rawcode,
-                target.rawcode
+                target_properties.content.unwrap().rawcode
             );
             original
                 .cancel_building_construction_for_player(PlayerId(0), id)
@@ -164,6 +171,152 @@ fn catalog_upgrade_wire_restore_and_cancellation_preserve_the_precursor_definiti
             for _ in 0..3 {
                 assert_eq!(original.step().checksum, restored.step().checksum);
             }
+        }
+    }
+}
+
+fn building_fixture(
+    content: &crate::CastleFightContentBundle,
+    kind: crate::CastleFightBuildingKind,
+    footprint: BuildingFootprint,
+) -> (BuildingSpawn, BuildingGameplayProperties) {
+    match kind {
+        crate::CastleFightBuildingKind::Production(kind) => {
+            let definition = content.production_building(kind).unwrap();
+            (
+                definition.spawn(Team(0), footprint),
+                definition.gameplay_properties(),
+            )
+        }
+        crate::CastleFightBuildingKind::Tower(kind) => {
+            let definition = content.tower(kind).unwrap();
+            (
+                definition.spawn(Team(0), footprint),
+                definition.gameplay_properties(),
+            )
+        }
+    }
+}
+
+#[test]
+fn catalog_type_caps_reserve_pending_upgrades_and_release_on_cancellation_or_death() {
+    let content = castle_fight_content_bundle(CASTLE_FIGHT_DEFAULT_MAP_VERSION).unwrap();
+    for source_kind in crate::CastleFightTowerKind::ALL {
+        for target_kind in source_kind
+            .upgrade_targets_for_version(content.map_version)
+            .unwrap()
+        {
+            let source = content.tower(source_kind).unwrap();
+            let target = content.tower(target_kind).unwrap();
+            let Some(limit) = crate::building_mechanics::building_type_limit_for_version(
+                content.map_version,
+                target.rawcode,
+            ) else {
+                continue;
+            };
+            let mut sim = Simulation::new(SimulationConfig::default(), 1);
+            sim.debug_grant_player_resources_for(PlayerId(0), u32::MAX / 2, u32::MAX / 2);
+            let size = source.footprint_size_cells;
+            let first_footprint = BuildingFootprint::new(12, 12, size, size);
+            let second_footprint = BuildingFootprint::new(20, 12, size, size);
+            let first = sim.spawn_building_for_player_with_properties(
+                PlayerId(0),
+                source.spawn(Team(0), first_footprint),
+                source.gameplay_properties(),
+            );
+            let second = sim.spawn_building_for_player_with_properties(
+                PlayerId(0),
+                source.spawn(Team(0), second_footprint),
+                source.gameplay_properties(),
+            );
+            for n in 1..limit {
+                let footprint =
+                    BuildingFootprint::new(12 + i32::from(n) * i32::from(size + 2), 20, size, size);
+                sim.spawn_building_for_player_with_properties(
+                    PlayerId(0),
+                    target.spawn(Team(0), footprint),
+                    target.gameplay_properties(),
+                );
+            }
+            let resources = &mut sim.player_state_mut(PlayerId(0)).unwrap().resources;
+            resources.legendary_points_used = source.economy.legendary_points_cost * 2
+                + target.economy.legendary_points_cost * (limit - 1);
+            resources.legendary_points_cap = resources.legendary_points_used;
+            assert!(sim.can_afford_building_upgrade_for_player(PlayerId(0), first, target.economy));
+            assert!(!sim.can_afford_building_for_player(PlayerId(0), target.economy));
+            sim.start_building_upgrade_as(
+                PlayerId(0),
+                first,
+                source.spawn(Team(0), first_footprint),
+                source.gameplay_properties(),
+                target.spawn(Team(0), first_footprint),
+                target.gameplay_properties(),
+            )
+            .unwrap();
+            assert!(!sim.building_type_limit_available_for_player(
+                PlayerId(0),
+                content.map_version,
+                target.rawcode
+            ));
+            assert!(sim.building_type_limit_available_for_player(
+                PlayerId(1),
+                content.map_version,
+                target.rawcode
+            ));
+            let mut restored = wire_restore(&sim, 4);
+            let before = sim.checksum();
+            assert_eq!(
+                sim.start_building_upgrade_as(
+                    PlayerId(0),
+                    second,
+                    source.spawn(Team(0), second_footprint),
+                    source.gameplay_properties(),
+                    target.spawn(Team(0), second_footprint),
+                    target.gameplay_properties()
+                ),
+                Err(BuildingUpgradeError::TypeLimitReached)
+            );
+            assert_eq!(sim.checksum(), before);
+            for simulation in [&mut sim, &mut restored] {
+                simulation
+                    .cancel_building_construction_for_player(PlayerId(0), first)
+                    .unwrap();
+                assert!(simulation.building_type_limit_available_for_player(
+                    PlayerId(0),
+                    content.map_version,
+                    target.rawcode
+                ));
+                simulation
+                    .start_building_upgrade_as(
+                        PlayerId(0),
+                        second,
+                        source.spawn(Team(0), second_footprint),
+                        source.gameplay_properties(),
+                        target.spawn(Team(0), second_footprint),
+                        target.gameplay_properties(),
+                    )
+                    .unwrap();
+            }
+            for _ in 0..=target.construction_time_ticks {
+                assert_eq!(sim.step().checksum, restored.step().checksum);
+            }
+            assert!(!sim.building_type_limit_available_for_player(
+                PlayerId(0),
+                content.map_version,
+                target.rawcode
+            ));
+            let entity = sim
+                .world
+                .iter_entities()
+                .find(|e| e.get::<SimId>() == Some(&second))
+                .unwrap()
+                .id();
+            sim.world.get_mut::<Health>(entity).unwrap().current = 0;
+            assert!(sim.building_type_limit_available_for_player(
+                PlayerId(0),
+                content.map_version,
+                target.rawcode
+            ));
         }
     }
 }

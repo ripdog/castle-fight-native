@@ -1028,6 +1028,15 @@ impl Simulation {
         if !building_allowed {
             return Err(BuilderBuildError::BuildingNotInCatalog);
         }
+        if let Some(content) = properties.content
+            && !self.building_type_limit_available_for_player(
+                builder_owner,
+                content.map_version,
+                content.rawcode,
+            )
+        {
+            return Err(BuilderBuildError::TypeLimitReached);
+        }
         Ok((builder_entity, builder_owner))
     }
 

@@ -34,11 +34,13 @@ def build(map_version='9.27', revision='r1'):
     mushroom = next(r for r in building_rows if r['building_rawcode'] == 'h047')
     serpent = next(r for r in building_rows if r['building_rawcode'] == 'h02N')
     ceremonial = next(r for r in building_rows if r['building_rawcode'] == 'h02R')
+    stasis = next(r for r in building_rows if r['building_rawcode'] == 'h07X')
     grant_params = json.loads(ceremonial['parameters_json'])
     grant_codes = [value.to_bytes(4, 'big').decode() for value in grant_params['always_ability_ids']
                    + [value for option in grant_params['option_ability_ids'] for value in option]]
     launcher_codes += ['h02R', 'A039', 'A0F1', *grant_codes]
     launcher_codes += ['h02N', 'A02O', 'A02Z', 'A030']
+    launcher_codes += ['h07X', 'A032', 'Ast9']
     launcher_codes += ['h047', 'A06P', 'A0AK']
     freezer = next(r for r in building_rows if r['building_rawcode'] == 'h03O')
     launcher_codes += ['h03O', 'h08U', 'A04I', 'A081', 'A080', 'A084', 'A082', 'A083', 'A04H']
@@ -66,6 +68,12 @@ def build(map_version='9.27', revision='r1'):
                      'CallbackSingle_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_ReengageRuntime',
                      'CallbackSingle_doAfter_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_doAfter_ReengageRuntime',
                      *snow['source_functions'].split(','), *serpent['source_functions'].split(','), *ceremonial['source_functions'].split(','),
+                     *stasis['source_functions'].split(','), 'dummyCastPointFrom',
+                     'CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities',
+                     'CallbackSingle_doAfter_StasisTrap_call_doAfter_StasisTrap',
+                     'code__onEnter_doAfter_StasisTrap', 'BO', 'isSingleLimitBuilding',
+                     'getBuildingTechMaxAllowedForCurrentModes', 'applyRaceTechAvailabilityForPlayer',
+                     'setBuildingLineTechAvailabilityForCurrentModes',
                      'CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities3',
                      'CallbackSingle_doAfter_doAfter_RaceOrcAbilities_call_doAfter_doAfter_RaceOrcAbilities',
                      *(f for row in launchers for f in row['source_functions'].split(',')), *mushroom['source_functions'].split(','), *freezer['source_functions'].split(','), 'randomAliveEnemyNear', 'OC', 'applyArtilleryModeEnabled', 'CallbackSingle_doAfter_doAfter_RaceNorthernAbilities_call_doAfter_doAfter_RaceNorthernAbilities', 'CallbackSingle_doAfter_doAfter_doAfter_RaceNorthernAbilities_call_doAfter_doAfter_doAfter_RaceNorthernAbilities', 'ForGroupCallback_forUnitsInRange_RaceNorthernAbilities_callback_forUnitsInRange_RaceNorthernAbilities', 'dummyCastTargetWithVision', 'tileR', 'tile_toVec2', 'vL', 'AI', 'unit_resetSpawnQueue', 'vM', 'ZE', 'EventListener_add_BuildingSpells_onEvent_add_BuildingSpells'):
@@ -90,6 +98,27 @@ def build(map_version='9.27', revision='r1'):
         {'role': 'target', 'path': json.loads('"' + target_art[1] + '"'), 'attachment': target_art[2]},
         {'role': 'caster', 'path': json.loads('"' + source_art[1] + '"')},
     ]
+    limit_source = traces['CallbackSingle_doAfter_StasisTrap_call_doAfter_StasisTrap']['source']
+    limits = {int(code).to_bytes(4, 'big').decode(): int(limit)
+              for code, limit in re.findall(r'SetPlayerTechMaxAllowed\(\w+\[\w+\],(\d+),(\d+)\)', limit_source)}
+    if not limits:
+        raise ValueError('native type limit source no longer matches audited callback')
+    predicate_ids = set(map(int, re.findall(r'==([0-9]+)', traces['isSingleLimitBuilding']['source'])))
+    if predicate_ids != {int.from_bytes(code.encode(), 'big') for code in limits}:
+        raise ValueError('type limit initializer and current-mode predicate differ')
+    stasis_source = traces[stasis['source_functions']]['source']
+    point_call = re.search(r'dummyCastPointFrom\(\w+,(\d+),OrderId\("([^"]+)"\),\w+,\w+,([\d.]+)\)', stasis_source)
+    params = json.loads(stasis['parameters_json'])
+    if not point_call or int(point_call[1]) != params['effect_ability_id']:
+        raise ValueError('native Stasis child identity differs from literal callback')
+    if float(point_call[3]) != float(params['carrier_or_dummy_lifetime_seconds']):
+        raise ValueError('native Stasis dummy recycle lifetime differs from source')
+    hidden_ward = int(re.search(r'\bVR=(\d+)', traces['BO']['source'])[1]).to_bytes(4, 'big').decode()
+    if selected['Ast9']['Stau:1'] != hidden_ward:
+        raise ValueError('hidden trap listener identity differs from native summon')
+    stasis_control = {'order': point_call[2], 'dummy_seconds': point_call[3],
+                      'stand_seconds': re.search(r'doAfter\(([\d.]+),', stasis_source)[1],
+                      'hidden_ward_rawcode': hidden_ward}
     # The normalized summary reverses these names. Retain the actual callback assignment.
     initial = traces['FL']['source']
     callback = traces['ForGroupCallback_forUnitsOfPlayer_nullTimer_SnowveilFountain_callback_forUnitsOfPlayer_nullTimer_SnowveilFountain']['source']
@@ -120,6 +149,7 @@ def build(map_version='9.27', revision='r1'):
                                 'duration': re.search(r'doAfter\((\d+\.\d+),', traces['issueFrostLauncherOrder']['source']).group(1)}, 'protected': protected,
             'overheat_explosions': overheat_explosions,
             'ceremonial': ceremonial, 'ceremonial_retry_marker': retry_marker, 'ceremonial_cast_visuals': ceremonial_visuals,
+            'stasis': stasis, 'stasis_control': stasis_control, 'building_type_limits': limits,
             'serpent': serpent,
             'serpent_animation_delays': {
                 'attack': re.search(r'doAfter\(([\d.]+),', traces['serpentRockShoot']['source']).group(1),

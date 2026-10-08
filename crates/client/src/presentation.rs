@@ -3372,6 +3372,7 @@ fn prewarm_timed_wc3_effects(
                         | AbilityEffect::SolarStrike { .. }
                         | AbilityEffect::PhoenixFire(_)
                         | AbilityEffect::Hailstone(_)
+                        | AbilityEffect::BuildingStasis(_)
                         | AbilityEffect::BuildingPermanentGrant(_)
                         | AbilityEffect::BuildingAcidBomb(_)
                         | AbilityEffect::BuildingBolt(_)

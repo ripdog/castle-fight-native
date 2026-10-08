@@ -2394,7 +2394,18 @@ fn can_afford_building_upgrade(
     };
     authoritative
         .simulation
-        .can_afford_building_for_player(owner, target.economy(content))
+        .can_afford_building_upgrade_for_player(
+            owner,
+            state.actor.expect("upgrade source"),
+            target.economy(content),
+        )
+        && authoritative
+            .simulation
+            .building_type_limit_available_for_player(
+                owner,
+                content.map_version,
+                target.rawcode(content),
+            )
 }
 
 fn insufficient_upgrade_resources_status(
@@ -2409,6 +2420,19 @@ fn insufficient_upgrade_resources_status(
         .and_then(|actor| authoritative.simulation.building(actor))
         .and_then(|building| building.owner)
         .expect("controllable building must have an owner");
+    if !authoritative
+        .simulation
+        .building_type_limit_available_for_player(
+            owner,
+            content.map_version,
+            target.rawcode(content),
+        )
+    {
+        return format!(
+            "Cannot upgrade to {}: the limit for this building type is reached.",
+            target.label(content)
+        );
+    }
     let resources = authoritative
         .simulation
         .player_resources_for(owner)
