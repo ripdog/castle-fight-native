@@ -544,6 +544,10 @@ impl Simulation {
                             index,
                             units,
                         ));
+                    } else if let AbilityEffect::BuildingAura(profile) = intent.ability.effect {
+                        self.start_aura_carrier(source, profile, units, buildings);
+                        metrics.effects += 1;
+                        emit_cast_visual = false;
                     } else if let AbilityEffect::BuildingStasis(profile) = intent.ability.effect {
                         self.start_stasis_trap(source, profile, buildings);
                         metrics.effects += 1;
@@ -804,7 +808,11 @@ impl Simulation {
                     }
                 }
                 AbilityIntentTarget::Building { id, position } => {
-                    if let AbilityEffect::BuildingStasis(profile) = intent.ability.effect {
+                    if let AbilityEffect::BuildingAura(profile) = intent.ability.effect {
+                        self.start_aura_carrier(source, profile, units, buildings);
+                        metrics.effects += 1;
+                        emit_cast_visual = false;
+                    } else if let AbilityEffect::BuildingStasis(profile) = intent.ability.effect {
                         self.start_stasis_trap(source, profile, buildings);
                         metrics.effects += 1;
                         emit_cast_visual = false;

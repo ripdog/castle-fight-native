@@ -161,6 +161,7 @@ pub(crate) struct HailstoneState {
 
 #[derive(Component, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum NativeAction {
+    AuraCarrier(AuraCarrierState),
     StasisTrap(StasisTrapState),
     AcidBomb(AcidBombMissileState),
     Poison(PoisonState),
@@ -189,5 +190,16 @@ pub(crate) struct StasisTrapState {
     pub profile: crate::building_mechanics::BuildingStasisProfile,
     pub armed_tick: u64,
     pub detonation_tick: Option<u64>,
+    pub expires_tick: u64,
+}
+
+/// Invulnerable/locust carrier: no combat handle, collision, model, or selectable presence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct AuraCarrierState {
+    pub source: SimId,
+    pub team: Team,
+    pub position: SimPoint,
+    pub profile: crate::building_mechanics::BuildingAuraProfile,
+    pub created_tick: u64,
     pub expires_tick: u64,
 }

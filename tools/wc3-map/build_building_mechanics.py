@@ -35,12 +35,14 @@ def build(map_version='9.27', revision='r1'):
     serpent = next(r for r in building_rows if r['building_rawcode'] == 'h02N')
     ceremonial = next(r for r in building_rows if r['building_rawcode'] == 'h02R')
     stasis = next(r for r in building_rows if r['building_rawcode'] == 'h07X')
+    healing = next(r for r in building_rows if r['building_rawcode'] == 'h07Y')
     grant_params = json.loads(ceremonial['parameters_json'])
     grant_codes = [value.to_bytes(4, 'big').decode() for value in grant_params['always_ability_ids']
                    + [value for option in grant_params['option_ability_ids'] for value in option]]
     launcher_codes += ['h02R', 'A039', 'A0F1', *grant_codes]
     launcher_codes += ['h02N', 'A02O', 'A02Z', 'A030']
     launcher_codes += ['h07X', 'A032', 'Ast9']
+    launcher_codes += ['h07Y', 'A0HT', 'AstB', 'e008']
     launcher_codes += ['h047', 'A06P', 'A0AK']
     freezer = next(r for r in building_rows if r['building_rawcode'] == 'h03O')
     launcher_codes += ['h03O', 'h08U', 'A04I', 'A081', 'A080', 'A084', 'A082', 'A083', 'A04H']
@@ -69,6 +71,9 @@ def build(map_version='9.27', revision='r1'):
                      'CallbackSingle_doAfter_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_doAfter_ReengageRuntime',
                      *snow['source_functions'].split(','), *serpent['source_functions'].split(','), *ceremonial['source_functions'].split(','),
                      *stasis['source_functions'].split(','), 'dummyCastPointFrom',
+                     *healing['source_functions'].split(','), 'dummyCarrierWithAbility', 'createSpellCarrier', 'QL', 'iD', 'hD',
+                     'CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities1',
+                     'CallbackSingle_doAfter_SpellHelpers_call_doAfter_SpellHelpers4',
                      'CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities',
                      'CallbackSingle_doAfter_StasisTrap_call_doAfter_StasisTrap',
                      'code__onEnter_doAfter_StasisTrap', 'BO', 'isSingleLimitBuilding',
@@ -119,6 +124,18 @@ def build(map_version='9.27', revision='r1'):
     stasis_control = {'order': point_call[2], 'dummy_seconds': point_call[3],
                       'stand_seconds': re.search(r'doAfter\(([\d.]+),', stasis_source)[1],
                       'hidden_ward_rawcode': hidden_ward}
+    healing_source = traces[healing['source_functions']]['source']
+    healing_params = json.loads(healing['parameters_json'])
+    carrier_call = re.search(r'dummyCarrierWithAbility\(unit_getOwner\(\w+\),(\d+),unit_getPos\(\w+\),([\d.]+)\)', healing_source)
+    if not carrier_call or int(carrier_call[1]) != healing_params['effect_ability_id']:
+        raise ValueError('healing carrier child differs from literal callback')
+    if float(carrier_call[2]) != float(healing_params['carrier_or_dummy_lifetime_seconds']):
+        raise ValueError('healing carrier lifetime differs from literal callback')
+    carrier_rawcode = int(re.search(r'dV=(\d+)', traces['QL']['source'])[1]).to_bytes(4, 'big').decode()
+    if carrier_rawcode not in selected:
+        raise ValueError('aura carrier identity is missing from field closure')
+    healing_control = {'carrier_rawcode': carrier_rawcode, 'lifetime_seconds': carrier_call[2],
+                       'stand_seconds': re.search(r'doAfter\(([\d.]+),', healing_source)[1]}
     # The normalized summary reverses these names. Retain the actual callback assignment.
     initial = traces['FL']['source']
     callback = traces['ForGroupCallback_forUnitsOfPlayer_nullTimer_SnowveilFountain_callback_forUnitsOfPlayer_nullTimer_SnowveilFountain']['source']
@@ -150,6 +167,7 @@ def build(map_version='9.27', revision='r1'):
             'overheat_explosions': overheat_explosions,
             'ceremonial': ceremonial, 'ceremonial_retry_marker': retry_marker, 'ceremonial_cast_visuals': ceremonial_visuals,
             'stasis': stasis, 'stasis_control': stasis_control, 'building_type_limits': limits,
+            'healing': healing, 'healing_control': healing_control,
             'serpent': serpent,
             'serpent_animation_delays': {
                 'attack': re.search(r'doAfter\(([\d.]+),', traces['serpentRockShoot']['source']).group(1),

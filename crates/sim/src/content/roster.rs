@@ -133,6 +133,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    HealingTotem = 0x2100_0015 => b"h07Y",
     StasisTotem = 0x2100_0014 => b"h07X",
     LegendaryTotem = 0x2100_0013 => b"h02O",
     CeremonialTotem = 0x2100_0011 => b"h02R",

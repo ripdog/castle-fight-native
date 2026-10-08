@@ -5,6 +5,7 @@ use crate::components::{
 };
 
 mod acid_bomb;
+mod aura_carrier;
 mod buff_transfer;
 mod burning_oil;
 mod damage_threshold;

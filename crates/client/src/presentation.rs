@@ -3372,6 +3372,7 @@ fn prewarm_timed_wc3_effects(
                         | AbilityEffect::SolarStrike { .. }
                         | AbilityEffect::PhoenixFire(_)
                         | AbilityEffect::Hailstone(_)
+                        | AbilityEffect::BuildingAura(_)
                         | AbilityEffect::BuildingStasis(_)
                         | AbilityEffect::BuildingPermanentGrant(_)
                         | AbilityEffect::BuildingAcidBomb(_)
@@ -4864,6 +4865,9 @@ fn sync_render_entities(
             );
         }
         for (ability, kind) in status_visual_sources(&unit.status, samples.current.tick) {
+            if kind == Wc3StatusVisualKind::Regeneration && unit.health >= unit.health_max {
+                continue;
+            }
             spawn_status_visuals(
                 &mut commands,
                 &mut render_map,
@@ -4887,6 +4891,9 @@ fn sync_render_entities(
             .get(&building.id)
             .and_then(|entry| entry.model_root);
         for (ability, kind) in status_visual_sources(&building.status, samples.current.tick) {
+            if kind == Wc3StatusVisualKind::Regeneration && building.health >= building.health_max {
+                continue;
+            }
             spawn_status_visuals(
                 &mut commands,
                 &mut render_map,
@@ -5440,6 +5447,7 @@ fn entity_status_visual_is_active(
     }
     if let Some(unit) = snapshot.units.get(&target) {
         return unit.health > 0
+            && (kind != Wc3StatusVisualKind::Regeneration || unit.health < unit.health_max)
             && ((kind == Wc3StatusVisualKind::Armor
                 && ability_rawcode == u32::from_be_bytes(*b"A09L")
                 && unit.negative_building_shield_level > 0
@@ -5448,6 +5456,7 @@ fn entity_status_visual_is_active(
     }
     snapshot.buildings.get(&target).is_some_and(|building| {
         building.health > 0
+            && (kind != Wc3StatusVisualKind::Regeneration || building.health < building.health_max)
             && status_visual_is_active(&building.status, snapshot.tick, ability_rawcode, kind)
     })
 }
@@ -5497,6 +5506,14 @@ fn status_visual_sources(
                 .iter()
                 .filter(move |modifier| modifier.expires_tick > tick)
                 .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::Armor)),
+        )
+        .chain(
+            status.armor_modifiers[..usize::from(status.armor_modifier_count)]
+                .iter()
+                .filter(move |modifier| {
+                    modifier.expires_tick > tick && modifier.regeneration_per_second_per_10k > 0
+                })
+                .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::Regeneration)),
         )
         .chain(
             status.attack_speed_modifiers[..usize::from(status.attack_speed_modifier_count)]
@@ -5563,6 +5580,14 @@ fn status_visual_is_active(
                 .iter()
                 .any(|modifier| modifier.id.0 == ability_rawcode && modifier.expires_tick > tick)
         }
+        Wc3StatusVisualKind::Regeneration => status.armor_modifiers
+            [..usize::from(status.armor_modifier_count)]
+            .iter()
+            .any(|modifier| {
+                modifier.id.0 == ability_rawcode
+                    && modifier.regeneration_per_second_per_10k > 0
+                    && modifier.expires_tick > tick
+            }),
         Wc3StatusVisualKind::Armor => {
             let count = usize::from(status.armor_modifier_count);
             status.armor_modifiers[..count]
@@ -8478,6 +8503,71 @@ mod tests {
         assert!(status_visual_sources(&status, 20).next().is_none());
         status.acid_bomb = None;
         assert!(!status_visual_is_active(&status, 19, 124, kind));
+    }
+
+    #[test]
+    fn native_regeneration_visual_requires_missing_health_and_live_payload() {
+        use castle_fight_sim::{
+            AttackDelivery, AttackProfile, BuildingFootprint, BuildingSpawn, MovementProfile,
+            SimPoint, Simulation, SimulationConfig, Team, UnitSpawn,
+        };
+        let mut simulation = Simulation::new(SimulationConfig::default(), 1);
+        let unit = simulation.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(0, 0),
+            health: 100,
+            attack: AttackProfile {
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 1,
+                delivery: AttackDelivery::Melee,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let building = simulation.spawn_building(BuildingSpawn {
+            team: Team(0),
+            footprint: BuildingFootprint::new(10, 10, 1, 1),
+            health: 100,
+            attack: None,
+            production: None,
+            spellcasting: None,
+        });
+        let mut snapshot = crate::bridge::PresentationSnapshot::capture(&simulation);
+        let ability = 123;
+        let kind = Wc3StatusVisualKind::Regeneration;
+        for id in [unit, building] {
+            let status = if id == unit {
+                &mut snapshot.units.get_mut(&id).unwrap().status
+            } else {
+                &mut snapshot.buildings.get_mut(&id).unwrap().status
+            };
+            status.armor_modifier_count = 1;
+            status.armor_modifiers[0].id = castle_fight_sim::ModifierId(ability);
+            status.armor_modifiers[0].regeneration_per_second_per_10k = 15_000;
+            status.armor_modifiers[0].expires_tick = 20;
+            assert!(!entity_status_visual_is_active(
+                id, &snapshot, ability, kind
+            ));
+            if id == unit {
+                snapshot.units.get_mut(&id).unwrap().health = 99;
+            } else {
+                snapshot.buildings.get_mut(&id).unwrap().health = 99;
+            }
+            snapshot.tick = 19;
+            assert!(entity_status_visual_is_active(id, &snapshot, ability, kind));
+            assert!(!entity_status_visual_is_active(
+                id,
+                &snapshot,
+                ability + 1,
+                kind
+            ));
+            snapshot.tick = 20;
+            assert!(!entity_status_visual_is_active(
+                id, &snapshot, ability, kind
+            ));
+            snapshot.tick = 0;
+        }
     }
 
     #[test]

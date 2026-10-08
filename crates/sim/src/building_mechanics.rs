@@ -7,6 +7,12 @@ use crate::{
     math::SUBUNITS_PER_WORLD_UNIT,
     version::MapVersion,
 };
+mod aura_carrier;
+pub use aura_carrier::BuildingAuraProfile;
+pub(crate) use aura_carrier::{
+    aura_carrier_bindings_for_version, aura_carrier_source_for_version,
+    healing_aura_spellcasting_for_version,
+};
 mod orc;
 mod stasis;
 pub use stasis::{BuildingStasisProfile, building_type_limit_for_version};

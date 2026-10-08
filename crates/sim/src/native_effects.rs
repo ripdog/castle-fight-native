@@ -28,6 +28,7 @@ const TUNING_9_27_JSON: &str = include_str!("../data/castle-fight/9.27/native-ef
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum NativeEffectImplementationId {
+    WarcraftAuraCarrierV1,
     WarcraftStasisTrapV1,
     WarcraftPermanentAbilityGrantsV1,
     WarcraftAcidBombV1,
@@ -70,6 +71,7 @@ impl NativeEffectImplementationId {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::WarcraftAuraCarrierV1 => 36,
             Self::WarcraftStasisTrapV1 => 35,
             Self::WarcraftPoisonV1 => 68,
             Self::WarcraftDamageThresholdV1 => 67,
@@ -929,6 +931,9 @@ pub fn resolve_native_effect_requirements(
         .iter()
         .copied()
         .partition(|source| crate::building_mechanics::stasis_source_for_version(*source, version));
+    let (aura_roots, roots): (Vec<_>, Vec<_>) = roots.into_iter().partition(|source| {
+        crate::building_mechanics::aura_carrier_source_for_version(*source, version)
+    });
     let (grant_roots, roots): (Vec<_>, Vec<_>) = roots.into_iter().partition(|source| {
         crate::building_mechanics::ceremonial_source_for_version(*source, version)
     });
@@ -952,6 +957,9 @@ pub fn resolve_native_effect_requirements(
         .copied()
         .partition(|source| crate::building_mechanics::hex_source_for_version(*source, version));
     let mut resolved = catalog().resolve_requirements(version, &ordinary_roots)?;
+    if !aura_roots.is_empty() {
+        resolved.extend(crate::building_mechanics::aura_carrier_bindings_for_version(version));
+    }
     if !stasis_roots.is_empty() {
         resolved.extend(crate::building_mechanics::stasis_bindings_for_version(
             version,
@@ -1168,6 +1176,11 @@ pub fn native_effect_implementation_for(
         .is_some_and(|source| crate::building_mechanics::stasis_source_for_version(source, version))
     {
         return Some(NativeEffectImplementationId::WarcraftStasisTrapV1);
+    }
+    if source.is_some_and(|source| {
+        crate::building_mechanics::aura_carrier_source_for_version(source, version)
+    }) {
+        return Some(NativeEffectImplementationId::WarcraftAuraCarrierV1);
     }
     catalog().implementation_for(source_kind, source_key, version)
 }

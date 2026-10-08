@@ -5,6 +5,7 @@ use crate::components::{
 };
 
 pub(super) mod acid_bomb;
+pub(super) mod aura_carrier;
 pub(super) mod ensnare;
 pub(super) mod poison;
 pub(super) mod stasis;
@@ -121,11 +122,17 @@ impl Simulation {
             })
             .collect::<Vec<_>>();
         actions.sort_unstable_by_key(|(id, _, _)| *id);
+        self.refresh_carrier_auras(units);
         for (_, entity, action) in actions {
             if self.world.get::<NativeAction>(entity).is_none() {
                 continue;
             }
             match action {
+                NativeAction::AuraCarrier(state) => {
+                    if self.next_tick >= state.expires_tick {
+                        self.world.despawn(entity);
+                    }
+                }
                 NativeAction::StasisTrap(state) => self.advance_stasis_trap(entity, state, units),
                 NativeAction::AcidBomb(state) => self.advance_acid_bomb(entity, state, units),
                 NativeAction::Poison(state) => self.advance_poison(entity, state, units),
