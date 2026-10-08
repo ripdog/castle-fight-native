@@ -7,8 +7,16 @@ use crate::{
     math::SUBUNITS_PER_WORLD_UNIT,
     version::MapVersion,
 };
+mod world_freezer;
 use serde_json::Value;
 use std::sync::OnceLock;
+pub use world_freezer::{
+    WorldFreezerProfile, WorldFreezerVisualTiming, world_freezer_visual_timing_for_version,
+};
+pub(crate) use world_freezer::{
+    world_freezer_bindings_for_version, world_freezer_source_for_version,
+    world_freezer_spellcasting_for_version,
+};
 
 fn evidence(version: MapVersion) -> &'static Value {
     assert_eq!(version, MapVersion::CASTLE_FIGHT_9_27);

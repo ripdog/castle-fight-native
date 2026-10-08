@@ -4912,6 +4912,7 @@ mod tests {
         let launch = sim.step();
         assert_eq!(launch.projectiles_launched, 1);
         let destination = match sim.projectiles()[0].kind {
+            ProjectileViewKind::NativeMover { .. } => panic!("unexpected native mover"),
             ProjectileViewKind::Ballistic { destination, .. } => destination,
             ProjectileViewKind::GuaranteedHit { .. }
             | ProjectileViewKind::NativeCarrierBolt { .. }

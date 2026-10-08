@@ -777,6 +777,7 @@ mod tests {
                 "ACff" | "Afae" => "armor",
                 "Apxf" => "damage_over_time",
                 "Afrz" => "freeze",
+                "AOae" => "movement",
                 "AHtb" | "ACtb" => "stun",
                 _ => continue,
             };

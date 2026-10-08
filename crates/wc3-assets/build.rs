@@ -864,6 +864,7 @@ fn load_visual_assets(
             // Entangling Roots-family effects hold the target in place for the buff lifetime.
             "Aenr" => &["movement"],
             "Afrz" => &["freeze"],
+            "AOae" => &["movement"],
             "AHtb" | "ACtb" => &["stun"],
             // Frost Armor applies one persistent shield buff and one reactive slow buff.
             "ACf2" => &["armor", "movement"],
@@ -933,6 +934,42 @@ fn load_visual_assets(
             }
         },
     ));
+    // Script-owned World Freezer orbs use the dummy unit model as a persistent mover.
+    let building_projection: serde_json::Value = serde_json::from_str(include_str!(
+        "../sim/data/castle-fight/9.27/building-mechanics-r1.json"
+    ))?;
+    let row = &building_projection["freezer"];
+    let parameters: serde_json::Value = serde_json::from_str(
+        row["parameters_json"]
+            .as_str()
+            .ok_or("missing freezer parameters")?,
+    )?;
+    let code = u32::try_from(
+        parameters["orb_unit_id"]
+            .as_u64()
+            .ok_or("missing orb identity")?,
+    )?
+    .to_be_bytes();
+    let dummy = std::str::from_utf8(&code)?;
+    visual_assets.push(VisualAssetSpec {
+        owner_kind: "abilities".to_owned(),
+        owner_rawcode: row["ability_rawcode"]
+            .as_str()
+            .ok_or("missing freezer ability")?
+            .to_owned(),
+        source_unit_rawcode: Some(
+            row["building_rawcode"]
+                .as_str()
+                .ok_or("missing freezer source")?
+                .to_owned(),
+        ),
+        role: "missile".to_owned(),
+        model_path: building_projection["fields"][dummy]["umdl:0"]
+            .as_str()
+            .ok_or("missing orb art")?
+            .to_owned(),
+        missile_arc: Some(0.0),
+    });
     // Some registered building spells create transient effects directly in the 9.27
     // script, so they have no object-field art link for the automatic extractor to follow.
     visual_assets.push(VisualAssetSpec {
@@ -1073,6 +1110,37 @@ fn append_building_script_visuals(
             owner_kind: asset.owner_kind.clone(),
             owner_rawcode: asset.owner_rawcode.clone(),
             source_unit_rawcode: Some(building.to_owned()),
+            role: asset.role.clone(),
+            model_path: asset.model_path.clone(),
+            missile_arc: asset.missile_arc,
+        })
+        .collect::<Vec<_>>();
+    visuals.assets.extend(missiles);
+    let row = &data["freezer"];
+    let objects: serde_json::Value = serde_json::from_str(
+        row["effect_objects_json"]
+            .as_str()
+            .ok_or("freezer effects")?,
+    )?;
+    let building = row["building_rawcode"].as_str().ok_or("freezer source")?;
+    let children = objects
+        .as_array()
+        .ok_or("freezer objects")?
+        .iter()
+        .filter_map(|object| object["rawcode"].as_str())
+        .collect::<Vec<_>>();
+    let missiles = visuals
+        .assets
+        .iter()
+        .filter(|a| {
+            a.owner_kind == "abilities"
+                && children.contains(&a.owner_rawcode.as_str())
+                && a.role == "missile"
+        })
+        .map(|asset| VisualAssetSpec {
+            source_unit_rawcode: Some(building.to_owned()),
+            owner_kind: asset.owner_kind.clone(),
+            owner_rawcode: asset.owner_rawcode.clone(),
             role: asset.role.clone(),
             model_path: asset.model_path.clone(),
             missile_arc: asset.missile_arc,

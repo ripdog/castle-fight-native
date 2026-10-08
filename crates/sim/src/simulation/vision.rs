@@ -165,6 +165,29 @@ impl Simulation {
                 ))
             })
             .collect::<Vec<_>>();
+        for entity in self.world.iter_entities() {
+            if let Some(state) = entity.get::<WorldFreezerState>() {
+                let sight = crate::castle_fight_sight_for_version(
+                    state.profile.map_version,
+                    state.profile.dummy_rawcode,
+                )
+                .expect("native orb retains ordinary day/night sight");
+                sources.extend(state.orbs.iter().map(|orb| {
+                    (
+                        orb.id,
+                        orb.team,
+                        orb.position(),
+                        sight.radius(rules.is_night(self.next_tick)),
+                        true,
+                        0,
+                        None,
+                        None,
+                        Some(orb.owner),
+                        None,
+                    )
+                }));
+            }
+        }
         sources.sort_unstable_by_key(|source| source.0);
         for &(_, team, position, radius, flying, revealed_teams, _, _, _, _) in &sources {
             // Capture size outside the closure so mutating the visibility grid needs no clone.

@@ -58,7 +58,7 @@ class NativeStatusDeliveryAuditTests(unittest.TestCase):
                      "target_attachments": [{"index": 0, "point": "head", "source": "native"}]}
         self.projection = {"buffs": [self.buff]}
         self.fields = [{"category": "abilities", "rawcode": "CAST", "base_rawcode": "ACff",
-                        "field_id": "abuf", "recovered_value_json": '"BUFF"'}]
+                        "field_id": "abuf", "level": "1", "recovered_value_json": '"BUFF"'}]
         self.binding = {"ability_rawcode": "CAST", "buff_rawcode": "BUFF", "status_kind": "armor",
                         "source_model": "stock.mdx", "gltf": "models/stock.gltf",
                         "target_attachment_count": None,
@@ -73,6 +73,10 @@ class NativeStatusDeliveryAuditTests(unittest.TestCase):
         for entries in ([], [self.binding, self.binding], [dict(self.binding, gltf=None)]):
             self.assertEqual(len(self.audit(entries)[0]), 1)
         self.assertEqual(audit.audit_native_status_visuals(self.projection, self.fields, set(), {}), ([], []))
+
+    def test_unused_higher_level_buff_does_not_replace_active_art(self):
+        self.fields.append(dict(self.fields[0], level="2", recovered_value_json='"STCK"'))
+        self.assertEqual(self.audit([self.binding]), ([], [self.binding]))
 
     def test_freeze_requires_its_native_buff_binding(self):
         self.fields[0]["base_rawcode"] = "Afrz"

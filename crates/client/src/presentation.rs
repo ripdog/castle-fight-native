@@ -525,7 +525,8 @@ impl PresentationAssets {
 
     fn projectile_mesh(&self, projectile: &ProjectileView) -> Handle<Mesh> {
         match projectile.kind {
-            ProjectileViewKind::NativeCarrierBolt { .. }
+            ProjectileViewKind::NativeMover { .. }
+            | ProjectileViewKind::NativeCarrierBolt { .. }
             | ProjectileViewKind::GuaranteedHit { .. }
             | ProjectileViewKind::Reflected { .. }
             | ProjectileViewKind::Line { .. } => self.guaranteed_projectile_mesh.clone(),
@@ -536,7 +537,8 @@ impl PresentationAssets {
 
     fn projectile_material(&self, projectile: &ProjectileView) -> Handle<StandardMaterial> {
         let index = match projectile.kind {
-            ProjectileViewKind::NativeCarrierBolt { .. }
+            ProjectileViewKind::NativeMover { .. }
+            | ProjectileViewKind::NativeCarrierBolt { .. }
             | ProjectileViewKind::GuaranteedHit { .. }
             | ProjectileViewKind::Reflected { .. }
             | ProjectileViewKind::Line { .. } => 0,
@@ -2008,7 +2010,55 @@ fn update_imported_building_animations(
             continue;
         }
 
-        if controller.state != ImportedBuildingAnimationState::Birth {
+        let native_cast = samples
+            .current
+            .buildings
+            .get(&controller.sim_id)
+            .and_then(|building| {
+                let content = building.content?;
+                let timing =
+                    castle_fight_sim::building_mechanics::world_freezer_visual_timing_for_version(
+                        content.map_version,
+                    );
+                if content.rawcode != timing.building_rawcode
+                    || building.ability_cast_sequence? == 0
+                {
+                    return None;
+                }
+                let started = building
+                    .ability_ready_tick?
+                    .saturating_sub(u64::from(timing.cooldown_ticks));
+                let elapsed = samples.current.tick.saturating_sub(started);
+                (elapsed < u64::from(timing.death_ticks)).then_some(elapsed)
+            });
+        if let Some(elapsed) = native_cast
+            && let Some(death) = controller.death.clone()
+        {
+            if controller.state != ImportedBuildingAnimationState::Death {
+                transitions.play(&mut player, death.node, Duration::ZERO);
+                set_building_emitter_sequence(
+                    &mut commands,
+                    &building_models,
+                    controller.model_root,
+                    controller.rawcode,
+                    Some(&death.name),
+                );
+                controller.state = ImportedBuildingAnimationState::Death;
+            }
+            if let Some(animation) = player.animation_mut(death.node) {
+                animation
+                    .set_seek_time(
+                        (elapsed as f32 / CASTLE_FIGHT_SIMULATION_HZ as f32)
+                            .min(death.duration_seconds),
+                    )
+                    .pause();
+            }
+            continue;
+        }
+        // The source intentionally plays Death while the building remains alive.
+        // Only a real death remnant above may despawn the presentation root.
+        let recovering_native_cast = controller.state == ImportedBuildingAnimationState::Death;
+        if controller.state != ImportedBuildingAnimationState::Birth && !recovering_native_cast {
             continue;
         }
         if let Some(stand) = controller.stand.clone() {
@@ -3158,6 +3208,7 @@ fn prewarm_timed_wc3_effects(
                         | AbilityEffect::PhoenixFire(_)
                         | AbilityEffect::Hailstone(_)
                         | AbilityEffect::BuildingBolt(_)
+                        | AbilityEffect::WorldFreezer(_)
                         | AbilityEffect::Snowfall { .. }
                         | AbilityEffect::Hex { .. }
                         | AbilityEffect::Damage { .. }
@@ -4815,6 +4866,25 @@ fn projectile_pose(
     alpha: f32,
     render_tick: f32,
 ) -> (Vec3, Quat) {
+    if let ProjectileViewKind::NativeMover {
+        facing_degrees,
+        height_world_units,
+        ..
+    } = projectile.kind
+    {
+        let previous = samples
+            .previous
+            .projectiles
+            .get(&projectile.id)
+            .map_or(projectile.launch_position, |p| p.launch_position);
+        let position =
+            sim_point_to_terrain_world_lerp(previous, projectile.launch_position, alpha, terrain)
+                + Vec3::Y * height_world_units as f32;
+        let rotation = Quat::from_rotation_y(
+            std::f32::consts::FRAC_PI_2 - f32::from(facing_degrees).to_radians(),
+        );
+        return (position, rotation);
+    }
     if samples.current.observer.is_some() {
         let target = match projectile.kind {
             ProjectileViewKind::NativeCarrierBolt { target, .. }
@@ -4922,6 +4992,9 @@ fn projectile_target(
     fallback: Vec3,
 ) -> Vec3 {
     match projectile.kind {
+        ProjectileViewKind::NativeMover { .. } => {
+            sim_point_to_terrain_world(projectile.launch_position, terrain)
+        }
         ProjectileViewKind::NativeCarrierBolt { target, .. }
         | ProjectileViewKind::GuaranteedHit { target }
         | ProjectileViewKind::Reflected { target, .. }
@@ -6894,6 +6967,7 @@ fn building_height(building: &BuildingSample) -> f32 {
 
 fn projectile_effect_color(kind: ProjectileViewKind) -> Color {
     match kind {
+        ProjectileViewKind::NativeMover { .. } => Color::srgb(0.48, 0.90, 1.0),
         ProjectileViewKind::NativeCarrierBolt { .. } => Color::srgb(0.92, 0.92, 1.0),
         ProjectileViewKind::GuaranteedHit { .. } => Color::srgb(0.48, 0.90, 1.0),
         ProjectileViewKind::Reflected { .. } => Color::srgb(0.92, 0.92, 1.0),
@@ -8138,6 +8212,7 @@ mod tests {
             mana_current: None,
             mana_maximum: None,
             ability_ready_tick: None,
+            ability_cast_sequence: None,
             ability_autocast_enabled: None,
             stunned_until_tick: None,
             visual_kind: BuildingVisualKind::Production,
@@ -8204,6 +8279,7 @@ mod tests {
             mana_current: None,
             mana_maximum: None,
             ability_ready_tick: None,
+            ability_cast_sequence: None,
             ability_autocast_enabled: None,
             stunned_until_tick: None,
             visual_kind: BuildingVisualKind::Production,

@@ -191,7 +191,7 @@ impl Simulation {
                                     target.status.native_stun_ability = Some(profile.ability);
                                 }
                             }
-                            if profile.damage_per_second > 0 {
+                            if profile.duration_ticks > 0 {
                                 apply_native_fire_damage_over_time(
                                     &mut target.status,
                                     ModifierId(profile.ability.0),
@@ -226,7 +226,7 @@ impl Simulation {
                                     .apply_spell(profile.damage, target.armor.armor_type),
                                 target.snow_damage_taken_per_10k,
                             ));
-                            if target.health > 0 && profile.damage_per_second > 0 {
+                            if target.health > 0 && profile.duration_ticks > 0 {
                                 apply_native_fire_damage_over_time(
                                     target.status.get_or_insert_default(),
                                     ModifierId(profile.ability.0),

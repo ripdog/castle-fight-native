@@ -198,7 +198,7 @@ def audit_native_status_visuals(projection, fields, abilities, manifest):
     recipes = {"Aenr": ("movement",), "ACf2": ("armor", "movement"),
                "Ainf": ("armor",), "AIrr": ("armor",), "AHad": ("armor",),
                "ACff": ("armor",), "Afae": ("armor",), "Ablo": ("attack_speed",),
-               "Apxf": ("damage_over_time",), "Afrz": ("freeze",), "AHtb": ("stun",), "ACtb": ("stun",)}
+               "Apxf": ("damage_over_time",), "Afrz": ("freeze",), "AOae": ("movement",), "AHtb": ("stun",), "ACtb": ("stun",)}
     buffs = {row["rawcode"]: row for row in projection["buffs"]}
     findings, selected = [], []
     for field in fields:

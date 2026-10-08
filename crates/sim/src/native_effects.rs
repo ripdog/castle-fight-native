@@ -55,6 +55,7 @@ pub enum NativeEffectImplementationId {
     WarcraftSnowveilV1,
     WarcraftHailstoneV1,
     WarcraftBuildingBoltV1,
+    WarcraftWorldFreezerV1,
     WarcraftBarrageV1,
     WarcraftPersistentCarrierV1,
 }
@@ -90,6 +91,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftSnowveilV1 => 25,
             Self::WarcraftHailstoneV1 => 26,
             Self::WarcraftBuildingBoltV1 => 27,
+            Self::WarcraftWorldFreezerV1 => 28,
             Self::WarcraftBarrageV1 => 64,
             Self::WarcraftPersistentCarrierV1 => 65,
         }
@@ -847,7 +849,10 @@ pub fn resolve_native_effect_requirements(
     version: MapVersion,
     roots: &[NativeEffectSource],
 ) -> Result<Vec<ResolvedNativeEffectBinding>, NativeEffectResolveError> {
-    let (bolt_roots, roots): (Vec<_>, Vec<_>) = roots.iter().copied().partition(|source| {
+    let (field_roots, roots): (Vec<_>, Vec<_>) = roots.iter().copied().partition(|source| {
+        crate::building_mechanics::world_freezer_source_for_version(*source, version)
+    });
+    let (bolt_roots, roots): (Vec<_>, Vec<_>) = roots.into_iter().partition(|source| {
         crate::building_mechanics::building_bolt_source_for_version(*source, version)
     });
     let (launcher_roots, roots): (Vec<_>, Vec<_>) = roots.into_iter().partition(|source| {
@@ -861,6 +866,9 @@ pub fn resolve_native_effect_requirements(
         .copied()
         .partition(|source| crate::building_mechanics::hex_source_for_version(*source, version));
     let mut resolved = catalog().resolve_requirements(version, &ordinary_roots)?;
+    if !field_roots.is_empty() {
+        resolved.extend(crate::building_mechanics::world_freezer_bindings_for_version(version));
+    }
     if !launcher_roots.is_empty() {
         resolved.extend(crate::building_mechanics::launcher_bindings_for_version(
             version,
@@ -1010,6 +1018,11 @@ pub fn native_effect_implementation_for(
         crate::building_mechanics::building_bolt_source_for_version(source, version)
     }) {
         return Some(NativeEffectImplementationId::WarcraftBuildingBoltV1);
+    }
+    if source.is_some_and(|source| {
+        crate::building_mechanics::world_freezer_source_for_version(source, version)
+    }) {
+        return Some(NativeEffectImplementationId::WarcraftWorldFreezerV1);
     }
     catalog().implementation_for(source_kind, source_key, version)
 }

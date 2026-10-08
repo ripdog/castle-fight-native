@@ -313,6 +313,11 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
     hash.write_u64(entities.len() as u64);
     for entity in entities {
         match entity {
+            CanonicalEntity::WorldFreezer { id, state } => {
+                hash.write_u8(16);
+                hash.write_u64(id.0);
+                hash_world_freezer_state(&mut hash, state);
+            }
             CanonicalEntity::NativeAction { id, action } => {
                 hash.write_u8(10);
                 hash.write_u64(id.0);
@@ -680,7 +685,8 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         building.production_additional_abilities.as_deref().copied(),
                     );
                     hash_unit_classifications(&mut hash, building.production_classifications);
-                    if let Some(spellcasting) = building.production_spellcasting {
+                    if let Some(spellcasting) = building.production_spellcasting.as_deref().copied()
+                    {
                         hash.write_u8(1);
                         hash_spellcasting_profile(&mut hash, spellcasting);
                     } else {
@@ -1102,6 +1108,10 @@ pub(super) enum CanonicalEntity {
     BurningOil(CanonicalBurningOil),
     ChainLightning(CanonicalChainLightning),
     Builder(CanonicalBuilder),
+    WorldFreezer {
+        id: SimId,
+        state: WorldFreezerState,
+    },
     NativeAction {
         id: SimId,
         action: NativeAction,
@@ -1138,6 +1148,7 @@ impl CanonicalEntity {
             Self::BurningOil(zone) => zone.id,
             Self::ChainLightning(chain) => chain.id,
             Self::Builder(builder) => builder.id,
+            Self::WorldFreezer { id, .. } => *id,
             Self::NativeAction { id, .. } => *id,
             Self::DelayedShrineRevival { id, .. } => *id,
             Self::LineProjectile(projectile) => projectile.id,
@@ -1301,7 +1312,7 @@ pub(super) struct CanonicalBuilding {
     pub(super) production_damage_type: Option<DamageType>,
     pub(super) production_armor: Option<ArmorProfile>,
     pub(super) production_passive_effects: Option<PassiveUnitEffects>,
-    pub(super) production_spellcasting: Option<SpellcastingProfile>,
+    pub(super) production_spellcasting: Option<Box<SpellcastingProfile>>,
     // Cold optional definitions must not inflate every canonical entity record.
     pub(super) production_additional_abilities: Option<Box<AdditionalAutomaticAbilityDefinitions>>,
     pub(super) production_classifications: UnitClassifications,
@@ -2036,6 +2047,11 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
     hash.write_u8(ability.effect.stable_tag());
     match ability.effect {
         AbilityEffect::Hailstone(profile) => hash_hailstone_profile(hash, profile),
+        AbilityEffect::WorldFreezer(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         AbilityEffect::BuildingBolt(p) => {
             hash.write_u16(p.map_version.major);
             hash.write_u16(p.map_version.minor);
@@ -2405,6 +2421,38 @@ fn hash_hailstone_profile(hash: &mut Fnv64, p: crate::building_mechanics::Hailst
     hash.write_u32(p.excluded_buff);
     hash.write_i32(p.vision_radius);
     hash.write_u16(p.vision_ticks);
+}
+
+fn hash_world_freezer_state(hash: &mut Fnv64, state: WorldFreezerState) {
+    for word in state.profile.canonical_words() {
+        hash.write_u64(word);
+    }
+    hash.write_u64(state.timer_origin_tick);
+    hash.write_u64(state.timer_step);
+    hash.write_u64(state.pending.len() as u64);
+    for cast in state.pending {
+        hash.write_u64(cast.source.0);
+        hash.write_u8(cast.owner.0);
+        hash.write_u8(cast.team.0);
+        hash.write_i32(cast.position.x);
+        hash.write_i32(cast.position.y);
+        hash.write_u64(cast.due_tick);
+    }
+    hash.write_u64(state.orbs.len() as u64);
+    for orb in state.orbs {
+        hash.write_u64(orb.id.0);
+        hash.write_u64(orb.source.0);
+        hash.write_u8(orb.owner.0);
+        hash.write_u8(orb.team.0);
+        hash.write_u64(orb.position_fractional[0] as u64);
+        hash.write_u64(orb.position_fractional[1] as u64);
+        hash.write_i32(i32::from(orb.facing_degrees));
+        hash.write_u16(orb.counter);
+        hash.write_u64(orb.sequence);
+        hash.write_u64(orb.fire_due_time);
+        hash.write_u64(orb.fire_sequence);
+        hash.write_u64(orb.born_tick);
+    }
 }
 
 #[cfg(test)]

@@ -80,6 +80,11 @@ pub(super) fn native_building_trigger(
             p.trigger_invulnerable,
             p.trigger_spell_immune,
         )),
+        AbilityEffect::WorldFreezer(p) => Some((
+            p.trigger_targets,
+            p.trigger_invulnerable,
+            p.trigger_spell_immune,
+        )),
         AbilityEffect::BuildingBolt(p) => Some((
             p.trigger_targets,
             p.trigger_invulnerable,

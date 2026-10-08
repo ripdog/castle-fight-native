@@ -1,6 +1,6 @@
 use super::*;
 
-fn native_fire_buff_active(status: &StatusState, ability: AbilityId, tick: u64) -> bool {
+pub(super) fn native_fire_buff_active(status: &StatusState, ability: AbilityId, tick: u64) -> bool {
     status.damage_over_time[..usize::from(status.damage_over_time_count)]
         .iter()
         .any(|effect| effect.id.0 == ability.0 && tick < effect.expires_tick)
@@ -508,7 +508,10 @@ impl Simulation {
             let mut emit_cast_visual = true;
             match intent.target {
                 AbilityIntentTarget::Unit { index, .. } => {
-                    if let AbilityEffect::BuildingBolt(profile) = intent.ability.effect {
+                    if let AbilityEffect::WorldFreezer(profile) = intent.ability.effect {
+                        self.start_world_freezer(source, profile);
+                        metrics.effects += 1;
+                    } else if let AbilityEffect::BuildingBolt(profile) = intent.ability.effect {
                         metrics.effects += usize::from(self.cast_building_bolt(
                             source,
                             profile,
@@ -741,7 +744,10 @@ impl Simulation {
                     }
                 }
                 AbilityIntentTarget::Building { id, position } => {
-                    if let AbilityEffect::BuildingBolt(profile) = intent.ability.effect {
+                    if let AbilityEffect::WorldFreezer(profile) = intent.ability.effect {
+                        self.start_world_freezer(source, profile);
+                        metrics.effects += 1;
+                    } else if let AbilityEffect::BuildingBolt(profile) = intent.ability.effect {
                         metrics.effects += usize::from(self.cast_building_bolt(
                             source,
                             profile,

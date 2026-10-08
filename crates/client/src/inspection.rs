@@ -3618,6 +3618,7 @@ mod tests {
                 mana_current: None,
                 mana_maximum: None,
                 ability_ready_tick: None,
+                ability_cast_sequence: None,
                 ability_autocast_enabled: None,
                 stunned_until_tick: None,
                 status: castle_fight_sim::StatusState::default(),

@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 40;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 41;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -26,6 +26,8 @@ mod abilities;
 mod automatic_abilities;
 mod builder;
 mod building_bolts;
+mod world_freezer;
+use world_freezer::WorldFreezerState;
 mod building_spells;
 mod frost_launcher;
 mod snowveil;
@@ -377,6 +379,12 @@ impl ChainLightningEvent {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProjectileViewKind {
+    NativeMover {
+        rawcode: u32,
+        owner: PlayerId,
+        facing_degrees: i16,
+        height_world_units: i32,
+    },
     NativeCarrierBolt {
         target: SimId,
         ability: AbilityId,
@@ -885,6 +893,7 @@ impl Simulation {
         }
         self.invalidate_pending_golden_shrine_revivals();
         self.clear_snow();
+        self.clear_world_freezer();
         self.lifecycle = MatchLifecycle::Finished {
             outcome,
             finished_tick: self.next_tick.saturating_sub(1),
@@ -1109,6 +1118,7 @@ impl Simulation {
         };
         self.invalidate_pending_golden_shrine_revivals();
         self.clear_snow();
+        self.clear_world_freezer();
         self.lifecycle = MatchLifecycle::Finished {
             outcome,
             finished_tick: completed_tick,
@@ -1552,6 +1562,7 @@ impl Simulation {
         let mut snapshot_and_spatial = phase_start.elapsed();
 
         let phase_start = Instant::now();
+        self.resolve_world_freezer(&mut units, &mut buildings);
         self.resolve_native_actions(&mut units, &mut buildings);
         self.apply_passive_auras(&mut units);
         let ability_metrics = self.resolve_automatic_abilities(&mut buildings, &mut units, &grid);
@@ -2201,8 +2212,8 @@ impl Simulation {
     pub fn projectile_count(&self) -> usize {
         self.world
             .iter_entities()
-            .filter(|entity| {
-                matches!(
+            .map(|entity| {
+                let ordinary = matches!(
                     entity.get::<crate::components::NativeAction>(),
                     Some(
                         crate::components::NativeAction::Bolt(_)
@@ -2216,9 +2227,13 @@ impl Simulation {
                     || matches!(
                         entity.get::<crate::native_carriers::NativeCarrierState>(),
                         Some(crate::native_carriers::NativeCarrierState::Bolt(_))
-                    )
+                    );
+                usize::from(ordinary)
+                    + entity
+                        .get::<WorldFreezerState>()
+                        .map_or(0, |state| state.orbs.len())
             })
-            .count()
+            .sum()
     }
 
     #[must_use]
@@ -2247,6 +2262,30 @@ impl Simulation {
             .iter_entities()
             .filter_map(projectile_view_from_entity)
             .collect();
+        for entity in self.world.iter_entities() {
+            if let Some(state) = entity.get::<WorldFreezerState>() {
+                projectiles.extend(state.orbs.iter().map(|orb| {
+                    ProjectileView {
+                        id: orb.id,
+                        source: orb.source,
+                        ability: Some(state.profile.parent),
+                        launch_position: orb.position(),
+                        launch_tick: self.next_tick.saturating_sub(1),
+                        impact_tick: self.next_tick,
+                        kind: ProjectileViewKind::NativeMover {
+                            rawcode: state.profile.dummy_rawcode,
+                            owner: orb.owner,
+                            facing_degrees: orb.facing_degrees,
+                            height_world_units:
+                                crate::building_mechanics::world_freezer_visual_timing_for_version(
+                                    state.profile.map_version,
+                                )
+                                .orb_height_world_units,
+                        },
+                    }
+                }));
+            }
+        }
         projectiles.sort_unstable_by_key(|projectile| projectile.id);
         projectiles
     }
@@ -3898,6 +3937,14 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
         AbilityEffect::Hailstone(p) => {
             assert!(p.damage >= 0 && p.speed_per_tick > 0 && p.full_radius >= 0 && p.range > 0);
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::NativeBuildingSpellTrigger
+            );
+        }
+        AbilityEffect::WorldFreezer(p) => {
+            assert_eq!(p.map_version, crate::MapVersion::CASTLE_FIGHT_9_27);
+            assert!(p.interval_millis > 0 && p.step > 0 && p.fire_cooldown_millis > 0);
             assert_eq!(
                 spellcasting.ability.target_policy,
                 AbilityTargetPolicy::NativeBuildingSpellTrigger

@@ -6,7 +6,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 35;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 36;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -142,6 +142,9 @@ impl SimulationSnapshot {
                         NativeCarrierState::Bolt(bolt) => bolt.map_version,
                     };
                     validate_content_version(version, content)?;
+                }
+                CanonicalEntity::WorldFreezer { state, .. } => {
+                    validate_content_version(state.profile.map_version, content)?;
                 }
                 CanonicalEntity::NativeAction { action, .. } => {
                     if let crate::components::NativeAction::Hailstone(state) = action {
@@ -402,6 +405,12 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
         .iter_entities()
         .filter_map(|entity| {
             let id = *entity.get::<SimId>()?;
+            if let Some(state) = entity.get::<WorldFreezerState>() {
+                return Some(CanonicalEntity::WorldFreezer {
+                    id,
+                    state: state.clone(),
+                });
+            }
             if let Some(action) = entity.get::<NativeAction>() {
                 return Some(CanonicalEntity::NativeAction {
                     id,
@@ -604,7 +613,7 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
                         .map(|effects| effects.0),
                     production_spellcasting: entity
                         .get::<ProductionSpellcastingProfile>()
-                        .map(|profile| profile.0),
+                        .map(|profile| Box::new(profile.0)),
                     classifications: entity
                         .get::<UnitClassifications>()
                         .copied()
@@ -721,6 +730,9 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                     entity.insert(abilities);
                 }
             }
+            CanonicalEntity::WorldFreezer { id, state } => {
+                world.spawn((*id, state.clone()));
+            }
             CanonicalEntity::NativeAction { id, action } => {
                 world.spawn((*id, action.clone()));
             }
@@ -810,7 +822,7 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                         building.production_classifications,
                     ));
                 }
-                if let Some(spellcasting) = building.production_spellcasting {
+                if let Some(spellcasting) = building.production_spellcasting.as_deref().copied() {
                     entity.insert(ProductionSpellcastingProfile(spellcasting));
                 }
                 if let Some(definitions) =

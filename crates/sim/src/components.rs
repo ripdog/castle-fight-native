@@ -416,7 +416,7 @@ pub struct ChainLightningEffectProfile {
     pub targets: AttackTargetMask,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EntanglingRootsEffectProfile {
     pub ability: AbilityId,
     pub damage_per_second: i32,
@@ -1189,6 +1189,7 @@ pub enum AbilityEffect {
     HealingWave(HealingWaveProfile),
     Hailstone(crate::building_mechanics::HailstoneProfile),
     BuildingBolt(crate::building_mechanics::BuildingBoltProfile),
+    WorldFreezer(crate::building_mechanics::WorldFreezerProfile),
     Snowfall {
         map_version: crate::MapVersion,
     },
@@ -1241,6 +1242,7 @@ impl AbilityEffect {
             Self::Snowfall { .. } => 18,
             Self::Hailstone(_) => 19,
             Self::BuildingBolt(_) => 20,
+            Self::WorldFreezer(_) => 21,
         }
     }
 }
