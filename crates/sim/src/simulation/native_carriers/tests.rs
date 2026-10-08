@@ -406,9 +406,39 @@ fn permanent_ability_removal_is_exact_and_native_buff_identity_is_not_a_grant() 
         },
     );
     let e = entity(&sim, target);
-    sim.world.get_mut::<Health>(e).unwrap().max += profile.holy_health_bonus;
+    sim.world.get_mut::<Health>(e).unwrap().max += profile.removed_native_life_bonus;
+    let paladin_life =
+        crate::building_mechanics::holy_aid_life_ability_for_version(MapVersion::CASTLE_FIGHT_9_27);
+    {
+        let mut s = sim.world.get_mut::<StatusState>(e).unwrap();
+        s.native_grants.insert(crate::NativeAbilityGrant {
+            ability: AbilityId(u32::from_be_bytes(*b"A03D")),
+            effect: crate::NativeAbilityGrantEffect::MaximumLife(profile.removed_native_life_bonus),
+        });
+        let AbilityEffect::BuildingPermanentGrant(grants) =
+            crate::building_mechanics::ceremonial_spellcasting_for_version(
+                MapVersion::CASTLE_FIGHT_9_27,
+            )
+            .ability
+            .effect
+        else {
+            panic!()
+        };
+        for grant in grants
+            .always
+            .into_iter()
+            .chain(grants.options.into_iter().flatten())
+        {
+            s.native_grants.insert(grant);
+        }
+        // Paladin and Totem native life identities are distinct; Obelisk removes only its literal list.
+        s.native_grants.insert(crate::NativeAbilityGrant {
+            ability: paladin_life,
+            effect: crate::NativeAbilityGrantEffect::MaximumLife(17),
+        });
+    }
+    sim.world.get_mut::<Health>(e).unwrap().max += 17;
     let mut s = sim.world.get_mut::<StatusState>(e).unwrap();
-    s.permanent_holy_health_bonus = true;
     s.stunned_until_tick = 1000;
     s.secondary_resurrection_due_tick = 1000;
     // Equal lifetimes and equal signs must not conflate buffs with permanent abilities.
@@ -440,8 +470,16 @@ fn permanent_ability_removal_is_exact_and_native_buff_identity_is_not_a_grant() 
     let s = sim.unit(target).unwrap().status;
     assert_eq!(s.stunned_until_tick, 0);
     assert_eq!(s.secondary_resurrection_due_tick, 1000);
-    assert!(!s.permanent_holy_health_bonus);
-    assert_eq!(sim.unit(target).unwrap().health_max, 10_000);
+    assert!(
+        !s.native_grants
+            .contains(AbilityId(u32::from_be_bytes(*b"A03D")))
+    );
+    assert_eq!(sim.unit(target).unwrap().health_max, 10_017);
+    assert!(s.native_grants.contains(paladin_life));
+    assert_eq!(s.native_grants.iter().count(), 1);
+    assert_eq!(s.native_grants.attack_damage(), 0);
+    assert_eq!(s.native_grants.attack_speed_percent(), 0);
+    assert_eq!(s.native_grants.armor_bonus_per_100(), 0);
     assert_eq!(s.armor_modifier_count, 1);
     assert_eq!(s.armor_modifiers[0].id, ModifierId(811));
     assert_eq!(s.movement_modifier_count, 1);

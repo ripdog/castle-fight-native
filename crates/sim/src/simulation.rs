@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 49;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 50;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -26,6 +26,7 @@ mod abilities;
 mod automatic_abilities;
 mod builder;
 mod building_bolts;
+mod permanent_grants;
 mod world_freezer;
 use world_freezer::WorldFreezerState;
 mod building_spells;
@@ -3456,6 +3457,15 @@ struct UnitSnapshot {
 }
 
 impl UnitSnapshot {
+    fn effective_passive_effects(&self) -> impl Iterator<Item = PassiveUnitEffect> + '_ {
+        self.passive_effects.iter().chain(
+            self.status
+                .native_grants
+                .passive_effects()
+                .filter(|_| !self.abilities_disabled),
+        )
+    }
+
     fn target_movement_class(&self) -> MovementClass {
         if self.status.ensnare.is_some() {
             MovementClass::Ground
@@ -4166,6 +4176,34 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                 AbilityTargetPolicy::FriendlyUnitInCombat
             );
         }
+        AbilityEffect::BuildingPermanentGrant(p) => {
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::NativeBuildingSpellTrigger
+            );
+            let mut identities = std::collections::BTreeSet::new();
+            for grant in p.always.into_iter().chain(p.options.into_iter().flatten()) {
+                assert!(identities.insert(grant.ability));
+                match grant.effect {
+                    crate::NativeAbilityGrantEffect::CriticalStrike {
+                        chance_per_10k,
+                        multiplier_per_10k,
+                        ..
+                    }
+                    | crate::NativeAbilityGrantEffect::Demolish {
+                        chance_per_10k,
+                        multiplier_per_10k,
+                        ..
+                    } => {
+                        assert!(chance_per_10k <= 10_000 && multiplier_per_10k >= 10_000);
+                    }
+                    crate::NativeAbilityGrantEffect::Evasion { chance_per_10k } => {
+                        assert!(chance_per_10k <= 10_000)
+                    }
+                    _ => {}
+                }
+            }
+        }
         AbilityEffect::BuildingAcidBomb(p) => {
             assert!(p.child.speed_per_tick > 0 && p.child.range > 0 && p.child.radius >= 0);
             assert!(
@@ -4783,7 +4821,8 @@ fn unit_view_from_entity(
     );
     attack.damage = attack
         .damage
-        .saturating_add(status.damage_threshold.attack_bonus);
+        .saturating_add(status.damage_threshold.attack_bonus)
+        .saturating_add(status.native_grants.attack_damage());
     Some(UnitView {
         id: *entity.get::<SimId>()?,
         content: entity.get::<ContentIdentity>().copied(),
@@ -4807,7 +4846,17 @@ fn unit_view_from_entity(
         health: entity.get::<Health>()?.current,
         health_max: entity.get::<Health>()?.max,
         attack,
-        secondary_attack: entity.get::<SecondaryAttackProfile>().copied(),
+        secondary_attack: entity
+            .get::<SecondaryAttackProfile>()
+            .copied()
+            .map(|mut secondary| {
+                secondary.attack.damage = secondary
+                    .attack
+                    .damage
+                    .saturating_add(status.damage_threshold.attack_bonus)
+                    .saturating_add(status.native_grants.attack_damage());
+                secondary
+            }),
         attack_delivery: attack.delivery,
         attack_targets: *entity.get::<AttackTargetMask>()?,
         damage_type: *entity.get::<DamageType>()?,

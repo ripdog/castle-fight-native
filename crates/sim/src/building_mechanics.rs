@@ -9,9 +9,11 @@ use crate::{
 };
 mod orc;
 mod world_freezer;
-pub use orc::BuildingAcidBombProfile;
+pub use orc::{BuildingAcidBombProfile, BuildingPermanentGrantProfile};
 pub(crate) use orc::{
-    serpent_bindings_for_version, serpent_source_for_version, serpent_spellcasting_for_version,
+    ceremonial_bindings_for_version, ceremonial_source_for_version,
+    ceremonial_spellcasting_for_version, serpent_bindings_for_version, serpent_source_for_version,
+    serpent_spellcasting_for_version,
 };
 use serde_json::Value;
 use std::sync::OnceLock;
@@ -676,4 +678,34 @@ pub(crate) fn snow_trigger_eligible(
 ) -> bool {
     let [min_x, min_y, max_x, max_y] = snowveil_for_version(version).battlefield_bounds;
     sapper && point.x >= min_x && point.x <= max_x && point.y >= min_y && point.y <= max_y
+}
+
+/// Native Paladin life grant, distinct from the Totem's permanent life ability.
+pub(crate) fn holy_aid_life_ability_for_version(version: MapVersion) -> AbilityId {
+    assert_eq!(version, MapVersion::CASTLE_FIGHT_9_27);
+    AbilityId(u32::from_be_bytes(*b"A03L"))
+}
+
+/// Literal native AddSpecialEffectTarget attachment from the retained cast callback.
+pub fn permanent_grant_target_attachment_for_version(version: MapVersion) -> &'static str {
+    evidence(version)["ceremonial_cast_visuals"][0]["attachment"]
+        .as_str()
+        .unwrap()
+}
+
+/// Source self-aura identity supplies the visible badge for a permanent special grant.
+pub fn permanent_grant_badge_for_version(
+    version: MapVersion,
+    ability: AbilityId,
+) -> Option<AbilityId> {
+    let AbilityEffect::BuildingPermanentGrant(profile) =
+        ceremonial_spellcasting_for_version(version).ability.effect
+    else {
+        unreachable!()
+    };
+    profile
+        .options
+        .into_iter()
+        .find(|option| option[0].ability == ability)
+        .map(|option| option[1].ability)
 }

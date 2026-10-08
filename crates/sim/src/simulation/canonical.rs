@@ -1726,7 +1726,12 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         }
         None => hash.write_u8(0),
     }
-    hash.write_u8(u8::from(status.permanent_holy_health_bonus));
+    hash.write_u8(status.native_grants.iter().count() as u8);
+    for grant in status.native_grants.iter() {
+        for word in grant.canonical_words() {
+            hash.write_u64(word);
+        }
+    }
     hash.write_u8(status.movement_modifier_count);
     let count = usize::from(status.movement_modifier_count);
     debug_assert!(count <= MAX_TIMED_MOVEMENT_MODIFIERS);
@@ -2219,6 +2224,11 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_i32(autocast_range);
         }
         AbilityEffect::Hailstone(profile) => hash_hailstone_profile(hash, profile),
+        AbilityEffect::BuildingPermanentGrant(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         AbilityEffect::BuildingAcidBomb(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);

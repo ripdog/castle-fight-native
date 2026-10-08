@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r52";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r53";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 32;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 33;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1345,6 +1345,11 @@ impl CastleFightTowerKind {
         let expected_name = extracted_content_927().buildings[&rawcode].name;
         let mut definition = extracted_tower_definition_927(rawcode, expected_name);
         definition.spellcasting = match self {
+            Self::CeremonialTotem => Some(
+                crate::building_mechanics::ceremonial_spellcasting_for_version(
+                    MapVersion::CASTLE_FIGHT_9_27,
+                ),
+            ),
             Self::SerpentRock => Some(crate::building_mechanics::serpent_spellcasting_for_version(
                 MapVersion::CASTLE_FIGHT_9_27,
             )),
@@ -1764,6 +1769,42 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A039") => {
+            0x4000_0082
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A03B") => {
+            0x4000_0083
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A03A") => {
+            0x4000_0084
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A03D") => {
+            0x4000_0085
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A08L") => {
+            0x4000_0086
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A05I") => {
+            0x4000_0087
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A06W") => {
+            0x4000_0088
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A08M") => {
+            0x4000_0089
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A06Y") => {
+            0x4000_008a
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A08R") => {
+            0x4000_008b
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A06X") => {
+            0x4000_008c
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A0F1") => {
+            0x4000_008d
+        }
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A02Z") => {
             0x4000_007f
         }
@@ -2829,6 +2870,11 @@ fn hash_automatic_ability_profile(hash: &mut ContentHash64, ability: AutomaticAb
             hash.write_i32(autocast_range);
         }
         AbilityEffect::Hailstone(profile) => hash_hailstone_content(hash, profile),
+        AbilityEffect::BuildingPermanentGrant(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         AbilityEffect::BuildingAcidBomb(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);
@@ -4534,6 +4580,15 @@ pub(crate) fn vessel_corpse_qualifies_927(definition: CorpseDefinitionId) -> boo
         .units
         .get(&definition.0)
         .is_some_and(|unit| unit.sapper && !unit.undead)
+}
+
+pub(crate) fn unit_has_ability_for_version(
+    rawcode: u32,
+    ability: AbilityId,
+    version: MapVersion,
+) -> bool {
+    assert_eq!(version, MapVersion::CASTLE_FIGHT_9_27);
+    unit_has_ability_927(rawcode, ability)
 }
 
 pub(crate) fn unit_has_ability_927(rawcode: u32, ability: AbilityId) -> bool {

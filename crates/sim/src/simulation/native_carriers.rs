@@ -497,16 +497,11 @@ fn cleanse_native_effects(
         };
         ability.is_none_or(|id| !profile.removed_persistent_abilities.contains(&id))
     });
-    if status.permanent_holy_health_bonus
-        && profile
-            .removed_persistent_abilities
-            .contains(&AbilityId(u32::from_be_bytes(*b"A03D")))
-    {
-        status.permanent_holy_health_bonus = false;
-        unit.health_max = unit
-            .health_max
-            .saturating_sub(profile.holy_health_bonus)
-            .max(1);
+    let revoked_life = status
+        .native_grants
+        .remove(&profile.removed_persistent_abilities);
+    if revoked_life != 0 {
+        unit.health_max = unit.health_max.saturating_sub(revoked_life).max(1);
         *health = (*health).min(unit.health_max);
     }
 }

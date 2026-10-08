@@ -3372,6 +3372,7 @@ fn prewarm_timed_wc3_effects(
                         | AbilityEffect::SolarStrike { .. }
                         | AbilityEffect::PhoenixFire(_)
                         | AbilityEffect::Hailstone(_)
+                        | AbilityEffect::BuildingPermanentGrant(_)
                         | AbilityEffect::BuildingAcidBomb(_)
                         | AbilityEffect::BuildingBolt(_)
                         | AbilityEffect::WorldFreezer(_)
@@ -4237,13 +4238,33 @@ fn sync_render_entities(
             let Some(position) = position else {
                 continue;
             };
+            let attachment = if let AbilityEffect::BuildingPermanentGrant(profile) = cast.effect
+                && visual.anchor == Wc3AbilityVisualAnchor::Target
+                && let AbilityCastTarget::Unit(target) = cast.target
+            {
+                imported_roots.iter().find_map(|(entity, root)| (root.sim_id == target).then_some((entity,
+                    castle_fight_sim::building_mechanics::permanent_grant_target_attachment_for_version(profile.map_version))))
+            } else {
+                None
+            };
             let (entity, pooled_scene) = spawn_or_reuse_timed_wc3_visual(
                 &mut commands,
                 &mut effect_pool,
                 &visual.model,
-                Transform::from_translation(position),
+                if attachment.is_some() {
+                    Transform::IDENTITY
+                } else {
+                    Transform::from_translation(position)
+                },
                 !legacy_effect_pooling,
             );
+            if let Some((root, point)) = attachment {
+                commands.entity(root).add_child(entity);
+                commands.entity(entity).insert(Wc3AttachToNode {
+                    owner_root: root,
+                    attachment_point: point.to_owned(),
+                });
+            }
             let lifetime = visual
                 .model
                 .effect_lifetime_seconds(ABILITY_MODEL_EFFECT_SECONDS);
@@ -4255,7 +4276,7 @@ fn sync_render_entities(
                 fade_material: None,
                 pooled_lightning: false,
                 pooled_scene,
-                owner_root: None,
+                owner_root: attachment.map(|(root, _)| root),
             });
         }
 
@@ -5452,6 +5473,18 @@ fn status_visual_sources(
         )
         .chain(
             status
+                .native_grants
+                .iter()
+                .filter(|grant| {
+                    matches!(
+                        grant.effect,
+                        castle_fight_sim::NativeAbilityGrantEffect::AuraMarker
+                    )
+                })
+                .map(|grant| (grant.ability.0, Wc3StatusVisualKind::Movement)),
+        )
+        .chain(
+            status
                 .ensnare
                 .filter(move |net| tick < net.expires_tick)
                 .map(|net| (net.profile.ability.0, Wc3StatusVisualKind::Movement)),
@@ -5514,6 +5547,15 @@ fn status_visual_is_active(
                     .is_some_and(|a| a.0 == ability_rawcode)
         }
         Wc3StatusVisualKind::Movement => {
+            if status.native_grants.iter().any(|grant| {
+                grant.ability.0 == ability_rawcode
+                    && matches!(
+                        grant.effect,
+                        castle_fight_sim::NativeAbilityGrantEffect::AuraMarker
+                    )
+            }) {
+                return true;
+            }
             if status.ensnare.is_some_and(|net| {
                 net.profile.ability.0 == ability_rawcode && tick < net.expires_tick
             }) {
@@ -8362,6 +8404,37 @@ mod tests {
             .push(target);
         snapshot.burning_oil.clear();
         assert!(!active(&snapshot));
+    }
+
+    #[test]
+    fn permanent_self_aura_visuals_follow_installed_identity_without_a_timer() {
+        use castle_fight_sim::{
+            AbilityId, NativeAbilityGrant, NativeAbilityGrantEffect, NativeAbilityGrants,
+            StatusState,
+        };
+        let mut status = StatusState {
+            native_grants: NativeAbilityGrants::from_slice(&[
+                NativeAbilityGrant {
+                    ability: AbilityId(123),
+                    effect: NativeAbilityGrantEffect::AuraMarker,
+                },
+                NativeAbilityGrant {
+                    ability: AbilityId(124),
+                    effect: NativeAbilityGrantEffect::AttackDamage(7),
+                },
+            ]),
+            ..Default::default()
+        };
+        let kind = Wc3StatusVisualKind::Movement;
+        assert_eq!(
+            status_visual_sources(&status, 100_000).collect::<Vec<_>>(),
+            [(123, kind)]
+        );
+        assert!(status_visual_is_active(&status, 100_000, 123, kind));
+        assert!(!status_visual_is_active(&status, 100_000, 124, kind));
+        status.native_grants = NativeAbilityGrants::default();
+        assert!(status_visual_sources(&status, 100_000).next().is_none());
+        assert!(!status_visual_is_active(&status, 100_000, 123, kind));
     }
 
     #[test]

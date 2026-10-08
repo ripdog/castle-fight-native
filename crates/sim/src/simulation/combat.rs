@@ -81,7 +81,8 @@ impl Simulation {
                 let base = intent
                     .attack
                     .damage
-                    .saturating_add(source.status.damage_threshold.attack_bonus);
+                    .saturating_add(source.status.damage_threshold.attack_bonus)
+                    .saturating_add(source.status.native_grants.attack_damage());
                 intent.attack.damage = base
                     .saturating_add(
                         i32::try_from(i64::from(base) * i64::from(percent) / 10_000)
@@ -659,8 +660,7 @@ impl Simulation {
         // Native Evasion does not independently roll every copy. Only the highest
         // chance is effective; ties use rawcode identity, not inventory order.
         let Some(profile) = target
-            .passive_effects
-            .iter()
+            .effective_passive_effects()
             .filter_map(|effect| {
                 if let PassiveUnitEffect::Evasion(profile) = effect {
                     Some(profile)
@@ -692,7 +692,18 @@ impl Simulation {
         let mut on_hit = PendingAttackEffects::default();
         let mut critical = false;
         let mut critical_bonus = 0;
-        for effect in intent.passive_effects.iter() {
+        let granted = match intent.source {
+            AttackSourceIndex::Unit(index) if !units[index].abilities_disabled => {
+                Some(&units[index].status.native_grants)
+            }
+            AttackSourceIndex::Unit(_) => None,
+            AttackSourceIndex::Building(_) => None,
+        };
+        for effect in intent.passive_effects.iter().chain(
+            granted
+                .into_iter()
+                .flat_map(|grants| grants.passive_effects()),
+        ) {
             match effect {
                 PassiveUnitEffect::Poison(profile) => {
                     assert!(
@@ -828,6 +839,46 @@ impl Simulation {
                 | PassiveUnitEffect::SpellResistance(_) => {}
             }
         }
+        // Native Demolish modifies weapon damage without becoming Critical Strike or
+        // granting the critical-only Barrage primary-hit bonus.
+        let demolish_bonus = granted
+            .into_iter()
+            .flat_map(|grants| grants.iter())
+            .filter_map(|grant| {
+                let crate::NativeAbilityGrantEffect::Demolish {
+                    chance_per_10k,
+                    multiplier_per_10k,
+                    targets,
+                } = grant.effect
+                else {
+                    return None;
+                };
+                let matches = match intent.target {
+                    TargetIndex::Unit(index) => {
+                        targets.can_target_unit(units[index].target_movement_class())
+                    }
+                    TargetIndex::Building(_) => targets.can_target_buildings(),
+                };
+                let roll = deterministic_random(
+                    self.config.match_seed,
+                    completed_tick,
+                    intent.source_id,
+                    RANDOM_PURPOSE_ATTACK_PROC ^ u64::from(grant.ability.0),
+                    intent.attack_sequence,
+                ) % u64::from(ATTACK_PROC_CHANCE_SCALE);
+                (matches && roll < u64::from(chance_per_10k)).then(|| {
+                    i32::try_from(
+                        i64::from(intent.attack.damage) * i64::from(multiplier_per_10k - 10_000)
+                            / 10_000,
+                    )
+                    .expect("Demolish damage overflowed")
+                })
+            })
+            .max()
+            .unwrap_or_default();
+        bonus_damage = bonus_damage
+            .checked_add(demolish_bonus)
+            .expect("Demolish bonus overflowed");
         (
             bonus_damage
                 .checked_add(critical_bonus)

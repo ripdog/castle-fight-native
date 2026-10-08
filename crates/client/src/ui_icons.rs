@@ -132,7 +132,6 @@ pub(crate) struct CastleFightPresentationCatalog {
     pub(crate) repair_turn_off_command: UiIconKey,
     pub(crate) blink_command: UiIconKey,
     pub(crate) stun_buff: UiIconKey,
-    pub(crate) permanent_holy_health: UiIconKey,
     pub(crate) cursor_theme: UiCursorTheme,
 }
 
@@ -155,10 +154,6 @@ impl CastleFightPresentationCatalog {
             ),
             blink_command: UiIconKey::ability(u32::from_be_bytes(*b"A0-1"), UiIconRole::Normal),
             stun_buff: UiIconKey::buff(u32::from_be_bytes(*b"B005")),
-            permanent_holy_health: UiIconKey::StatusEffect {
-                ability: u32::from_be_bytes(*b"A03I"),
-                role: UiStatusIconRole::Primary,
-            },
             cursor_theme: UiCursorTheme::Human,
         })
     }

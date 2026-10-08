@@ -1,6 +1,11 @@
 use bevy_ecs::prelude::Component;
 use std::collections::VecDeque;
 
+mod native_grants;
+pub use native_grants::{
+    MAX_PERMANENT_NATIVE_ABILITIES, NativeAbilityGrant, NativeAbilityGrantEffect,
+    NativeAbilityGrants,
+};
 mod native_actions;
 pub(crate) use native_actions::{
     AcidBombMissileState, EnsnareMissileState, HailstoneState, HealingWaveState, NativeAction,
@@ -1167,6 +1172,7 @@ pub enum AreaDamageOrigin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AbilityEffect {
+    BuildingPermanentGrant(crate::building_mechanics::BuildingPermanentGrantProfile),
     BuildingAcidBomb(crate::building_mechanics::BuildingAcidBombProfile),
     Ensnare {
         profile: EnsnareProfile,
@@ -1319,6 +1325,7 @@ impl AbilityEffect {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::BuildingPermanentGrant(_) => 26,
             Self::BuildingAcidBomb(_) => 25,
             Self::Ensnare { .. } => 24,
             Self::StatBuff { .. } => 22,
@@ -1517,7 +1524,7 @@ pub struct StatusState {
     pub secondary_resurrection_due_tick: u64,
     pub secondary_resurrection_ready_tick: u64,
     pub secondary_resurrection_ability: Option<AbilityId>,
-    pub permanent_holy_health_bonus: bool,
+    pub native_grants: NativeAbilityGrants,
     pub movement_modifiers: [TimedMovementModifier; MAX_TIMED_MOVEMENT_MODIFIERS],
     pub movement_modifier_count: u8,
     pub attack_speed_modifiers: [TimedAttackSpeedModifier; MAX_TIMED_ATTACK_SPEED_MODIFIERS],
@@ -1584,7 +1591,7 @@ impl StatusState {
         let count = usize::from(self.armor_modifier_count);
         debug_assert!(count <= MAX_TIMED_ARMOR_MODIFIERS);
         self.armor_modifiers[..count].iter().fold(
-            i32::from(armor.armor_points) * 100
+            i32::from(armor.armor_points) * 100 + self.native_grants.armor_bonus_per_100()
                 - self
                     .acid_bomb
                     .map_or(0, |acid| i32::from(acid.profile.armor_penalty_per_100)),

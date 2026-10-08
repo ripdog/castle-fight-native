@@ -807,6 +807,31 @@ mod tests {
     }
 
     #[test]
+    fn script_grant_visuals_preserve_source_owner_and_distinct_cast_anchors() {
+        let catalog = load_embedded_visuals().unwrap();
+        let projection: serde_json::Value = serde_json::from_str(include_str!(
+            "../../sim/data/castle-fight/9.27/building-mechanics-r1.json"
+        ))
+        .unwrap();
+        let row = &projection["ceremonial"];
+        let parent = row["ability_rawcode"].as_str().unwrap();
+        let source = row["building_rawcode"].as_str().unwrap();
+        for visual in projection["ceremonial_cast_visuals"].as_array().unwrap() {
+            let matches = catalog
+                .assets
+                .iter()
+                .filter(|asset| {
+                    asset.owner_rawcode == parent
+                        && asset.source_unit_rawcode.as_deref() == Some(source)
+                        && asset.role == visual["role"].as_str().unwrap()
+                        && asset.model_path == visual["path"].as_str().unwrap()
+                })
+                .count();
+            assert_eq!(matches, 1);
+        }
+    }
+
+    #[test]
     fn embedded_visual_catalog_contains_current_combat_art() {
         let catalog = load_embedded_visuals().expect("embedded visual catalog parses");
         let projectile = |rawcode: &str| {

@@ -33,6 +33,11 @@ def build(map_version='9.27', revision='r1'):
     launcher_codes = ['h048', 'h04G', 'A04J', 'A04F', 'h03L', 'h04H', 'A04L', 'A04K']
     mushroom = next(r for r in building_rows if r['building_rawcode'] == 'h047')
     serpent = next(r for r in building_rows if r['building_rawcode'] == 'h02N')
+    ceremonial = next(r for r in building_rows if r['building_rawcode'] == 'h02R')
+    grant_params = json.loads(ceremonial['parameters_json'])
+    grant_codes = [value.to_bytes(4, 'big').decode() for value in grant_params['always_ability_ids']
+                   + [value for option in grant_params['option_ability_ids'] for value in option]]
+    launcher_codes += ['h02R', 'A039', 'A0F1', *grant_codes]
     launcher_codes += ['h02N', 'A02O', 'A02Z', 'A030']
     launcher_codes += ['h047', 'A06P', 'A0AK']
     freezer = next(r for r in building_rows if r['building_rawcode'] == 'h03O')
@@ -60,7 +65,7 @@ def build(map_version='9.27', revision='r1'):
                      'CallbackSingle_doAfter_ReengageRuntime_call_doAfter_ReengageRuntime',
                      'CallbackSingle_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_ReengageRuntime',
                      'CallbackSingle_doAfter_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_doAfter_ReengageRuntime',
-                     *snow['source_functions'].split(','), *serpent['source_functions'].split(','),
+                     *snow['source_functions'].split(','), *serpent['source_functions'].split(','), *ceremonial['source_functions'].split(','),
                      'CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities3',
                      'CallbackSingle_doAfter_doAfter_RaceOrcAbilities_call_doAfter_doAfter_RaceOrcAbilities',
                      *(f for row in launchers for f in row['source_functions'].split(',')), *mushroom['source_functions'].split(','), *freezer['source_functions'].split(','), 'randomAliveEnemyNear', 'OC', 'applyArtilleryModeEnabled', 'CallbackSingle_doAfter_doAfter_RaceNorthernAbilities_call_doAfter_doAfter_RaceNorthernAbilities', 'CallbackSingle_doAfter_doAfter_doAfter_RaceNorthernAbilities_call_doAfter_doAfter_doAfter_RaceNorthernAbilities', 'ForGroupCallback_forUnitsInRange_RaceNorthernAbilities_callback_forUnitsInRange_RaceNorthernAbilities', 'dummyCastTargetWithVision', 'tileR', 'tile_toVec2', 'vL', 'AI', 'unit_resetSpawnQueue', 'vM', 'ZE', 'EventListener_add_BuildingSpells_onEvent_add_BuildingSpells'):
@@ -70,7 +75,21 @@ def build(map_version='9.27', revision='r1'):
     script_art = {function: [json.loads('"' + literal + '"')
                             for literal in re.findall(r'"(.*?)"', traces[function]['source'])
                             if literal.endswith('.mdl')]
-                  for function in ('checkForShield', 'Vd', 'Ed', 'frostLauncherSpell')}
+                  for function in ('checkForShield', 'Vd', 'Ed', 'frostLauncherSpell', 'ceremonialTotemSpell')}
+    grant_source = traces['ceremonialTotemSpell']['source']
+    native_calls = re.findall(r'addProtectedAbility\(\w+,(\d+)\)', grant_source)
+    projected_ids = grant_params['always_ability_ids'] + [value for option in grant_params['option_ability_ids'] for value in option]
+    if list(map(int, native_calls)) != projected_ids:
+        raise ValueError('ceremonial grant identities differ from literal source control flow')
+    target_art = re.search(r'addEffect1\("(.*?)",\w+,"(.*?)"\)', grant_source)
+    source_art = re.search(r'addEffect\("(.*?)",unit_getPos\(\w+\)\)', grant_source)
+    if not target_art or not source_art:
+        raise ValueError('ceremonial source/recipient art no longer matches literal calls')
+    retry_marker = int(re.findall(r'unit_getAbilityLevel\(\w+,(\d+)\)', traces['isCeremonialTotemTarget']['source'])[-1])
+    ceremonial_visuals = [
+        {'role': 'target', 'path': json.loads('"' + target_art[1] + '"'), 'attachment': target_art[2]},
+        {'role': 'caster', 'path': json.loads('"' + source_art[1] + '"')},
+    ]
     # The normalized summary reverses these names. Retain the actual callback assignment.
     initial = traces['FL']['source']
     callback = traces['ForGroupCallback_forUnitsOfPlayer_nullTimer_SnowveilFountain_callback_forUnitsOfPlayer_nullTimer_SnowveilFountain']['source']
@@ -100,6 +119,7 @@ def build(map_version='9.27', revision='r1'):
             'launcher_vision': {'radius': re.search(r'getY\(\w+\),(\d+\.),true,false', traces['issueFrostLauncherOrder']['source']).group(1),
                                 'duration': re.search(r'doAfter\((\d+\.\d+),', traces['issueFrostLauncherOrder']['source']).group(1)}, 'protected': protected,
             'overheat_explosions': overheat_explosions,
+            'ceremonial': ceremonial, 'ceremonial_retry_marker': retry_marker, 'ceremonial_cast_visuals': ceremonial_visuals,
             'serpent': serpent,
             'serpent_animation_delays': {
                 'attack': re.search(r'doAfter\(([\d.]+),', traces['serpentRockShoot']['source']).group(1),

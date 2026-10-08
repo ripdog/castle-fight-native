@@ -280,9 +280,25 @@ pub(super) fn apply_ability_effect_to_unit(
             resurrection_cooldown_ticks: _,
             resurrection_delay_ticks: _,
         } => {
-            if permanent_max_health_bonus > 0 && !target.status.permanent_holy_health_bonus {
-                target.status.permanent_holy_health_bonus = true;
-                target.health_max = target.health_max.saturating_add(permanent_max_health_bonus);
+            if permanent_max_health_bonus > 0 {
+                let ability = crate::building_mechanics::holy_aid_life_ability_for_version(
+                    target
+                        .map_version
+                        .unwrap_or(crate::CASTLE_FIGHT_DEFAULT_MAP_VERSION),
+                );
+                if target
+                    .status
+                    .native_grants
+                    .insert(crate::NativeAbilityGrant {
+                        ability,
+                        effect: crate::NativeAbilityGrantEffect::MaximumLife(
+                            permanent_max_health_bonus,
+                        ),
+                    })
+                {
+                    target.health_max =
+                        target.health_max.saturating_add(permanent_max_health_bonus);
+                }
             }
             target.health = target.health.saturating_add(healing).min(target.health_max);
             apply_timed_armor_modifier(
@@ -342,6 +358,7 @@ pub(super) fn apply_ability_effect_to_unit(
         AbilityEffect::Ensnare { .. }
         | AbilityEffect::SpellSteal { .. }
         | AbilityEffect::WorldFreezer(_)
+        | AbilityEffect::BuildingPermanentGrant(_)
         | AbilityEffect::BuildingAcidBomb(_)
         | AbilityEffect::BuildingBolt(_)
         | AbilityEffect::Hailstone(_)
@@ -731,6 +748,7 @@ pub(super) fn effective_attack_cooldown_ticks(base_ticks: u16, status: StatusSta
         .iter()
         .fold(
             100_i32
+                + status.native_grants.attack_speed_percent()
                 + status
                     .acid_bomb
                     .map_or(0, |acid| i32::from(acid.profile.attack_speed_percent_delta)),

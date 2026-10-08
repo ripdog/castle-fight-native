@@ -62,7 +62,7 @@ pub struct NativeCarrierProfile {
     pub removed_persistent_abilities: Vec<AbilityId>,
     /// Retained buff object identities, distinct from ability-granted permanent modifiers.
     pub native_buff_ids: Vec<u32>,
-    pub holy_health_bonus: i32,
+    pub removed_native_life_bonus: i32,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -226,7 +226,7 @@ pub fn carrier_for_version(
             .map(AbilityId)
             .collect(),
         native_buff_ids: p.native_buff_ids.clone(),
-        holy_health_bonus: p.number("A03D", "Ilif") as i32,
+        removed_native_life_bonus: p.number("A03D", "Ilif") as i32,
     }))
 }
 

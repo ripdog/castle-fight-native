@@ -46,6 +46,32 @@ class BuildingMechanicsProjectionTests(unittest.TestCase):
         self.assertIn("randomAliveEnemy", traces["serpentRockShoot"]["source"])
         self.assertIn("isAliveCombatSapper", traces["ForGroupCallback_forUnitsInRect_SpellHelpers_callback_forUnitsInRect_SpellHelpers"]["source"])
 
+    def test_permanent_grants_retain_literal_add_order_options_retry_gate_and_art(self):
+        import re
+        data = MODULE.build()
+        params = json.loads(data['ceremonial']['parameters_json'])
+        source = data['script_traces']['ceremonialTotemSpell']['source']
+        calls = list(map(int, re.findall(r'addProtectedAbility\(\w+,(\d+)\)', source)))
+        self.assertEqual(calls, params['always_ability_ids'] +
+                         [value for option in params['option_ability_ids'] for value in option])
+        self.assertLess(source.index('GetRandomInt'), source.index('ceremonialPick'))
+        self.assertRegex(source, r'ceremonialPick\(\w+,false\).*ceremonialPick\(\w+,true\)')
+        predicate = data['script_traces']['isCeremonialTotemTarget']['source']
+        gate = int(re.findall(r'unit_getAbilityLevel\(\w+,(\d+)\)', predicate)[-1])
+        self.assertEqual(data['ceremonial_retry_marker'], gate)
+        code = gate.to_bytes(4, 'big').decode()
+        self.assertIn(code, data['fields'])
+        self.assertNotIn(gate, calls)
+        self.assertIn('isAliveCombatSapper', predicate)
+        self.assertIn('unit_isAllyOf', predicate)
+        self.assertIn('Zcs or ads', data['script_traces']['passesRetryTargetGate']['source'])
+        for identity in calls:
+            self.assertIn(identity.to_bytes(4, 'big').decode(), data['fields'])
+        target, caster = data['ceremonial_cast_visuals']
+        self.assertEqual([target['role'], caster['role']], ['target', 'caster'])
+        self.assertIn(target['attachment'], source)
+        self.assertEqual([target['path'], caster['path']], data['script_art']['ceremonialTotemSpell'])
+
     def test_unsupported_version_does_not_reuse_an_older_recipe(self):
         with self.assertRaisesRegex(ValueError, "do not support"):
             MODULE.build("9.32")

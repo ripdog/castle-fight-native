@@ -2217,10 +2217,46 @@ fn active_effect_badges(
             beneficial: true,
         });
     }
-    if unit.status.permanent_holy_health_bonus {
+    for grant in unit.status.native_grants.iter() {
+        use castle_fight_sim::NativeAbilityGrantEffect::*;
+        let description = match grant.effect {
+            AttackDamage(amount) => format!("Permanent attack damage {amount:+}"),
+            AttackSpeed(amount) => format!("Permanent attack speed {amount:+}%"),
+            MaximumLife(amount) => format!("Permanent maximum health {amount:+}"),
+            Armor(amount) => format!("Permanent armor {:+}", f32::from(amount) / 100.0),
+            CriticalStrike {
+                chance_per_10k,
+                multiplier_per_10k,
+                ..
+            } => format!(
+                "Critical Strike: {}% chance, {}× damage",
+                f32::from(chance_per_10k) / 100.0,
+                f32::from(multiplier_per_10k) / 10_000.0
+            ),
+            Evasion { chance_per_10k } => {
+                format!("Evasion: {}%", f32::from(chance_per_10k) / 100.0)
+            }
+            Demolish {
+                multiplier_per_10k, ..
+            } => format!(
+                "Demolish: {}× structure damage",
+                f32::from(multiplier_per_10k) / 10_000.0
+            ),
+            AuraMarker => continue,
+        };
         effects.push(ActiveEffectBadgeData {
-            icon: catalog.permanent_holy_health,
-            description: "Permanent Holy health bonus".to_owned(),
+            icon: castle_fight_sim::building_mechanics::permanent_grant_badge_for_version(
+                catalog.map_version,
+                grant.ability,
+            )
+            .map_or_else(
+                || UiIconKey::ability(grant.ability.0, UiIconRole::Normal),
+                |marker| UiIconKey::StatusEffect {
+                    ability: marker.0,
+                    role: UiStatusIconRole::Primary,
+                },
+            ),
+            description,
             beneficial: true,
         });
     }
