@@ -1636,6 +1636,7 @@
       "unit_rawcode": "o009",
       "profile": {
         "ability": 1093677880,
+        "buff_rawcode": 1110454343,
         "damage_per_second": 12,
         "movement_percent_delta": -25,
         "attack_speed_percent_delta": -25,
@@ -1648,6 +1649,29 @@
       "provenance": {
         "source": "resolved/object-fields.tsv",
         "native_base": "Aven",
+        "stacking_flags": 1
+      }
+    },
+    {
+      "kind": "poison",
+      "source_kind": "unit-ability",
+      "source_key": "A020",
+      "unit_rawcode": "o000",
+      "profile": {
+        "ability": 1093677616,
+        "buff_rawcode": 1114665828,
+        "damage_per_second": 5,
+        "movement_percent_delta": -25,
+        "attack_speed_percent_delta": -25,
+        "duration_ticks": 120,
+        "hero_duration_ticks": 120,
+        "targets": 3,
+        "stack_damage": true,
+        "can_kill": false
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "ACvs",
         "stacking_flags": 1
       }
     }

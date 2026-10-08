@@ -13,6 +13,19 @@ def row(category, rawcode, base, field, value):
 
 
 class NativeBuffProjectionTests(unittest.TestCase):
+    def test_buff_icons_keep_native_last_assignment_and_explicit_map_clear(self):
+        skin = "[STOK]\nBuffart=old.blp\nBuffart=stock.blp\n"
+        fields = [row("abilities", "CAST", "BASE", "abuf", "STOK,CUST,NONE"),
+                  row("buffs", "CUST", "STOK", "fart", "custom.blp"),
+                  row("buffs", "NONE", "STOK", "fart", "")]
+        projection = {buff["rawcode"]: buff for buff in buffs.project(skin, fields)}
+        self.assertEqual(projection["STOK"]["icon_art"], "stock.blp")
+        self.assertEqual(projection["STOK"]["icon_art_source"], "native")
+        self.assertEqual(projection["CUST"]["icon_art"], "custom.blp")
+        self.assertEqual(projection["CUST"]["icon_art_source"], "resolved")
+        self.assertEqual(projection["NONE"]["icon_art"], "")
+        self.assertEqual(projection["NONE"]["icon_art_source"], "resolved")
+
     def test_ground_effect_references_preserve_skin_and_explicit_override(self):
         skin = "[FIRE]\nEffectart=embers.mdl\n"
         fields = [row("abilities", "CAST", "BASE", "aeff", "FIRE,CUST,NONE"),

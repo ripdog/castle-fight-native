@@ -734,6 +734,18 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(projection["map_version"], CATALOG_VERSION);
+        let ui = load_embedded_ui().unwrap();
+        for buff in projection["buffs"].as_array().unwrap() {
+            if let Some(icon) = buff["icon_art"]
+                .as_str()
+                .filter(|icon| !matches!(icon.trim(), "" | "_" | "-" | "0" | "none"))
+            {
+                assert!(ui.assets.iter().any(|asset| asset.owner_kind == "buffs"
+                    && Some(asset.owner_rawcode.as_str()) == buff["rawcode"].as_str()
+                    && asset.role == "buff"
+                    && asset.texture_path == icon));
+            }
+        }
         let buffs = projection["buffs"]
             .as_array()
             .unwrap()
@@ -764,9 +776,25 @@ mod tests {
         );
         let headers = fields.headers().unwrap().clone();
         let column = |name| headers.iter().position(|header| header == name).unwrap();
+        let rows: Vec<_> = fields.records().map(Result::unwrap).collect();
+        let poison_flags: std::collections::BTreeMap<_, _> = rows
+            .iter()
+            .filter(|row| {
+                &row[column("category")] == "abilities"
+                    && &row[column("field_id")] == "Poi4"
+                    && &row[column("level")] == "1"
+            })
+            .map(|row| {
+                let value: serde_json::Value =
+                    serde_json::from_str(&row[column("recovered_value_json")]).unwrap();
+                let flags = value
+                    .as_u64()
+                    .unwrap_or_else(|| value.as_str().unwrap().parse().unwrap());
+                (row[column("rawcode")].to_owned(), flags)
+            })
+            .collect();
         let mut checked = 0;
-        for row in fields.records() {
-            let row = row.unwrap();
+        for row in rows {
             if &row[column("category")] != "abilities"
                 || &row[column("field_id")] != "abuf"
                 || &row[column("level")] != "1"
@@ -775,7 +803,7 @@ mod tests {
             }
             let kind = match &row[column("base_rawcode")] {
                 "ACff" | "Afae" | "AIar" | "AHad" => "armor",
-                "Apxf" | "Aven" | "Abof" | "ANab" => "damage_over_time",
+                "Apxf" | "Aven" | "ACvs" | "Abof" | "ANab" => "damage_over_time",
                 "Afrz" => "freeze",
                 "AOae" => "movement",
                 "AHtb" | "ACtb" => "stun",
@@ -783,7 +811,19 @@ mod tests {
             };
             let references: String =
                 serde_json::from_str(&row[column("recovered_value_json")]).unwrap();
-            for buff in references.split(',').filter(|code| !code.is_empty()) {
+            let mut references: Vec<_> = references
+                .split(',')
+                .filter(|code| !code.is_empty())
+                .collect();
+            if matches!(&row[column("base_rawcode")], "Aven" | "ACvs") && !references.is_empty() {
+                let flags = poison_flags
+                    .get(&row[column("rawcode")])
+                    .copied()
+                    .unwrap_or(0);
+                let active = usize::from(flags & 7 != 0).min(references.len() - 1);
+                references = vec![references[active]];
+            }
+            for buff in references {
                 for path in buffs[buff]["target_art"].as_array().unwrap() {
                     assert!(catalog.status_visuals.iter().any(|visual| {
                         visual.ability_rawcode == row[column("rawcode")]

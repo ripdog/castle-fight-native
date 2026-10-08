@@ -1941,7 +1941,10 @@ fn selected_combat_badges(
                         profile,
                         damage_type,
                     }),
-                None,
+                building.secondary_attack.map(|attack| AttackBadgeData {
+                    profile: attack.attack,
+                    damage_type: attack.damage_type,
+                }),
             ],
             Some(ArmorBadgeData {
                 armor_type: building.armor.armor_type,
@@ -2161,20 +2164,19 @@ fn active_effect_badges(
             beneficial: true,
         });
     }
-    if let Some(poison) = unit
+    for buff in unit
         .status
         .poison
-        .filter(|poison| tick < poison.expires_tick)
+        .iter()
+        .flat_map(|poison| poison.buffs.iter().flatten())
+        .filter(|buff| tick < buff.expires_tick)
     {
         effects.push(ActiveEffectBadgeData {
-            icon: UiIconKey::StatusEffect {
-                ability: poison.profile.ability.0,
-                role: UiStatusIconRole::Primary,
-            },
+            icon: UiIconKey::buff(buff.buff_rawcode),
             description: format!(
                 "Poison: {} damage/s ({}s)",
-                i64::from(poison.profile.damage_per_second) * i64::from(poison.sources),
-                remaining(poison.expires_tick)
+                buff.damage_per_second,
+                remaining(buff.expires_tick)
             ),
             beneficial: false,
         });
@@ -3712,6 +3714,7 @@ mod tests {
                 construction_started_tick: None,
                 construction_complete_tick: None,
                 attack: None,
+                secondary_attack: None,
                 damage_type: None,
                 armor: castle_fight_sim::ArmorProfile::new(ArmorType::Fortified, 5),
                 target: None,
@@ -3745,6 +3748,24 @@ mod tests {
         let (attacks, armor) = selected_combat_badges(SimId(9), &samples);
         assert!(attacks.into_iter().all(|attack| attack.is_none()));
         assert_eq!(armor.unwrap().armor_type, ArmorType::Fortified);
+        let building = samples.current.buildings.get_mut(&SimId(9)).unwrap();
+        building.attack = Some(test_attack());
+        building.damage_type = Some(DamageType::Normal);
+        let secondary = castle_fight_sim::SecondaryAttackProfile {
+            primary_targets: castle_fight_sim::AttackTargetMask::AIR_UNITS,
+            attack: AttackProfile {
+                damage: 13,
+                range: 60,
+                ..test_attack()
+            },
+            targets: castle_fight_sim::AttackTargetMask::GROUND_UNITS,
+            damage_type: DamageType::Pierce,
+        };
+        building.secondary_attack = Some(secondary);
+        let (attacks, _) = selected_combat_badges(SimId(9), &samples);
+        assert_eq!(attacks[0].unwrap().profile, test_attack());
+        assert_eq!(attacks[1].unwrap().profile, secondary.attack);
+        assert_eq!(attacks[1].unwrap().damage_type, secondary.damage_type);
     }
 
     #[test]

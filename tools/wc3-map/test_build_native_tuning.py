@@ -19,8 +19,13 @@ class NativeTuningProjectionTest(unittest.TestCase):
 
     def test_poison_projects_class_mask_short_hero_expiry_and_nonlethal_damage_stacking(self) -> None:
         recipe = {"kind": "poison", "source_kind": "unit-ability", "source_key": "TEST", "unit_rawcode": "UNIT"}
-        fields = {"targs1": "air,ground,organic", "dataa1": "19", "datab1": "0.15", "datac1": "0.1", "datad1": "1", "dur1": "4", "herodur1": "0.25"}
-        profile = native.project_effect(recipe, fields, None, {}, {})["profile"]
+        fields = {"targs1": "air,ground,organic", "dataa1": "19", "datab1": "0.15", "datac1": "0.1", "datad1": "1", "dur1": "4", "herodur1": "0.25", "buffid1": "BUFF,SLOW"}
+        profile = native.project_effect(recipe, fields, None, {}, {"native_base": "ACvs"})["profile"]
+        self.assertEqual(profile["buff_rawcode"], int.from_bytes(b"SLOW", "big"))
+        for base in ("Aven", "ACvs"):
+            projected = native.project_effect(recipe, {**fields, "buffid1": "BUFF"}, None, {}, {"native_base": base})
+            self.assertEqual(projected["profile"]["buff_rawcode"], int.from_bytes(b"BUFF", "big"))
+            self.assertEqual(projected["provenance"]["native_base"], base)
         self.assertTrue(profile["stack_damage"])
         self.assertFalse(profile["can_kill"])
         self.assertEqual((profile["hero_duration_ticks"], profile["movement_percent_delta"], profile["attack_speed_percent_delta"]), (8, -10, -15))

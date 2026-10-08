@@ -504,3 +504,230 @@ fn interrupted_windup_does_not_release_or_switch_to_a_new_target() {
         assert!(sim.unit(source).unwrap().status.pending_attack.is_none());
     }
 }
+
+fn dual_weapon_tower(sim: &mut Simulation) -> SimId {
+    let primary = AttackProfile {
+        delivery: AttackDelivery::RangedInstant,
+        damage: 7,
+        range: 96,
+        acquisition_range: 128,
+        cooldown_ticks: 12,
+    };
+    sim.spawn_building_with_properties(
+        BuildingSpawn {
+            team: Team(0),
+            footprint: BuildingFootprint::new(0, 0, 1, 1),
+            health: 500,
+            production: None,
+            attack: Some(primary),
+            spellcasting: None,
+        },
+        BuildingGameplayProperties {
+            attack_targets: AttackTargetMask::AIR_AND_GROUND,
+            secondary_attack: Some(SecondaryAttackProfile {
+                primary_targets: AttackTargetMask::AIR_UNITS,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::RangedGuaranteedHit {
+                        speed_per_tick: 256,
+                    },
+                    damage: 11,
+                    range: 32,
+                    acquisition_range: 64,
+                    cooldown_ticks: 17,
+                },
+                targets: AttackTargetMask::GROUND_UNITS,
+                damage_type: DamageType::Pierce,
+            }),
+            action_timing: ActionTimingProfile {
+                primary_attack_ticks: 5,
+                primary_attack_point_ticks: 2,
+                secondary_attack_ticks: 7,
+                secondary_attack_point_ticks: 4,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    )
+}
+
+#[test]
+fn building_weapons_keep_separate_delivery_damage_and_windup_through_rejoin() {
+    for (class, damage, release_tick, cooldown) in [
+        (MovementClass::Air, 7, 3, 10),
+        (MovementClass::Ground, 11, 5, 13),
+    ] {
+        let mut sim = Simulation::new(configuration(), 1);
+        let tower = dual_weapon_tower(&mut sim);
+        let mut victim = spawn(Team(1), SimPoint::new(48, 16));
+        victim.health = 500;
+        victim.movement.speed_per_tick = 0;
+        victim.attack.damage = 0;
+        victim.attack.acquisition_range = 0;
+        victim.attack.range = 0;
+        let victim = sim.spawn_unit_with_properties(victim, properties(class));
+        sim.step();
+        sim.step();
+        assert_eq!(sim.unit(victim).unwrap().health, 500);
+        let view = sim.building(tower).unwrap();
+        assert!(view.secondary_attack.is_some());
+        assert_eq!(
+            view.status.pending_attack.unwrap().release_tick,
+            release_tick
+        );
+        assert_eq!(view.status.action_animation.unwrap().started_tick, 1);
+        let mut restored = wire_restore(&sim);
+        while sim.next_tick <= release_tick {
+            let tick = sim.next_tick;
+            let step = sim.step();
+            assert_eq!(step.checksum, restored.step().checksum);
+            assert_eq!(step.attacks_resolved, usize::from(tick == release_tick));
+        }
+        assert_eq!(
+            sim.building(tower).unwrap().cooldown_remaining,
+            Some(cooldown)
+        );
+        if class == MovementClass::Ground {
+            assert_eq!(
+                sim.unit(victim).unwrap().health,
+                500,
+                "the ground weapon has missile travel"
+            );
+            assert_eq!(sim.step().checksum, restored.step().checksum);
+        }
+        let damage_type = if class == MovementClass::Air {
+            DamageType::Normal
+        } else {
+            DamageType::Pierce
+        };
+        let expected_damage = sim.combat_rules.damage_rules.apply_attack(
+            damage,
+            damage_type,
+            sim.unit(victim).unwrap().armor,
+        );
+        assert_eq!(sim.unit(victim).unwrap().health, 500 - expected_damage);
+    }
+}
+
+#[test]
+fn building_secondary_weapon_rejects_structures_and_uses_its_own_ranges() {
+    let mut sim = Simulation::new(configuration(), 1);
+    let tower = dual_weapon_tower(&mut sim);
+    let structure = sim.spawn_building(BuildingSpawn {
+        team: Team(1),
+        footprint: BuildingFootprint::new(2, 0, 1, 1),
+        health: 500,
+        production: None,
+        attack: None,
+        spellcasting: None,
+    });
+    assert_eq!(
+        sim.order_building_attack_target(tower, structure),
+        Err(BuildingCommandError::InvalidTargetType)
+    );
+    let mut ground = spawn(Team(1), SimPoint::new(112, 16));
+    ground.health = 500;
+    ground.attack.damage = 0;
+    ground.attack.acquisition_range = 0;
+    ground.attack.range = 0;
+    ground.movement.speed_per_tick = 0;
+    let ground = sim.spawn_unit_with_properties(ground, properties(MovementClass::Ground));
+    assert_eq!(
+        sim.order_building_attack_target(tower, ground),
+        Err(BuildingCommandError::TargetOutOfRange)
+    );
+    for _ in 0..4 {
+        sim.step();
+    }
+    assert!(sim.building(tower).unwrap().target.is_none());
+    let victim = sim
+        .snapshot_units()
+        .into_iter()
+        .find(|unit| unit.id == ground)
+        .unwrap()
+        .entity;
+    sim.world
+        .entity_mut(victim)
+        .get_mut::<Position>()
+        .unwrap()
+        .0 = SimPoint::new(80, 16);
+    sim.order_building_attack_target(tower, ground).unwrap();
+    sim.step();
+    assert_eq!(sim.building(tower).unwrap().target, Some(ground));
+    assert!(
+        sim.building(tower).unwrap().status.pending_attack.is_none(),
+        "acquisition does not extend weapon range"
+    );
+    sim.world
+        .entity_mut(victim)
+        .get_mut::<Position>()
+        .unwrap()
+        .0 = SimPoint::new(48, 16);
+    sim.step();
+    assert!(sim.building(tower).unwrap().status.pending_attack.is_some());
+    sim.world
+        .entity_mut(victim)
+        .get_mut::<Position>()
+        .unwrap()
+        .0 = SimPoint::new(160, 16);
+    sim.step();
+    assert!(sim.building(tower).unwrap().status.pending_attack.is_none());
+    assert!(
+        sim.building(tower)
+            .unwrap()
+            .status
+            .action_animation
+            .is_none()
+    );
+    assert_eq!(sim.unit(ground).unwrap().health, 500);
+}
+
+#[test]
+fn building_windup_cancels_when_an_earlier_released_attack_kills_its_target() {
+    let mut sim = Simulation::new(configuration(), 1);
+    let mut earlier = spawn(Team(0), SimPoint::new(-16, 16));
+    earlier.health = 500;
+    earlier.movement.speed_per_tick = 0;
+    earlier.attack.range = 0;
+    earlier.attack.acquisition_range = 0;
+    let earlier = sim.spawn_unit(earlier);
+    let tower = dual_weapon_tower(&mut sim);
+    let mut victim = spawn(Team(1), SimPoint::new(48, 16));
+    victim.movement.speed_per_tick = 0;
+    victim.attack.range = 0;
+    victim.attack.acquisition_range = 0;
+    let victim = sim.spawn_unit_with_properties(victim, properties(MovementClass::Air));
+    sim.step();
+    sim.step();
+    let release_tick = sim
+        .building(tower)
+        .unwrap()
+        .status
+        .pending_attack
+        .unwrap()
+        .release_tick;
+    while sim.next_tick < release_tick {
+        sim.step();
+    }
+    let entity = sim
+        .snapshot_units()
+        .into_iter()
+        .find(|unit| unit.id == earlier)
+        .unwrap()
+        .entity;
+    *sim.world
+        .entity_mut(entity)
+        .get_mut::<AttackProfile>()
+        .unwrap() = AttackProfile {
+        delivery: AttackDelivery::RangedInstant,
+        damage: 100,
+        range: 96,
+        acquisition_range: 128,
+        cooldown_ticks: 10,
+    };
+    let step = sim.step();
+    assert_eq!(step.attacks_resolved, 1);
+    assert!(sim.unit(victim).is_none());
+    let status = sim.building(tower).unwrap().status;
+    assert!(status.pending_attack.is_none());
+    assert!(status.action_animation.is_none());
+}

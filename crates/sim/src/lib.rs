@@ -45,10 +45,11 @@ pub use components::{
     ModifierId, MovementClass, MovementProfile, NativeAbilityGrant, NativeAbilityGrantEffect,
     NativeAbilityGrants, NativeBoltProfile, NativeBuffIdentity, Owner, PassiveUnitEffect,
     PassiveUnitEffects, PendingAttackState, PendingCastState, PendingCastTarget, PlayerId,
-    PoisonProfile, PoisonStatus, ProductionProfile, PulverizeEffectProfile, ResolvedUnitDefinition,
-    SecondaryAttackProfile, SecondaryResurrectionState, SimId, SpellcastingProfile,
-    SplashFalloffProfile, StatusState, Team, TriggeredAttackEffect, TriggeredSpellProcProfile,
-    UnitClassifications, UnitGameplayProperties, UnitSpawn, UnitTemplate,
+    PoisonBuffStatus, PoisonProfile, PoisonStatus, ProductionProfile, PulverizeEffectProfile,
+    ResolvedUnitDefinition, SecondaryAttackProfile, SecondaryResurrectionState, SimId,
+    SpellcastingProfile, SplashFalloffProfile, StatusState, Team, TriggeredAttackEffect,
+    TriggeredSpellProcProfile, UnitClassifications, UnitGameplayProperties, UnitSpawn,
+    UnitTemplate,
 };
 pub use content::{
     CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION, CASTLE_FIGHT_CONTENT_REVISION_927,

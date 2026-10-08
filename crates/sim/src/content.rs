@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r53";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r54";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 33;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 34;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1269,6 +1269,8 @@ impl CastleFightProductionDefinition {
         );
         let unit = self.produced_unit.resolved();
         BuildingGameplayProperties {
+            action_timing: ActionTimingProfile::default(),
+            secondary_attack: None,
             passive_effects: PassiveUnitEffects::EMPTY,
             content: Some(ContentIdentity {
                 map_version: self.map_version,
@@ -1492,6 +1494,8 @@ impl CastleFightTowerKind {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CastleFightTowerDefinition {
+    pub action_timing: ActionTimingProfile,
+    pub secondary_attack: Option<SecondaryAttackProfile>,
     pub passive_effects: PassiveUnitEffects,
     pub rawcode: u32,
     pub name: &'static str,
@@ -1532,6 +1536,8 @@ impl CastleFightTowerDefinition {
     #[must_use]
     pub const fn gameplay_properties(self) -> BuildingGameplayProperties {
         BuildingGameplayProperties {
+            action_timing: self.action_timing,
+            secondary_attack: self.secondary_attack,
             passive_effects: self.passive_effects,
             content: Some(ContentIdentity {
                 map_version: self.map_version,
@@ -1542,7 +1548,11 @@ impl CastleFightTowerDefinition {
             repair_time_ticks: Some(self.repair_time_ticks),
             health_regen_per_second_per_10k: self.health_regen_per_second_per_10k,
             classifications: self.classifications,
-            attack_targets: self.attack_targets,
+            attack_targets: if let Some(secondary) = self.secondary_attack {
+                self.attack_targets.union(secondary.targets)
+            } else {
+                self.attack_targets
+            },
             damage_type: self.damage_type,
             armor: self.armor,
             economy: Some(self.economy),
@@ -1769,6 +1779,9 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A020") => {
+            0x4000_008e
+        }
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A039") => {
             0x4000_0082
         }
@@ -2477,6 +2490,25 @@ fn hash_production_definition(
 
 fn hash_tower_definition(hash: &mut ContentHash64, definition: CastleFightTowerDefinition) {
     hash_passive_effects(hash, definition.passive_effects);
+    for ticks in [
+        definition.action_timing.primary_attack_ticks,
+        definition.action_timing.primary_attack_point_ticks,
+        definition.action_timing.secondary_attack_ticks,
+        definition.action_timing.secondary_attack_point_ticks,
+        definition.action_timing.cast_ticks,
+        definition.action_timing.cast_point_ticks,
+    ] {
+        hash.write_u16(ticks);
+    }
+    if let Some(secondary) = definition.secondary_attack {
+        hash.write_u8(1);
+        hash_attack_profile(hash, secondary.attack);
+        hash.write_u8(secondary.primary_targets.bits());
+        hash.write_u8(secondary.targets.bits());
+        hash.write_u8(secondary.damage_type.stable_tag());
+    } else {
+        hash.write_u8(0);
+    }
     hash.write_u16(definition.map_version.major);
     hash.write_u16(definition.map_version.minor);
     hash.write_u32(definition.rawcode);
@@ -2596,6 +2628,7 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
             PassiveUnitEffect::Poison(profile) => {
                 hash.write_u8(15);
                 hash.write_u32(profile.ability.0);
+                hash.write_u32(profile.buff_rawcode);
                 hash.write_i32(profile.damage_per_second);
                 hash.write_i32(i32::from(profile.movement_percent_delta));
                 hash.write_i32(i32::from(profile.attack_speed_percent_delta));
@@ -3346,11 +3379,24 @@ struct CatalogSupplement927 {
     source_object_fields_sha256: String,
     objects: Vec<CatalogSupplementObject927>,
     action_timings: Vec<CatalogActionTiming927>,
+    building_secondary_attacks: Vec<CatalogBuildingSecondaryAttack927>,
     bounce_weapons: Vec<CatalogBounceWeapon927>,
     line_weapons: Vec<CatalogLineWeapon927>,
     sight_profiles: Vec<CatalogSightProfile927>,
     fog_rules: CatalogFogRules927,
     spell_reveals: Vec<CatalogSpellReveal927>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CatalogBuildingSecondaryAttack927 {
+    rawcode: String,
+    weapon_type: String,
+    damage_type: String,
+    targets: String,
+    damage: String,
+    range: String,
+    cooldown: String,
+    projectile_speed_world_per_second: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -3534,6 +3580,7 @@ struct ExtractedContent927 {
     protected_stats: BTreeMap<u32, ExtractedProtectedStats927>,
     primary_attacks: BTreeMap<u32, ExtractedAttack927>,
     secondary_attacks: BTreeMap<u32, ExtractedAttack927>,
+    building_secondary_attacks: BTreeMap<u32, CatalogBuildingSecondaryAttack927>,
     production: BTreeMap<u32, ExtractedProduction927>,
     legendary_points_costs: BTreeMap<u32, u16>,
     corpses: BTreeMap<u32, ExtractedCorpse927>,
@@ -3602,6 +3649,11 @@ impl ExtractedContent927 {
         }
 
         let supplement = catalog_supplement_927()?;
+        let building_secondary_attacks = supplement
+            .building_secondary_attacks
+            .into_iter()
+            .map(|weapon| (parse_rawcode(&weapon.rawcode), weapon))
+            .collect();
         let action_timings: BTreeMap<_, _> = supplement
             .action_timings
             .into_iter()
@@ -4168,6 +4220,7 @@ impl ExtractedContent927 {
             protected_stats,
             primary_attacks,
             secondary_attacks,
+            building_secondary_attacks,
             production,
             legendary_points_costs,
             corpses,
@@ -4189,7 +4242,7 @@ impl ExtractedContent927 {
 fn catalog_supplement_927() -> Result<CatalogSupplement927, String> {
     let supplement: CatalogSupplement927 = serde_json::from_str(CATALOG_SUPPLEMENT_927_R1_JSON)
         .map_err(|error| format!("invalid 9.27 catalog supplement: {error}"))?;
-    if supplement.schema_version != 5 {
+    if supplement.schema_version != 6 {
         return Err(format!(
             "unsupported 9.27 catalog supplement schema {}",
             supplement.schema_version
@@ -4926,7 +4979,59 @@ fn extracted_tower_definition_927(
     if let Some(profile) = unit.splash_falloff {
         passive_effects.push(PassiveUnitEffect::SplashFalloff(profile));
     }
+    let secondary_attack = content
+        .building_secondary_attacks
+        .get(&rawcode)
+        .map(|second| {
+            let primary = attack.expect("secondary weapon requires a primary weapon");
+            let delivery = match parse_weapon_kind_927(&second.weapon_type)
+                .expect("building secondary weapon kind")
+            {
+                ExtractedWeaponKind927::Instant => AttackDelivery::RangedInstant,
+                ExtractedWeaponKind927::Missile => AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: movement(
+                        parse_optional_i32_927(&second.projectile_speed_world_per_second)
+                            .expect("secondary missile speed field")
+                            .expect("secondary missile speed"),
+                    )
+                    .speed_per_tick,
+                },
+                other => panic!("tower {rawcode:#010x} has unsupported secondary weapon {other:?}"),
+            };
+            SecondaryAttackProfile {
+                primary_targets: unit.attack1_targets.expect("primary target mask"),
+                attack: AttackProfile {
+                    delivery,
+                    damage: protected
+                        .and_then(|stats| stats.attack2_damage)
+                        .or(parse_optional_decimal_rounded_i32_927(&second.damage)
+                            .expect("secondary damage field"))
+                        .expect("secondary damage"),
+                    range: protected
+                        .and_then(|stats| stats.attack2_range)
+                        .unwrap_or_else(|| {
+                            world(
+                                parse_optional_i32_927(&second.range)
+                                    .expect("secondary range field")
+                                    .expect("secondary range"),
+                            )
+                        }),
+                    acquisition_range: primary.acquisition_range,
+                    cooldown_ticks: protected
+                        .and_then(|stats| stats.attack2_cooldown_ticks)
+                        .unwrap_or_else(|| {
+                            parse_seconds_to_ticks_u16_927(&second.cooldown)
+                                .expect("secondary cooldown")
+                        }),
+                },
+                targets: parse_attack_targets_927(&second.targets),
+                damage_type: parse_damage_type_927(&second.damage_type)
+                    .expect("secondary damage type"),
+            }
+        });
     CastleFightTowerDefinition {
+        action_timing: unit.action_timing,
+        secondary_attack,
         passive_effects: PassiveUnitEffects::from_slice(&passive_effects),
         rawcode,
         name: building.name,
@@ -5342,6 +5447,32 @@ mod tests {
             hash_unit_definition(&mut before, unit);
             hash_unit_definition(&mut after, changed);
             assert_ne!(before.finish(), after.finish());
+        }
+        for tower in bundle.tower_definitions() {
+            assert_eq!(tower.action_timing, timings[&tower.rawcode]);
+            assert_eq!(
+                tower.gameplay_properties().secondary_attack,
+                tower.secondary_attack
+            );
+            assert_eq!(
+                tower.secondary_attack.is_some(),
+                extracted_content_927()
+                    .building_secondary_attacks
+                    .contains_key(&tower.rawcode)
+            );
+            if let Some(secondary) = tower.secondary_attack {
+                assert_eq!(
+                    tower.gameplay_properties().attack_targets,
+                    tower.attack_targets.union(secondary.targets)
+                );
+                let mut changed = tower;
+                changed.secondary_attack.as_mut().unwrap().attack.damage += 1;
+                let mut before = ContentHash64::new();
+                let mut after = ContentHash64::new();
+                hash_tower_definition(&mut before, tower);
+                hash_tower_definition(&mut after, changed);
+                assert_ne!(before.finish(), after.finish());
+            }
         }
     }
 

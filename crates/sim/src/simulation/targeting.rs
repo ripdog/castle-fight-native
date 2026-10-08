@@ -235,20 +235,26 @@ impl Simulation {
         grid: &SpatialGrid,
     ) -> Option<SimId> {
         let attack = source.attack?;
-        let attack_targets = source
-            .attack_targets
-            .expect("attack building target mask missing");
+
         let enemy_team = 1u8
             .checked_sub(source.team.0)
             .expect("verification slice supports teams 0 and 1 only");
         let center = footprint_center_point(source.footprint, self.config.navigation_cell_size);
+        let acquisition_range =
+            source
+                .secondary_attack
+                .map_or(attack.acquisition_range, |secondary| {
+                    secondary
+                        .attack
+                        .acquisition_range
+                        .max(attack.acquisition_range)
+                });
         let query_radius = building_source_query_radius(
             source.footprint,
-            attack.acquisition_range,
+            acquisition_range,
             self.config.navigation_cell_size,
         );
-        let acquisition_range_sq = attack.acquisition_range_sq();
-        let mut best_unit: Option<(u64, SimId)> = None;
+        let mut best_unit: Option<(u8, u64, SimId)> = None;
         grid.for_each_candidate(
             SpatialPartition::global(enemy_team),
             center,
@@ -257,30 +263,33 @@ impl Simulation {
                 let candidate = &units[index];
                 if candidate.health <= 0
                     || !candidate.visible_to(source.team, self.next_tick)
-                    || !attack_targets.can_target_unit(candidate.target_movement_class())
+
                 {
                     return;
                 }
+                let Some((weapon, _, _)) = source.attack_for_unit(candidate.target_movement_class()) else { return; };
                 let distance_sq = point_to_footprint_distance_sq(
                     candidate.position,
                     source.footprint,
                     self.config.navigation_cell_size,
                 );
-                if distance_sq > acquisition_range_sq {
+                if distance_sq > weapon.acquisition_range_sq() {
                     return;
                 }
-                let key = (distance_sq, candidate.id);
+                let poisoned = source.passive_effects.iter().any(|effect| matches!(effect,
+                    PassiveUnitEffect::Poison(profile) if native_actions::poison::eligible(candidate, profile)
+                        && candidate.status.poison.is_some_and(|status| status.buffs.iter().flatten().any(|buff| buff.buff_rawcode == profile.buff_rawcode && self.next_tick < buff.expires_tick))));
+                let key = (u8::from(poisoned), distance_sq, candidate.id);
                 if best_unit.is_none_or(|current| key < current) {
                     best_unit = Some(key);
                 }
             },
         );
-        if let Some((_, target)) = best_unit {
+        if let Some((_, _, target)) = best_unit {
             return Some(target);
         }
-        if !attack_targets.can_target_buildings() {
-            return None;
-        }
+        let (building_weapon, _, _) = source.attack_for_building()?;
+        let acquisition_range_sq = building_weapon.acquisition_range_sq();
 
         let mut best_building: Option<(u64, SimId)> = None;
         for candidate in buildings {
@@ -314,36 +323,34 @@ impl Simulation {
         units: &[UnitSnapshot],
         buildings: &[BuildingSnapshot],
     ) -> bool {
-        let Some(attack) = source.attack else {
-            return false;
-        };
-        let attack_targets = source
-            .attack_targets
-            .expect("attack building target mask missing");
-        let range_sq = attack.acquisition_range_sq();
         if let Some(index) = find_unit_index(units, target_id) {
             let target = &units[index];
+            let Some((attack, _, _)) = source.attack_for_unit(target.target_movement_class())
+            else {
+                return false;
+            };
             return target.team != source.team
                 && target.health > 0
                 && target.visible_to(source.team, self.next_tick)
-                && attack_targets.can_target_unit(target.target_movement_class())
                 && point_to_footprint_distance_sq(
                     target.position,
                     source.footprint,
                     self.config.navigation_cell_size,
-                ) <= range_sq;
+                ) <= attack.acquisition_range_sq();
         }
         if let Some(index) = find_building_index(buildings, target_id) {
             let target = &buildings[index];
-            return attack_targets.can_target_buildings()
-                && target.visible_teams & (1 << source.team.0) != 0
+            let Some((attack, _, _)) = source.attack_for_building() else {
+                return false;
+            };
+            return target.visible_teams & (1 << source.team.0) != 0
                 && target.team != source.team
                 && target.health > 0
                 && footprint_to_footprint_distance_sq(
                     source.footprint,
                     target.footprint,
                     self.config.navigation_cell_size,
-                ) <= range_sq;
+                ) <= attack.acquisition_range_sq();
         }
         false
     }
@@ -398,8 +405,7 @@ impl Simulation {
                 let poisoned = source.passive_effects.iter().any(|effect| {
                     matches!(effect, PassiveUnitEffect::Poison(profile)
                         if native_actions::poison::eligible(candidate, profile)
-                        && candidate.status.poison.is_some_and(|status| status.profile.ability == profile.ability
-                            && self.next_tick < status.expires_tick))
+                        && candidate.status.poison.is_some_and(|status| status.buffs.iter().flatten().any(|buff| buff.buff_rawcode == profile.buff_rawcode && self.next_tick < buff.expires_tick)))
                 });
                 let key = (0, u8::from(poisoned), distance_sq, candidate.id);
                 if best.is_none_or(|current| key < current) {

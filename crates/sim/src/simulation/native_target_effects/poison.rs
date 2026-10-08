@@ -4,6 +4,7 @@ use crate::PoisonProfile;
 fn profile() -> PoisonProfile {
     PoisonProfile {
         ability: AbilityId(95),
+        buff_rawcode: 195,
         damage_per_second: 19,
         movement_percent_delta: -10,
         attack_speed_percent_delta: -15,
@@ -26,9 +27,13 @@ fn attacker(sim: &mut Simulation, x: i32, delivery: AttackDelivery) -> SimId {
 }
 
 fn apply(sim: &mut Simulation, source: SimId, target: SimId) {
+    apply_profile(sim, source, target, profile());
+}
+
+fn apply_profile(sim: &mut Simulation, source: SimId, target: SimId, poison: PoisonProfile) {
     let mut units = sim.snapshot_units();
     let index = find_unit_index(&units, target).unwrap();
-    sim.apply_poison(source, &mut units[index], profile(), sim.next_tick);
+    sim.apply_poison(source, &mut units[index], poison, sim.next_tick);
     *sim.world
         .entity_mut(units[index].entity)
         .get_mut::<StatusState>()
@@ -265,4 +270,87 @@ fn poison_acquisition_prefers_an_unpoisoned_unit_without_breaking_retained_targe
     apply(&mut sim, source, far);
     sim.step();
     assert_eq!(sim.unit(source).unwrap().target, Some(far));
+}
+
+#[test]
+fn distinct_poison_variants_keep_damage_clocks_and_fall_back_to_surviving_slows() {
+    let mut sim = simulation(1);
+    let source = sim.spawn_unit(unit(0, 20, 0, AttackDelivery::Melee));
+    let target = sim.spawn_unit(unit(1, 40, 0, AttackDelivery::Melee));
+    let weak = PoisonProfile {
+        ability: AbilityId(97),
+        buff_rawcode: 197,
+        damage_per_second: 7,
+        movement_percent_delta: -5,
+        attack_speed_percent_delta: -8,
+        duration_ticks: 95,
+        ..profile()
+    };
+    let strong = PoisonProfile {
+        duration_ticks: 30,
+        ..profile()
+    };
+    apply_profile(&mut sim, source, target, weak);
+    apply_profile(&mut sim, source, target, strong);
+    apply_profile(&mut sim, source, target, strong);
+    let status = sim.unit(target).unwrap().status;
+    assert_eq!(
+        status.poison.unwrap().sources,
+        2,
+        "same attacker can own distinct poison variants"
+    );
+    assert_eq!(status.poison.unwrap().total_damage_per_second, 26);
+    assert_eq!(status.poison.unwrap().buffs.iter().flatten().count(), 2);
+    assert_eq!(status.movement_modifier_count, 1);
+    assert_eq!(status.movement_modifiers[0].percent_delta, -10);
+    assert_eq!(status.attack_speed_modifiers[0].percent_delta, -15);
+    let before = sim.unit(target).unwrap().health;
+    let mut restored = wire_restored(&sim, 6);
+    while sim.next_tick <= 30 {
+        assert_eq!(sim.step().checksum, restored.step().checksum);
+    }
+    let status = sim.unit(target).unwrap().status;
+    assert_eq!(
+        sim.unit(target).unwrap().health,
+        before - 26,
+        "expiry includes the final whole-second pulse"
+    );
+    assert_eq!(status.poison.unwrap().sources, 1);
+    assert_eq!(status.poison.unwrap().profile.ability, weak.ability);
+    assert_eq!(status.poison.unwrap().total_damage_per_second, 7);
+    assert_eq!(status.poison.unwrap().buffs.iter().flatten().count(), 1);
+    assert_eq!(status.movement_modifiers[0].percent_delta, -5);
+    assert_eq!(status.attack_speed_modifiers[0].percent_delta, -8);
+    while sim.next_tick <= 95 {
+        assert_eq!(sim.step().checksum, restored.step().checksum);
+    }
+    let status = sim.unit(target).unwrap().status;
+    assert!(status.poison.is_none());
+    assert_eq!(status.movement_modifier_count, 0);
+    assert_eq!(status.attack_speed_modifier_count, 0);
+}
+
+#[test]
+fn poison_abilities_sharing_a_native_buff_refresh_the_same_attacker_clock() {
+    let mut sim = simulation(1);
+    let source = sim.spawn_unit(unit(0, 20, 0, AttackDelivery::Melee));
+    let target = sim.spawn_unit(unit(1, 40, 0, AttackDelivery::Melee));
+    let first = profile();
+    apply_profile(&mut sim, source, target, first);
+    let replacement = PoisonProfile {
+        ability: AbilityId(96),
+        damage_per_second: 7,
+        movement_percent_delta: -5,
+        attack_speed_percent_delta: -8,
+        ..first
+    };
+    apply_profile(&mut sim, source, target, replacement);
+    let status = sim.unit(target).unwrap().status;
+    assert_eq!(poison_actions(&sim), 1);
+    assert_eq!(status.poison.unwrap().sources, 1);
+    assert_eq!(status.poison.unwrap().total_damage_per_second, 7);
+    assert_eq!(status.poison.unwrap().buffs.iter().flatten().count(), 1);
+    assert_eq!(status.poison.unwrap().profile, replacement);
+    assert_eq!(status.movement_modifier_count, 1);
+    assert_eq!(status.movement_modifiers[0].percent_delta, -5);
 }

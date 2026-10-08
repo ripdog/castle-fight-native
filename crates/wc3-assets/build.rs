@@ -77,6 +77,7 @@ struct NativeBuffAttachment {
 #[derive(Deserialize)]
 struct NativeBuffVisual {
     rawcode: String,
+    icon_art: Option<String>,
     #[serde(default)]
     effect_art: Vec<String>,
     target_art: Vec<String>,
@@ -174,7 +175,7 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
     println!("cargo:rerun-if-changed={}", buff_visuals_path.display());
     let buff_projection: NativeBuffProjection =
         serde_json::from_slice(&fs::read(&buff_visuals_path)?)?;
-    if buff_projection.schema_version != 1 || buff_projection.map_version != catalog_version {
+    if buff_projection.schema_version != 2 || buff_projection.map_version != catalog_version {
         return Err("native buff projection schema/version mismatch".into());
     }
     let mut visuals = load_visual_assets(
@@ -221,7 +222,7 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
             });
         }
     }
-    let ui = load_ui_assets(&object_fields_path, &map_skin_path)?;
+    let ui = load_ui_assets(&object_fields_path, &map_skin_path, &buff_projection)?;
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR"));
     fs::write(
         out_dir.join("unit-assets.json"),
@@ -609,6 +610,7 @@ fn load_visual_assets(
     let mut missile_arcs = BTreeMap::<(String, String), f32>::new();
     let mut ability_base_rawcodes = BTreeMap::<String, String>::new();
     let mut ability_buff_ids = BTreeMap::<String, Vec<String>>::new();
+    let mut poison_stacking_flags = BTreeMap::<String, u32>::new();
     let mut buff_visuals = BTreeMap::new();
     for buff in &buff_projection.buffs {
         if buff_visuals.insert(buff.rawcode.as_str(), buff).is_some() {
@@ -668,6 +670,12 @@ fn load_visual_assets(
             ability_base_rawcodes
                 .entry(rawcode.to_owned())
                 .or_insert_with(|| base_rawcode.to_owned());
+            if field == "Poi4"
+                && row.get(level).unwrap_or_default() == "1"
+                && let Some(flags) = parse_json_u32(row.get(recovered).unwrap_or_default())
+            {
+                poison_stacking_flags.insert(rawcode.to_owned(), flags);
+            }
             if field == "abuf" && row.get(level).unwrap_or_default() == "1" {
                 ability_buff_ids.insert(
                     rawcode.to_owned(),
@@ -907,7 +915,7 @@ fn load_visual_assets(
     }
 
     let mut status_visuals = Vec::new();
-    for (ability_rawcode, buffs) in ability_buff_ids {
+    for (ability_rawcode, mut buffs) in ability_buff_ids {
         let Some(base_rawcode) = ability_base_rawcodes
             .get(&ability_rawcode)
             .map(String::as_str)
@@ -927,7 +935,21 @@ fn load_visual_assets(
             // Persistent native fire/carrier buffs use their authoritative DOT entry.
             "Apxf" => &["damage_over_time"],
             // Native poison can author separate poison/slow buffs or one combined override.
-            "Aven" => &["damage_over_time", "damage_over_time"],
+            "Aven" | "ACvs" => {
+                // Flags for damage/speed stacking select the second buff; one-buff overrides
+                // retain their sole authored identity. Kill-only flags use the first buff.
+                let slot = usize::from(
+                    poison_stacking_flags
+                        .get(&ability_rawcode)
+                        .copied()
+                        .unwrap_or(0)
+                        & 7
+                        != 0,
+                )
+                .min(buffs.len().saturating_sub(1));
+                buffs = buffs.into_iter().nth(slot).into_iter().collect();
+                &["damage_over_time"]
+            }
             "Abof" | "ANab" => &["damage_over_time"],
             // Bloodlust-family effects persist for the attack-speed buff lifetime.
             "Ablo" => &["attack_speed"],
@@ -1233,6 +1255,7 @@ fn append_building_script_visuals(
 fn load_ui_assets(
     object_fields_path: &std::path::Path,
     map_skin_path: &std::path::Path,
+    buff_projection: &NativeBuffProjection,
 ) -> Result<UiAssetCatalog, Box<dyn Error>> {
     let mut fields = csv::ReaderBuilder::new()
         .delimiter(b'\t')
@@ -1247,6 +1270,19 @@ fn load_ui_assets(
     let mut assets = BTreeSet::<(String, String, String, String)>::new();
     let mut ability_buffs = BTreeMap::<String, Vec<String>>::new();
     let mut buff_icons = BTreeMap::<String, String>::new();
+    for buff in &buff_projection.buffs {
+        if let Some(icon) = buff.icon_art.as_ref()
+            && !matches!(icon.trim(), "" | "_" | "-" | "0" | "none")
+        {
+            buff_icons.insert(buff.rawcode.clone(), icon.clone());
+            assets.insert((
+                "buffs".to_owned(),
+                buff.rawcode.clone(),
+                "buff".to_owned(),
+                icon.clone(),
+            ));
+        }
+    }
     for row in fields.records() {
         let row = row?;
         let Some(owner_kind) = row.get(category) else {

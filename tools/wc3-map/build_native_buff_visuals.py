@@ -40,6 +40,9 @@ def sections(text):
         elif current is not None and "=" in line and not line.startswith("//"):
             key, value = line.split("=", 1)
             key = key.lower()
+            if key == "buffart":
+                current[key] = value  # Native skin icon overrides use the last assignment.
+                continue
             if key not in {"targetart", "effectart"} and not key.startswith("targetattach"):
                 continue  # Unrelated native icon fields can intentionally repeat.
             if key in current and current[key] != value:
@@ -65,8 +68,8 @@ def project(skin, rows):
             buff = buffs.setdefault(row["rawcode"], {"base": row["base_rawcode"], "fields": {}})
             if buff["base"] != row["base_rawcode"]:
                 raise ValueError("conflicting buff base identity")
-            if row["field_id"].startswith("fta") or row["field_id"] == "feat":
-                if row["field_id"] not in {"ftat", "ftac", "feat", *(f"fta{i}" for i in range(6))}:
+            if row["field_id"].startswith("fta") or row["field_id"] in {"feat", "fart"}:
+                if row["field_id"] not in {"ftat", "ftac", "feat", "fart", *(f"fta{i}" for i in range(6))}:
                     raise ValueError("unsupported buff attachment field")
                 value = json.loads(row["recovered_value_json"])
                 previous = buff["fields"].get(row["field_id"])
@@ -80,6 +83,9 @@ def project(skin, rows):
         buff = buffs.get(rawcode, {"base": rawcode, "fields": {}})
         base, fields = buff["base"], buff["fields"]
         inherited = native.get(base, {})
+        icon = fields.get("fart", inherited.get("buffart"))
+        if icon is not None and not isinstance(icon, str):
+            raise ValueError("buff icon must be a string")
         art = fields.get("ftat", inherited.get("targetart", ""))
         attachments = []
         for index in range(6):
@@ -101,6 +107,9 @@ def project(skin, rows):
             "effect_art": string_list(effect_art),
             "effect_art_source": "resolved" if "feat" in fields else "native"}
         result.append({"rawcode": rawcode, "base_rawcode": base, **effect,
+                       "icon_art": icon,
+                       "icon_art_source": "resolved" if "fart" in fields else
+                                          "native" if "buffart" in inherited else "absent",
                        "native_section": base if base in native else None,
                        "target_art": string_list(art),
                        "target_art_source": "resolved" if "ftat" in fields else
@@ -119,7 +128,7 @@ def build(skin_path, map_version="9.27", revision="r1", repo_root=ROOT, releases
                for path in ("object-fields.tsv", "base-data-manifest.json", "summary.json")}
     skin = Path(skin_path).read_bytes()
     identity = verify_skin(skin, json.loads(sources["base-data-manifest.json"]))
-    return {"schema_version": 1, "map_version": map_version, "source_revision": revision,
+    return {"schema_version": 2, "map_version": map_version, "source_revision": revision,
             "extraction_git_tree": tree,
             "sources": {path: digest(data) for path, data in sources.items()},
             "native_skin": identity,

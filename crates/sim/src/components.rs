@@ -639,6 +639,8 @@ pub struct DamageThresholdState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PoisonProfile {
     pub ability: AbilityId,
+    /// Native poison uses its second authored buff when stacking flags are set.
+    pub buff_rawcode: u32,
     pub damage_per_second: i32,
     pub movement_percent_delta: i16,
     pub attack_speed_percent_delta: i16,
@@ -649,12 +651,24 @@ pub struct PoisonProfile {
     pub can_kill: bool,
 }
 
+pub const MAX_NATIVE_POISON_BUFFS: usize = 8;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PoisonStatus {
     pub profile: PoisonProfile,
+    pub total_damage_per_second: i32,
+    pub buffs: [Option<PoisonBuffStatus>; MAX_NATIVE_POISON_BUFFS],
     /// Distinguishes a cleansed family from a new application in the same tick.
     pub generation: SimId,
     pub sources: u32,
+    pub expires_tick: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PoisonBuffStatus {
+    pub ability: AbilityId,
+    pub buff_rawcode: u32,
+    pub damage_per_second: i32,
     pub expires_tick: u64,
 }
 
@@ -753,6 +767,8 @@ pub struct UnitGameplayProperties {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BuildingGameplayProperties {
+    pub action_timing: ActionTimingProfile,
+    pub secondary_attack: Option<SecondaryAttackProfile>,
     pub passive_effects: PassiveUnitEffects,
     pub content: Option<ContentIdentity>,
     /// Intrinsic structure flags, independent of the classifications of produced children.

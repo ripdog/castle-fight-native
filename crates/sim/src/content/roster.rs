@@ -134,6 +134,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
     CeremonialTotem = 0x2100_0011 => b"h02R",
+    AntiAirTower = 0x2100_0012 => b"o000",
     SerpentRock = 0x2100_0010 => b"h02N",
     WorldFreezer = 0x2100_000f => b"h03O",
     IcyTower = 0x2100_000e => b"h03Q",

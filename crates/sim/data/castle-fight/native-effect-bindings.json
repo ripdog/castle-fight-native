@@ -489,6 +489,7 @@
     {"source_kind": "unit-ability", "source_key": "A08O", "implementation": "warcraft-spell-resistance-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "unit-ability", "source_key": "A08P", "implementation": "warcraft-marker-only-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Zero-payload, zero-radius native Slow Aura with no recipient mask; retains unit decoration."},
     {"source_kind": "unit-ability", "source_key": "A08N", "implementation": "warcraft-marker-only-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Native Sphere presentation attachment on a production building without a weapon."},
-    {"source_kind": "unit-ability", "source_key": "A02O", "implementation": "warcraft-marker-only-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Zero-payload native Slow Aura self marker and persistent source art."}
+    {"source_kind": "unit-ability", "source_key": "A02O", "implementation": "warcraft-marker-only-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Zero-payload native Slow Aura self marker and persistent source art."},
+    {"source_kind": "unit-ability", "source_key": "A020", "implementation": "warcraft-poison-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Anti-Air Tower native ACvs poison, independent of its two ordinary weapons."}
   ]
 }

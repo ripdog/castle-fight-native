@@ -2,6 +2,8 @@
   "buffs": [
     {
       "base_rawcode": "AEsd",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "AEsd",
       "rawcode": "AEsd",
       "target_art": [
@@ -19,6 +21,8 @@
     },
     {
       "base_rawcode": "AEtr",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "AEtr",
       "rawcode": "AEtr",
       "target_art": [
@@ -30,6 +34,8 @@
     },
     {
       "base_rawcode": "ANmd",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "ANmd",
       "rawcode": "ANmd",
       "target_art": [
@@ -47,6 +53,8 @@
     },
     {
       "base_rawcode": "Bblo",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNTransmute.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bblo",
       "rawcode": "B000",
       "target_art": [
@@ -70,6 +78,8 @@
     },
     {
       "base_rawcode": "Bapl",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNPlagueCloud.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bapl",
       "rawcode": "B001",
       "target_art": [
@@ -87,6 +97,8 @@
     },
     {
       "base_rawcode": "BHfs",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNPossession.blp",
+      "icon_art_source": "resolved",
       "native_section": "BHfs",
       "rawcode": "B002",
       "target_art": [],
@@ -96,6 +108,8 @@
     },
     {
       "base_rawcode": "Bapl",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNPlagueCloud.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bapl",
       "rawcode": "B003",
       "target_art": [
@@ -113,6 +127,8 @@
     },
     {
       "base_rawcode": "Bbof",
+      "icon_art": "ReplaceableTextures\\PassiveButtons\\PASBTNRegenerationAura.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bbof",
       "rawcode": "B004",
       "target_art": [
@@ -130,6 +146,8 @@
     },
     {
       "base_rawcode": "BPSE",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNStun.blp",
+      "icon_art_source": "resolved",
       "native_section": "BPSE",
       "rawcode": "B005",
       "target_art": [
@@ -147,6 +165,8 @@
     },
     {
       "base_rawcode": "Bblo",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNBerserkForTrolls.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bblo",
       "rawcode": "B007",
       "target_art": [
@@ -170,6 +190,8 @@
     },
     {
       "base_rawcode": "BOac",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNDrum.blp",
+      "icon_art_source": "resolved",
       "native_section": "BOac",
       "rawcode": "B008",
       "target_art": [
@@ -187,6 +209,8 @@
     },
     {
       "base_rawcode": "Binf",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNMetamorphosis.blp",
+      "icon_art_source": "resolved",
       "native_section": "Binf",
       "rawcode": "B009",
       "target_art": [
@@ -208,6 +232,8 @@
         "Objects\\Spawnmodels\\Naga\\NagaDeath\\NagaDeath.mdl"
       ],
       "effect_art_source": "resolved",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNLobstrokkBlue.blp",
+      "icon_art_source": "resolved",
       "native_section": "BOsf",
       "rawcode": "B00A",
       "target_art": [],
@@ -217,6 +243,8 @@
     },
     {
       "base_rawcode": "BNab",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNBanish.blp",
+      "icon_art_source": "resolved",
       "native_section": "BNab",
       "rawcode": "B00C",
       "target_art": [
@@ -234,6 +262,8 @@
     },
     {
       "base_rawcode": "BPSE",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNStun.blp",
+      "icon_art_source": "resolved",
       "native_section": "BPSE",
       "rawcode": "B00D",
       "target_art": [
@@ -251,6 +281,8 @@
     },
     {
       "base_rawcode": "BHad",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNHumanArmorUpThree.blp",
+      "icon_art_source": "resolved",
       "native_section": "BHad",
       "rawcode": "B00E",
       "target_art": [
@@ -268,6 +300,8 @@
     },
     {
       "base_rawcode": "BHad",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNThoriumMelee.blp",
+      "icon_art_source": "resolved",
       "native_section": "BHad",
       "rawcode": "B00F",
       "target_art": [
@@ -285,6 +319,8 @@
     },
     {
       "base_rawcode": "Bcri",
+      "icon_art": "ReplaceableTextures\\PassiveButtons\\PASBTNEnvenomedSpear.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bcri",
       "rawcode": "B00G",
       "target_art": [
@@ -296,6 +332,8 @@
     },
     {
       "base_rawcode": "BNbr",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNOrbOfVenom.blp",
+      "icon_art_source": "resolved",
       "native_section": "BNbr",
       "rawcode": "B00H",
       "target_art": [
@@ -313,6 +351,8 @@
     },
     {
       "base_rawcode": "BNbr",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNHeartOfSearinox.blp",
+      "icon_art_source": "resolved",
       "native_section": "BNbr",
       "rawcode": "B00I",
       "target_art": [
@@ -330,6 +370,8 @@
     },
     {
       "base_rawcode": "Binf",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNInnerFire.blp",
+      "icon_art_source": "resolved",
       "native_section": "Binf",
       "rawcode": "B00J",
       "target_art": [
@@ -347,6 +389,8 @@
     },
     {
       "base_rawcode": "Broa",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNBattleRoar.blp",
+      "icon_art_source": "resolved",
       "native_section": "Broa",
       "rawcode": "B00K",
       "target_art": [
@@ -364,6 +408,8 @@
     },
     {
       "base_rawcode": "BOac",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNHornOfFog.blp",
+      "icon_art_source": "resolved",
       "native_section": "BOac",
       "rawcode": "B00L",
       "target_art": [
@@ -381,6 +427,8 @@
     },
     {
       "base_rawcode": "BEer",
+      "icon_art": "ReplaceableTextures\\PassiveButtons\\PASBTNFreezingBreath.blp",
+      "icon_art_source": "resolved",
       "native_section": "BEer",
       "rawcode": "B00M",
       "target_art": [
@@ -398,6 +446,8 @@
     },
     {
       "base_rawcode": "BHab",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNBrilliance.blp",
+      "icon_art_source": "resolved",
       "native_section": "BHab",
       "rawcode": "B00N",
       "target_art": [
@@ -415,6 +465,8 @@
     },
     {
       "base_rawcode": "Bcri",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNCurse.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bcri",
       "rawcode": "B00P",
       "target_art": [
@@ -426,6 +478,8 @@
     },
     {
       "base_rawcode": "Bhea",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNImprovedUnholyArmor.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bhea",
       "rawcode": "B00Q",
       "target_art": [
@@ -443,6 +497,8 @@
     },
     {
       "base_rawcode": "Bcri",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNUpgradeRegenerationAura.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bcri",
       "rawcode": "B00R",
       "target_art": [
@@ -454,6 +510,8 @@
     },
     {
       "base_rawcode": "BNpi",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "BNpi",
       "rawcode": "B00S",
       "target_art": [],
@@ -463,6 +521,8 @@
     },
     {
       "base_rawcode": "Bphx",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "Bphx",
       "rawcode": "B00T",
       "target_art": [],
@@ -472,6 +532,8 @@
     },
     {
       "base_rawcode": "Bapl",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNPlagueCloud.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bapl",
       "rawcode": "B00U",
       "target_art": [
@@ -494,6 +556,8 @@
     },
     {
       "base_rawcode": "BEah",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNThorns.blp",
+      "icon_art_source": "resolved",
       "native_section": "BEah",
       "rawcode": "B00V",
       "target_art": [
@@ -511,6 +575,8 @@
     },
     {
       "base_rawcode": "BHfs",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNDoom.blp",
+      "icon_art_source": "resolved",
       "native_section": "BHfs",
       "rawcode": "B00W",
       "target_art": [
@@ -528,6 +594,8 @@
     },
     {
       "base_rawcode": "Bens",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNFrostBolt.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bens",
       "rawcode": "B00X",
       "target_art": [
@@ -545,6 +613,8 @@
     },
     {
       "base_rawcode": "BOae",
+      "icon_art": "ReplaceableTextures\\PassiveButtons\\PASBTNDemolish.blp",
+      "icon_art_source": "resolved",
       "native_section": "BOae",
       "rawcode": "B00Y",
       "target_art": [],
@@ -560,6 +630,8 @@
     },
     {
       "base_rawcode": "BOae",
+      "icon_art": "ReplaceableTextures\\PassiveButtons\\PASBTNCriticalStrike.blp",
+      "icon_art_source": "resolved",
       "native_section": "BOae",
       "rawcode": "B00Z",
       "target_art": [],
@@ -575,6 +647,8 @@
     },
     {
       "base_rawcode": "BOae",
+      "icon_art": "ReplaceableTextures\\PassiveButtons\\PASBTNEvasion.blp",
+      "icon_art_source": "resolved",
       "native_section": "BOae",
       "rawcode": "B010",
       "target_art": [],
@@ -590,6 +664,8 @@
     },
     {
       "base_rawcode": "BHab",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNOrbOfDarkness.blp",
+      "icon_art_source": "resolved",
       "native_section": "BHab",
       "rawcode": "B011",
       "target_art": [],
@@ -605,6 +681,8 @@
     },
     {
       "base_rawcode": "BOwk",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNWindWalkOn.blp",
+      "icon_art_source": "resolved",
       "native_section": "BOwk",
       "rawcode": "B012",
       "target_art": [],
@@ -614,6 +692,8 @@
     },
     {
       "base_rawcode": "Bcri",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNLament.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bcri",
       "rawcode": "B014",
       "target_art": [
@@ -631,6 +711,8 @@
     },
     {
       "base_rawcode": "Bcri",
+      "icon_art": "ReplaceableTextures\\PassiveButtons\\PASBTNFrost.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bcri",
       "rawcode": "B015",
       "target_art": [
@@ -648,6 +730,8 @@
     },
     {
       "base_rawcode": "Bdef",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNElunesBlessing.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bdef",
       "rawcode": "B016",
       "target_art": [],
@@ -663,6 +747,8 @@
     },
     {
       "base_rawcode": "Bbar",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNBearForm.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bbar",
       "rawcode": "B017",
       "target_art": [],
@@ -678,6 +764,8 @@
     },
     {
       "base_rawcode": "BNcs",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNUnholyFrenzy.blp",
+      "icon_art_source": "resolved",
       "native_section": "BNcs",
       "rawcode": "B018",
       "target_art": [
@@ -695,6 +783,8 @@
     },
     {
       "base_rawcode": "Bphx",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNAuraOfDarkness.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bphx",
       "rawcode": "B019",
       "target_art": [],
@@ -704,6 +794,8 @@
     },
     {
       "base_rawcode": "BHad",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNDevotion.blp",
+      "icon_art_source": "resolved",
       "native_section": "BHad",
       "rawcode": "B01B",
       "target_art": [
@@ -721,6 +813,8 @@
     },
     {
       "base_rawcode": "Bdef",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNScroll.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bdef",
       "rawcode": "B01C",
       "target_art": [
@@ -738,6 +832,8 @@
     },
     {
       "base_rawcode": "Bpxf",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNFireForTheCannon.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bpxf",
       "rawcode": "B01D",
       "target_art": [
@@ -749,6 +845,8 @@
     },
     {
       "base_rawcode": "Basl",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNOrbOfLightning.blp",
+      "icon_art_source": "resolved",
       "native_section": "Basl",
       "rawcode": "B01E",
       "target_art": [],
@@ -758,6 +856,8 @@
     },
     {
       "base_rawcode": "BHds",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNAntiMagicShell.blp",
+      "icon_art_source": "resolved",
       "native_section": "BHds",
       "rawcode": "B01F",
       "target_art": [],
@@ -773,6 +873,8 @@
     },
     {
       "base_rawcode": "BHab",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNNeutralManaShield.blp",
+      "icon_art_source": "resolved",
       "native_section": "BHab",
       "rawcode": "B01H",
       "target_art": [
@@ -790,6 +892,8 @@
     },
     {
       "base_rawcode": "BHab",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNControlMagic.blp",
+      "icon_art_source": "resolved",
       "native_section": "BHab",
       "rawcode": "B01I",
       "target_art": [],
@@ -805,6 +909,8 @@
     },
     {
       "base_rawcode": "BOac",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNControlMagic.blp",
+      "icon_art_source": "resolved",
       "native_section": "BOac",
       "rawcode": "B01J",
       "target_art": [],
@@ -820,6 +926,8 @@
     },
     {
       "base_rawcode": "BHab",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNImbuedMasonry.blp",
+      "icon_art_source": "resolved",
       "native_section": "BHab",
       "rawcode": "B01K",
       "target_art": [],
@@ -835,6 +943,8 @@
     },
     {
       "base_rawcode": "Bakb",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNStaffOfTeleportation.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bakb",
       "rawcode": "B01L",
       "target_art": [],
@@ -850,6 +960,8 @@
     },
     {
       "base_rawcode": "Bpxf",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNResurrection.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bpxf",
       "rawcode": "B01M",
       "target_art": [],
@@ -859,6 +971,8 @@
     },
     {
       "base_rawcode": "Bpxf",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNClusterRockets.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bpxf",
       "rawcode": "B01N",
       "target_art": [],
@@ -868,6 +982,8 @@
     },
     {
       "base_rawcode": "Bpxf",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNWandOfNeutralization.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bpxf",
       "rawcode": "B01O",
       "target_art": [],
@@ -877,6 +993,8 @@
     },
     {
       "base_rawcode": "Bslo",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNSlow.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bslo",
       "rawcode": "B01P",
       "target_art": [
@@ -888,6 +1006,8 @@
     },
     {
       "base_rawcode": "BIcb",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNWandOfNeutralization.blp",
+      "icon_art_source": "resolved",
       "native_section": "BIcb",
       "rawcode": "B01Q",
       "target_art": [],
@@ -897,6 +1017,8 @@
     },
     {
       "base_rawcode": "BNht",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNHowlOfTerror.blp",
+      "icon_art_source": "resolved",
       "native_section": "BNht",
       "rawcode": "B01R",
       "target_art": [
@@ -912,6 +1034,8 @@
         "Abilities\\Spells\\Undead\\Impale\\ImpaleHitTarget.mdl"
       ],
       "effect_art_source": "resolved",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNImpale.blp",
+      "icon_art_source": "resolved",
       "native_section": "BUim",
       "rawcode": "B01S",
       "target_art": [
@@ -929,6 +1053,8 @@
     },
     {
       "base_rawcode": "BNpa",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNSkillz.tga",
+      "icon_art_source": "resolved",
       "native_section": "BNpa",
       "rawcode": "B01T",
       "target_art": [],
@@ -944,6 +1070,8 @@
     },
     {
       "base_rawcode": "Basl",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNHumanMissileUpTwo.blp",
+      "icon_art_source": "resolved",
       "native_section": "Basl",
       "rawcode": "B01U",
       "target_art": [],
@@ -953,6 +1081,8 @@
     },
     {
       "base_rawcode": "Bphx",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "Bphx",
       "rawcode": "B01V",
       "target_art": [],
@@ -962,6 +1092,8 @@
     },
     {
       "base_rawcode": "BHtc",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNEarthquake.blp",
+      "icon_art_source": "resolved",
       "native_section": "BHtc",
       "rawcode": "B01W",
       "target_art": [
@@ -979,6 +1111,8 @@
     },
     {
       "base_rawcode": "Bphx",
+      "icon_art": "ui\\widgets\\escmenu\\human\\blank-background.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bphx",
       "rawcode": "B01X",
       "target_art": [],
@@ -988,6 +1122,8 @@
     },
     {
       "base_rawcode": "BHtc",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNDizzy.blp",
+      "icon_art_source": "resolved",
       "native_section": "BHtc",
       "rawcode": "B01Y",
       "target_art": [
@@ -1005,6 +1141,8 @@
     },
     {
       "base_rawcode": "BHab",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNOrbOfDarkness.blp",
+      "icon_art_source": "resolved",
       "native_section": "BHab",
       "rawcode": "B020",
       "target_art": [],
@@ -1024,6 +1162,8 @@
         "Objects\\Spawnmodels\\NightElf\\EntBirthTarget\\EntBirthTarget.mdl"
       ],
       "effect_art_source": "resolved",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNSpiritWolf.blp",
+      "icon_art_source": "resolved",
       "native_section": "BOsf",
       "rawcode": "B021",
       "target_art": [],
@@ -1033,6 +1173,8 @@
     },
     {
       "base_rawcode": "BNpa",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNSpiderBlue.blp",
+      "icon_art_source": "resolved",
       "native_section": "BNpa",
       "rawcode": "B022",
       "target_art": [
@@ -1050,6 +1192,8 @@
     },
     {
       "base_rawcode": "Basl",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNCorrosiveBreath.blp",
+      "icon_art_source": "resolved",
       "native_section": "Basl",
       "rawcode": "B023",
       "target_art": [],
@@ -1059,6 +1203,8 @@
     },
     {
       "base_rawcode": "BUau",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNRegeneration.blp",
+      "icon_art_source": "resolved",
       "native_section": "BUau",
       "rawcode": "B024",
       "target_art": [
@@ -1076,6 +1222,8 @@
     },
     {
       "base_rawcode": "Binf",
+      "icon_art": "ui\\widgets\\escmenu\\human\\blank-background.blp",
+      "icon_art_source": "resolved",
       "native_section": "Binf",
       "rawcode": "B025",
       "target_art": [],
@@ -1091,6 +1239,8 @@
     },
     {
       "base_rawcode": "BOae",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNLocustSwarm.blp",
+      "icon_art_source": "resolved",
       "native_section": "BOae",
       "rawcode": "B026",
       "target_art": [
@@ -1108,6 +1258,8 @@
     },
     {
       "base_rawcode": "BNcs",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNUnholyFrenzy.blp",
+      "icon_art_source": "resolved",
       "native_section": "BNcs",
       "rawcode": "B028",
       "target_art": [
@@ -1125,6 +1277,8 @@
     },
     {
       "base_rawcode": "Bfro",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNFrost.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bfro",
       "rawcode": "B029",
       "target_art": [
@@ -1136,6 +1290,8 @@
     },
     {
       "base_rawcode": "BHad",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNCleavingAttack.blp",
+      "icon_art_source": "resolved",
       "native_section": "BHad",
       "rawcode": "B02A",
       "target_art": [],
@@ -1151,6 +1307,8 @@
     },
     {
       "base_rawcode": "BHad",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNAvatarOn.blp",
+      "icon_art_source": "resolved",
       "native_section": "BHad",
       "rawcode": "B02B",
       "target_art": [],
@@ -1166,6 +1324,8 @@
     },
     {
       "base_rawcode": "BHad",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNHardenedSkin.blp",
+      "icon_art_source": "resolved",
       "native_section": "BHad",
       "rawcode": "B02C",
       "target_art": [],
@@ -1181,6 +1341,8 @@
     },
     {
       "base_rawcode": "Basl",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNWirtsLeg.blp",
+      "icon_art_source": "resolved",
       "native_section": "Basl",
       "rawcode": "B02D",
       "target_art": [
@@ -1192,6 +1354,8 @@
     },
     {
       "base_rawcode": "BOae",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNAcorn.blp",
+      "icon_art_source": "resolved",
       "native_section": "BOae",
       "rawcode": "B02E",
       "target_art": [
@@ -1209,6 +1373,8 @@
     },
     {
       "base_rawcode": "BOac",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNStrongDrink.blp",
+      "icon_art_source": "resolved",
       "native_section": "BOac",
       "rawcode": "B02F",
       "target_art": [
@@ -1226,6 +1392,8 @@
     },
     {
       "base_rawcode": "BHad",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNDevotion.blp",
+      "icon_art_source": "resolved",
       "native_section": "BHad",
       "rawcode": "B02G",
       "target_art": [
@@ -1243,6 +1411,8 @@
     },
     {
       "base_rawcode": "BNdh",
+      "icon_art": "ReplaceableTextures\\PassiveButtons\\PASBTNGenericSpellImmunity.blp",
+      "icon_art_source": "resolved",
       "native_section": "BNdh",
       "rawcode": "B02O",
       "target_art": [
@@ -1260,6 +1430,8 @@
     },
     {
       "base_rawcode": "BNab",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNHealingSpray.blp",
+      "icon_art_source": "resolved",
       "native_section": "BNab",
       "rawcode": "B02Q",
       "target_art": [
@@ -1277,6 +1449,8 @@
     },
     {
       "base_rawcode": "Bclf",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNWallOfFire.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bclf",
       "rawcode": "B02R",
       "target_art": [],
@@ -1286,6 +1460,8 @@
     },
     {
       "base_rawcode": "BUts",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNThornShield.blp",
+      "icon_art_source": "resolved",
       "native_section": "BUts",
       "rawcode": "B02S",
       "target_art": [
@@ -1321,6 +1497,8 @@
     },
     {
       "base_rawcode": "Bblo",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNChemicalRage.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bblo",
       "rawcode": "B02T",
       "target_art": [],
@@ -1341,6 +1519,8 @@
     },
     {
       "base_rawcode": "BOae",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNCryptFiendBurrow.blp",
+      "icon_art_source": "resolved",
       "native_section": "BOae",
       "rawcode": "B02U",
       "target_art": [],
@@ -1356,6 +1536,8 @@
     },
     {
       "base_rawcode": "Bcri",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNDizzy.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bcri",
       "rawcode": "B02W",
       "target_art": [],
@@ -1365,6 +1547,8 @@
     },
     {
       "base_rawcode": "B031",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": null,
       "rawcode": "B031",
       "target_art": [],
@@ -1374,6 +1558,8 @@
     },
     {
       "base_rawcode": "BEah",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNThorns.blp",
+      "icon_art_source": "native",
       "native_section": "BEah",
       "rawcode": "BEah",
       "target_art": [
@@ -1391,6 +1577,8 @@
     },
     {
       "base_rawcode": "BEer",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNEntanglingRoots.blp",
+      "icon_art_source": "native",
       "native_section": "BEer",
       "rawcode": "BEer",
       "target_art": [
@@ -1408,6 +1596,8 @@
     },
     {
       "base_rawcode": "BEfn",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNEnt.blp",
+      "icon_art_source": "native",
       "native_section": "BEfn",
       "rawcode": "BEfn",
       "target_art": [],
@@ -1417,6 +1607,8 @@
     },
     {
       "base_rawcode": "BEsh",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNShadowStrike.blp",
+      "icon_art_source": "native",
       "native_section": "BEsh",
       "rawcode": "BEsh",
       "target_art": [
@@ -1434,6 +1626,8 @@
     },
     {
       "base_rawcode": "BHab",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNBrilliance.blp",
+      "icon_art_source": "native",
       "native_section": "BHab",
       "rawcode": "BHab",
       "target_art": [
@@ -1451,6 +1645,8 @@
     },
     {
       "base_rawcode": "BHad",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNDevotion.blp",
+      "icon_art_source": "native",
       "native_section": "BHad",
       "rawcode": "BHad",
       "target_art": [
@@ -1468,6 +1664,8 @@
     },
     {
       "base_rawcode": "BHbd",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNBlizzard.blp",
+      "icon_art_source": "native",
       "native_section": "BHbd",
       "rawcode": "BHbd",
       "target_art": [
@@ -1479,6 +1677,8 @@
     },
     {
       "base_rawcode": "BHbn",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNBanish.blp",
+      "icon_art_source": "native",
       "native_section": "BHbn",
       "rawcode": "BHbn",
       "target_art": [
@@ -1490,6 +1690,8 @@
     },
     {
       "base_rawcode": "BHbz",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": null,
       "rawcode": "BHbz",
       "target_art": [],
@@ -1499,6 +1701,8 @@
     },
     {
       "base_rawcode": "BHfs",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNWallOfFire.blp",
+      "icon_art_source": "native",
       "native_section": "BHfs",
       "rawcode": "BHfs",
       "target_art": [
@@ -1510,6 +1714,8 @@
     },
     {
       "base_rawcode": "BHtc",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNThunderclap.blp",
+      "icon_art_source": "native",
       "native_section": "BHtc",
       "rawcode": "BHtc",
       "target_art": [
@@ -1527,6 +1733,8 @@
     },
     {
       "base_rawcode": "BIcb",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNOrbOfCorruption.blp",
+      "icon_art_source": "native",
       "native_section": "BIcb",
       "rawcode": "BIcb",
       "target_art": [],
@@ -1536,6 +1744,8 @@
     },
     {
       "base_rawcode": "BIil",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNWand.blp",
+      "icon_art_source": "native",
       "native_section": "BIil",
       "rawcode": "BIil",
       "target_art": [],
@@ -1545,6 +1755,8 @@
     },
     {
       "base_rawcode": "BNab",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNAcidBomb.blp",
+      "icon_art_source": "native",
       "native_section": "BNab",
       "rawcode": "BNab",
       "target_art": [
@@ -1562,6 +1774,8 @@
     },
     {
       "base_rawcode": "BNbf",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNBreathOfFire.blp",
+      "icon_art_source": "native",
       "native_section": "BNbf",
       "rawcode": "BNbf",
       "target_art": [
@@ -1579,6 +1793,8 @@
     },
     {
       "base_rawcode": "BNdh",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNStrongDrink.blp",
+      "icon_art_source": "native",
       "native_section": "BNdh",
       "rawcode": "BNdh",
       "target_art": [
@@ -1596,6 +1812,8 @@
     },
     {
       "base_rawcode": "BNhs",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNHealingSpray.blp",
+      "icon_art_source": "native",
       "native_section": "BNhs",
       "rawcode": "BNhs",
       "target_art": [],
@@ -1605,6 +1823,8 @@
     },
     {
       "base_rawcode": "BNic",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNIncinerate.blp",
+      "icon_art_source": "resolved",
       "native_section": "BNic",
       "rawcode": "BNic",
       "target_art": [
@@ -1622,6 +1842,8 @@
     },
     {
       "base_rawcode": "BNlm",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "BNlm",
       "rawcode": "BNlm",
       "target_art": [],
@@ -1631,6 +1853,8 @@
     },
     {
       "base_rawcode": "BNpi",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "BNpi",
       "rawcode": "BNpi",
       "target_art": [],
@@ -1640,6 +1864,8 @@
     },
     {
       "base_rawcode": "BNrd",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNFire.blp",
+      "icon_art_source": "native",
       "native_section": "BNrd",
       "rawcode": "BNrd",
       "target_art": [
@@ -1651,6 +1877,8 @@
     },
     {
       "base_rawcode": "BNrf",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": null,
       "rawcode": "BNrf",
       "target_art": [],
@@ -1660,6 +1888,8 @@
     },
     {
       "base_rawcode": "BNss",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": null,
       "rawcode": "BNss",
       "target_art": [],
@@ -1669,6 +1899,8 @@
     },
     {
       "base_rawcode": "BNto",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "BNto",
       "rawcode": "BNto",
       "target_art": [],
@@ -1678,6 +1910,8 @@
     },
     {
       "base_rawcode": "BOac",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNGnollCommandAura.blp",
+      "icon_art_source": "native",
       "native_section": "BOac",
       "rawcode": "BOac",
       "target_art": [
@@ -1695,6 +1929,8 @@
     },
     {
       "base_rawcode": "BOae",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNCommand.blp",
+      "icon_art_source": "native",
       "native_section": "BOae",
       "rawcode": "BOae",
       "target_art": [
@@ -1716,6 +1952,8 @@
         "Abilities\\Spells\\Human\\Polymorph\\PolyMorphDoneGround.mdl"
       ],
       "effect_art_source": "native",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNHex.blp",
+      "icon_art_source": "native",
       "native_section": "BOhx",
       "rawcode": "BOhx",
       "target_art": [],
@@ -1725,6 +1963,8 @@
     },
     {
       "base_rawcode": "BOmi",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNMirrorImage.blp",
+      "icon_art_source": "native",
       "native_section": "BOmi",
       "rawcode": "BOmi",
       "target_art": [],
@@ -1738,6 +1978,8 @@
         "Abilities\\Spells\\Orc\\FeralSpirit\\feralspiritdone.mdl"
       ],
       "effect_art_source": "native",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNSpiritWolf.blp",
+      "icon_art_source": "native",
       "native_section": "BOsf",
       "rawcode": "BOsf",
       "target_art": [],
@@ -1747,6 +1989,8 @@
     },
     {
       "base_rawcode": "BOsh",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": null,
       "rawcode": "BOsh",
       "target_art": [],
@@ -1756,6 +2000,8 @@
     },
     {
       "base_rawcode": "BOwk",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNWindWalkOn.blp",
+      "icon_art_source": "native",
       "native_section": "BOwk",
       "rawcode": "BOwk",
       "target_art": [],
@@ -1765,6 +2011,8 @@
     },
     {
       "base_rawcode": "BPSE",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNStun.blp",
+      "icon_art_source": "native",
       "native_section": "BPSE",
       "rawcode": "BPSE",
       "target_art": [
@@ -1782,6 +2030,8 @@
     },
     {
       "base_rawcode": "BUau",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNUnholyAura.blp",
+      "icon_art_source": "native",
       "native_section": "BUau",
       "rawcode": "BUau",
       "target_art": [
@@ -1799,6 +2049,8 @@
     },
     {
       "base_rawcode": "BUav",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNVampiricAura.blp",
+      "icon_art_source": "native",
       "native_section": "BUav",
       "rawcode": "BUav",
       "target_art": [
@@ -1816,6 +2068,8 @@
     },
     {
       "base_rawcode": "BUcs",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": null,
       "rawcode": "BUcs",
       "target_art": [],
@@ -1825,6 +2079,8 @@
     },
     {
       "base_rawcode": "BUdd",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNDeathAndDecay.blp",
+      "icon_art_source": "native",
       "native_section": "BUdd",
       "rawcode": "BUdd",
       "target_art": [
@@ -1836,6 +2092,8 @@
     },
     {
       "base_rawcode": "BUfa",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNFrostArmor.blp",
+      "icon_art_source": "native",
       "native_section": "BUfa",
       "rawcode": "BUfa",
       "target_art": [
@@ -1853,6 +2111,8 @@
     },
     {
       "base_rawcode": "BUsl",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNSleep.blp",
+      "icon_art_source": "native",
       "native_section": "BUsl",
       "rawcode": "BUsl",
       "target_art": [
@@ -1870,6 +2130,8 @@
     },
     {
       "base_rawcode": "BUts",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNThornShield.blp",
+      "icon_art_source": "native",
       "native_section": "BUts",
       "rawcode": "BUts",
       "target_art": [
@@ -1905,6 +2167,8 @@
     },
     {
       "base_rawcode": "BUtt",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNThornShield.blp",
+      "icon_art_source": "native",
       "native_section": "BUtt",
       "rawcode": "BUtt",
       "target_art": [
@@ -1928,6 +2192,8 @@
     },
     {
       "base_rawcode": "Bapl",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNPlagueCloud.blp",
+      "icon_art_source": "native",
       "native_section": "Bapl",
       "rawcode": "Bapl",
       "target_art": [
@@ -1945,6 +2211,8 @@
     },
     {
       "base_rawcode": "Basl",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNTornado.blp",
+      "icon_art_source": "native",
       "native_section": "Basl",
       "rawcode": "Basl",
       "target_art": [
@@ -1956,6 +2224,8 @@
     },
     {
       "base_rawcode": "Bbof",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNWallOfFire.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bbof",
       "rawcode": "Bbof",
       "target_art": [
@@ -1967,6 +2237,8 @@
     },
     {
       "base_rawcode": "Bbsk",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNBerserkForTrolls.blp",
+      "icon_art_source": "native",
       "native_section": "Bbsk",
       "rawcode": "Bbsk",
       "target_art": [
@@ -1990,6 +2262,8 @@
     },
     {
       "base_rawcode": "Bclf",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNCloudOfFog.blp",
+      "icon_art_source": "native",
       "native_section": "Bclf",
       "rawcode": "Bclf",
       "target_art": [],
@@ -1999,6 +2273,8 @@
     },
     {
       "base_rawcode": "Bcrs",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNCurse.blp",
+      "icon_art_source": "native",
       "native_section": "Bcrs",
       "rawcode": "Bcrs",
       "target_art": [
@@ -2016,6 +2292,8 @@
     },
     {
       "base_rawcode": "Bdbb",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNLifeDrain.blp",
+      "icon_art_source": "native",
       "native_section": "Bdbb",
       "rawcode": "Bdbb",
       "target_art": [],
@@ -2025,6 +2303,8 @@
     },
     {
       "base_rawcode": "Bdbl",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNLifeDrain.blp",
+      "icon_art_source": "native",
       "native_section": "Bdbl",
       "rawcode": "Bdbl",
       "target_art": [],
@@ -2034,6 +2314,8 @@
     },
     {
       "base_rawcode": "Bdbm",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNManaDrain.blp",
+      "icon_art_source": "native",
       "native_section": "Bdbm",
       "rawcode": "Bdbm",
       "target_art": [],
@@ -2043,6 +2325,8 @@
     },
     {
       "base_rawcode": "Bdcb",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "Bdcb",
       "rawcode": "Bdcb",
       "target_art": [
@@ -2060,6 +2344,8 @@
     },
     {
       "base_rawcode": "Bdcl",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "Bdcl",
       "rawcode": "Bdcl",
       "target_art": [
@@ -2077,6 +2363,8 @@
     },
     {
       "base_rawcode": "Bdcm",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "Bdcm",
       "rawcode": "Bdcm",
       "target_art": [
@@ -2094,6 +2382,8 @@
     },
     {
       "base_rawcode": "Bdtb",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "Bdtb",
       "rawcode": "Bdtb",
       "target_art": [
@@ -2111,6 +2401,8 @@
     },
     {
       "base_rawcode": "Bdtl",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "Bdtl",
       "rawcode": "Bdtl",
       "target_art": [
@@ -2128,6 +2420,8 @@
     },
     {
       "base_rawcode": "Bdtm",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "Bdtm",
       "rawcode": "Bdtm",
       "target_art": [
@@ -2145,6 +2439,8 @@
     },
     {
       "base_rawcode": "Bena",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNEnsnare.blp",
+      "icon_art_source": "native",
       "native_section": "Bena",
       "rawcode": "Bena",
       "target_art": [
@@ -2162,6 +2458,8 @@
     },
     {
       "base_rawcode": "Beng",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNEnsnare.blp",
+      "icon_art_source": "native",
       "native_section": "Beng",
       "rawcode": "Beng",
       "target_art": [
@@ -2173,6 +2471,8 @@
     },
     {
       "base_rawcode": "Bfae",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNFaerieFire.blp",
+      "icon_art_source": "native",
       "native_section": "Bfae",
       "rawcode": "Bfae",
       "target_art": [
@@ -2190,6 +2490,8 @@
     },
     {
       "base_rawcode": "Bfro",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNFrost.blp",
+      "icon_art_source": "native",
       "native_section": "Bfro",
       "rawcode": "Bfro",
       "target_art": [
@@ -2201,6 +2503,8 @@
     },
     {
       "base_rawcode": "Bfrz",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNFreezingBreath.blp",
+      "icon_art_source": "native",
       "native_section": "Bfrz",
       "rawcode": "Bfrz",
       "target_art": [
@@ -2218,6 +2522,8 @@
     },
     {
       "base_rawcode": "Bfzy",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNBloodLust.blp",
+      "icon_art_source": "native",
       "native_section": "Bfzy",
       "rawcode": "Bfzy",
       "target_art": [
@@ -2241,6 +2547,8 @@
     },
     {
       "base_rawcode": "Bgra",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": null,
       "rawcode": "Bgra",
       "target_art": [],
@@ -2250,6 +2558,8 @@
     },
     {
       "base_rawcode": "Bhea",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNHeal.blp",
+      "icon_art_source": "native",
       "native_section": "Bhea",
       "rawcode": "Bhea",
       "target_art": [],
@@ -2259,6 +2569,8 @@
     },
     {
       "base_rawcode": "Bhwd",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNHealingWard.blp",
+      "icon_art_source": "native",
       "native_section": "Bhwd",
       "rawcode": "Bhwd",
       "target_art": [],
@@ -2268,6 +2580,8 @@
     },
     {
       "base_rawcode": "Bliq",
+      "icon_art": "ReplaceableTextures\\PassiveButtons\\PASBTNLiquidFire.blp",
+      "icon_art_source": "native",
       "native_section": "Bliq",
       "rawcode": "Bliq",
       "target_art": [
@@ -2279,6 +2593,8 @@
     },
     {
       "base_rawcode": "Boar",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNHealingWard.blp",
+      "icon_art_source": "native",
       "native_section": "Boar",
       "rawcode": "Boar",
       "target_art": [
@@ -2290,6 +2606,8 @@
     },
     {
       "base_rawcode": "Bpig",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "Bpig",
       "rawcode": "Bpig",
       "target_art": [
@@ -2307,6 +2625,8 @@
     },
     {
       "base_rawcode": "Bpoi",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNEnvenomedSpear.blp",
+      "icon_art_source": "native",
       "native_section": "Bpoi",
       "rawcode": "Bpoi",
       "target_art": [
@@ -2318,6 +2638,8 @@
     },
     {
       "base_rawcode": "Bprg",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNPurge.blp",
+      "icon_art_source": "native",
       "native_section": "Bprg",
       "rawcode": "Bprg",
       "target_art": [
@@ -2335,6 +2657,8 @@
     },
     {
       "base_rawcode": "Bpsd",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNEnvenomedSpear.blp",
+      "icon_art_source": "native",
       "native_section": "Bpsd",
       "rawcode": "Bpsd",
       "target_art": [
@@ -2346,6 +2670,8 @@
     },
     {
       "base_rawcode": "Bpsh",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNPhaseShift.blp",
+      "icon_art_source": "native",
       "native_section": "Bpsh",
       "rawcode": "Bpsh",
       "target_art": [],
@@ -2355,6 +2681,8 @@
     },
     {
       "base_rawcode": "Bpsi",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": null,
       "rawcode": "Bpsi",
       "target_art": [],
@@ -2364,6 +2692,8 @@
     },
     {
       "base_rawcode": "Brai",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNSkeletonWarrior.blp",
+      "icon_art_source": "native",
       "native_section": "Brai",
       "rawcode": "Brai",
       "target_art": [],
@@ -2373,6 +2703,8 @@
     },
     {
       "base_rawcode": "Brej",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNRejuvenation.blp",
+      "icon_art_source": "native",
       "native_section": "Brej",
       "rawcode": "Brej",
       "target_art": [
@@ -2390,6 +2722,8 @@
     },
     {
       "base_rawcode": "Bslo",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNSlow.blp",
+      "icon_art_source": "native",
       "native_section": "Bslo",
       "rawcode": "Bslo",
       "target_art": [
@@ -2401,6 +2735,8 @@
     },
     {
       "base_rawcode": "Bspe",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNBoots.blp",
+      "icon_art_source": "native",
       "native_section": "Bspe",
       "rawcode": "Bspe",
       "target_art": [
@@ -2412,6 +2748,8 @@
     },
     {
       "base_rawcode": "Bspo",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNSlowPoison.blp",
+      "icon_art_source": "native",
       "native_section": "Bspo",
       "rawcode": "Bspo",
       "target_art": [
@@ -2423,6 +2761,8 @@
     },
     {
       "base_rawcode": "Bssd",
+      "icon_art": "ReplaceableTextures\\PassiveButtons\\PASBTNSlowPoison.blp",
+      "icon_art_source": "native",
       "native_section": "Bssd",
       "rawcode": "Bssd",
       "target_art": [
@@ -2434,6 +2774,8 @@
     },
     {
       "base_rawcode": "Bsta",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNStasisTrap.blp",
+      "icon_art_source": "native",
       "native_section": "Bsta",
       "rawcode": "Bsta",
       "target_art": [
@@ -2451,6 +2793,8 @@
     },
     {
       "base_rawcode": "Btdg",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": null,
       "rawcode": "Btdg",
       "target_art": [],
@@ -2460,6 +2804,8 @@
     },
     {
       "base_rawcode": "Bwea",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNWeb.blp",
+      "icon_art_source": "native",
       "native_section": "Bwea",
       "rawcode": "Bwea",
       "target_art": [
@@ -2477,6 +2823,8 @@
     },
     {
       "base_rawcode": "Bweb",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNWeb.blp",
+      "icon_art_source": "resolved",
       "native_section": "Bweb",
       "rawcode": "Bweb",
       "target_art": [
@@ -2498,6 +2846,8 @@
         "Abilities\\Spells\\Demon\\RainOfFire\\RainOfFireTarget.mdl"
       ],
       "effect_art_source": "native",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "XErf",
       "rawcode": "XErf",
       "target_art": [],
@@ -2511,6 +2861,8 @@
         "Abilities\\Spells\\NightElf\\Starfall\\StarfallCaster.mdl"
       ],
       "effect_art_source": "native",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "XEsf",
       "rawcode": "XEsf",
       "target_art": [],
@@ -2524,6 +2876,8 @@
         "Abilities\\Spells\\NightElf\\Tranquility\\Tranquility.mdl"
       ],
       "effect_art_source": "native",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "XEtq",
       "rawcode": "XEtq",
       "target_art": [],
@@ -2537,6 +2891,8 @@
         "Abilities\\Spells\\Human\\Blizzard\\BlizzardTarget.mdl"
       ],
       "effect_art_source": "native",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "XHbz",
       "rawcode": "XHbz",
       "target_art": [],
@@ -2550,6 +2906,8 @@
         "Abilities\\Spells\\Human\\FlameStrike\\FlameStrikeEmbers.mdl"
       ],
       "effect_art_source": "native",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "XHfs",
       "rawcode": "XHfs",
       "target_art": [],
@@ -2559,6 +2917,8 @@
     },
     {
       "base_rawcode": "XNhs",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "XNhs",
       "rawcode": "XNhs",
       "target_art": [],
@@ -2572,6 +2932,8 @@
         "Abilities\\Spells\\Other\\Monsoon\\MonsoonRain.mdl"
       ],
       "effect_art_source": "native",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "XNmo",
       "rawcode": "XNmo",
       "target_art": [],
@@ -2585,6 +2947,8 @@
         "Abilities\\Spells\\Undead\\DeathandDecay\\DeathandDecayTarget.mdl"
       ],
       "effect_art_source": "native",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "XUdd",
       "rawcode": "XUdd",
       "target_art": [],
@@ -2596,6 +2960,8 @@
       "base_rawcode": "Xbdt",
       "effect_art": [],
       "effect_art_source": "resolved",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "Xbdt",
       "rawcode": "Xbdt",
       "target_art": [],
@@ -2609,6 +2975,8 @@
         "Abilities\\Spells\\Human\\FlameStrike\\FlameStrikeEmbers.mdl"
       ],
       "effect_art_source": "native",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "Xbof",
       "rawcode": "Xbof",
       "target_art": [],
@@ -2622,6 +2990,8 @@
         "Abilities\\Spells\\Human\\CloudOfFog\\CloudOfFog.mdl"
       ],
       "effect_art_source": "native",
+      "icon_art": null,
+      "icon_art_source": "absent",
       "native_section": "Xclf",
       "rawcode": "Xclf",
       "target_art": [],
@@ -2637,7 +3007,7 @@
     "path": "base/units/abilityskin.txt",
     "sha256": "0a8000f12fb761822e84c98026b3cdf16deab5a9d51f41971356747ef9ec7186"
   },
-  "schema_version": 1,
+  "schema_version": 2,
   "source_revision": "r1",
   "sources": {
     "base-data-manifest.json": "0b300249cd2eb57c2849439aea974666d2f44d88aacf087a93120348c696bcfe",

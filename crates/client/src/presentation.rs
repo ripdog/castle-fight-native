@@ -5457,14 +5457,10 @@ fn status_visual_sources(
 ) -> impl Iterator<Item = (u32, Wc3StatusVisualKind)> + '_ {
     status
         .poison
-        .filter(move |poison| tick < poison.expires_tick)
-        .map(|poison| {
-            (
-                poison.profile.ability.0,
-                Wc3StatusVisualKind::DamageOverTime,
-            )
-        })
-        .into_iter()
+        .iter()
+        .flat_map(|poison| poison.buffs.iter().flatten())
+        .filter(move |buff| tick < buff.expires_tick)
+        .map(|buff| (buff.ability.0, Wc3StatusVisualKind::DamageOverTime))
         .chain(
             status
                 .acid_bomb
@@ -5585,7 +5581,11 @@ fn status_visual_is_active(
                 return true;
             }
             if status.poison.is_some_and(|poison| {
-                poison.profile.ability.0 == ability_rawcode && tick < poison.expires_tick
+                poison
+                    .buffs
+                    .iter()
+                    .flatten()
+                    .any(|buff| buff.ability.0 == ability_rawcode && tick < buff.expires_tick)
             }) {
                 return true;
             }
@@ -8816,6 +8816,7 @@ mod tests {
             construction_started_tick: None,
             construction_complete_tick: None,
             attack: None,
+            secondary_attack: None,
             damage_type: None,
             armor: castle_fight_sim::ArmorProfile::UNARMORED,
             target: None,
@@ -8884,6 +8885,7 @@ mod tests {
             construction_complete_tick: Some(80),
             status: castle_fight_sim::StatusState::default(),
             attack: None,
+            secondary_attack: None,
             damage_type: None,
             armor: castle_fight_sim::ArmorProfile::UNARMORED,
             target: None,

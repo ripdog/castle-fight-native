@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 50;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 51;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -538,6 +538,7 @@ pub struct BuildingView {
     pub next_spawn_tick: Option<u64>,
     pub production_queue: Option<u8>,
     pub attack: Option<AttackProfile>,
+    pub secondary_attack: Option<SecondaryAttackProfile>,
     pub attack_delivery: Option<AttackDelivery>,
     pub attack_targets: Option<AttackTargetMask>,
     pub damage_type: DamageType,
@@ -1160,26 +1161,27 @@ impl Simulation {
         source: SimId,
         target: SimId,
     ) -> Result<(), BuildingCommandError> {
-        let (source_entity, source_team, source_footprint, attack, attack_targets) = self
-            .world
-            .iter_entities()
-            .find_map(|entity| {
-                (entity.get::<SimId>().copied() == Some(source)
-                    && entity.get::<BuildingFootprint>().is_some())
-                .then(|| {
-                    (
-                        entity.id(),
-                        *entity.get::<Team>().expect("building missing team"),
-                        *entity
-                            .get::<BuildingFootprint>()
-                            .expect("building missing footprint"),
-                        entity.get::<AttackProfile>().copied(),
-                        entity.get::<AttackTargetMask>().copied(),
-                    )
+        let (source_entity, source_team, source_footprint, attack, attack_targets, secondary) =
+            self.world
+                .iter_entities()
+                .find_map(|entity| {
+                    (entity.get::<SimId>().copied() == Some(source)
+                        && entity.get::<BuildingFootprint>().is_some())
+                    .then(|| {
+                        (
+                            entity.id(),
+                            *entity.get::<Team>().expect("building missing team"),
+                            *entity
+                                .get::<BuildingFootprint>()
+                                .expect("building missing footprint"),
+                            entity.get::<AttackProfile>().copied(),
+                            entity.get::<AttackTargetMask>().copied(),
+                            entity.get::<SecondaryAttackProfile>().copied(),
+                        )
+                    })
                 })
-            })
-            .ok_or(BuildingCommandError::SourceNotFound)?;
-        let attack = attack.ok_or(BuildingCommandError::SourceCannotAttack)?;
+                .ok_or(BuildingCommandError::SourceNotFound)?;
+        let mut attack = attack.ok_or(BuildingCommandError::SourceCannotAttack)?;
         let attack_targets = attack_targets.expect("attack building missing target mask");
 
         let target_entity = self
@@ -1215,6 +1217,11 @@ impl Simulation {
             if !attack_targets.can_target_unit(movement_class) {
                 return Err(BuildingCommandError::InvalidTargetType);
             }
+            if let Some(second) = secondary
+                && !second.primary_targets.can_target_unit(movement_class)
+            {
+                attack = second.attack;
+            }
             point_to_footprint_distance_sq(
                 position.0,
                 source_footprint,
@@ -1223,6 +1230,11 @@ impl Simulation {
         } else if let Some(target_footprint) = target_entity.get::<BuildingFootprint>() {
             if !attack_targets.can_target_buildings() {
                 return Err(BuildingCommandError::InvalidTargetType);
+            }
+            if let Some(second) = secondary
+                && !second.primary_targets.can_target_buildings()
+            {
+                attack = second.attack;
             }
             footprint_to_footprint_distance_sq(
                 source_footprint,
@@ -3371,6 +3383,11 @@ impl Simulation {
                         !(attack.is_some() || spellcasting.is_some()) || status.is_some()
                     );
                     BuildingSnapshot {
+                        action_timing: entity_ref
+                            .get::<ActionTimingProfile>()
+                            .copied()
+                            .unwrap_or_default(),
+                        secondary_attack: entity_ref.get::<SecondaryAttackProfile>().copied(),
                         passive_effects: entity_ref
                             .get::<PassiveUnitEffects>()
                             .copied()
@@ -3527,6 +3544,8 @@ impl UnitSnapshot {
 
 #[derive(Debug, Clone, Copy)]
 struct BuildingSnapshot {
+    action_timing: ActionTimingProfile,
+    secondary_attack: Option<SecondaryAttackProfile>,
     passive_effects: PassiveUnitEffects,
     snow_damage_taken_per_10k: u16,
     map_version: Option<crate::MapVersion>,
@@ -3548,6 +3567,46 @@ struct BuildingSnapshot {
     mana_current: Option<i32>,
     ability_state: Option<AutomaticAbilityState>,
     status: Option<StatusState>,
+}
+
+impl BuildingSnapshot {
+    fn primary_attack_targets(self) -> AttackTargetMask {
+        self.secondary_attack.map_or_else(
+            || self.attack_targets.unwrap_or_default(),
+            |attack| attack.primary_targets,
+        )
+    }
+
+    fn attack_for_unit(
+        self,
+        movement: MovementClass,
+    ) -> Option<(AttackProfile, AttackTargetMask, DamageType)> {
+        let primary = self.attack?;
+        let mask = self.primary_attack_targets();
+        if mask.can_target_unit(movement) {
+            return Some((primary, mask, self.damage_type));
+        }
+        let secondary = self.secondary_attack?;
+        secondary.targets.can_target_unit(movement).then_some((
+            secondary.attack,
+            secondary.targets,
+            secondary.damage_type,
+        ))
+    }
+
+    fn attack_for_building(self) -> Option<(AttackProfile, AttackTargetMask, DamageType)> {
+        let primary = self.attack?;
+        let mask = self.primary_attack_targets();
+        if mask.can_target_buildings() {
+            return Some((primary, mask, self.damage_type));
+        }
+        let secondary = self.secondary_attack?;
+        secondary.targets.can_target_buildings().then_some((
+            secondary.attack,
+            secondary.targets,
+            secondary.damage_type,
+        ))
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -4920,6 +4979,7 @@ fn building_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<B
             .map(|state| state.next_spawn_tick),
         production_queue: entity.get::<ProductionState>().map(|state| state.queued),
         attack,
+        secondary_attack: entity.get::<SecondaryAttackProfile>().copied(),
         attack_delivery: attack.map(|attack| attack.delivery),
         attack_targets: entity.get::<AttackTargetMask>().copied(),
         damage_type: *entity.get::<DamageType>()?,

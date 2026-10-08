@@ -245,6 +245,13 @@ impl Simulation {
         properties: BuildingGameplayProperties,
     ) {
         assert!(building.health > 0);
+        assert!(
+            properties.secondary_attack.is_none() || building.attack.is_some(),
+            "secondary weapon requires primary weapon"
+        );
+        if let Some(secondary) = properties.secondary_attack {
+            validate_attack_profile(secondary.attack);
+        }
         assert!(building.team.0 < 2, "verification slice supports two teams");
         assert!(building.footprint.width > 0 && building.footprint.height > 0);
         if let Some(construction_time_ticks) = properties.construction_time_ticks {
@@ -414,6 +421,10 @@ impl Simulation {
                 entity.insert(ProductionAdditionalAutomaticAbilities(definitions));
             }
         }
+        entity.insert(properties.action_timing);
+        if let Some(secondary) = properties.secondary_attack {
+            entity.insert(secondary);
+        }
         if let Some(attack) = building.attack {
             entity.insert((
                 attack,
@@ -476,6 +487,8 @@ impl Simulation {
         entity.remove::<ProductionAdditionalAutomaticAbilities>();
         entity.remove::<ProductionUnitClassifications>();
         entity.remove::<AttackProfile>();
+        entity.remove::<SecondaryAttackProfile>();
+        entity.remove::<ActionTimingProfile>();
         entity.remove::<AttackTargetMask>();
         entity.remove::<AttackCooldown>();
         entity.remove::<TargetState>();

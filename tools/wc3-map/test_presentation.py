@@ -90,6 +90,19 @@ class NativeStatusDeliveryAuditTests(unittest.TestCase):
         self.assertEqual(self.audit([entry]), ([], [entry]))
         self.assertTrue(self.audit([])[0])
 
+    def test_native_poison_selects_active_buff_without_duplicating_the_model(self):
+        self.projection["buffs"].append(dict(self.buff, rawcode="SLOW"))
+        for base in ("Aven", "ACvs"):
+            self.fields[0].update(base_rawcode=base, recovered_value_json='"BUFF,SLOW"')
+            self.fields.append(dict(self.fields[0], field_id="Poi4", recovered_value_json="1"))
+            active = dict(self.binding, buff_rawcode="SLOW", status_kind="damage_over_time")
+            inactive = dict(active, buff_rawcode="BUFF")
+            self.assertEqual(self.audit([active]), ([], [active]))
+            self.assertTrue(self.audit([active, inactive])[0])
+            self.fields[-1]["recovered_value_json"] = "8"
+            self.assertEqual(self.audit([inactive]), ([], [inactive]))
+            self.fields.pop()
+
     def test_native_area_debuff_requires_one_persistent_buff_binding(self):
         self.fields[0]["base_rawcode"] = "ANab"
         entry = dict(self.binding, status_kind="damage_over_time")

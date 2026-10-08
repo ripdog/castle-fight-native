@@ -734,6 +734,8 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 } else {
                     hash.write_u8(0);
                 }
+                hash_action_timing(&mut hash, building.action_timing);
+                hash_secondary_attack(&mut hash, building.secondary_attack);
                 if let Some(attack) = building.attack {
                     hash.write_u8(1);
                     hash_attack_delivery(&mut hash, attack.delivery);
@@ -1332,6 +1334,8 @@ impl CanonicalUnit {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(super) struct CanonicalBuilding {
+    pub(super) action_timing: ActionTimingProfile,
+    pub(super) secondary_attack: Option<SecondaryAttackProfile>,
     pub(super) passive_effects: Option<Box<PassiveUnitEffects>>,
     pub(super) id: SimId,
     pub(super) content: Option<ContentIdentity>,
@@ -1633,6 +1637,16 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     hash.write_u8(u8::from(status.poison.is_some()));
     if let Some(poison) = status.poison {
         hash_poison_profile(hash, poison.profile);
+        hash.write_i32(poison.total_damage_per_second);
+        for buff in poison.buffs {
+            hash.write_u8(u8::from(buff.is_some()));
+            if let Some(buff) = buff {
+                hash.write_u32(buff.ability.0);
+                hash.write_u32(buff.buff_rawcode);
+                hash.write_i32(buff.damage_per_second);
+                hash.write_u64(buff.expires_tick);
+            }
+        }
         hash.write_u64(poison.generation.0);
         hash.write_u32(poison.sources);
         hash.write_u64(poison.expires_tick);
@@ -1804,6 +1818,8 @@ fn hash_building_definition(
     hash_optional_u32(hash, properties.repair_time_ticks);
     hash.write_u32(properties.health_regen_per_second_per_10k);
     hash.write_u8(properties.attack_targets.bits());
+    hash_action_timing(hash, properties.action_timing);
+    hash_secondary_attack(hash, properties.secondary_attack);
     hash.write_u8(properties.damage_type.stable_tag());
     hash.write_u8(properties.armor.armor_type.stable_tag());
     hash.write_i32(i32::from(properties.armor.armor_points));
@@ -2659,6 +2675,7 @@ fn hash_world_freezer_state(hash: &mut Fnv64, state: WorldFreezerState) {
 
 fn hash_poison_profile(hash: &mut Fnv64, profile: crate::PoisonProfile) {
     hash.write_u32(profile.ability.0);
+    hash.write_u32(profile.buff_rawcode);
     hash.write_i32(profile.damage_per_second);
     hash.write_i32(i32::from(profile.movement_percent_delta));
     hash.write_i32(i32::from(profile.attack_speed_percent_delta));

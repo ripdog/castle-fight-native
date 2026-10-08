@@ -1,5 +1,5 @@
 {
-  "schema_version": 5,
+  "schema_version": 6,
   "fog_rules": {
     "initially_explored": true,
     "attack_reveal_radius_world": 200,
@@ -8342,6 +8342,18 @@
       "secondary_attack_ticks": 0,
       "secondary_attack_point_ticks": 0,
       "cast_ticks": 16
+    }
+  ],
+  "building_secondary_attacks": [
+    {
+      "rawcode": "o000",
+      "weapon_type": "missile",
+      "damage_type": "normal",
+      "targets": "enemies,ground",
+      "damage": "1.0",
+      "range": "600",
+      "cooldown": "99",
+      "projectile_speed_world_per_second": "1600"
     }
   ],
   "bounce_weapons": [

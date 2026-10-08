@@ -265,6 +265,7 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
                     "detects_invisible": False,
                 }
 
+    secondary_missile_speeds: dict[str, str] = {}
     action_fields: dict[str, dict[str, str]] = {}
     sight_fields: dict[str, dict[str, int]] = {}
     bounce_fields: dict[str, dict[str, str]] = {}
@@ -274,6 +275,8 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
     with io.StringIO(object_fields_bytes.decode("utf-8"), newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
         for row in reader:
+            if row["category"] == "units" and row["field_id"] == "ua2z":
+                secondary_missile_speeds[row["rawcode"]] = row["recovered_value_json"].strip('"')
             if row["category"] == "abilities" and row["base_rawcode"] == "AOfs" and row["level"] == "1" and row["field_id"] in {"aare", "adur", "Ofs1"}:
                 far_sight.setdefault(row["rawcode"], {})[row["field_id"]] = _integer_recovered_value(
                     row["recovered_value_json"], rawcode=row["rawcode"], field_id=row["field_id"])
@@ -346,10 +349,19 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
                     "only_if_hidden": False, "detects_invisible": bool(fields["Ofs1"] & 1),
                 }
 
+    building_secondary_attacks = []
     bounce_weapons = []
     line_weapons = []
     unit_rows = csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree, "resolved/units.tsv").decode()), delimiter="\t")
     for unit in unit_rows:
+        if unit["is_building"] == "1" and unit["attack2_enabled"] == "True":
+            building_secondary_attacks.append({
+                "rawcode": unit["rawcode"], "weapon_type": unit["attack2_weapon_type"],
+                "damage_type": unit["attack2_type"], "targets": unit["attack2_targets"],
+                "damage": unit["attack2_avg"], "range": unit["attack2_range"],
+                "cooldown": unit["attack2_cooldown"],
+                "projectile_speed_world_per_second": secondary_missile_speeds.get(unit["rawcode"], "-"),
+            })
         if unit["attack1_weapon_type"] in {"mline", "aline"}:
             fields = line_fields[unit["rawcode"]]
             line_weapons.append({
@@ -375,7 +387,7 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
         bounce_weapons.append({"rawcode": unit["rawcode"], "maximum_targets": targets,
                                "damage_percent_per_bounce": int(retained_percent), "range_world": int(fields["ua1f"])})
     return {
-        "schema_version": 5,
+        "schema_version": 6,
         "fog_rules": {
             "initially_explored": True,
             "attack_reveal_radius_world": _line_world_integer(misc_values["FoggedAttackRevealRadius"]),
@@ -403,6 +415,7 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
             _action_timing_entry(rawcode, fields, simulation_hz)
             for rawcode, fields in sorted(action_fields.items())
         ],
+        "building_secondary_attacks": sorted(building_secondary_attacks, key=lambda weapon: weapon["rawcode"]),
         "bounce_weapons": sorted(bounce_weapons, key=lambda weapon: weapon["rawcode"]),
         "line_weapons": sorted(line_weapons, key=lambda weapon: weapon["rawcode"]),
         "map_version": release["map_version"],

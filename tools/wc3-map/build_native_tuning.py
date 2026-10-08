@@ -76,11 +76,16 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         if set(fields["targs1"].split(",")) != {"air", "ground", "organic"} or number("DataD1") != 1:
             raise ValueError("poison requires the audited organic mask and damage-only stacking flags")
         ticks = lambda field: int((Decimal(fields[field]) * 30).to_integral_value(rounding="ROUND_CEILING"))
+        if mechanics["native_base"] not in ("Aven", "ACvs"):
+            raise ValueError("unsupported native poison base")
+        buffs = [code for code in fields["buffid1"].split(",") if code not in ("", "_", "-", "0")]
+        buff = buffs[min(1, len(buffs) - 1)]
         effect.update(profile={"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
+            "buff_rawcode": int.from_bytes(buff.encode(), "big"),
             "damage_per_second": abs(number("DataA1")), "movement_percent_delta": -number("DataC1", 100),
             "attack_speed_percent_delta": -number("DataB1", 100), "duration_ticks": ticks("dur1"),
             "hero_duration_ticks": ticks("herodur1"), "targets": 3, "stack_damage": True, "can_kill": False},
-            provenance={"source": "resolved/object-fields.tsv", "native_base": "Aven", "stacking_flags": number("DataD1")})
+            provenance={"source": "resolved/object-fields.tsv", "native_base": mechanics["native_base"], "stacking_flags": number("DataD1")})
         return effect
     if kind == "damage-threshold":
         trace = mechanics["damage_threshold"]

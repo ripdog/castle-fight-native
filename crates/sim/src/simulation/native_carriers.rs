@@ -506,7 +506,7 @@ fn cleanse_native_effects(
     }
 }
 
-fn retain_modifiers<T: Copy + Default>(
+pub(super) fn retain_modifiers<T: Copy + Default>(
     modifiers: &mut [T],
     count: &mut u8,
     mut keep: impl FnMut(&T) -> bool,

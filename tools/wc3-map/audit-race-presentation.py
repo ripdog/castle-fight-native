@@ -198,9 +198,11 @@ def audit_native_status_visuals(projection, fields, abilities, manifest):
     recipes = {"Aenr": ("movement",), "ACf2": ("armor", "movement"),
                "Ainf": ("armor",), "AIrr": ("armor",), "AHad": ("armor",), "AIar": ("armor",),
                "ACff": ("armor",), "Afae": ("armor",), "Ablo": ("attack_speed",),
-               "Apxf": ("damage_over_time",), "Aven": ("damage_over_time", "damage_over_time"),
+               "Apxf": ("damage_over_time",), "Aven": ("damage_over_time",), "ACvs": ("damage_over_time",),
                "Abof": ("damage_over_time",), "ANab": ("damage_over_time",),
                "Afrz": ("freeze",), "AOae": ("movement",), "AHtb": ("stun",), "ACtb": ("stun",)}
+    poison_flags = {row["rawcode"]: int(json.loads(row["recovered_value_json"]))
+                    for row in fields if row["category"] == "abilities" and row["field_id"] == "Poi4" and row["level"] == "1"}
     buffs = {row["rawcode"]: row for row in projection["buffs"]}
     findings, selected = [], []
     for field in fields:
@@ -209,6 +211,8 @@ def audit_native_status_visuals(projection, fields, abilities, manifest):
             continue
         codes = [code.strip() for code in json.loads(field["recovered_value_json"]).split(",")
                  if code.strip() not in ("", "_", "-", "0")]
+        if field["base_rawcode"] in ("Aven", "ACvs") and codes:
+            codes = [codes[min(int(bool(poison_flags.get(field["rawcode"], 0) & 7)), len(codes) - 1)]]
         for code, kind in zip(codes, recipes[field["base_rawcode"]]):
             buff = buffs[code]
             entries = [entry for entry in manifest.get("status_visuals", [])
