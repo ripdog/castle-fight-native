@@ -928,7 +928,7 @@ fn load_visual_assets(
             "Apxf" => &["damage_over_time"],
             // Native poison can author separate poison/slow buffs or one combined override.
             "Aven" => &["damage_over_time", "damage_over_time"],
-            "Abof" => &["damage_over_time"],
+            "Abof" | "ANab" => &["damage_over_time"],
             // Bloodlust-family effects persist for the attack-speed buff lifetime.
             "Ablo" => &["attack_speed"],
             _ => continue,

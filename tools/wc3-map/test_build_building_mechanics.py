@@ -24,6 +24,28 @@ class BuildingMechanicsProjectionTests(unittest.TestCase):
             for call in read_source.call_args_list
         ))
 
+    def test_targeted_native_child_and_delayed_animations_retain_script_provenance(self):
+        import re
+        data = MODULE.build()
+        row = data["serpent"]
+        child = json.loads(row["parameters_json"])["dummy_ability_id"].to_bytes(4, "big").decode()
+        linked = json.loads(row["effect_objects_json"])[0]
+        self.assertEqual(child, linked["rawcode"])
+        fields = data["fields"][child]
+        for native, extracted in (("aare:1", "area"), ("aran:1", "range"),
+                                  ("adur:1", "duration_normal"), ("ahdu:1", "duration_hero")):
+            self.assertEqual(float(fields[native]), float(linked["ability_level1"][extracted]))
+        self.assertEqual(fields["atar:1"], linked["ability_level1"]["targets"])
+        traces = data["script_traces"]
+        attack = re.search(r"doAfter\(([\d.]+),", traces["serpentRockShoot"]["source"])[1]
+        stand_callback = traces["CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities3"]["source"]
+        stand = re.search(r"doAfter\(([\d.]+),", stand_callback)[1]
+        self.assertEqual(data["serpent_animation_delays"], {"attack": attack, "stand": stand})
+        self.assertIn('"attack"', stand_callback)
+        self.assertIn('"stand"', traces["CallbackSingle_doAfter_doAfter_RaceOrcAbilities_call_doAfter_doAfter_RaceOrcAbilities"]["source"])
+        self.assertIn("randomAliveEnemy", traces["serpentRockShoot"]["source"])
+        self.assertIn("isAliveCombatSapper", traces["ForGroupCallback_forUnitsInRect_SpellHelpers_callback_forUnitsInRect_SpellHelpers"]["source"])
+
     def test_unsupported_version_does_not_reuse_an_older_recipe(self):
         with self.assertRaisesRegex(ValueError, "do not support"):
             MODULE.build("9.32")

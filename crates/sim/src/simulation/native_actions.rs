@@ -4,6 +4,7 @@ use crate::components::{
     TimedMovementModifier,
 };
 
+pub(super) mod acid_bomb;
 pub(super) mod ensnare;
 pub(super) mod poison;
 
@@ -121,6 +122,7 @@ impl Simulation {
         actions.sort_unstable_by_key(|(id, _, _)| *id);
         for (_, entity, action) in actions {
             match action {
+                NativeAction::AcidBomb(state) => self.advance_acid_bomb(entity, state, units),
                 NativeAction::Poison(state) => self.advance_poison(entity, state, units),
                 NativeAction::Ensnare(state) => self.advance_ensnare(entity, state, units),
                 // Splash attack proxies resolve in the shared post-movement impact phase.
@@ -349,6 +351,7 @@ pub(super) fn resolve_native_building_damage_over_time(
 }
 
 pub(super) fn cleanse_native_status(status: &mut StatusState) {
+    status.acid_bomb = None;
     status.poison = None;
     status.stunned_until_tick = 0;
     status.native_stun_until_tick = 0;

@@ -28,6 +28,7 @@ const TUNING_9_27_JSON: &str = include_str!("../data/castle-fight/9.27/native-ef
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum NativeEffectImplementationId {
+    WarcraftAcidBombV1,
     WarcraftPoisonV1,
     WarcraftDamageThresholdV1,
     WarcraftKillBerserkV1,
@@ -97,6 +98,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftSnowveilV1 => 25,
             Self::WarcraftHailstoneV1 => 26,
             Self::WarcraftBuildingBoltV1 => 27,
+            Self::WarcraftAcidBombV1 => 33,
             Self::WarcraftWorldFreezerV1 => 28,
             Self::WarcraftBarrageV1 => 64,
             Self::WarcraftPersistentCarrierV1 => 65,
@@ -919,7 +921,10 @@ pub fn resolve_native_effect_requirements(
     version: MapVersion,
     roots: &[NativeEffectSource],
 ) -> Result<Vec<ResolvedNativeEffectBinding>, NativeEffectResolveError> {
-    let (field_roots, roots): (Vec<_>, Vec<_>) = roots.iter().copied().partition(|source| {
+    let (acid_roots, roots): (Vec<_>, Vec<_>) = roots.iter().copied().partition(|source| {
+        crate::building_mechanics::serpent_source_for_version(*source, version)
+    });
+    let (field_roots, roots): (Vec<_>, Vec<_>) = roots.into_iter().partition(|source| {
         crate::building_mechanics::world_freezer_source_for_version(*source, version)
     });
     let (bolt_roots, roots): (Vec<_>, Vec<_>) = roots.into_iter().partition(|source| {
@@ -936,6 +941,11 @@ pub fn resolve_native_effect_requirements(
         .copied()
         .partition(|source| crate::building_mechanics::hex_source_for_version(*source, version));
     let mut resolved = catalog().resolve_requirements(version, &ordinary_roots)?;
+    if !acid_roots.is_empty() {
+        resolved.extend(crate::building_mechanics::serpent_bindings_for_version(
+            version,
+        ));
+    }
     if !field_roots.is_empty() {
         resolved.extend(crate::building_mechanics::world_freezer_bindings_for_version(version));
     }
@@ -1122,6 +1132,11 @@ pub fn native_effect_implementation_for(
         crate::building_mechanics::world_freezer_source_for_version(source, version)
     }) {
         return Some(NativeEffectImplementationId::WarcraftWorldFreezerV1);
+    }
+    if source.is_some_and(|source| {
+        crate::building_mechanics::serpent_source_for_version(source, version)
+    }) {
+        return Some(NativeEffectImplementationId::WarcraftAcidBombV1);
     }
     catalog().implementation_for(source_kind, source_key, version)
 }

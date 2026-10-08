@@ -124,6 +124,7 @@ pub struct BuildingAnimationSet {
     pub birth: Option<BuildingAnimationClip>,
     pub stand: Option<BuildingAnimationClip>,
     pub death: Option<BuildingAnimationClip>,
+    pub attack: Option<BuildingAnimationClip>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq, Eq)]
@@ -242,6 +243,20 @@ impl BuildingModelSet {
             let birth = named_animation(gltf, model.lifecycle_animations.birth.as_deref());
             let stand = named_animation(gltf, model.lifecycle_animations.stand.as_deref());
             let death = named_animation(gltf, model.lifecycle_animations.death.as_deref());
+            let attack_name = gltf
+                .named_animations
+                .keys()
+                .filter(|name| {
+                    name.eq_ignore_ascii_case("attack")
+                        || name.to_ascii_lowercase().starts_with("attack ")
+                })
+                .min_by(|left, right| {
+                    (!left.eq_ignore_ascii_case("attack"))
+                        .cmp(&(!right.eq_ignore_ascii_case("attack")))
+                        .then_with(|| left.cmp(right))
+                })
+                .cloned();
+            let attack = named_animation(gltf, attack_name.as_deref());
             for (role, requested, resolved) in [
                 (
                     "Birth",
@@ -268,7 +283,12 @@ impl BuildingModelSet {
                     );
                 }
             }
-            let selected = [birth.as_ref(), stand.as_ref(), death.as_ref()];
+            let selected = [
+                birth.as_ref(),
+                stand.as_ref(),
+                death.as_ref(),
+                attack.as_ref(),
+            ];
             if selected
                 .into_iter()
                 .flatten()
@@ -281,6 +301,7 @@ impl BuildingModelSet {
             let birth_slot = append_optional_clip(&mut clips, birth);
             let stand_slot = append_optional_clip(&mut clips, stand);
             let death_slot = append_optional_clip(&mut clips, death);
+            let attack_slot = append_optional_clip(&mut clips, attack);
             if clips.is_empty() {
                 model.animations_prepared = true;
                 continue;
@@ -298,6 +319,13 @@ impl BuildingModelSet {
             let graph = graphs.add(graph);
             model.animations = Some(BuildingAnimationSet {
                 graph,
+                attack: attack_slot.map(|slot| BuildingAnimationClip {
+                    node: nodes[slot],
+                    name: attack_name
+                        .expect("attack slot requires a source sequence")
+                        .into_string(),
+                    duration_seconds: durations[slot],
+                }),
                 birth: birth_slot.map(|slot| BuildingAnimationClip {
                     node: nodes[slot],
                     name: model

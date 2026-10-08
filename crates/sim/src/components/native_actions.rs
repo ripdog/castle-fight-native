@@ -1,6 +1,68 @@
 use super::*;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct AcidBombProfile {
+    pub ability: AbilityId,
+    pub range: i32,
+    pub radius: i32,
+    pub speed_per_tick: i32,
+    pub homing: bool,
+    pub armor_penalty_per_100: i16,
+    pub movement_percent_delta: i16,
+    pub attack_speed_percent_delta: i16,
+    pub primary_damage: i32,
+    pub secondary_damage: i32,
+    pub interval_ticks: u16,
+    pub duration_ticks: u16,
+    pub hero_duration_ticks: u16,
+    pub targets: AttackTargetMask,
+}
+
+impl AcidBombProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 14] {
+        [
+            u64::from(self.ability.0),
+            self.range as u64,
+            self.radius as u64,
+            self.speed_per_tick as u64,
+            u64::from(self.homing),
+            self.armor_penalty_per_100 as u64,
+            self.movement_percent_delta as u64,
+            self.attack_speed_percent_delta as u64,
+            self.primary_damage as u64,
+            self.secondary_damage as u64,
+            u64::from(self.interval_ticks),
+            u64::from(self.duration_ticks),
+            u64::from(self.hero_duration_ticks),
+            u64::from(self.targets.bits()),
+        ]
+    }
+}
+
+/// One native Acid Bomb family: separate custom buffs cannot multiply its payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AcidBombStatus {
+    pub profile: AcidBombProfile,
+    pub damage_per_pulse: i32,
+    pub next_pulse_tick: u64,
+    pub expires_tick: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct AcidBombMissileState {
+    pub source: SimId,
+    pub team: Team,
+    pub target: SimId,
+    pub profile: AcidBombProfile,
+    pub launch_position: SimPoint,
+    pub destination: SimPoint,
+    pub launch_tick: u64,
+    pub position: SimPoint,
+    pub position_tick: u64,
+    pub impact_tick: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct EnsnareProfile {
     pub ability: AbilityId,
     pub duration_ticks: u16,
@@ -99,6 +161,7 @@ pub(crate) struct HailstoneState {
 
 #[derive(Component, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum NativeAction {
+    AcidBomb(AcidBombMissileState),
     Poison(PoisonState),
     Ensnare(EnsnareMissileState),
     HealingWave(HealingWaveState),

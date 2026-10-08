@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r50";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r51";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 31;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 32;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1345,6 +1345,9 @@ impl CastleFightTowerKind {
         let expected_name = extracted_content_927().buildings[&rawcode].name;
         let mut definition = extracted_tower_definition_927(rawcode, expected_name);
         definition.spellcasting = match self {
+            Self::SerpentRock => Some(crate::building_mechanics::serpent_spellcasting_for_version(
+                MapVersion::CASTLE_FIGHT_9_27,
+            )),
             Self::WorldFreezer => Some(
                 crate::building_mechanics::world_freezer_spellcasting_for_version(
                     MapVersion::CASTLE_FIGHT_9_27,
@@ -1761,6 +1764,15 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A02Z") => {
+            0x4000_007f
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A030") => {
+            0x4000_0080
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A02O") => {
+            0x4000_0081
+        }
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A08P") => {
             0x4000_007c
         }
@@ -2817,6 +2829,11 @@ fn hash_automatic_ability_profile(hash: &mut ContentHash64, ability: AutomaticAb
             hash.write_i32(autocast_range);
         }
         AbilityEffect::Hailstone(profile) => hash_hailstone_content(hash, profile),
+        AbilityEffect::BuildingAcidBomb(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         AbilityEffect::WorldFreezer(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);

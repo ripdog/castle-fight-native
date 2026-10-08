@@ -1615,16 +1615,23 @@ fn movement_collision_partition(movement_class: MovementClass) -> SpatialPartiti
     SpatialPartition::new(0, component)
 }
 
-fn effective_movement_speed(unit: &UnitSnapshot) -> i32 {
+pub(super) fn effective_movement_speed(unit: &UnitSnapshot) -> i32 {
     let count = usize::from(unit.status.movement_modifier_count);
     debug_assert!(count <= MAX_TIMED_MOVEMENT_MODIFIERS);
     let percent = unit.status.movement_modifiers[..count]
         .iter()
-        .fold(100_i32, |total, modifier| {
-            total
-                .checked_add(i32::from(modifier.percent_delta))
-                .expect("movement percentage overflow")
-        })
+        .fold(
+            100_i32
+                + unit
+                    .status
+                    .acid_bomb
+                    .map_or(0, |acid| i32::from(acid.profile.movement_percent_delta)),
+            |total, modifier| {
+                total
+                    .checked_add(i32::from(modifier.percent_delta))
+                    .expect("movement percentage overflow")
+            },
+        )
         .clamp(0, 1_000);
     i32::try_from(i64::from(unit.movement.speed_per_tick) * i64::from(percent) / 100)
         .expect("effective movement speed overflowed validated bounds")

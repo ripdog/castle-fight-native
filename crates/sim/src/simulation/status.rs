@@ -342,6 +342,7 @@ pub(super) fn apply_ability_effect_to_unit(
         AbilityEffect::Ensnare { .. }
         | AbilityEffect::SpellSteal { .. }
         | AbilityEffect::WorldFreezer(_)
+        | AbilityEffect::BuildingAcidBomb(_)
         | AbilityEffect::BuildingBolt(_)
         | AbilityEffect::Hailstone(_)
         | AbilityEffect::Snowfall { .. }
@@ -354,6 +355,12 @@ pub(super) fn apply_ability_effect_to_unit(
 }
 
 pub(super) fn purge_expired_status_modifiers(status: &mut StatusState, tick: u64) {
+    if status
+        .acid_bomb
+        .is_some_and(|acid| tick >= acid.expires_tick)
+    {
+        status.acid_bomb = None;
+    }
     if status.ensnare.is_some_and(|net| tick >= net.expires_tick) {
         status.ensnare = None;
     }
@@ -610,6 +617,11 @@ pub(super) fn resolve_periodic_unit_statuses(
         if unit.health <= 0 {
             continue;
         }
+        super::native_actions::acid_bomb::resolve_periodic_acid_bomb(
+            unit,
+            completed_tick,
+            damage_rules,
+        );
         let count = usize::from(unit.status.damage_over_time_count);
         debug_assert!(count <= MAX_TIMED_DAMAGE_OVER_TIME);
         let resistance = unit
@@ -717,11 +729,17 @@ pub(super) fn effective_attack_cooldown_ticks(base_ticks: u16, status: StatusSta
     debug_assert!(count <= MAX_TIMED_ATTACK_SPEED_MODIFIERS);
     let percent = status.attack_speed_modifiers[..count]
         .iter()
-        .fold(100_i32, |total, modifier| {
-            total
-                .checked_add(i32::from(modifier.percent_delta))
-                .expect("attack-speed percentage overflow")
-        })
+        .fold(
+            100_i32
+                + status
+                    .acid_bomb
+                    .map_or(0, |acid| i32::from(acid.profile.attack_speed_percent_delta)),
+            |total, modifier| {
+                total
+                    .checked_add(i32::from(modifier.percent_delta))
+                    .expect("attack-speed percentage overflow")
+            },
+        )
         .clamp(1, 1_000);
     let scaled = u64::from(base_ticks) * 100;
     u16::try_from(scaled.div_ceil(u64::try_from(percent).expect("positive attack speed")))

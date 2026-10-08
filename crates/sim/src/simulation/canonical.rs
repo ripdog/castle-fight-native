@@ -322,6 +322,22 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(10);
                 hash.write_u64(id.0);
                 match action {
+                    NativeAction::AcidBomb(state) => {
+                        hash.write_u8(5);
+                        hash.write_u64(state.source.0);
+                        hash.write_u8(state.team.0);
+                        hash.write_u64(state.target.0);
+                        for word in state.profile.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                        for position in [state.launch_position, state.destination, state.position] {
+                            hash.write_i32(position.x);
+                            hash.write_i32(position.y);
+                        }
+                        hash.write_u64(state.launch_tick);
+                        hash.write_u64(state.position_tick);
+                        hash.write_u64(state.impact_tick);
+                    }
                     NativeAction::Poison(state) => {
                         hash.write_u8(4);
                         hash.write_u64(state.source.0);
@@ -1605,6 +1621,15 @@ fn hash_action_timing(hash: &mut Fnv64, timing: ActionTimingProfile) {
 }
 
 fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
+    hash.write_u8(u8::from(status.acid_bomb.is_some()));
+    if let Some(acid) = status.acid_bomb {
+        for word in acid.profile.canonical_words() {
+            hash.write_u64(word);
+        }
+        hash.write_i32(acid.damage_per_pulse);
+        hash.write_u64(acid.next_pulse_tick);
+        hash.write_u64(acid.expires_tick);
+    }
     hash.write_u8(u8::from(status.poison.is_some()));
     if let Some(poison) = status.poison {
         hash_poison_profile(hash, poison.profile);
@@ -2194,6 +2219,11 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_i32(autocast_range);
         }
         AbilityEffect::Hailstone(profile) => hash_hailstone_profile(hash, profile),
+        AbilityEffect::BuildingAcidBomb(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         AbilityEffect::WorldFreezer(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);

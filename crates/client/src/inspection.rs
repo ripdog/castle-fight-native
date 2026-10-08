@@ -2179,6 +2179,20 @@ fn active_effect_badges(
             beneficial: false,
         });
     }
+    if let Some(acid) = unit
+        .status
+        .acid_bomb
+        .filter(|acid| tick < acid.expires_tick)
+    {
+        effects.push(ActiveEffectBadgeData {
+            icon: UiIconKey::StatusEffect { ability: acid.profile.ability.0, role: UiStatusIconRole::Primary },
+            description: format!("Acid Bomb: {} damage per pulse, armor -{}, movement {:+}%, attack speed {:+}% ({}s)",
+                acid.damage_per_pulse, f32::from(acid.profile.armor_penalty_per_100) / 100.0,
+                acid.profile.movement_percent_delta, acid.profile.attack_speed_percent_delta,
+                remaining(acid.expires_tick)),
+            beneficial: false,
+        });
+    }
     if let Some(net) = unit.status.ensnare.filter(|net| tick < net.expires_tick) {
         effects.push(ActiveEffectBadgeData {
             icon: UiIconKey::StatusEffect {

@@ -133,6 +133,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    SerpentRock = 0x2100_0010 => b"h02N",
     WorldFreezer = 0x2100_000f => b"h03O",
     IcyTower = 0x2100_000e => b"h03Q",
     ChillingMushroom = 0x2100_000d => b"h047",

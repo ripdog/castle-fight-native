@@ -7,7 +7,12 @@ use crate::{
     math::SUBUNITS_PER_WORLD_UNIT,
     version::MapVersion,
 };
+mod orc;
 mod world_freezer;
+pub use orc::BuildingAcidBombProfile;
+pub(crate) use orc::{
+    serpent_bindings_for_version, serpent_source_for_version, serpent_spellcasting_for_version,
+};
 use serde_json::Value;
 use std::sync::OnceLock;
 pub use world_freezer::{

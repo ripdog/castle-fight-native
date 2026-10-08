@@ -32,6 +32,8 @@ def build(map_version='9.27', revision='r1'):
     launchers = [r for r in building_rows if r['building_rawcode'] in ('h048', 'h03L')]
     launcher_codes = ['h048', 'h04G', 'A04J', 'A04F', 'h03L', 'h04H', 'A04L', 'A04K']
     mushroom = next(r for r in building_rows if r['building_rawcode'] == 'h047')
+    serpent = next(r for r in building_rows if r['building_rawcode'] == 'h02N')
+    launcher_codes += ['h02N', 'A02O', 'A02Z', 'A030']
     launcher_codes += ['h047', 'A06P', 'A0AK']
     freezer = next(r for r in building_rows if r['building_rawcode'] == 'h03O')
     launcher_codes += ['h03O', 'h08U', 'A04I', 'A081', 'A080', 'A084', 'A082', 'A083', 'A04H']
@@ -58,7 +60,9 @@ def build(map_version='9.27', revision='r1'):
                      'CallbackSingle_doAfter_ReengageRuntime_call_doAfter_ReengageRuntime',
                      'CallbackSingle_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_ReengageRuntime',
                      'CallbackSingle_doAfter_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_doAfter_ReengageRuntime',
-                     *snow['source_functions'].split(','),
+                     *snow['source_functions'].split(','), *serpent['source_functions'].split(','),
+                     'CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities3',
+                     'CallbackSingle_doAfter_doAfter_RaceOrcAbilities_call_doAfter_doAfter_RaceOrcAbilities',
                      *(f for row in launchers for f in row['source_functions'].split(',')), *mushroom['source_functions'].split(','), *freezer['source_functions'].split(','), 'randomAliveEnemyNear', 'OC', 'applyArtilleryModeEnabled', 'CallbackSingle_doAfter_doAfter_RaceNorthernAbilities_call_doAfter_doAfter_RaceNorthernAbilities', 'CallbackSingle_doAfter_doAfter_doAfter_RaceNorthernAbilities_call_doAfter_doAfter_doAfter_RaceNorthernAbilities', 'ForGroupCallback_forUnitsInRange_RaceNorthernAbilities_callback_forUnitsInRange_RaceNorthernAbilities', 'dummyCastTargetWithVision', 'tileR', 'tile_toVec2', 'vL', 'AI', 'unit_resetSpawnQueue', 'vM', 'ZE', 'EventListener_add_BuildingSpells_onEvent_add_BuildingSpells'):
         start = script.index('function ' + function + '(')
         end = script.index('function ', start + 10)
@@ -96,6 +100,10 @@ def build(map_version='9.27', revision='r1'):
             'launcher_vision': {'radius': re.search(r'getY\(\w+\),(\d+\.),true,false', traces['issueFrostLauncherOrder']['source']).group(1),
                                 'duration': re.search(r'doAfter\((\d+\.\d+),', traces['issueFrostLauncherOrder']['source']).group(1)}, 'protected': protected,
             'overheat_explosions': overheat_explosions,
+            'serpent': serpent,
+            'serpent_animation_delays': {
+                'attack': re.search(r'doAfter\(([\d.]+),', traces['serpentRockShoot']['source']).group(1),
+                'stand': re.search(r'doAfter\(([\d.]+),', traces['CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities3']['source']).group(1)},
             'fields': selected, 'target_markers': markers, 'script_traces': traces,
             'script_art': script_art}
 

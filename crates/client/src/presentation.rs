@@ -817,6 +817,7 @@ struct ImportedBuildingModelRoot {
 enum ImportedBuildingAnimationState {
     Birth,
     Stand,
+    Attack,
     Death,
 }
 
@@ -829,6 +830,8 @@ struct ImportedBuildingAnimationController {
     birth: Option<BuildingAnimationClip>,
     stand: Option<BuildingAnimationClip>,
     death: Option<BuildingAnimationClip>,
+    attack: Option<BuildingAnimationClip>,
+    action_animation: Option<ActionAnimationState>,
     state: ImportedBuildingAnimationState,
 }
 
@@ -1886,6 +1889,8 @@ fn setup_imported_building_animation_players(
                 birth: animations.birth.clone(),
                 stand: animations.stand.clone(),
                 death: animations.death.clone(),
+                attack: animations.attack.clone(),
+                action_animation: None,
                 state,
             },
         ));
@@ -2063,9 +2068,48 @@ fn update_imported_building_animations(
             }
             continue;
         }
+        let action = samples
+            .current
+            .buildings
+            .get(&controller.sim_id)
+            .and_then(|building| building.status.action_animation);
+        if let Some(action) = action
+            && action.kind == ActionAnimationKind::Attack
+            && let Some(phase) = action_animation_phase(action, samples.current.tick as f64)
+            && let Some(attack) = controller.attack.clone()
+        {
+            if controller.state != ImportedBuildingAnimationState::Attack
+                || controller.action_animation != Some(action)
+            {
+                player.stop_all();
+                transitions.play(&mut player, attack.node, Duration::ZERO);
+                set_building_emitter_sequence(
+                    &mut commands,
+                    &building_models,
+                    controller.model_root,
+                    controller.rawcode,
+                    Some(&attack.name),
+                );
+                controller.state = ImportedBuildingAnimationState::Attack;
+                controller.action_animation = Some(action);
+            }
+            if let Some(animation) = player.animation_mut(attack.node) {
+                animation
+                    .set_seek_time(attack.duration_seconds * phase)
+                    .pause();
+            }
+            continue;
+        }
         // The source intentionally plays Death while the building remains alive.
         // Only a real death remnant above may despawn the presentation root.
-        let recovering_native_cast = controller.state == ImportedBuildingAnimationState::Death;
+        let recovering_native_cast = matches!(
+            controller.state,
+            ImportedBuildingAnimationState::Death | ImportedBuildingAnimationState::Attack
+        );
+        controller.action_animation = None;
+        if recovering_native_cast {
+            player.stop_all();
+        }
         if controller.state != ImportedBuildingAnimationState::Birth && !recovering_native_cast {
             continue;
         }
@@ -3328,6 +3372,7 @@ fn prewarm_timed_wc3_effects(
                         | AbilityEffect::SolarStrike { .. }
                         | AbilityEffect::PhoenixFire(_)
                         | AbilityEffect::Hailstone(_)
+                        | AbilityEffect::BuildingAcidBomb(_)
                         | AbilityEffect::BuildingBolt(_)
                         | AbilityEffect::WorldFreezer(_)
                         | AbilityEffect::Snowfall { .. }
@@ -5401,6 +5446,12 @@ fn status_visual_sources(
         .into_iter()
         .chain(
             status
+                .acid_bomb
+                .filter(move |acid| tick < acid.expires_tick)
+                .map(|acid| (acid.profile.ability.0, Wc3StatusVisualKind::DamageOverTime)),
+        )
+        .chain(
+            status
                 .ensnare
                 .filter(move |net| tick < net.expires_tick)
                 .map(|net| (net.profile.ability.0, Wc3StatusVisualKind::Movement)),
@@ -5486,6 +5537,11 @@ fn status_visual_is_active(
                 .any(|modifier| modifier.id.0 == ability_rawcode && modifier.expires_tick > tick)
         }
         Wc3StatusVisualKind::DamageOverTime => {
+            if status.acid_bomb.is_some_and(|acid| {
+                acid.profile.ability.0 == ability_rawcode && tick < acid.expires_tick
+            }) {
+                return true;
+            }
             if status.poison.is_some_and(|poison| {
                 poison.profile.ability.0 == ability_rawcode && tick < poison.expires_tick
             }) {
@@ -8306,6 +8362,48 @@ mod tests {
             .push(target);
         snapshot.burning_oil.clear();
         assert!(!active(&snapshot));
+    }
+
+    #[test]
+    fn native_area_debuff_visual_follows_the_current_family_and_exclusive_deadline() {
+        use castle_fight_sim::{AbilityId, AcidBombProfile, AcidBombStatus, StatusState};
+        let mut status = StatusState {
+            acid_bomb: Some(AcidBombStatus {
+                profile: AcidBombProfile {
+                    ability: AbilityId(123),
+                    range: 100,
+                    radius: 40,
+                    speed_per_tick: 10,
+                    homing: false,
+                    armor_penalty_per_100: 300,
+                    movement_percent_delta: -10,
+                    attack_speed_percent_delta: -20,
+                    primary_damage: 17,
+                    secondary_damage: 7,
+                    interval_ticks: 10,
+                    duration_ticks: 20,
+                    hero_duration_ticks: 15,
+                    targets: castle_fight_sim::AttackTargetMask::AIR_AND_GROUND,
+                },
+                damage_per_pulse: 17,
+                next_pulse_tick: 10,
+                expires_tick: 20,
+            }),
+            ..Default::default()
+        };
+        let kind = Wc3StatusVisualKind::DamageOverTime;
+        assert_eq!(
+            status_visual_sources(&status, 19).collect::<Vec<_>>(),
+            [(123, kind)]
+        );
+        assert!(status_visual_is_active(&status, 19, 123, kind));
+        status.acid_bomb.as_mut().unwrap().profile.ability = AbilityId(124);
+        assert!(!status_visual_is_active(&status, 19, 123, kind));
+        assert!(status_visual_is_active(&status, 19, 124, kind));
+        assert!(!status_visual_is_active(&status, 20, 124, kind));
+        assert!(status_visual_sources(&status, 20).next().is_none());
+        status.acid_bomb = None;
+        assert!(!status_visual_is_active(&status, 19, 124, kind));
     }
 
     #[test]

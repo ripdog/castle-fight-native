@@ -90,6 +90,12 @@ class NativeStatusDeliveryAuditTests(unittest.TestCase):
         self.assertEqual(self.audit([entry]), ([], [entry]))
         self.assertTrue(self.audit([])[0])
 
+    def test_native_area_debuff_requires_one_persistent_buff_binding(self):
+        self.fields[0]["base_rawcode"] = "ANab"
+        entry = dict(self.binding, status_kind="damage_over_time")
+        self.assertEqual(self.audit([entry]), ([], [entry]))
+        self.assertTrue(self.audit([])[0])
+
     def test_authored_attachment_changes_are_not_delivery_success(self):
         for invalid in (dict(self.binding, target_attachments=[]),
                         dict(self.binding, target_attachment_count=2)):

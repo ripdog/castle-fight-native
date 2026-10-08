@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 48;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 49;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -2256,7 +2256,8 @@ impl Simulation {
                 let ordinary = matches!(
                     entity.get::<crate::components::NativeAction>(),
                     Some(
-                        crate::components::NativeAction::Bolt(_)
+                        crate::components::NativeAction::AcidBomb(_)
+                            | crate::components::NativeAction::Bolt(_)
                             | crate::components::NativeAction::Ensnare(_)
                             | crate::components::NativeAction::Hailstone(_)
                     )
@@ -4165,6 +4166,19 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                 AbilityTargetPolicy::FriendlyUnitInCombat
             );
         }
+        AbilityEffect::BuildingAcidBomb(p) => {
+            assert!(p.child.speed_per_tick > 0 && p.child.range > 0 && p.child.radius >= 0);
+            assert!(
+                p.child.interval_ticks > 0
+                    && p.child.duration_ticks > 0
+                    && p.child.hero_duration_ticks > 0
+            );
+            assert!(p.child.primary_damage >= 0 && p.child.secondary_damage >= 0);
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::NativeBuildingSpellTrigger
+            );
+        }
         AbilityEffect::BuildingBolt(p) => {
             assert!(p.bolt.speed_per_tick > 0 && p.child_range > 0);
             assert_eq!(
@@ -4541,6 +4555,38 @@ fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option
         });
     }
     let id = *entity.get::<SimId>()?;
+    if let Some(crate::components::NativeAction::AcidBomb(projectile)) =
+        entity.get::<crate::components::NativeAction>()
+    {
+        let destination = if projectile.profile.homing {
+            return Some(ProjectileView {
+                id,
+                source: projectile.source,
+                ability: Some(projectile.profile.ability),
+                launch_position: projectile.position,
+                launch_tick: projectile.position_tick,
+                impact_tick: projectile.impact_tick,
+                kind: ProjectileViewKind::GuaranteedHit {
+                    target: projectile.target,
+                },
+            });
+        } else {
+            projectile.destination
+        };
+        return Some(ProjectileView {
+            id,
+            source: projectile.source,
+            ability: Some(projectile.profile.ability),
+            launch_position: projectile.launch_position,
+            launch_tick: projectile.launch_tick,
+            impact_tick: projectile.impact_tick,
+            kind: ProjectileViewKind::Ballistic {
+                source_rawcode: None,
+                destination,
+                impact_radius: 0,
+            },
+        });
+    }
     if let Some(crate::components::NativeAction::Hailstone(projectile)) =
         entity.get::<crate::components::NativeAction>()
     {

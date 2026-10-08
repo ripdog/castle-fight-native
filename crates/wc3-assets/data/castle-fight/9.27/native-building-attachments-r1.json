@@ -9,6 +9,108 @@
   },
   "buildings": [
     {
+      "building_rawcode": "h01M",
+      "visuals": [],
+      "native_abilities": [
+        {
+          "ability_rawcode": "A028",
+          "attachment_points": [
+            "origin"
+          ]
+        },
+        {
+          "ability_rawcode": "A029",
+          "attachment_points": [
+            "second"
+          ]
+        }
+      ]
+    },
+    {
+      "building_rawcode": "h01W",
+      "visuals": [],
+      "native_abilities": [
+        {
+          "ability_rawcode": "A028",
+          "attachment_points": [
+            "origin"
+          ]
+        },
+        {
+          "ability_rawcode": "A029",
+          "attachment_points": [
+            "second"
+          ]
+        }
+      ]
+    },
+    {
+      "building_rawcode": "h01X",
+      "visuals": [],
+      "native_abilities": [
+        {
+          "ability_rawcode": "A029",
+          "attachment_points": [
+            "second"
+          ]
+        },
+        {
+          "ability_rawcode": "A028",
+          "attachment_points": [
+            "origin"
+          ]
+        }
+      ]
+    },
+    {
+      "building_rawcode": "h020",
+      "visuals": [],
+      "native_abilities": [
+        {
+          "ability_rawcode": "A023",
+          "attachment_points": [
+            "origin"
+          ]
+        }
+      ]
+    },
+    {
+      "building_rawcode": "h021",
+      "visuals": [],
+      "native_abilities": [
+        {
+          "ability_rawcode": "A023",
+          "attachment_points": [
+            "origin"
+          ]
+        }
+      ]
+    },
+    {
+      "building_rawcode": "h022",
+      "visuals": [],
+      "native_abilities": [
+        {
+          "ability_rawcode": "A024",
+          "attachment_points": [
+            "first"
+          ]
+        },
+        {
+          "ability_rawcode": "A023",
+          "attachment_points": [
+            "origin"
+          ]
+        },
+        {
+          "ability_rawcode": "A021",
+          "attachment_points": [
+            "origin"
+          ]
+        }
+      ]
+    },
+    {
       "building_rawcode": "h025",
       "visuals": [],
       "native_abilities": [
@@ -18,6 +120,18 @@
             "origin",
             "first",
             "second"
+          ]
+        }
+      ]
+    },
+    {
+      "building_rawcode": "h02N",
+      "visuals": [],
+      "native_abilities": [
+        {
+          "ability_rawcode": "A02O",
+          "attachment_points": [
+            "origin"
           ]
         }
       ]

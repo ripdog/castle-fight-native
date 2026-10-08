@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Project promoted script-owned building decorations from release-pinned Lua."""
+"""Project script and native building decorations from release-pinned evidence."""
 from __future__ import annotations
 
 import argparse
@@ -53,12 +53,15 @@ def build(release: dict) -> dict:
         attachments = []
         for rawcode in inventories.get(building["rawcode"], "").split(","):
             ability = abilities.get(rawcode, {})
-            if ability.get("base") != "Asph" or not ability.get("atat"):
+            base = ability.get("base")
+            marker_aura = (base == "Aasl" and ability.get("Slo1") == 0
+                and ability.get("Slo2") == 0 and ability.get("aare") == 0)
+            if not (base == "Asph" or marker_aura) or not ability.get("atat"):
                 continue
             count = int(ability["atac"])
             points = [ability.get(f"ata{index}", "") for index in range(count)]
             if not all(points):
-                raise ValueError("native Sphere attachment must retain every authored point")
+                raise ValueError("native building attachment must retain every authored point")
             attachments.append({"ability_rawcode": rawcode, "attachment_points": points})
         if attachments:
             entry = next((row for row in entries if row["building_rawcode"] == building["rawcode"]), None)

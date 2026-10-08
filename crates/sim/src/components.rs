@@ -3,10 +3,13 @@ use std::collections::VecDeque;
 
 mod native_actions;
 pub(crate) use native_actions::{
-    EnsnareMissileState, HailstoneState, HealingWaveState, NativeAction, NativeBoltState,
-    PoisonState,
+    AcidBombMissileState, EnsnareMissileState, HailstoneState, HealingWaveState, NativeAction,
+    NativeBoltState, PoisonState,
 };
-pub use native_actions::{EnsnareProfile, EnsnareState, HealingWaveProfile, NativeBoltProfile};
+pub use native_actions::{
+    AcidBombProfile, AcidBombStatus, EnsnareProfile, EnsnareState, HealingWaveProfile,
+    NativeBoltProfile,
+};
 mod automatic_abilities;
 mod mana;
 pub(crate) use automatic_abilities::compose_spellcasting_profiles;
@@ -1164,6 +1167,7 @@ pub enum AreaDamageOrigin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AbilityEffect {
+    BuildingAcidBomb(crate::building_mechanics::BuildingAcidBombProfile),
     Ensnare {
         profile: EnsnareProfile,
         search_radius: i32,
@@ -1315,6 +1319,7 @@ impl AbilityEffect {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::BuildingAcidBomb(_) => 25,
             Self::Ensnare { .. } => 24,
             Self::StatBuff { .. } => 22,
             Self::SpellSteal { .. } => 23,
@@ -1491,6 +1496,7 @@ pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
 
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusState {
+    pub acid_bomb: Option<AcidBombStatus>,
     pub poison: Option<PoisonStatus>,
     pub damage_threshold: DamageThresholdState,
     pub ensnare: Option<EnsnareState>,
@@ -1578,7 +1584,10 @@ impl StatusState {
         let count = usize::from(self.armor_modifier_count);
         debug_assert!(count <= MAX_TIMED_ARMOR_MODIFIERS);
         self.armor_modifiers[..count].iter().fold(
-            i32::from(armor.armor_points) * 100,
+            i32::from(armor.armor_points) * 100
+                - self
+                    .acid_bomb
+                    .map_or(0, |acid| i32::from(acid.profile.armor_penalty_per_100)),
             |total, modifier| {
                 total
                     .checked_add(i32::from(modifier.armor_bonus_per_100))
