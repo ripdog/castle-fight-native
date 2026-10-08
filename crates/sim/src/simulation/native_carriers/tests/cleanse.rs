@@ -55,6 +55,31 @@ fn prepare(simulation: &mut Simulation) -> (SimId, SimId, PassiveUnitEffects, Pa
         },
     );
     status(simulation, target);
+    simulation
+        .world
+        .get_mut::<StatusState>(entity(simulation, target))
+        .unwrap()
+        .acid_bomb = Some(crate::AcidBombStatus {
+        profile: crate::AcidBombProfile {
+            ability: AbilityId(9878),
+            range: 100,
+            radius: 40,
+            speed_per_tick: 10,
+            homing: false,
+            armor_penalty_per_100: 150,
+            movement_percent_delta: -10,
+            attack_speed_percent_delta: -10,
+            primary_damage: 0,
+            secondary_damage: 0,
+            interval_ticks: 100,
+            duration_ticks: 1000,
+            hero_duration_ticks: 1000,
+            targets: AttackTargetMask::AIR_AND_GROUND,
+        },
+        damage_per_pulse: 0,
+        next_pulse_tick: 1000,
+        expires_tick: 1000,
+    });
     let AbilityEffect::Hex { mut profile } =
         crate::building_mechanics::city_spellcasting_for_version(MapVersion::CASTLE_FIGHT_9_27)
             .ability
@@ -144,6 +169,7 @@ fn positive_cleanse_restores_baseline_and_removes_shield_without_erasing_overhea
     assert!(!projected.abilities_disabled && !projected.attacks_disabled);
     assert!(projected.orders_suspended);
     assert_eq!(projected.passive_effects, retained.without_defend());
+    assert!(projected.status.acid_bomb.is_none());
     assert_eq!(projected.status.movement_modifier_count, 0);
     assert_eq!(projected.status.armor_modifier_count, 0);
     assert_eq!(projected.status.stunned_until_tick, 0);

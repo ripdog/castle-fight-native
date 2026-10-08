@@ -445,6 +445,7 @@ fn cleanse_native_effects(
     status.native_stun_until_tick = 0;
     status.native_stun_ability = None;
     status.rooted_until_tick = 0;
+    status.acid_bomb = None;
     status.poison = None;
     status.ensnare = None;
     status.frozen_until_tick = 0;
