@@ -206,6 +206,7 @@ pub struct Wc3AbilityVisual {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Wc3StatusVisualKind {
+    AuraCarrier,
     Regeneration,
     Stun,
     Freeze,

@@ -16,10 +16,10 @@ struct Recipient {
 // Regeneration accounts for the interval that closes at this timer tick. Live membership
 // remains exclusive at removal, so this does not leave a trailing recipient buff.
 fn eligible(state: AuraCarrierState, recipient: Recipient, tick: u64, for_timers: bool) -> bool {
-    (if for_timers {
+    (if for_timers && state.profile.regeneration_per_second_per_10k > 0 {
         tick > state.created_tick && tick <= state.expires_tick
     } else {
-        tick < state.expires_tick
+        tick >= state.created_tick && tick < state.expires_tick
     }) && recipient.health > 0
         && recipient.team == state.team
         && (!state.profile.organic_only || !recipient.mechanical)
@@ -35,45 +35,125 @@ fn refresh_status(
     tick: u64,
     for_timers: bool,
 ) {
-    // Zero native duration means membership is resampled, without a trailing heal after exit.
-    // Keep the carrier deadline on the live modifier so inspection reports its real lifetime.
-    let old_count = usize::from(status.armor_modifier_count);
-    let mut kept = 0;
-    for index in 0..old_count {
-        let active = status.armor_modifiers[index];
-        if sources
-            .iter()
-            .any(|source| active.id.0 == source.profile.ability.0)
-        {
-            continue;
+    use crate::simulation::native_carriers::retain_modifiers;
+    // A representative ability can outlive the carrier that first supplied that identity.
+    // Clear the complete old native family, including its paired speed modifiers, before
+    // selecting this tick's contributors. This also removes membership without extra linger.
+    let mut removed_ids = [ModifierId(0); MAX_TIMED_ARMOR_MODIFIERS];
+    let mut removed_count = 0;
+    for modifier in &status.armor_modifiers[..usize::from(status.armor_modifier_count)] {
+        if sources.iter().any(|source| {
+            modifier.id.0 == source.profile.ability.0
+                || modifier
+                    .native_buff
+                    .is_some_and(|buff| buff.rawcode == source.profile.buff_rawcode)
+        }) {
+            removed_ids[removed_count] = modifier.id;
+            removed_count += 1;
         }
-        status.armor_modifiers[kept] = active;
-        kept += 1;
     }
-    status.armor_modifiers[kept..old_count].fill(TimedArmorModifier::default());
-    status.armor_modifier_count = u8::try_from(kept).expect("bounded modifier count");
-    // Ascending strength ensures one strongest payload per native buff family. Distinct native
-    // buff identities remain independent. Equal strength prefers the later expiry,
-    // then stable source identities.
-    for &state in sources {
-        if !eligible(state, recipient, tick, for_timers) {
+    let keep = |id: ModifierId| {
+        !removed_ids[..removed_count].contains(&id)
+            && !sources
+                .iter()
+                .any(|source| source.profile.ability.0 == id.0)
+    };
+    retain_modifiers(
+        &mut status.movement_modifiers,
+        &mut status.movement_modifier_count,
+        |modifier| keep(modifier.id),
+    );
+    retain_modifiers(
+        &mut status.attack_speed_modifiers,
+        &mut status.attack_speed_modifier_count,
+        |modifier| keep(modifier.id),
+    );
+    retain_modifiers(
+        &mut status.armor_modifiers,
+        &mut status.armor_modifier_count,
+        |modifier| keep(modifier.id),
+    );
+
+    for family in
+        sources.chunk_by(|left, right| left.profile.buff_rawcode == right.profile.buff_rawcode)
+    {
+        let eligible = family
+            .iter()
+            .copied()
+            .filter(|state| eligible(*state, recipient, tick, for_timers));
+        let Some(representative) = eligible.clone().next() else {
+            continue;
+        };
+        let regeneration = eligible
+            .clone()
+            .filter(|state| state.profile.regeneration_per_second_per_10k > 0)
+            .max_by_key(|state| {
+                (
+                    state.profile.regeneration_per_second_per_10k,
+                    state.expires_tick,
+                )
+            });
+        let movement = eligible
+            .clone()
+            .filter(|state| state.profile.movement_percent_delta != 0)
+            .max_by_key(|state| {
+                (
+                    state.profile.movement_percent_delta.unsigned_abs(),
+                    state.profile.movement_percent_delta,
+                    state.expires_tick,
+                )
+            });
+        let attack_speed = eligible
+            .clone()
+            .filter(|state| state.profile.attack_speed_percent_delta != 0)
+            .max_by_key(|state| {
+                (
+                    state.profile.attack_speed_percent_delta.unsigned_abs(),
+                    state.profile.attack_speed_percent_delta,
+                    state.expires_tick,
+                )
+            });
+        let id = ModifierId(representative.profile.ability.0);
+        let regeneration_expiry =
+            regeneration.map_or(0, |state| state.expires_tick + u64::from(for_timers));
+        let expires_tick = regeneration_expiry
+            .max(movement.map_or(0, |state| state.expires_tick))
+            .max(attack_speed.map_or(0, |state| state.expires_tick));
+        if expires_tick == 0 {
             continue;
         }
         apply_timed_armor_modifier(
             status,
             TimedArmorModifier {
-                id: ModifierId(state.profile.ability.0),
+                id,
                 native_buff: Some(crate::NativeBuffIdentity {
-                    rawcode: state.profile.buff_rawcode,
+                    rawcode: representative.profile.buff_rawcode,
                     positive: true,
                     stealable: false,
-                    organic_only: state.profile.organic_only,
+                    organic_only: eligible.clone().all(|state| state.profile.organic_only),
                 }),
-                regeneration_per_second_per_10k: state.profile.regeneration_per_second_per_10k,
-                expires_tick: state.expires_tick + u64::from(for_timers),
+                regeneration_per_second_per_10k: regeneration
+                    .map_or(0, |state| state.profile.regeneration_per_second_per_10k),
+                expires_tick,
                 ..Default::default()
             },
         );
+        if let Some(state) = movement {
+            apply_timed_movement_modifier(
+                status,
+                id,
+                state.profile.movement_percent_delta,
+                state.expires_tick,
+            );
+        }
+        if let Some(state) = attack_speed {
+            apply_timed_attack_speed_modifier(
+                status,
+                id,
+                state.profile.attack_speed_percent_delta,
+                state.expires_tick,
+            );
+        }
     }
 }
 
@@ -91,10 +171,10 @@ impl Simulation {
             .collect();
         sources.sort_unstable_by_key(|state| {
             (
-                state.profile.regeneration_per_second_per_10k,
-                state.expires_tick,
+                state.profile.buff_rawcode,
                 state.profile.ability,
                 state.source,
+                state.expires_tick,
             )
         });
         sources
@@ -196,5 +276,43 @@ impl Simulation {
             target_position: Some(position),
             effect: AbilityEffect::BuildingAura(profile),
         });
+    }
+}
+
+/// Presentation of the carrier's own native aura art; it does not expose a combat handle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AuraCarrierView {
+    pub id: SimId,
+    pub source: SimId,
+    pub team: Team,
+    pub position: SimPoint,
+    pub ability: AbilityId,
+    pub created_tick: u64,
+    pub expires_tick: u64,
+}
+
+impl Simulation {
+    #[must_use]
+    pub fn aura_carriers(&self) -> Vec<AuraCarrierView> {
+        let mut views: Vec<_> = self
+            .world
+            .iter_entities()
+            .filter_map(|entity| {
+                let NativeAction::AuraCarrier(state) = entity.get::<NativeAction>()? else {
+                    return None;
+                };
+                (self.next_tick < state.expires_tick).then(|| AuraCarrierView {
+                    id: *entity.get::<SimId>().expect("native action identity"),
+                    source: state.source,
+                    team: state.team,
+                    position: state.position,
+                    ability: state.profile.ability,
+                    created_tick: state.created_tick,
+                    expires_tick: state.expires_tick,
+                })
+            })
+            .collect();
+        views.sort_unstable_by_key(|view| view.id);
+        views
     }
 }

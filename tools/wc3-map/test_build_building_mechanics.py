@@ -98,31 +98,37 @@ class BuildingMechanicsProjectionTests(unittest.TestCase):
     def test_aura_carrier_closure_reconciles_child_fields_lifetime_and_inert_dummy(self):
         import re
         data = MODULE.build()
-        row = data['healing']
-        control = data['healing_control']
-        params = json.loads(row['parameters_json'])
-        child = params['effect_ability_id'].to_bytes(4, 'big').decode()
-        callback = data['script_traces'][row['source_functions']]['source']
-        literal = re.search(r'dummyCarrierWithAbility\(unit_getOwner\(\w+\),(\d+),unit_getPos\(\w+\),([\d.]+)\)', callback)
-        self.assertEqual(int(literal[1]), params['effect_ability_id'])
-        self.assertEqual(float(literal[2]), float(control['lifetime_seconds']))
-        self.assertEqual(float(literal[2]), float(params['carrier_or_dummy_lifetime_seconds']))
-        self.assertEqual(control['stand_seconds'], re.search(r'doAfter\(([\d.]+),', callback)[1])
-        linked = json.loads(row['effect_objects_json'])[0]['ability_level1']
-        fields = data['fields'][child]
-        self.assertEqual(fields['atar:1'], linked['targets'])
-        self.assertEqual(float(fields['aare:1']), float(linked['area']))
-        labelled = json.loads(linked['data_fields_labeled_json'])
-        self.assertEqual(fields['Oar1:1'], labelled['Amount of Hit Points Regenerated'])
-        self.assertEqual(fields['Oar2:1'], labelled['Percentage'])
-        carrier = data['fields'][control['carrier_rawcode']]
-        self.assertIn('Avul', carrier['uabi:0'].split(','))
-        self.assertIn('Aloc', carrier['uabi:0'].split(','))
-        self.assertEqual(carrier['umdl:0'], 'no_model.mdl')
-        for field in ('usid:0', 'usin:0', 'ucol:0', 'umvs:0'):
-            self.assertEqual(carrier[field], 0)
-        self.assertIn('__wurst_safe_RemoveUnit', data['script_traces']['CallbackSingle_doAfter_SpellHelpers_call_doAfter_SpellHelpers4']['source'])
-        self.assertIn('"stand"', data['script_traces']['CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities1']['source'])
+        for index, name in enumerate(('healing', 'endurance'), 1):
+            row = data[name]
+            control = data[name + '_control']
+            params = json.loads(row['parameters_json'])
+            child = params['effect_ability_id'].to_bytes(4, 'big').decode()
+            callback = data['script_traces'][row['source_functions']]['source']
+            literal = re.search(r'dummyCarrierWithAbility\(unit_getOwner\(\w+\),(\d+),unit_getPos\(\w+\),([\d.]+)\)', callback)
+            self.assertEqual(int(literal[1]), params['effect_ability_id'])
+            self.assertEqual(float(literal[2]), float(control['lifetime_seconds']))
+            self.assertEqual(float(literal[2]), float(params['carrier_or_dummy_lifetime_seconds']))
+            self.assertEqual(control['stand_seconds'], re.search(r'doAfter\(([\d.]+),', callback)[1])
+            linked = json.loads(row['effect_objects_json'])[0]['ability_level1']
+            fields = data['fields'][child]
+            self.assertEqual(fields['atar:1'], linked['targets'])
+            self.assertEqual(float(fields['aare:1']), float(linked['area']))
+            labelled = json.loads(linked['data_fields_labeled_json'])
+            if name == 'healing':
+                self.assertEqual(fields['Oar1:1'], labelled['Amount of Hit Points Regenerated'])
+                self.assertEqual(fields['Oar2:1'], labelled['Percentage'])
+            else:
+                self.assertEqual(fields['Oae1:1'], labelled['Movement Speed Increase (%)'])
+                self.assertEqual(fields['Oae2:1'], labelled['Attack Speed Increase (%)'])
+                self.assertIn('atat:0', fields)
+            carrier = data['fields'][control['carrier_rawcode']]
+            self.assertIn('Avul', carrier['uabi:0'].split(','))
+            self.assertIn('Aloc', carrier['uabi:0'].split(','))
+            self.assertEqual(carrier['umdl:0'], 'no_model.mdl')
+            for field in ('usid:0', 'usin:0', 'ucol:0', 'umvs:0'):
+                self.assertEqual(carrier[field], 0)
+            self.assertIn('__wurst_safe_RemoveUnit', data['script_traces']['CallbackSingle_doAfter_SpellHelpers_call_doAfter_SpellHelpers4']['source'])
+            self.assertIn('"stand"', data['script_traces']['CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities' + str(index)]['source'])
 
     def test_unsupported_version_does_not_reuse_an_older_recipe(self):
         with self.assertRaisesRegex(ValueError, "do not support"):

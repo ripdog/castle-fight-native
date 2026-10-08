@@ -2340,6 +2340,17 @@ fn active_effect_badges(
                 f64::from(modifier.damage_taken_bonus_per_10k) / 100.0
             ));
         }
+        if changes.is_empty()
+            && (unit.status.movement_modifiers[..usize::from(unit.status.movement_modifier_count)]
+                .iter()
+                .any(|active| active.id == modifier.id && active.expires_tick > tick)
+                || unit.status.attack_speed_modifiers
+                    [..usize::from(unit.status.attack_speed_modifier_count)]
+                    .iter()
+                    .any(|active| active.id == modifier.id && active.expires_tick > tick))
+        {
+            continue;
+        }
         let label = format!(
             "{} ({}s)",
             changes.join(", "),
@@ -3413,6 +3424,7 @@ mod tests {
 
     fn empty_samples() -> PresentationSamples {
         let snapshot = PresentationSnapshot {
+            aura_carriers: BTreeMap::new(),
             burning_oil: BTreeMap::new(),
             projectile_positions: Default::default(),
             navigation_cell_size: SUBUNITS_PER_WORLD_UNIT,

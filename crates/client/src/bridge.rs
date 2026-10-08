@@ -200,6 +200,7 @@ pub struct PresentationSnapshot {
     pub buildings: BTreeMap<SimId, BuildingSample>,
     pub corpses: BTreeMap<SimId, CorpseView>,
     pub projectiles: BTreeMap<SimId, ProjectileView>,
+    pub aura_carriers: BTreeMap<SimId, castle_fight_sim::AuraCarrierView>,
     pub burning_oil: BTreeMap<SimId, castle_fight_sim::BurningOilView>,
     pub attacks: Vec<AttackEvent>,
     pub ability_casts: Vec<AbilityCastEvent>,
@@ -430,6 +431,11 @@ impl PresentationSnapshot {
             buildings,
             corpses,
             projectiles,
+            aura_carriers: simulation
+                .aura_carriers()
+                .into_iter()
+                .map(|view| (view.id, view))
+                .collect(),
             burning_oil: simulation
                 .burning_oil_zones()
                 .into_iter()
@@ -657,6 +663,9 @@ impl PresentationSnapshot {
             .retain(|id, _| self.projectiles.contains_key(id));
         self.burning_oil
             .retain(|_, zone| fog.is_visible(team, zone.center));
+        self.aura_carriers.retain(|_, carrier| {
+            observer.shares_team(carrier.team) || fog.is_visible(team, carrier.position)
+        });
         for zone in self.burning_oil.values_mut() {
             zone.recipients.retain(|id| {
                 self.units.contains_key(id)

@@ -200,7 +200,7 @@ def audit_native_status_visuals(projection, fields, abilities, manifest):
                "ACff": ("armor",), "Afae": ("armor",), "Ablo": ("attack_speed",),
                "Apxf": ("damage_over_time",), "Aven": ("damage_over_time",), "ACvs": ("damage_over_time",),
                "Abof": ("damage_over_time",), "ANab": ("damage_over_time",),
-               "Afrz": ("freeze",), "Aoar": ("regeneration",), "AOae": ("movement",), "Asta": ("stun",), "AHtb": ("stun",), "ACtb": ("stun",)}
+               "Afrz": ("freeze",), "Aoar": ("regeneration",), "SCae": ("movement",), "AOae": ("movement",), "Asta": ("stun",), "AHtb": ("stun",), "ACtb": ("stun",)}
     poison_flags = {row["rawcode"]: int(json.loads(row["recovered_value_json"]))
                     for row in fields if row["category"] == "abilities" and row["field_id"] == "Poi4" and row["level"] == "1"}
     buffs = {row["rawcode"]: row for row in projection["buffs"]}

@@ -958,7 +958,9 @@ pub fn resolve_native_effect_requirements(
         .partition(|source| crate::building_mechanics::hex_source_for_version(*source, version));
     let mut resolved = catalog().resolve_requirements(version, &ordinary_roots)?;
     if !aura_roots.is_empty() {
-        resolved.extend(crate::building_mechanics::aura_carrier_bindings_for_version(version));
+        resolved.extend(
+            crate::building_mechanics::aura_carrier_bindings_for_version(version, &aura_roots),
+        );
     }
     if !stasis_roots.is_empty() {
         resolved.extend(crate::building_mechanics::stasis_bindings_for_version(

@@ -927,7 +927,7 @@ fn load_visual_assets(
             "Aenr" => &["movement"],
             "Afrz" => &["freeze"],
             "Aoar" => &["regeneration"],
-            "AOae" => &["movement"],
+            "AOae" | "SCae" => &["movement"],
             "Asta" | "AHtb" | "ACtb" => &["stun"],
             // Frost Armor applies one persistent shield buff and one reactive slow buff.
             "ACf2" => &["armor", "movement"],

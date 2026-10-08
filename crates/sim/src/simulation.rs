@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 53;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 54;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -52,6 +52,7 @@ mod economy;
 mod line_projectiles;
 mod movement;
 mod native_actions;
+pub use native_actions::aura_carrier::AuraCarrierView;
 #[cfg(test)]
 mod native_actions_tests;
 mod native_buff_transfer;

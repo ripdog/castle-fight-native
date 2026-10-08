@@ -11,7 +11,7 @@ mod aura_carrier;
 pub use aura_carrier::BuildingAuraProfile;
 pub(crate) use aura_carrier::{
     aura_carrier_bindings_for_version, aura_carrier_source_for_version,
-    healing_aura_spellcasting_for_version,
+    endurance_aura_spellcasting_for_version, healing_aura_spellcasting_for_version,
 };
 mod orc;
 mod stasis;

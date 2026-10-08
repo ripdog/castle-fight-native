@@ -806,7 +806,7 @@ mod tests {
                 "Apxf" | "Aven" | "ACvs" | "Abof" | "ANab" => "damage_over_time",
                 "Afrz" => "freeze",
                 "Aoar" => "regeneration",
-                "AOae" => "movement",
+                "AOae" | "SCae" => "movement",
                 "Asta" | "AHtb" | "ACtb" => "stun",
                 _ => continue,
             };

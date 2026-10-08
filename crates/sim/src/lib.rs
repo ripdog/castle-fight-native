@@ -101,15 +101,15 @@ pub use native_effects::{
 };
 pub use simulation::{
     AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION, AbilityCastEvent, AbilityCastTarget, AttackEvent,
-    BuilderBuildError, BuilderCommandError, BuilderOrderView, BuilderSpawnError, BuilderView,
-    BuildingCommandError, BuildingConstructionCancelError, BuildingConstructionCancelOutcome,
-    BuildingPlacementError, BuildingSpellVisualEvent, BuildingSpellVisualKind,
-    BuildingUpgradeError, BuildingView, BurningOilView, CANONICAL_CHECKSUM_SCHEMA_VERSION,
-    ChainLightningEvent, CombatRules, CorpseView, HexState, MatchLifecycle, MatchOutcome,
-    PlayerConfig, PlayerConnectionStatus, PlayerView, ProjectileView, ProjectileViewKind,
-    ShrineRevivalEvent, Simulation, SimulationConfig, SimulationSnapshot, SnapshotRestoreError,
-    SnapshotWireError, TargetlessLane, TeamObjectiveError, TickResult, TickTimings,
-    UPHILL_MISS_CHANCE_SCALE, UnitView,
+    AuraCarrierView, BuilderBuildError, BuilderCommandError, BuilderOrderView, BuilderSpawnError,
+    BuilderView, BuildingCommandError, BuildingConstructionCancelError,
+    BuildingConstructionCancelOutcome, BuildingPlacementError, BuildingSpellVisualEvent,
+    BuildingSpellVisualKind, BuildingUpgradeError, BuildingView, BurningOilView,
+    CANONICAL_CHECKSUM_SCHEMA_VERSION, ChainLightningEvent, CombatRules, CorpseView, HexState,
+    MatchLifecycle, MatchOutcome, PlayerConfig, PlayerConnectionStatus, PlayerView, ProjectileView,
+    ProjectileViewKind, ShrineRevivalEvent, Simulation, SimulationConfig, SimulationSnapshot,
+    SnapshotRestoreError, SnapshotWireError, TargetlessLane, TeamObjectiveError, TickResult,
+    TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
 };
 pub use terrain::{
     TerrainElevationMap, TerrainElevationSample, TerrainLoadError, WC3_TERRAIN_TILE_WORLD_UNITS,

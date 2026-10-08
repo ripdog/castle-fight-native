@@ -4178,6 +4178,9 @@ fn sync_render_entities(
     }
 
     for cast in &samples.current.ability_casts {
+        if matches!(cast.effect, AbilityEffect::BuildingAura(_)) {
+            continue;
+        }
         // The visible Parasite registration is only a trigger; its native base art is not Hex.
         if cast.ability
             == castle_fight_sim::building_mechanics::city_spellcasting_for_version(
@@ -4840,6 +4843,43 @@ fn sync_render_entities(
             );
         }
     }
+    for carrier in samples.current.aura_carriers.values() {
+        let position = sim_point_to_terrain_world(carrier.position, &terrain);
+        for (slot, visual) in wc3_visuals
+            .ability_for_source(carrier.ability.0, None)
+            .enumerate()
+        {
+            if visual.anchor != Wc3AbilityVisualAnchor::Target {
+                continue;
+            }
+            let key = StatusEffectKey {
+                target: carrier.id,
+                ability_rawcode: carrier.ability.0,
+                kind: Wc3StatusVisualKind::AuraCarrier,
+                slot: u16::try_from(slot).expect("aura visual slot"),
+                attachment_slot: 0,
+            };
+            if render_map.status_effects.contains_key(&key) {
+                continue;
+            }
+            let (entity, pooled_scene) = spawn_or_reuse_wc3_visual(
+                &mut commands,
+                &mut effect_pool,
+                &visual.model,
+                Transform::from_translation(position),
+                !legacy_effect_pooling,
+                Wc3EffectPlayback::Looping,
+            );
+            render_map.status_effects.insert(
+                key,
+                PresentedStatusEffect {
+                    entity,
+                    attached_to_model: false,
+                    pooled_scene,
+                },
+            );
+        }
+    }
     for unit in samples
         .current
         .units
@@ -5438,6 +5478,13 @@ fn entity_status_visual_is_active(
     ability_rawcode: u32,
     kind: Wc3StatusVisualKind,
 ) -> bool {
+    if kind == Wc3StatusVisualKind::AuraCarrier {
+        return snapshot.aura_carriers.get(&target).is_some_and(|carrier| {
+            carrier.ability.0 == ability_rawcode
+                && snapshot.tick >= carrier.created_tick
+                && snapshot.tick < carrier.expires_tick
+        });
+    }
     if kind == Wc3StatusVisualKind::DamageOverTime
         && snapshot.burning_oil.values().any(|zone| {
             zone.ability.0 == ability_rawcode && zone.recipients.binary_search(&target).is_ok()
@@ -5548,6 +5595,7 @@ fn status_visual_is_active(
     kind: Wc3StatusVisualKind,
 ) -> bool {
     match kind {
+        Wc3StatusVisualKind::AuraCarrier => false,
         Wc3StatusVisualKind::Stun => {
             tick < status.native_stun_until_tick
                 && status
@@ -8503,6 +8551,47 @@ mod tests {
         assert!(status_visual_sources(&status, 20).next().is_none());
         status.acid_bomb = None;
         assert!(!status_visual_is_active(&status, 19, 124, kind));
+    }
+
+    #[test]
+    fn native_aura_carrier_visual_survives_missing_source_and_recovers_without_cast_events() {
+        use castle_fight_sim::{
+            AbilityId, AuraCarrierView, SimId, SimPoint, Simulation, SimulationConfig, Team,
+        };
+        let simulation = Simulation::new(SimulationConfig::default(), 1);
+        let mut snapshot = crate::bridge::PresentationSnapshot::capture(&simulation);
+        let id = SimId(100);
+        snapshot.aura_carriers.insert(
+            id,
+            AuraCarrierView {
+                id,
+                source: SimId(999),
+                team: Team(0),
+                position: SimPoint::new(10, 20),
+                ability: AbilityId(123),
+                created_tick: 3,
+                expires_tick: 20,
+            },
+        );
+        let kind = Wc3StatusVisualKind::AuraCarrier;
+        snapshot.tick = 2;
+        assert!(!entity_status_visual_is_active(id, &snapshot, 123, kind));
+        snapshot.tick = 19;
+        assert!(snapshot.ability_casts.is_empty());
+        assert!(snapshot.buildings.is_empty());
+        assert!(entity_status_visual_is_active(id, &snapshot, 123, kind));
+        assert!(!entity_status_visual_is_active(id, &snapshot, 124, kind));
+        assert!(!entity_status_visual_is_active(
+            id,
+            &snapshot,
+            123,
+            Wc3StatusVisualKind::Movement
+        ));
+        snapshot.tick = 20;
+        assert!(!entity_status_visual_is_active(id, &snapshot, 123, kind));
+        snapshot.tick = 19;
+        snapshot.aura_carriers.clear();
+        assert!(!entity_status_visual_is_active(id, &snapshot, 123, kind));
     }
 
     #[test]
