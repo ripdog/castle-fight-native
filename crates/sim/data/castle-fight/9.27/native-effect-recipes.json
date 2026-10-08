@@ -58,6 +58,7 @@
     {"source_kind": "ability-effect", "source_key": "A043", "unit_rawcode": "n014", "kind": "frost-nova"},
     {"source_kind": "unit-ability", "source_key": "A046", "unit_rawcode": "n014", "kind": "orb-spell-proc"},
     {"source_kind": "ability-effect", "source_key": "A045", "kind": "entangling-roots"},
-    {"source_kind": "unit-ability", "source_key": "A042", "unit_rawcode": "n014", "kind": "native-aura"}
+    {"source_kind": "unit-ability", "source_key": "A042", "unit_rawcode": "n014", "kind": "native-aura"},
+    {"source_kind": "unit-ability", "source_key": "A02V", "unit_rawcode": "o004", "kind": "critical-strike"}
   ]
 }

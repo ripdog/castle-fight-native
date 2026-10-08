@@ -466,6 +466,7 @@
     {"source_kind": "ability-effect", "source_key": "A084", "implementation": "warcraft-world-freezer-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "ability-effect", "source_key": "A082", "implementation": "warcraft-world-freezer-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "ability-effect", "source_key": "A083", "implementation": "warcraft-world-freezer-v1", "valid_from": "9.27", "valid_through": "9.27"},
-    {"source_kind": "ability-effect", "source_key": "A04H", "implementation": "warcraft-world-freezer-v1", "valid_from": "9.27", "valid_through": "9.27"}
+    {"source_kind": "ability-effect", "source_key": "A04H", "implementation": "warcraft-world-freezer-v1", "valid_from": "9.27", "valid_through": "9.27"},
+    {"source_kind": "unit-ability", "source_key": "A02V", "implementation": "warcraft-critical-strike-v1", "valid_from": "9.27", "valid_through": "9.27"}
   ]
 }

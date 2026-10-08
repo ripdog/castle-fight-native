@@ -1161,6 +1161,19 @@
         "ability": "A042",
         "source": "resolved/object-fields.tsv"
       }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A02V",
+      "unit_rawcode": "o004",
+      "kind": "critical-strike",
+      "chance_per_10k": 2500,
+      "damage_multiplier_per_10k": 20000,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A02V",
+        "source": "resolved/object-fields.tsv"
+      }
     }
   ]
 }

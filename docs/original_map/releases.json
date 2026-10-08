@@ -29,12 +29,12 @@
       },
       "runtime_content": {
         "status": "supported-development-subset",
-        "content_revision": "cf-native-dev-slice-r35",
+        "content_revision": "cf-native-dev-slice-r36",
         "source_revision": "3c7221d369201f43ba54bd2c01d390795371db6f",
         "path": "crates/sim/data/castle-fight/9.27",
-        "native_effect_tuning_sha256": "496329692a514ab21bad9408e13a3f30b4cc13626064a3e23965daf4411babca",
+        "native_effect_tuning_sha256": "5caf9832d2b65a80249befadd0a19e6e4bfffa6d8a77224413b51f3420710987",
         "binding_registry_path": "crates/sim/data/castle-fight/native-effect-bindings.json",
-        "binding_registry_sha256": "cc0221b89a6842faf476bb19d672ceacb9c3fb4d65c98714e303843fda34627d"
+        "binding_registry_sha256": "9862e6c49b59847de41bc9ea87f588facb26371ea1108cc149547f236d120868"
       }
     },
     {
@@ -70,7 +70,7 @@
         "path": null,
         "native_effect_tuning_sha256": null,
         "binding_registry_path": "crates/sim/data/castle-fight/native-effect-bindings.json",
-        "binding_registry_sha256": "cc0221b89a6842faf476bb19d672ceacb9c3fb4d65c98714e303843fda34627d"
+        "binding_registry_sha256": "9862e6c49b59847de41bc9ea87f588facb26371ea1108cc149547f236d120868"
       }
     }
   ]

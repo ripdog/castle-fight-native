@@ -11,3 +11,10 @@ Work proceeds across the retained 9.27/r1 command card, starting at the top left
 - Orc becomes selectable after this first completed unit. Further buildings/upgrades appear only after their full behavior is promoted. No Grunt-specific interaction is left dormant.
 
 Validation: all 472 simulation tests, nine runtime-catalog projection tests, formatting and strict workspace/all-target Clippy passed (`.local-tools/orc-validation/grunt-*.log`).
+
+## Advanced Fighters' Hall / Veteran Grunt
+
+- Entity/source: `h02U` (base `hbla`) upgrades Fighters' Hall and produces `o004` (base `ogru`). All ordinary stats, protected combat overlays, source weapon masks, production, construction, repair, economy and corpse data use the retained catalog.
+- Complete inventory: native Critical Strike `A02V`, projected reproducibly from retained object fields. It applies to enemy air/ground units independently of the ordinary melee weapon's structure permission. No active spell, proxy, hidden ability, resource commitment, delay or scripted AI override.
+- Organic combat sapper/ward; raisable/decaying corpse. Existing source presentation, upgrade/production lifecycle and authoritative passive/RNG transport apply. No persistent shape change.
+- Verification: shared directed-critical tests cover deterministic rolls, misses and target masks; catalog-wide ability closure and production definitions cover the promotion.
