@@ -1,5 +1,7 @@
 # Castle Fight Native
 
+[![Linux and Windows builds](https://github.com/ripdog/castle-fight-native/actions/workflows/build.yml/badge.svg)](https://github.com/ripdog/castle-fight-native/actions/workflows/build.yml)
+
 An in-progress, native Rust reimplementation of **Castle Fight DE**, the Warcraft III custom map. Castle Fight Native uses a deterministic, authoritative simulation and a 3D client built with [Bevy](https://bevyengine.org/). The goal is to reproduce the map's mechanics and Classic Warcraft III presentation without requiring the Warcraft III engine to run the game.
 
 **Status:** active development, **not a complete or stable release**. The currently supported gameplay data targets **Castle Fight DE Beta 9.27 (revision r1)**. The repository also archives a 9.32 map for future compatibility work; 9.32 is not yet a supported native ruleset. Expect incomplete races, spells, and features.
