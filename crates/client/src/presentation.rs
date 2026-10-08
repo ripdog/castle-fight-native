@@ -855,9 +855,11 @@ struct ImportedUnitAnimationController {
     model_root: Entity,
     stand: AnimationNodeIndex,
     walk: Option<AnimationNodeIndex>,
+    walk_reference_speed: Option<f32>,
     attack: Option<UnitAnimationClip>,
     defend_stand: Option<AnimationNodeIndex>,
     defend_walk: Option<AnimationNodeIndex>,
+    defend_walk_reference_speed: Option<f32>,
     defend_attack: Option<UnitAnimationClip>,
     cast: Option<UnitAnimationClip>,
     death: Option<UnitAnimationClip>,
@@ -1787,9 +1789,11 @@ fn setup_imported_unit_animation_players(
                 model_root,
                 stand: animations.stand,
                 walk: animations.walk,
+                walk_reference_speed: animations.walk_reference_speed,
                 attack: animations.attack,
                 defend_stand: animations.defend_stand,
                 defend_walk: animations.defend_walk,
+                defend_walk_reference_speed: animations.defend_walk_reference_speed,
                 defend_attack: animations.defend_attack,
                 cast: animations.cast,
                 death: animations.death,
@@ -2253,6 +2257,7 @@ fn update_imported_unit_animations(
             update_live_imported_builder_animation(
                 &samples,
                 current,
+                locomotion_clock_multiplier(&fixed_time, playback.paused),
                 &mut player,
                 &mut transitions,
                 &mut controller,
@@ -2274,6 +2279,7 @@ fn update_imported_unit_animations(
                     playback.interpolation_alpha(&fixed_time, &samples),
                 ),
                 current,
+                locomotion_clock_multiplier(&fixed_time, playback.paused),
                 &mut player,
                 &mut transitions,
                 &mut controller,
@@ -2332,6 +2338,7 @@ fn update_imported_unit_animations(
 fn update_live_imported_builder_animation(
     samples: &PresentationSamples,
     current: &BuilderSample,
+    clock_multiplier: f32,
     player: &mut AnimationPlayer,
     transitions: &mut AnimationTransitions,
     controller: &mut ImportedUnitAnimationController,
@@ -2357,24 +2364,34 @@ fn update_live_imported_builder_animation(
     } else {
         ImportedUnitAnimationState::Stand
     };
-    if controller.state == desired {
-        return;
-    }
     let animation = match desired {
         ImportedUnitAnimationState::Stand => controller.stand,
         ImportedUnitAnimationState::Walk => controller.walk.unwrap_or(controller.stand),
         _ => unreachable!("builder animation only uses stand/walk locomotion"),
     };
-    transitions
-        .play(player, animation, Duration::from_millis(100))
-        .repeat();
-    controller.state = desired;
+    if controller.state != desired {
+        transitions
+            .play(player, animation, Duration::from_millis(100))
+            .repeat();
+        controller.state = desired;
+    }
+    if desired == ImportedUnitAnimationState::Walk {
+        update_walk_playback_speed(
+            player,
+            animation,
+            (previous.position, current.position),
+            (samples.previous.tick, samples.current.tick),
+            controller.walk_reference_speed,
+            clock_multiplier,
+        );
+    }
 }
 
 fn update_live_imported_unit_animation(
     samples: &PresentationSamples,
     rendered_tick: f64,
     current: &UnitSample,
+    clock_multiplier: f32,
     player: &mut AnimationPlayer,
     transitions: &mut AnimationTransitions,
     controller: &mut ImportedUnitAnimationController,
@@ -2434,9 +2451,6 @@ fn update_live_imported_unit_animation(
     } else {
         ImportedUnitAnimationState::Stand
     };
-    if controller.state == desired && controller.defend_active == defend_active {
-        return;
-    }
     let animation = match desired {
         ImportedUnitAnimationState::Stand if defend_active => {
             controller.defend_stand.unwrap_or(controller.stand)
@@ -2455,18 +2469,102 @@ fn update_live_imported_unit_animation(
             unreachable!("one-shot/death animation is handled before locomotion")
         }
     };
-    let transition = if matches!(
-        controller.state,
-        ImportedUnitAnimationState::Attack | ImportedUnitAnimationState::Cast
-    ) {
-        player.stop_all();
-        Duration::ZERO
+    if controller.state != desired || controller.defend_active != defend_active {
+        let transition = if matches!(
+            controller.state,
+            ImportedUnitAnimationState::Attack | ImportedUnitAnimationState::Cast
+        ) {
+            player.stop_all();
+            Duration::ZERO
+        } else {
+            Duration::from_millis(100)
+        };
+        transitions.play(player, animation, transition).repeat();
+        controller.state = desired;
+        controller.defend_active = defend_active;
+    }
+    if desired == ImportedUnitAnimationState::Walk {
+        let reference_speed = if defend_active && controller.defend_walk == Some(animation) {
+            controller
+                .defend_walk_reference_speed
+                .or(controller.walk_reference_speed)
+        } else {
+            controller.walk_reference_speed
+        };
+        // Defend Stand can substitute for a missing Defend Walk; it is not locomotion.
+        if controller.walk == Some(animation) || controller.defend_walk == Some(animation) {
+            update_walk_playback_speed(
+                player,
+                animation,
+                (previous.position, current.position),
+                action_movement_tick_window(
+                    samples.previous.tick,
+                    samples.current.tick,
+                    previous.status.action_animation,
+                    current.status.action_animation,
+                ),
+                reference_speed,
+                clock_multiplier,
+            );
+        }
+    }
+}
+
+/// Animation time is wall-clock driven, while simulation movement is measured per tick.
+/// Debug simulation speed changes the frequency of those ticks.
+fn locomotion_clock_multiplier(fixed_time: &Time<Fixed>, paused: bool) -> f32 {
+    if paused {
+        0.0
     } else {
-        Duration::from_millis(100)
+        1.0 / (fixed_time.timestep().as_secs_f32() * CASTLE_FIGHT_SIMULATION_HZ as f32)
+    }
+}
+
+fn walk_playback_speed(
+    previous: SimPoint,
+    current: SimPoint,
+    previous_tick: u64,
+    current_tick: u64,
+    reference_speed: Option<f32>,
+    clock_multiplier: f32,
+) -> f32 {
+    if clock_multiplier == 0.0 {
+        return 0.0;
+    }
+    let Some(reference_speed) = reference_speed.filter(|speed| speed.is_finite() && *speed > 0.0)
+    else {
+        return clock_multiplier;
     };
-    transitions.play(player, animation, transition).repeat();
-    controller.state = desired;
-    controller.defend_active = defend_active;
+    let ticks = current_tick.saturating_sub(previous_tick);
+    if ticks == 0 {
+        return clock_multiplier;
+    }
+    // Compute in f64 to avoid overflow for large authoritative coordinates.
+    let dx = f64::from(current.x) - f64::from(previous.x);
+    let dy = f64::from(current.y) - f64::from(previous.y);
+    let world_per_second = dx.hypot(dy) * f64::from(CASTLE_FIGHT_SIMULATION_HZ)
+        / (SUBUNITS_PER_WORLD_UNIT as f64 * ticks as f64);
+    (world_per_second as f32 / reference_speed).clamp(0.05, 4.0) * clock_multiplier
+}
+
+fn update_walk_playback_speed(
+    player: &mut AnimationPlayer,
+    animation: AnimationNodeIndex,
+    positions: (SimPoint, SimPoint),
+    ticks: (u64, u64),
+    reference_speed: Option<f32>,
+    clock_multiplier: f32,
+) {
+    if let Some(active) = player.animation_mut(animation) {
+        active.set_speed(walk_playback_speed(
+            positions.0,
+            positions.1,
+            ticks.0,
+            ticks.1,
+            reference_speed,
+            clock_multiplier,
+        ));
+    }
 }
 
 /// Snapshot ticks name the next simulation tick: interpolation from N to N+1 depicts
@@ -6845,6 +6943,21 @@ fn unit_ground_position(
     sim_point_to_terrain_world(point, terrain) + Vec3::Y * unit_visual_altitude(movement_class)
 }
 
+fn action_movement_tick_window(
+    previous_tick: u64,
+    current_tick: u64,
+    previous_action: Option<ActionAnimationState>,
+    current_action: Option<ActionAnimationState>,
+) -> (u64, u64) {
+    let start = previous_action.map_or(previous_tick, |action| {
+        action.until_tick.clamp(previous_tick, current_tick)
+    });
+    let end = current_action.map_or(current_tick, |action| {
+        action.started_tick.clamp(previous_tick, current_tick)
+    });
+    (start, end)
+}
+
 fn action_movement_interpolation_alpha(
     previous_tick: u64,
     current_tick: u64,
@@ -6855,12 +6968,8 @@ fn action_movement_interpolation_alpha(
     if previous_action.is_none() && current_action.is_none() {
         return alpha;
     }
-    let start = previous_action.map_or(previous_tick, |action| {
-        action.until_tick.clamp(previous_tick, current_tick)
-    });
-    let end = current_action.map_or(current_tick, |action| {
-        action.started_tick.clamp(previous_tick, current_tick)
-    });
+    let (start, end) =
+        action_movement_tick_window(previous_tick, current_tick, previous_action, current_action);
     if end <= start {
         return 1.0;
     }
@@ -7149,9 +7258,11 @@ mod tests {
             model_root: Entity::PLACEHOLDER,
             stand,
             walk: Some(walk),
+            walk_reference_speed: Some(240.0),
             attack: Some(attack),
             defend_stand: None,
             defend_walk: None,
+            defend_walk_reference_speed: None,
             defend_attack: None,
             cast: Some(cast),
             death: None,
@@ -7182,6 +7293,7 @@ mod tests {
                 &samples,
                 12.0,
                 &current,
+                1.0,
                 &mut player,
                 &mut transitions,
                 &mut controller,
@@ -7205,6 +7317,7 @@ mod tests {
             &samples,
             14.0,
             &current,
+            1.0,
             &mut player,
             &mut transitions,
             &mut controller,
@@ -7217,6 +7330,54 @@ mod tests {
             1,
             "walk cannot blend with a paused attack/cast"
         );
+    }
+
+    #[test]
+    fn walk_playback_tracks_authoritative_displacement_and_simulation_clock() {
+        let start = SimPoint::new(0, 0);
+        let moved = SimPoint::new(240 * SUBUNITS_PER_WORLD_UNIT, 0);
+        let playback = |end, ticks, reference, multiplier| {
+            walk_playback_speed(start, end, 20, 20_u64 + ticks, reference, multiplier)
+        };
+        assert!((playback(moved, 30, Some(240.0), 1.0) - 1.0).abs() < 1.0e-5);
+        assert!((playback(moved, 60, Some(240.0), 1.0) - 0.5).abs() < 1.0e-5);
+        assert!((playback(moved, 30, Some(480.0), 1.0) - 0.5).abs() < 1.0e-5);
+        assert!((playback(moved, 30, Some(240.0), 4.0) - 4.0).abs() < 1.0e-5);
+        assert_eq!(playback(moved, 30, Some(240.0), 0.0), 0.0);
+        assert_eq!(playback(moved, 30, None, 1.0), 1.0);
+        assert_eq!(playback(moved, 30, Some(0.0), 1.0), 1.0);
+        assert_eq!(playback(moved, 30, Some(240.0), 2.0), 2.0);
+        assert_eq!(playback(moved, 0, Some(240.0), 1.0), 1.0);
+        assert_eq!(playback(moved, 1, Some(240.0), 1.0), 4.0);
+        assert_eq!(playback(start, 30, Some(240.0), 1.0), 0.05);
+    }
+
+    #[test]
+    fn active_walk_clip_retimes_without_restarting_animation() {
+        let walk = AnimationNodeIndex::new(0);
+        let mut player = AnimationPlayer::default();
+        let mut transitions = AnimationTransitions::new();
+        transitions.play(&mut player, walk, Duration::ZERO).repeat();
+        let step = SimPoint::new(120 * SUBUNITS_PER_WORLD_UNIT, 0);
+        update_walk_playback_speed(
+            &mut player,
+            walk,
+            (SimPoint::new(0, 0), step),
+            (0, 30),
+            Some(240.0),
+            1.0,
+        );
+        assert_eq!(player.animation(walk).unwrap().speed(), 0.5);
+        update_walk_playback_speed(
+            &mut player,
+            walk,
+            (SimPoint::new(0, 0), step),
+            (0, 30),
+            Some(120.0),
+            1.0,
+        );
+        assert_eq!(player.animation(walk).unwrap().speed(), 1.0);
+        assert_eq!(player.playing_animations().count(), 1);
     }
 
     #[test]
@@ -7249,6 +7410,10 @@ mod tests {
             until_tick: 20,
         };
         // Motion only occupies 14..16, even if snapshots bracket both action timelines.
+        assert_eq!(
+            action_movement_tick_window(12, 18, Some(old), Some(new)),
+            (14, 16)
+        );
         for (tick, expected) in [
             (12.0, 0.0),
             (13.0, 0.0),

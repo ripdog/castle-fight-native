@@ -30,6 +30,7 @@ pub struct UnitModelAsset {
     pub attached_visuals: Vec<UnitAttachedVisual>,
     pub particle_emitters: Vec<Wc3ParticleEmitter>,
     pub ribbon_emitters: Vec<Wc3RibbonEmitter>,
+    animation_move_speeds: BTreeMap<String, f32>,
     animations: Option<UnitAnimationSet>,
 }
 
@@ -65,9 +66,11 @@ pub struct UnitAnimationSet {
     pub sequences: UnitAnimationSequenceNames,
     pub stand: AnimationNodeIndex,
     pub walk: Option<AnimationNodeIndex>,
+    pub walk_reference_speed: Option<f32>,
     pub attack: Option<UnitAnimationClip>,
     pub defend_stand: Option<AnimationNodeIndex>,
     pub defend_walk: Option<AnimationNodeIndex>,
+    pub defend_walk_reference_speed: Option<f32>,
     pub defend_attack: Option<UnitAnimationClip>,
     pub cast: Option<UnitAnimationClip>,
     pub death: Option<UnitAnimationClip>,
@@ -97,9 +100,17 @@ struct UnitModelManifestEntry {
     gltf: String,
     overhead_position: Option<[f32; 3]>,
     #[serde(default)]
+    animations: Vec<UnitAnimationMovementManifest>,
+    #[serde(default)]
     particle_emitters: Vec<Wc3ParticleEmitter>,
     #[serde(default)]
     ribbon_emitters: Vec<Wc3RibbonEmitter>,
+}
+
+#[derive(Debug, Deserialize)]
+struct UnitAnimationMovementManifest {
+    name: String,
+    move_speed: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -112,6 +123,7 @@ struct ResolvedUnitAsset {
     attached_visuals: Vec<UnitAttachedVisual>,
     particle_emitters: Vec<Wc3ParticleEmitter>,
     ribbon_emitters: Vec<Wc3RibbonEmitter>,
+    animation_move_speeds: BTreeMap<String, f32>,
 }
 
 impl UnitModelSet {
@@ -151,6 +163,7 @@ impl UnitModelSet {
                             attached_visuals: entry.attached_visuals,
                             particle_emitters: entry.particle_emitters,
                             ribbon_emitters: entry.ribbon_emitters,
+                            animation_move_speeds: entry.animation_move_speeds,
                             animations: None,
                         },
                     );
@@ -230,6 +243,20 @@ impl UnitModelSet {
                 decay_flesh: decay_flesh.as_ref().map(|animation| animation.name.clone()),
                 decay_bone: decay_bone.as_ref().map(|animation| animation.name.clone()),
             };
+            let walk_reference_speed = walk.as_ref().and_then(|animation| {
+                animation_reference_speed(
+                    &model.animation_move_speeds,
+                    &animation.name,
+                    model.scale,
+                )
+            });
+            let defend_walk_reference_speed = defend_walk.as_ref().and_then(|animation| {
+                animation_reference_speed(
+                    &model.animation_move_speeds,
+                    &animation.name,
+                    model.scale,
+                )
+            });
             let mut clips = vec![stand.clip];
             let walk_slot = append_optional_clip(&mut clips, walk.map(|animation| animation.clip));
             let attack_slot =
@@ -263,12 +290,14 @@ impl UnitModelSet {
                 sequences,
                 stand: nodes[0],
                 walk: walk_slot.map(|slot| nodes[slot]),
+                walk_reference_speed,
                 attack: attack_slot.map(|slot| UnitAnimationClip {
                     node: nodes[slot],
                     duration_seconds: durations[slot],
                 }),
                 defend_stand: defend_stand_slot.map(|slot| nodes[slot]),
                 defend_walk: defend_walk_slot.map(|slot| nodes[slot]),
+                defend_walk_reference_speed,
                 defend_attack: defend_attack_slot.map(|slot| UnitAnimationClip {
                     node: nodes[slot],
                     duration_seconds: durations[slot],
@@ -397,6 +426,19 @@ fn animation_score(name: &str, role: AnimationRole) -> Option<u8> {
     }
 }
 
+fn animation_reference_speed(
+    speeds: &BTreeMap<String, f32>,
+    name: &str,
+    scale: f32,
+) -> Option<f32> {
+    // The model root applies the per-unit WC3 object scale, including the distance
+    // covered by each footstep. The unscaled MDX MoveSpeed must scale with it.
+    speeds
+        .get(name)
+        .map(|speed| *speed * scale)
+        .filter(|speed| speed.is_finite() && *speed > 0.0)
+}
+
 fn append_optional_clip(
     clips: &mut Vec<Handle<AnimationClip>>,
     clip: Option<Handle<AnimationClip>>,
@@ -441,6 +483,11 @@ fn resolve_manifest_entries(
                     model.overhead_position,
                     model.particle_emitters,
                     model.ribbon_emitters,
+                    model
+                        .animations
+                        .into_iter()
+                        .map(|animation| (animation.name, animation.move_speed))
+                        .collect::<BTreeMap<_, _>>(),
                 ),
             )
             .is_some()
@@ -463,7 +510,7 @@ fn resolve_manifest_entries(
         }
         let gltf = gltf.replace('\\', "/");
         validate_relative_asset_path(&gltf)?;
-        let (overhead_position, particle_emitters, ribbon_emitters) =
+        let (overhead_position, particle_emitters, ribbon_emitters, animation_move_speeds) =
             model_metadata.get(&gltf).cloned().ok_or_else(|| {
                 format!(
                     "unit {} references missing model manifest {gltf}",
@@ -486,6 +533,7 @@ fn resolve_manifest_entries(
                     attached_visuals: entry.attached_visuals,
                     particle_emitters,
                     ribbon_emitters,
+                    animation_move_speeds,
                 },
             )
             .is_some()
@@ -566,7 +614,12 @@ mod tests {
             "models": [
                 {
                     "gltf": "models/units__human__footman__footman.gltf",
-                    "overhead_position": [0.0, 120.0, 0.0]
+                    "overhead_position": [0.0, 120.0, 0.0],
+                    "animations": [
+                        {"name": "Walk", "move_speed": 240.0},
+                        {"name": "Walk Defend", "move_speed": 120.0},
+                        {"name": "Walk - 2", "move_speed": 0.0}
+                    ]
                 },
                 {
                     "gltf": "models/units__human__gryphonrider__gryphonrider.gltf",
@@ -585,6 +638,16 @@ mod tests {
             "wc3/units/models/units__human__gryphonrider__gryphonrider.gltf"
         );
         assert_eq!(entries[1].rawcode, u32::from_be_bytes(*b"hfoo"));
+        let speeds = &entries[1].animation_move_speeds;
+        assert_eq!(animation_reference_speed(speeds, "Walk", 1.0), Some(240.0));
+        assert_eq!(animation_reference_speed(speeds, "Walk", 1.25), Some(300.0));
+        assert_eq!(
+            animation_reference_speed(speeds, "Walk Defend", 1.0),
+            Some(120.0)
+        );
+        assert_eq!(animation_reference_speed(speeds, "Walk - 2", 1.0), None);
+        assert_eq!(animation_reference_speed(speeds, "Walk - 1", 1.0), None);
+        assert_eq!(animation_reference_speed(speeds, "walk", 1.0), None);
     }
 
     #[test]
