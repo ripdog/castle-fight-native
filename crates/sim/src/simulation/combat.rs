@@ -364,6 +364,17 @@ impl Simulation {
                                 damage_rules: self.combat_rules.damage_rules,
                             },
                         );
+                        if let Some(profile) = pending.poison {
+                            let TargetIndex::Unit(index) = intent.target else {
+                                unreachable!()
+                            };
+                            self.apply_poison(
+                                intent.source_id,
+                                &mut units[index],
+                                profile,
+                                completed_tick,
+                            );
+                        }
                         if let Some(event) = pending.chain_event {
                             self.last_chain_lightnings.push(event);
                         }
@@ -683,6 +694,12 @@ impl Simulation {
         let mut critical_bonus = 0;
         for effect in intent.passive_effects.iter() {
             match effect {
+                PassiveUnitEffect::Poison(profile) => {
+                    assert!(
+                        on_hit.poison.replace(profile).is_none(),
+                        "multiple poison families on one attack"
+                    );
+                }
                 PassiveUnitEffect::CriticalStrike(profile) => {
                     let target_matches = match intent.target {
                         TargetIndex::Unit(index) => profile

@@ -4,6 +4,7 @@ use std::collections::VecDeque;
 mod native_actions;
 pub(crate) use native_actions::{
     EnsnareMissileState, HailstoneState, HealingWaveState, NativeAction, NativeBoltState,
+    PoisonState,
 };
 pub use native_actions::{EnsnareProfile, EnsnareState, HealingWaveProfile, NativeBoltProfile};
 mod automatic_abilities;
@@ -178,6 +179,7 @@ pub struct SecondaryAttackProfile {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct PendingAttackEffects {
+    pub poison: Option<PoisonProfile>,
     pub stun_duration_ticks: u16,
     pub triggered_spell: Option<TriggeredAttackEffect>,
     pub burning_oil: Option<BurningOilEffectProfile>,
@@ -572,6 +574,7 @@ pub(crate) struct ProductionUnitClassifications(pub UnitClassifications);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PassiveUnitEffect {
+    Poison(PoisonProfile),
     DamageThreshold(DamageThresholdProfile),
     KillBerserk(KillBerserkProfile),
     Bash(BashEffectProfile),
@@ -619,6 +622,28 @@ pub struct DamageThresholdState {
     pub color_level: u8,
     pub attack_bonus: i32,
     pub vertex_rgba: Option<[u8; 4]>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PoisonProfile {
+    pub ability: AbilityId,
+    pub damage_per_second: i32,
+    pub movement_percent_delta: i16,
+    pub attack_speed_percent_delta: i16,
+    pub duration_ticks: u16,
+    pub hero_duration_ticks: u16,
+    pub targets: AttackTargetMask,
+    pub stack_damage: bool,
+    pub can_kill: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PoisonStatus {
+    pub profile: PoisonProfile,
+    /// Distinguishes a cleansed family from a new application in the same tick.
+    pub generation: SimId,
+    pub sources: u32,
+    pub expires_tick: u64,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1462,6 +1487,7 @@ pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
 
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusState {
+    pub poison: Option<PoisonStatus>,
     pub damage_threshold: DamageThresholdState,
     pub ensnare: Option<EnsnareState>,
     pub action_animation: Option<ActionAnimationState>,

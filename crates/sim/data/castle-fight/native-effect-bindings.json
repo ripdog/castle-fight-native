@@ -480,6 +480,7 @@
     {"source_kind": "unit-ability", "source_key": "A0AG", "implementation": "warcraft-critical-strike-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Forest Troll Trapper native/proxy/script-granted ability reconciled with retained 9.27 evidence."},
     {"source_kind": "unit-ability", "source_key": "A0FB", "implementation": "warcraft-scripted-automatic-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Forest Troll Trapper native/proxy/script-granted ability reconciled with retained 9.27 evidence."},
     {"source_kind": "ability-effect", "source_key": "A0FC", "implementation": "warcraft-scripted-automatic-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Forest Troll Trapper native/proxy/script-granted ability reconciled with retained 9.27 evidence."},
-    {"source_kind": "ability-effect", "source_key": "A0HR", "implementation": "warcraft-damage-threshold-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Forest Troll Trapper native/proxy/script-granted ability reconciled with retained 9.27 evidence."}
+    {"source_kind": "ability-effect", "source_key": "A0HR", "implementation": "warcraft-damage-threshold-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Forest Troll Trapper native/proxy/script-granted ability reconciled with retained 9.27 evidence."},
+    {"source_kind": "unit-ability", "source_key": "A038", "implementation": "warcraft-poison-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Native Envenomed Spears with per-source damage stacking and nonlethal pulses."}
   ]
 }

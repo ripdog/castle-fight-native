@@ -904,6 +904,8 @@ fn load_visual_assets(
             "Ainf" | "AIrr" | "AHad" | "ACff" | "Afae" => &["armor"],
             // Persistent native fire/carrier buffs use their authoritative DOT entry.
             "Apxf" => &["damage_over_time"],
+            // Native poison can author separate poison/slow buffs or one combined override.
+            "Aven" => &["damage_over_time", "damage_over_time"],
             // Bloodlust-family effects persist for the attack-speed buff lifetime.
             "Ablo" => &["attack_speed"],
             _ => continue,

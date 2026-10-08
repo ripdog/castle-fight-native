@@ -28,6 +28,7 @@ const TUNING_9_27_JSON: &str = include_str!("../data/castle-fight/9.27/native-ef
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum NativeEffectImplementationId {
+    WarcraftPoisonV1,
     WarcraftDamageThresholdV1,
     WarcraftKillBerserkV1,
     WarcraftMarkerOnlyV1,
@@ -66,6 +67,7 @@ impl NativeEffectImplementationId {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::WarcraftPoisonV1 => 68,
             Self::WarcraftDamageThresholdV1 => 67,
             Self::WarcraftKillBerserkV1 => 66,
             Self::WarcraftMarkerOnlyV1 => 0,
@@ -518,6 +520,12 @@ fn native_buff_from_tuning(tuning: &TuningFile, source: u32) -> Option<crate::Na
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum TuningEffect {
+    Poison {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        profile: crate::PoisonProfile,
+    },
     DamageThreshold {
         source_kind: String,
         source_key: String,
@@ -767,7 +775,8 @@ impl TuningEffect {
 
     fn source_kind(&self) -> &str {
         match self {
-            Self::DamageThreshold { source_kind, .. }
+            Self::Poison { source_kind, .. }
+            | Self::DamageThreshold { source_kind, .. }
             | Self::KillBerserk { source_kind, .. }
             | Self::NativeAura { source_kind, .. }
             | Self::Pulverize { source_kind, .. }
@@ -792,7 +801,8 @@ impl TuningEffect {
 
     fn source_key(&self) -> &str {
         match self {
-            Self::DamageThreshold { source_key, .. }
+            Self::Poison { source_key, .. }
+            | Self::DamageThreshold { source_key, .. }
             | Self::KillBerserk { source_key, .. }
             | Self::NativeAura { source_key, .. }
             | Self::Pulverize { source_key, .. }
@@ -817,7 +827,8 @@ impl TuningEffect {
 
     fn unit_rawcode(&self) -> Option<&str> {
         match self {
-            Self::DamageThreshold { unit_rawcode, .. }
+            Self::Poison { unit_rawcode, .. }
+            | Self::DamageThreshold { unit_rawcode, .. }
             | Self::KillBerserk { unit_rawcode, .. }
             | Self::NativeAura { unit_rawcode, .. }
             | Self::Pulverize { unit_rawcode, .. }
@@ -853,6 +864,7 @@ impl TuningEffect {
             Self::Cleave { .. } => NativeEffectImplementationId::WarcraftCleaveV1,
             Self::FrostAttack { .. } => NativeEffectImplementationId::WarcraftFrostAttackV1,
             Self::Pulverize { .. } => NativeEffectImplementationId::WarcraftPulverizeV1,
+            Self::Poison { .. } => NativeEffectImplementationId::WarcraftPoisonV1,
             Self::DamageThreshold { .. } => NativeEffectImplementationId::WarcraftDamageThresholdV1,
             Self::KillBerserk { .. } => NativeEffectImplementationId::WarcraftKillBerserkV1,
             Self::NativeAura { .. } => NativeEffectImplementationId::WarcraftNativeAuraV1,
@@ -878,6 +890,7 @@ impl TuningEffect {
             Self::Cleave { .. } => "cleave",
             Self::FrostAttack { .. } => "frost-attack",
             Self::Pulverize { .. } => "pulverize",
+            Self::Poison { .. } => "poison",
             Self::DamageThreshold { .. } => "damage-threshold",
             Self::KillBerserk { .. } => "kill-berserk",
             Self::NativeAura { .. } => "native-aura",
@@ -1008,7 +1021,8 @@ fn native_unit_mechanics_from_tuning(
                         automatic_spell = Some(candidate);
                     }
                 }
-                TuningEffect::KillBerserk { .. }
+                TuningEffect::Poison { .. }
+                | TuningEffect::KillBerserk { .. }
                 | TuningEffect::NativeAura { .. }
                 | TuningEffect::Pulverize { .. }
                 | TuningEffect::FrostAttack { .. }
@@ -1109,6 +1123,10 @@ pub fn native_effect_implementation_for(
 
 fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUnitEffect {
     match effect {
+        TuningEffect::Poison { profile, .. } => {
+            assert!(profile.damage_per_second >= 0 && profile.duration_ticks > 0);
+            PassiveUnitEffect::Poison(*profile)
+        }
         TuningEffect::DamageThreshold {
             source_key,
             thresholds,

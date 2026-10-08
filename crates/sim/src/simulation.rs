@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 46;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 47;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -4933,6 +4933,7 @@ struct PendingAttackEffectState<'a> {
 
 #[derive(Debug, Clone, Copy, Default)]
 struct PendingAttackEffectResult {
+    poison: Option<crate::PoisonProfile>,
     chain_event: Option<ChainLightningEvent>,
     chain_state: Option<ChainLightningState>,
 }
@@ -5096,6 +5097,12 @@ fn apply_pending_attack_effects(
                 }
             }
         }
+    }
+    if let Some(profile) = effects.poison
+        && unit_health[index] > 0
+        && native_actions::poison::eligible(&units[index], profile)
+    {
+        result.poison = Some(profile);
     }
     result
 }

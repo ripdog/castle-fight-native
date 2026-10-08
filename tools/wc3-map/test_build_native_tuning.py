@@ -9,6 +9,17 @@ import build_runtime_catalog as catalog
 
 
 class NativeTuningProjectionTest(unittest.TestCase):
+    def test_poison_projects_class_mask_short_hero_expiry_and_nonlethal_damage_stacking(self) -> None:
+        recipe = {"kind": "poison", "source_kind": "unit-ability", "source_key": "TEST", "unit_rawcode": "UNIT"}
+        fields = {"targs1": "air,ground,organic", "dataa1": "19", "datab1": "0.15", "datac1": "0.1", "datad1": "1", "dur1": "4", "herodur1": "0.25"}
+        profile = native.project_effect(recipe, fields, None, {}, {})["profile"]
+        self.assertTrue(profile["stack_damage"])
+        self.assertFalse(profile["can_kill"])
+        self.assertEqual((profile["hero_duration_ticks"], profile["movement_percent_delta"], profile["attack_speed_percent_delta"]), (8, -10, -15))
+        for override in ({"datad1": "3"}, {"targs1": "air,ground,mechanical"}):
+            with self.assertRaisesRegex(ValueError, "organic mask"):
+                native.project_effect(recipe, {**fields, **override}, None, {}, {})
+
     def test_damage_controller_preserves_native_grant_vs_failed_level_assignment(self) -> None:
         recipe = {"kind": "damage-threshold", "source_kind": "ability-effect", "source_key": "BONU", "unit_rawcode": "UNIT"}
         handler = f"unit_getTypeId(o8n)=={int.from_bytes(b'UNIT', 'big')} p8n<0.4)then SetUnitAbilityLevel(a,b,3) SetUnitVertexColor(a,77,88,99,255) elseif(p8n<0.6)then SetUnitAbilityLevel(a,b,2) SetUnitVertexColor(a,44,55,66,255) elseif(p8n<0.8)then addProtectedAbility(a,b) SetUnitVertexColor(a,11,22,33,255) end end end end"

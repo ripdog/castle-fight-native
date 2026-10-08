@@ -322,6 +322,15 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(10);
                 hash.write_u64(id.0);
                 match action {
+                    NativeAction::Poison(state) => {
+                        hash.write_u8(4);
+                        hash.write_u64(state.source.0);
+                        hash.write_u64(state.target.0);
+                        hash.write_u64(state.generation.0);
+                        hash_poison_profile(&mut hash, state.profile);
+                        hash.write_u64(state.next_pulse_tick);
+                        hash.write_u64(state.expires_tick);
+                    }
                     NativeAction::Hailstone(state) => {
                         hash.write_u8(2);
                         hash.write_u64(state.source.0);
@@ -1596,6 +1605,14 @@ fn hash_action_timing(hash: &mut Fnv64, timing: ActionTimingProfile) {
 }
 
 fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
+    hash.write_u8(u8::from(status.poison.is_some()));
+    if let Some(poison) = status.poison {
+        hash_poison_profile(hash, poison.profile);
+        hash.write_u64(poison.generation.0);
+        hash.write_u32(poison.sources);
+        hash.write_u64(poison.expires_tick);
+    }
+
     hash.write_u8(u8::from(status.pending_attack.is_some()));
     if let Some(pending) = status.pending_attack {
         hash.write_u64(pending.target.0);
@@ -1854,6 +1871,10 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
     hash.write_u8(u8::try_from(effects.len()).expect("passive effect count fits u8"));
     for effect in effects {
         match effect {
+            PassiveUnitEffect::Poison(profile) => {
+                hash.write_u8(15);
+                hash_poison_profile(hash, profile);
+            }
             PassiveUnitEffect::DamageThreshold(profile) => {
                 hash.write_u8(14);
                 hash.write_u32(profile.ability.0);
@@ -2055,6 +2076,11 @@ fn hash_frost_profile_option(
 }
 
 fn hash_pending_attack_effects(hash: &mut Fnv64, effects: PendingAttackEffects) {
+    hash.write_u8(u8::from(effects.poison.is_some()));
+    if let Some(profile) = effects.poison {
+        hash_poison_profile(hash, profile);
+    }
+
     hash_frost_profile_option(hash, effects.frost);
     hash.write_u16(effects.stun_duration_ticks);
     if let Some(profile) = effects.feedback {
@@ -2585,6 +2611,18 @@ fn hash_world_freezer_state(hash: &mut Fnv64, state: WorldFreezerState) {
         hash.write_u64(orb.fire_sequence);
         hash.write_u64(orb.born_tick);
     }
+}
+
+fn hash_poison_profile(hash: &mut Fnv64, profile: crate::PoisonProfile) {
+    hash.write_u32(profile.ability.0);
+    hash.write_i32(profile.damage_per_second);
+    hash.write_i32(i32::from(profile.movement_percent_delta));
+    hash.write_i32(i32::from(profile.attack_speed_percent_delta));
+    hash.write_u16(profile.duration_ticks);
+    hash.write_u16(profile.hero_duration_ticks);
+    hash.write_u8(profile.targets.bits());
+    hash.write_u8(u8::from(profile.stack_damage));
+    hash.write_u8(u8::from(profile.can_kill));
 }
 
 #[cfg(test)]

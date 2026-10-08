@@ -5287,10 +5287,21 @@ fn status_visual_sources(
     tick: u64,
 ) -> impl Iterator<Item = (u32, Wc3StatusVisualKind)> + '_ {
     status
-        .ensnare
-        .filter(move |net| tick < net.expires_tick)
-        .map(|net| (net.profile.ability.0, Wc3StatusVisualKind::Movement))
+        .poison
+        .filter(move |poison| tick < poison.expires_tick)
+        .map(|poison| {
+            (
+                poison.profile.ability.0,
+                Wc3StatusVisualKind::DamageOverTime,
+            )
+        })
         .into_iter()
+        .chain(
+            status
+                .ensnare
+                .filter(move |net| tick < net.expires_tick)
+                .map(|net| (net.profile.ability.0, Wc3StatusVisualKind::Movement)),
+        )
         .chain(
             status.movement_modifiers[..usize::from(status.movement_modifier_count)]
                 .iter()
@@ -5372,6 +5383,12 @@ fn status_visual_is_active(
                 .any(|modifier| modifier.id.0 == ability_rawcode && modifier.expires_tick > tick)
         }
         Wc3StatusVisualKind::DamageOverTime => {
+            if status.poison.is_some_and(|poison| {
+                poison.profile.ability.0 == ability_rawcode && tick < poison.expires_tick
+            }) {
+                return true;
+            }
+
             let count = usize::from(status.damage_over_time_count);
             status.damage_over_time[..count]
                 .iter()

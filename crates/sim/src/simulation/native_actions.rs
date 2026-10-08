@@ -5,6 +5,7 @@ use crate::components::{
 };
 
 pub(super) mod ensnare;
+pub(super) mod poison;
 
 // Warcraft's native Healing Wave bounce interval is 250 ms. Derive each deadline
 // from the original cast, using ceiling at 30 Hz, rather than accumulating rounded hops.
@@ -120,6 +121,7 @@ impl Simulation {
         actions.sort_unstable_by_key(|(id, _, _)| *id);
         for (_, entity, action) in actions {
             match action {
+                NativeAction::Poison(state) => self.advance_poison(entity, state, units),
                 NativeAction::Ensnare(state) => self.advance_ensnare(entity, state, units),
                 // Splash attack proxies resolve in the shared post-movement impact phase.
                 NativeAction::Hailstone(_) => {}
@@ -347,6 +349,7 @@ pub(super) fn resolve_native_building_damage_over_time(
 }
 
 pub(super) fn cleanse_native_status(status: &mut StatusState) {
+    status.poison = None;
     status.stunned_until_tick = 0;
     status.native_stun_until_tick = 0;
     status.native_stun_ability = None;

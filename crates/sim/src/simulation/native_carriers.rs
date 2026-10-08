@@ -445,6 +445,7 @@ fn cleanse_native_effects(
     status.native_stun_until_tick = 0;
     status.native_stun_ability = None;
     status.rooted_until_tick = 0;
+    status.poison = None;
     status.ensnare = None;
     status.frozen_until_tick = 0;
     status.frozen_ability = None;
@@ -476,6 +477,7 @@ fn cleanse_native_effects(
     status.damage_over_time_count = 0;
     passive_baseline.retain(|effect| {
         let ability = match effect {
+            PassiveUnitEffect::Poison(p) => Some(p.ability),
             PassiveUnitEffect::KillBerserk(p) => Some(p.ability),
             PassiveUnitEffect::DamageThreshold(p) => Some(p.ability),
             PassiveUnitEffect::Bash(p) => Some(p.ability),

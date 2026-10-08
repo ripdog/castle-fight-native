@@ -334,6 +334,17 @@ impl Simulation {
                                     damage_rules: self.combat_rules.damage_rules,
                                 },
                             );
+                            if let Some(profile) = pending.poison {
+                                let TargetIndex::Unit(index) = target else {
+                                    unreachable!()
+                                };
+                                self.apply_poison(
+                                    snapshot.projectile.source,
+                                    &mut units[index],
+                                    profile,
+                                    completed_tick,
+                                );
+                            }
                             if let Some(event) = pending.chain_event {
                                 self.last_chain_lightnings.push(event);
                             }

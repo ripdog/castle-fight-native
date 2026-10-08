@@ -371,7 +371,7 @@ impl Simulation {
         } else {
             SpatialPartition::global(enemy_team)
         };
-        let mut best: Option<(u8, u64, SimId)> = None;
+        let mut best: Option<(u8, u8, u64, SimId)> = None;
         grid.for_each_candidate(
             partition,
             source.position,
@@ -395,7 +395,13 @@ impl Simulation {
                 ) {
                     return;
                 }
-                let key = (0, distance_sq, candidate.id);
+                let poisoned = source.passive_effects.iter().any(|effect| {
+                    matches!(effect, PassiveUnitEffect::Poison(profile)
+                        if native_actions::poison::eligible(candidate, profile)
+                        && candidate.status.poison.is_some_and(|status| status.profile.ability == profile.ability
+                            && self.next_tick < status.expires_tick))
+                });
+                let key = (0, u8::from(poisoned), distance_sq, candidate.id);
                 if best.is_none_or(|current| key < current) {
                     best = Some(key);
                 }
@@ -403,7 +409,7 @@ impl Simulation {
         );
 
         if !source.attack_targets.can_target_buildings() {
-            return best.map(|(_, _, id)| id);
+            return best.map(|(_, _, _, id)| id);
         }
         for building in buildings {
             if source.team == building.team
@@ -425,12 +431,12 @@ impl Simulation {
             ) {
                 continue;
             }
-            let key = (1, distance_sq, building.id);
+            let key = (1, 0, distance_sq, building.id);
             if best.is_none_or(|current| key < current) {
                 best = Some(key);
             }
         }
-        best.map(|(_, _, id)| id)
+        best.map(|(_, _, _, id)| id)
     }
 
     fn recent_retaliation_target(

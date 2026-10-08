@@ -99,8 +99,19 @@ pub(crate) struct HailstoneState {
 
 #[derive(Component, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum NativeAction {
+    Poison(PoisonState),
     Ensnare(EnsnareMissileState),
     HealingWave(HealingWaveState),
     Bolt(NativeBoltState),
     Hailstone(HailstoneState),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct PoisonState {
+    pub source: SimId,
+    pub target: SimId,
+    pub generation: SimId,
+    pub profile: PoisonProfile,
+    pub next_pulse_tick: u64,
+    pub expires_tick: u64,
 }

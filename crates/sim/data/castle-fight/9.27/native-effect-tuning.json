@@ -1578,6 +1578,28 @@
         "handler": "DamageListener_addListener_TrollBlood_onEvent_addListener_TrollBlood",
         "phase": "pre-health-commit-reduced-damage-event"
       }
+    },
+    {
+      "kind": "poison",
+      "source_kind": "unit-ability",
+      "source_key": "A038",
+      "unit_rawcode": "o009",
+      "profile": {
+        "ability": 1093677880,
+        "damage_per_second": 12,
+        "movement_percent_delta": -25,
+        "attack_speed_percent_delta": -25,
+        "duration_ticks": 90,
+        "hero_duration_ticks": 23,
+        "targets": 3,
+        "stack_damage": true,
+        "can_kill": false
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "Aven",
+        "stacking_flags": 1
+      }
     }
   ],
   "buff_families": [

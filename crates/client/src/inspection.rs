@@ -2161,6 +2161,24 @@ fn active_effect_badges(
             beneficial: true,
         });
     }
+    if let Some(poison) = unit
+        .status
+        .poison
+        .filter(|poison| tick < poison.expires_tick)
+    {
+        effects.push(ActiveEffectBadgeData {
+            icon: UiIconKey::StatusEffect {
+                ability: poison.profile.ability.0,
+                role: UiStatusIconRole::Primary,
+            },
+            description: format!(
+                "Poison: {} damage/s ({}s)",
+                i64::from(poison.profile.damage_per_second) * i64::from(poison.sources),
+                remaining(poison.expires_tick)
+            ),
+            beneficial: false,
+        });
+    }
     if let Some(net) = unit.status.ensnare.filter(|net| tick < net.expires_tick) {
         effects.push(ActiveEffectBadgeData {
             icon: UiIconKey::StatusEffect {

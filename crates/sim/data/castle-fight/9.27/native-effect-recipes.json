@@ -71,6 +71,7 @@
     {"source_kind": "unit-ability", "source_key": "A0AG", "unit_rawcode": "n02G", "kind": "critical-strike"},
     {"source_kind": "unit-ability", "source_key": "A0FB", "unit_rawcode": "n02G", "kind": "ensnare"},
     {"source_kind": "ability-effect", "source_key": "A0FC", "unit_rawcode": "n02G", "kind": "ensnare"},
-    {"source_kind": "ability-effect", "source_key": "A0HR", "unit_rawcode": "n02G", "kind": "damage-threshold"}
+    {"source_kind": "ability-effect", "source_key": "A0HR", "unit_rawcode": "n02G", "kind": "damage-threshold"},
+    {"kind": "poison", "source_kind": "unit-ability", "source_key": "A038", "unit_rawcode": "o009"}
   ]
 }
