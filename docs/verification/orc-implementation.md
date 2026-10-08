@@ -18,3 +18,10 @@ Validation: all 472 simulation tests, nine runtime-catalog projection tests, for
 - Complete inventory: native Critical Strike `A02V`, projected reproducibly from retained object fields. It applies to enemy air/ground units independently of the ordinary melee weapon's structure permission. No active spell, proxy, hidden ability, resource commitment, delay or scripted AI override.
 - Organic combat sapper/ward; raisable/decaying corpse. Existing source presentation, upgrade/production lifecycle and authoritative passive/RNG transport apply. No persistent shape change.
 - Verification: shared directed-critical tests cover deterministic rolls, misses and target masks; catalog-wide ability closure and production definitions cover the promotion.
+
+## Superior Fighters' Hall / Axemaster
+
+- Entity/source: `h031` (base `hbla`) upgrades Advanced Fighters' Hall and produces `o005` (base `ogru`). Retained ordinary/protected combat data, construction, training, repair, economy, organic sapper/ward classification and raisable/decaying corpse all consume the catalog.
+- Complete inventory: native critical `A02W` and Pulverize `A02P`; no active cast, proxy, hidden ability, script delay, resource cost or special AI. All parameters are generated from retained fields.
+- Critical modifies landed directed attacks on eligible units; Pulverize rolls independently at released attacks, uses the caster center and its separate ground-unit mask, and permits spell immunity. Ordinary structure targeting expands neither passive's unit-only targets. Its identical full/half radii leave no half-damage annulus; the shared primitive preserves that source geometry.
+- Verification: shared critical and Pulverize synthetic fixtures prove center, falloff, miss independence, masks, immunity, deterministic RNG and wire continuation; catalog-wide closure covers both abilities and the full upgrade chain. No new persistent shape.

@@ -1174,6 +1174,34 @@
         "ability": "A02V",
         "source": "resolved/object-fields.tsv"
       }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A02W",
+      "unit_rawcode": "o005",
+      "kind": "critical-strike",
+      "chance_per_10k": 3000,
+      "damage_multiplier_per_10k": 30000,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A02W",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A02P",
+      "unit_rawcode": "o005",
+      "kind": "pulverize",
+      "chance_per_10k": 3500,
+      "damage": 130,
+      "full_radius_world": 200,
+      "half_radius_world": 200,
+      "targets": "ground-units",
+      "provenance": {
+        "ability": "A02P",
+        "source": "resolved/object-fields.tsv"
+      }
     }
   ]
 }
