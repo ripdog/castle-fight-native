@@ -133,6 +133,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    LegendaryTotem = 0x2100_0013 => b"h02O",
     CeremonialTotem = 0x2100_0011 => b"h02R",
     AntiAirTower = 0x2100_0012 => b"o000",
     SerpentRock = 0x2100_0010 => b"h02N",
