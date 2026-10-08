@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r34";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r35";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -347,6 +347,7 @@ impl CastleFightContentBundle {
                         CastleFightBuilderRace::Human,
                         CastleFightBuilderRace::Elf,
                         CastleFightBuilderRace::Northern,
+                        CastleFightBuilderRace::Orc,
                     ]
                 } else {
                     &[CastleFightBuilderRace::Human]

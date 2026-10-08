@@ -66,6 +66,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
     Wandigoo = 0x1000_001e => b"n012",
     IceTrollWitchDoctor = 0x1000_001d => b"o00A",
     AngryHrimthrusa = 0x1000_001c => b"n02I",
+    Grunt = 0x1000_0022 => b"o002",
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
@@ -102,6 +103,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
     IceClaws = 0x2000_001e => b"h03T",
     IceTrollVoodooLounge = 0x2000_001d => b"h03J",
     ModernIgloo = 0x2000_001c => b"h06L",
+    FightersHall = 0x2000_0022 => b"h029",
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
