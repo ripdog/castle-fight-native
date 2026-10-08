@@ -5,6 +5,7 @@ use crate::components::{
 };
 
 mod buff_transfer;
+mod burning_oil;
 mod damage_threshold;
 mod ensnare;
 mod kill_berserk;

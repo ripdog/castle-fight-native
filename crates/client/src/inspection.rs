@@ -3361,6 +3361,7 @@ mod tests {
 
     fn empty_samples() -> PresentationSamples {
         let snapshot = PresentationSnapshot {
+            burning_oil: BTreeMap::new(),
             projectile_positions: Default::default(),
             navigation_cell_size: SUBUNITS_PER_WORLD_UNIT,
             fog: None,

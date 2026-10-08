@@ -77,6 +77,8 @@ struct NativeBuffAttachment {
 #[derive(Deserialize)]
 struct NativeBuffVisual {
     rawcode: String,
+    #[serde(default)]
+    effect_art: Vec<String>,
     target_art: Vec<String>,
     target_attachment_count: Option<u8>,
     target_attachments: Vec<NativeBuffAttachment>,
@@ -637,6 +639,22 @@ fn load_visual_assets(
             );
         }
         if kind == "abilities" {
+            if field == "aeff" && row.get(level).unwrap_or_default() == "1" {
+                for effect in parse_json_comma_list(row.get(recovered).unwrap_or_default()) {
+                    if let Some(effect) = buff_visuals.get(effect.as_str()) {
+                        for path in &effect.effect_art {
+                            if is_renderable_model_path(path) {
+                                assets.insert((
+                                    "abilities".to_owned(),
+                                    rawcode.to_owned(),
+                                    "effect".to_owned(),
+                                    path.clone(),
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
             if matches!(row.get(value_type), Some("abilCode" | "abilList")) {
                 ability_references
                     .entry(rawcode.to_owned())
@@ -828,6 +846,10 @@ fn load_visual_assets(
                     kind == "abilities"
                         && closure.contains(rawcode.as_str())
                         && (role == "missile"
+                            || (role == "effect"
+                                && ability_base_rawcodes
+                                    .get(rawcode)
+                                    .is_some_and(|base| base == "Abof"))
                             || (role == "target" && native_lightning_rawcodes.contains(rawcode)))
                 })
                 .map(|(kind, rawcode, role, path)| {
@@ -906,6 +928,7 @@ fn load_visual_assets(
             "Apxf" => &["damage_over_time"],
             // Native poison can author separate poison/slow buffs or one combined override.
             "Aven" => &["damage_over_time", "damage_over_time"],
+            "Abof" => &["damage_over_time"],
             // Bloodlust-family effects persist for the attack-speed buff lifetime.
             "Ablo" => &["attack_speed"],
             _ => continue,

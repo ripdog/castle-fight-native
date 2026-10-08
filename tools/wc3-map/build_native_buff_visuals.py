@@ -40,7 +40,7 @@ def sections(text):
         elif current is not None and "=" in line and not line.startswith("//"):
             key, value = line.split("=", 1)
             key = key.lower()
-            if key != "targetart" and not key.startswith("targetattach"):
+            if key not in {"targetart", "effectart"} and not key.startswith("targetattach"):
                 continue  # Unrelated native icon fields can intentionally repeat.
             if key in current and current[key] != value:
                 raise ValueError(f"conflicting native skin field {key}")
@@ -59,14 +59,14 @@ def project(skin, rows):
     references = set()
     buffs = {}
     for row in rows:
-        if row["category"] == "abilities" and row["field_id"] == "abuf":
+        if row["category"] == "abilities" and row["field_id"] in {"abuf", "aeff"}:
             references.update(string_list(json.loads(row["recovered_value_json"])))
         elif row["category"] == "buffs":
             buff = buffs.setdefault(row["rawcode"], {"base": row["base_rawcode"], "fields": {}})
             if buff["base"] != row["base_rawcode"]:
                 raise ValueError("conflicting buff base identity")
-            if row["field_id"].startswith("fta"):
-                if row["field_id"] not in {"ftat", "ftac", *(f"fta{i}" for i in range(6))}:
+            if row["field_id"].startswith("fta") or row["field_id"] == "feat":
+                if row["field_id"] not in {"ftat", "ftac", "feat", *(f"fta{i}" for i in range(6))}:
                     raise ValueError("unsupported buff attachment field")
                 value = json.loads(row["recovered_value_json"])
                 previous = buff["fields"].get(row["field_id"])
@@ -96,7 +96,11 @@ def project(skin, rows):
             if isinstance(count, bool) or str(count) not in {str(n) for n in range(7)}:
                 raise ValueError("unsupported buff attachment count")
             count = int(count)
-        result.append({"rawcode": rawcode, "base_rawcode": base,
+        effect_art = fields.get("feat", inherited.get("effectart"))
+        effect = {} if effect_art is None else {
+            "effect_art": string_list(effect_art),
+            "effect_art_source": "resolved" if "feat" in fields else "native"}
+        result.append({"rawcode": rawcode, "base_rawcode": base, **effect,
                        "native_section": base if base in native else None,
                        "target_art": string_list(art),
                        "target_art_source": "resolved" if "ftat" in fields else

@@ -199,6 +199,7 @@ pub struct PresentationSnapshot {
     pub buildings: BTreeMap<SimId, BuildingSample>,
     pub corpses: BTreeMap<SimId, CorpseView>,
     pub projectiles: BTreeMap<SimId, ProjectileView>,
+    pub burning_oil: BTreeMap<SimId, castle_fight_sim::BurningOilView>,
     pub attacks: Vec<AttackEvent>,
     pub ability_casts: Vec<AbilityCastEvent>,
     pub shrine_revivals: Vec<castle_fight_sim::ShrineRevivalEvent>,
@@ -427,6 +428,11 @@ impl PresentationSnapshot {
             buildings,
             corpses,
             projectiles,
+            burning_oil: simulation
+                .burning_oil_zones()
+                .into_iter()
+                .map(|zone| (zone.id, zone))
+                .collect(),
             attacks: simulation.attacks_last_tick().to_vec(),
             ability_casts: simulation.ability_casts_last_tick().to_vec(),
             shrine_revivals: simulation.shrine_revivals_last_tick().to_vec(),
@@ -646,6 +652,17 @@ impl PresentationSnapshot {
         });
         self.projectile_positions
             .retain(|id, _| self.projectiles.contains_key(id));
+        self.burning_oil
+            .retain(|_, zone| fog.is_visible(team, zone.center));
+        for zone in self.burning_oil.values_mut() {
+            zone.recipients.retain(|id| {
+                self.units.contains_key(id)
+                    || self
+                        .buildings
+                        .get(id)
+                        .is_some_and(|building| !building.remembered)
+            });
+        }
         let seen = |id: &SimId| {
             self.units.contains_key(id)
                 || self.builders.contains_key(id)

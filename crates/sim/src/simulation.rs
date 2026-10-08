@@ -429,6 +429,14 @@ pub struct ProjectileView {
     pub kind: ProjectileViewKind,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BurningOilView {
+    pub id: SimId,
+    pub ability: AbilityId,
+    pub center: SimPoint,
+    pub recipients: Vec<SimId>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CorpseView {
     pub vertex_rgba: Option<[u8; 4]>,
@@ -514,6 +522,7 @@ pub enum BuilderOrderView {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BuildingView {
     pub id: SimId,
+    pub classifications: UnitClassifications,
     pub content: Option<ContentIdentity>,
     pub owner: Option<PlayerId>,
     pub team: Team,
@@ -2277,6 +2286,71 @@ impl Simulation {
             .collect();
         corpses.sort_unstable_by_key(|corpse| corpse.id);
         corpses
+    }
+
+    #[must_use]
+    pub fn burning_oil_zones(&self) -> Vec<BurningOilView> {
+        if !self
+            .world
+            .iter_entities()
+            .any(|entity| entity.contains::<BurningOilZone>())
+        {
+            return Vec::new();
+        }
+        let units = self.units();
+        let buildings = self.buildings();
+        let mut zones: Vec<_> = self
+            .world
+            .iter_entities()
+            .filter_map(|entity| {
+                let zone = entity.get::<BurningOilZone>()?;
+                let radius_sq = square_i32(zone.profile.radius);
+                let mut recipients: Vec<_> = units
+                    .iter()
+                    .filter(|unit| {
+                        zone.profile.target_ground_units
+                            && unit.health > 0
+                            && unit.team != zone.source_team
+                            && !unit.classifications.spell_immune
+                            && !unit.classifications.invulnerable
+                            && (unit.movement_class == MovementClass::Ground
+                                || unit
+                                    .status
+                                    .ensnare
+                                    .is_some_and(|net| self.tick() < net.expires_tick))
+                            && zone.center.distance_sq(unit.position) <= radius_sq
+                    })
+                    .map(|unit| unit.id)
+                    .collect();
+                recipients.extend(
+                    buildings
+                        .iter()
+                        .filter(|building| {
+                            zone.profile.target_buildings
+                                && !self.debug_buildings_invulnerable
+                                && building.health > 0
+                                && building.team != zone.source_team
+                                && !building.classifications.spell_immune
+                                && !building.classifications.invulnerable
+                                && point_to_footprint_distance_sq(
+                                    zone.center,
+                                    building.footprint,
+                                    self.config.navigation_cell_size,
+                                ) <= radius_sq
+                        })
+                        .map(|building| building.id),
+                );
+                recipients.sort_unstable();
+                Some(BurningOilView {
+                    id: *entity.get::<SimId>()?,
+                    ability: zone.profile.ability,
+                    center: zone.center,
+                    recipients,
+                })
+            })
+            .collect();
+        zones.sort_unstable_by_key(|zone| zone.id);
+        zones
     }
 
     #[must_use]
@@ -4727,6 +4801,10 @@ fn building_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<B
     let ability_state = entity.get::<AutomaticAbilityState>().copied();
     let construction = entity.get::<BuildingConstruction>().copied();
     Some(BuildingView {
+        classifications: entity
+            .get::<UnitClassifications>()
+            .copied()
+            .unwrap_or_default(),
         id: *entity.get::<SimId>()?,
         content: entity.get::<ContentIdentity>().copied(),
         owner: entity.get::<Owner>().map(|owner| owner.0),

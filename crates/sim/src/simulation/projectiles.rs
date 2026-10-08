@@ -898,7 +898,7 @@ impl Simulation {
                     zone.profile.total_duration_millis,
                 )))
                 .expect("Burning Oil expiry tick overflow");
-            if completed_tick >= expires_tick {
+            if completed_tick > expires_tick {
                 expired.push(entity);
                 continue;
             }
@@ -918,6 +918,8 @@ impl Simulation {
                     for unit in units.iter_mut() {
                         if unit.health <= 0
                             || unit.team == zone.source_team
+                            || unit.classifications.invulnerable
+                            || unit.classifications.spell_immune
                             || unit.target_movement_class() != MovementClass::Ground
                             || zone.center.distance_sq(unit.position) > radius_sq
                         {
@@ -937,7 +939,11 @@ impl Simulation {
                 }
                 if zone.profile.target_buildings && !self.debug_buildings_invulnerable {
                     for building in buildings.iter_mut() {
-                        if building.health <= 0 || building.team == zone.source_team {
+                        if building.health <= 0
+                            || building.team == zone.source_team
+                            || building.classifications.invulnerable
+                            || building.classifications.spell_immune
+                        {
                             continue;
                         }
                         if point_to_footprint_distance_sq(
@@ -966,7 +972,11 @@ impl Simulation {
                     .checked_add(1)
                     .expect("Burning Oil pulse index overflow");
             }
-            updates.push((entity, zone));
+            if completed_tick >= expires_tick {
+                expired.push(entity);
+            } else {
+                updates.push((entity, zone));
+            }
         }
 
         for entity in expired {

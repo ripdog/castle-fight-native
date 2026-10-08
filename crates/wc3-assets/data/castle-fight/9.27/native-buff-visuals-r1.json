@@ -204,6 +204,10 @@
     },
     {
       "base_rawcode": "BOsf",
+      "effect_art": [
+        "Objects\\Spawnmodels\\Naga\\NagaDeath\\NagaDeath.mdl"
+      ],
+      "effect_art_source": "resolved",
       "native_section": "BOsf",
       "rawcode": "B00A",
       "target_art": [],
@@ -904,6 +908,10 @@
     },
     {
       "base_rawcode": "BUim",
+      "effect_art": [
+        "Abilities\\Spells\\Undead\\Impale\\ImpaleHitTarget.mdl"
+      ],
+      "effect_art_source": "resolved",
       "native_section": "BUim",
       "rawcode": "B01S",
       "target_art": [
@@ -1012,6 +1020,10 @@
     },
     {
       "base_rawcode": "BOsf",
+      "effect_art": [
+        "Objects\\Spawnmodels\\NightElf\\EntBirthTarget\\EntBirthTarget.mdl"
+      ],
+      "effect_art_source": "resolved",
       "native_section": "BOsf",
       "rawcode": "B021",
       "target_art": [],
@@ -1700,6 +1712,10 @@
     },
     {
       "base_rawcode": "BOhx",
+      "effect_art": [
+        "Abilities\\Spells\\Human\\Polymorph\\PolyMorphDoneGround.mdl"
+      ],
+      "effect_art_source": "native",
       "native_section": "BOhx",
       "rawcode": "BOhx",
       "target_art": [],
@@ -1718,6 +1734,10 @@
     },
     {
       "base_rawcode": "BOsf",
+      "effect_art": [
+        "Abilities\\Spells\\Orc\\FeralSpirit\\feralspiritdone.mdl"
+      ],
+      "effect_art_source": "native",
       "native_section": "BOsf",
       "rawcode": "BOsf",
       "target_art": [],
@@ -2471,6 +2491,143 @@
           "source": "resolved"
         }
       ]
+    },
+    {
+      "base_rawcode": "XErf",
+      "effect_art": [
+        "Abilities\\Spells\\Demon\\RainOfFire\\RainOfFireTarget.mdl"
+      ],
+      "effect_art_source": "native",
+      "native_section": "XErf",
+      "rawcode": "XErf",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "XEsf",
+      "effect_art": [
+        "Abilities\\Spells\\NightElf\\Starfall\\StarfallCaster.mdl"
+      ],
+      "effect_art_source": "native",
+      "native_section": "XEsf",
+      "rawcode": "XEsf",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "XEtq",
+      "effect_art": [
+        "Abilities\\Spells\\NightElf\\Tranquility\\Tranquility.mdl"
+      ],
+      "effect_art_source": "native",
+      "native_section": "XEtq",
+      "rawcode": "XEtq",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "XHbz",
+      "effect_art": [
+        "Abilities\\Spells\\Human\\Blizzard\\BlizzardTarget.mdl"
+      ],
+      "effect_art_source": "native",
+      "native_section": "XHbz",
+      "rawcode": "XHbz",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "XHfs",
+      "effect_art": [
+        "Abilities\\Spells\\Human\\FlameStrike\\FlameStrikeEmbers.mdl"
+      ],
+      "effect_art_source": "native",
+      "native_section": "XHfs",
+      "rawcode": "XHfs",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "XNhs",
+      "native_section": "XNhs",
+      "rawcode": "XNhs",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "XNmo",
+      "effect_art": [
+        "Abilities\\Spells\\Other\\Monsoon\\MonsoonRain.mdl"
+      ],
+      "effect_art_source": "native",
+      "native_section": "XNmo",
+      "rawcode": "XNmo",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "XUdd",
+      "effect_art": [
+        "Abilities\\Spells\\Undead\\DeathandDecay\\DeathandDecayTarget.mdl"
+      ],
+      "effect_art_source": "native",
+      "native_section": "XUdd",
+      "rawcode": "XUdd",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Xbdt",
+      "effect_art": [],
+      "effect_art_source": "resolved",
+      "native_section": "Xbdt",
+      "rawcode": "Xbdt",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Xbof",
+      "effect_art": [
+        "Abilities\\Spells\\Human\\FlameStrike\\FlameStrikeEmbers.mdl"
+      ],
+      "effect_art_source": "native",
+      "native_section": "Xbof",
+      "rawcode": "Xbof",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "Xclf",
+      "effect_art": [
+        "Abilities\\Spells\\Human\\CloudOfFog\\CloudOfFog.mdl"
+      ],
+      "effect_art_source": "native",
+      "native_section": "Xclf",
+      "rawcode": "Xclf",
+      "target_art": [],
+      "target_art_source": "absent",
+      "target_attachment_count": null,
+      "target_attachments": []
     }
   ],
   "extraction_git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",

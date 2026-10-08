@@ -588,6 +588,7 @@ struct RenderMap {
     buildings: HashMap<SimId, PresentedEntry>,
     corpses: HashMap<SimId, Entity>,
     projectiles: HashMap<SimId, PresentedProjectile>,
+    burning_oil: HashMap<(SimId, usize), PresentedStatusEffect>,
     stun_effects: HashMap<SimId, Entity>,
     status_effects: HashMap<StatusEffectKey, PresentedStatusEffect>,
 }
@@ -4490,6 +4491,67 @@ fn sync_render_entities(
         );
     }
 
+    let stale_zones: Vec<_> = render_map
+        .burning_oil
+        .keys()
+        .copied()
+        .filter(|(id, _)| !samples.current.burning_oil.contains_key(id))
+        .collect();
+    for key in stale_zones {
+        if let Some(effect) = render_map.burning_oil.remove(&key) {
+            release_status_visual(
+                &mut commands,
+                &mut effect_pool,
+                effect,
+                world_instances.contains(effect.entity),
+            );
+        }
+    }
+    for zone in samples.current.burning_oil.values() {
+        for (slot, visual) in wc3_visuals.ability(zone.ability.0).iter().enumerate() {
+            render_map
+                .burning_oil
+                .entry((zone.id, slot))
+                .or_insert_with(|| {
+                    let (entity, pooled_scene) = spawn_or_reuse_wc3_visual(
+                        &mut commands,
+                        &mut effect_pool,
+                        &visual.model,
+                        Transform::from_translation(sim_point_to_terrain_world(
+                            zone.center,
+                            &terrain,
+                        )),
+                        !legacy_effect_pooling,
+                        Wc3EffectPlayback::Looping,
+                    );
+                    PresentedStatusEffect {
+                        entity,
+                        attached_to_model: false,
+                        pooled_scene,
+                    }
+                });
+        }
+        for &recipient in &zone.recipients {
+            if let Some(position) =
+                entity_render_position(recipient, &samples, &metrics, &terrain, 1.0)
+            {
+                let root = render_map
+                    .units
+                    .get(&recipient)
+                    .or_else(|| render_map.buildings.get(&recipient))
+                    .and_then(|entry| entry.model_root);
+                spawn_status_visuals(
+                    &mut commands,
+                    &mut render_map,
+                    (&wc3_visuals, &mut effect_pool, !legacy_effect_pooling),
+                    (recipient, position, root),
+                    zone.ability.0,
+                    Wc3StatusVisualKind::DamageOverTime,
+                );
+            }
+        }
+    }
+
     let stale_stun_effects: Vec<_> = render_map
         .stun_effects
         .keys()
@@ -5302,6 +5364,13 @@ fn entity_status_visual_is_active(
     ability_rawcode: u32,
     kind: Wc3StatusVisualKind,
 ) -> bool {
+    if kind == Wc3StatusVisualKind::DamageOverTime
+        && snapshot.burning_oil.values().any(|zone| {
+            zone.ability.0 == ability_rawcode && zone.recipients.binary_search(&target).is_ok()
+        })
+    {
+        return true;
+    }
     if let Some(unit) = snapshot.units.get(&target) {
         return unit.health > 0
             && ((kind == Wc3StatusVisualKind::Armor
@@ -8194,6 +8263,49 @@ mod tests {
         assert!(!entity_status_visual_is_active(
             id, &snapshot, ability, kind
         ));
+    }
+
+    #[test]
+    fn ground_fire_status_follows_the_live_zone_recipient_projection() {
+        let simulation =
+            castle_fight_sim::Simulation::new(castle_fight_sim::SimulationConfig::default(), 1);
+        let mut snapshot = crate::bridge::PresentationSnapshot::capture(&simulation);
+        let target = SimId(7);
+        let zone = SimId(8);
+        let ability = 95;
+        snapshot.burning_oil.insert(
+            zone,
+            castle_fight_sim::BurningOilView {
+                id: zone,
+                ability: castle_fight_sim::AbilityId(ability),
+                center: SimPoint::new(0, 0),
+                recipients: vec![target],
+            },
+        );
+        let active = |snapshot: &crate::bridge::PresentationSnapshot| {
+            entity_status_visual_is_active(
+                target,
+                snapshot,
+                ability,
+                Wc3StatusVisualKind::DamageOverTime,
+            )
+        };
+        assert!(active(&snapshot));
+        snapshot
+            .burning_oil
+            .get_mut(&zone)
+            .unwrap()
+            .recipients
+            .clear();
+        assert!(!active(&snapshot));
+        snapshot
+            .burning_oil
+            .get_mut(&zone)
+            .unwrap()
+            .recipients
+            .push(target);
+        snapshot.burning_oil.clear();
+        assert!(!active(&snapshot));
     }
 
     #[test]
