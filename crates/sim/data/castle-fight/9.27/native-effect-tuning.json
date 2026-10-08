@@ -1202,6 +1202,49 @@
         "ability": "A02P",
         "source": "resolved/object-fields.tsv"
       }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A02M",
+      "unit_rawcode": "o003",
+      "spellcasting": {
+        "mana": {
+          "maximum": 200,
+          "starting": 120,
+          "regen_per_tick_per_10k": 2147491648
+        },
+        "ability": {
+          "id": 1093677645,
+          "mana_cost": 35,
+          "cooldown_ticks": 180,
+          "range": 614400,
+          "target_policy": "FriendlyUnitInCombat",
+          "effect": {
+            "StatBuff": {
+              "modifier": 1093677645,
+              "buff": {
+                "rawcode": 1110454329,
+                "positive": true,
+                "stealable": true
+              },
+              "armor_bonus_per_100": 400,
+              "damage_bonus_per_10k": 2000,
+              "regeneration_per_second_per_10k": 30000,
+              "duration_ticks": 1800,
+              "hero_duration_ticks": 1800,
+              "autocast_range": 614400
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 8000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv"
+      }
     }
   ]
 }

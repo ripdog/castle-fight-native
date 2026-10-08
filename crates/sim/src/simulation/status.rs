@@ -11,6 +11,37 @@ pub(super) fn apply_ability_effect_to_unit(
         return false;
     }
     match effect {
+        AbilityEffect::StatBuff {
+            modifier,
+            buff,
+            armor_bonus_per_100,
+            damage_bonus_per_10k,
+            regeneration_per_second_per_10k,
+            duration_ticks,
+            hero_duration_ticks,
+            ..
+        } => {
+            if target.team != source_team || target.classifications.invulnerable {
+                return false;
+            }
+            let duration = if target.classifications.hero {
+                hero_duration_ticks
+            } else {
+                duration_ticks
+            };
+            apply_timed_armor_modifier(
+                &mut target.status,
+                TimedArmorModifier {
+                    id: modifier,
+                    native_buff: Some(buff),
+                    armor_bonus_per_100,
+                    damage_bonus_per_10k,
+                    regeneration_per_second_per_10k,
+                    expires_tick: completed_tick + u64::from(duration),
+                    ..TimedArmorModifier::default()
+                },
+            );
+        }
         AbilityEffect::Damage { amount } => {
             let adjusted = damage_rules.apply_spell(amount, target.armor.armor_type);
             let adjusted = spell_damage_after_defend(*target, adjusted, completed_tick);
@@ -196,6 +227,7 @@ pub(super) fn apply_ability_effect_to_unit(
                 &mut target.status,
                 TimedArmorModifier {
                     id: modifier,
+                    native_buff: None,
                     armor_bonus_per_100,
                     regeneration_per_second_per_10k: 0,
                     mana_regeneration_per_second_per_10k: 0,
@@ -230,6 +262,7 @@ pub(super) fn apply_ability_effect_to_unit(
                 &mut target.status,
                 TimedArmorModifier {
                     id: modifier,
+                    native_buff: None,
                     armor_bonus_per_100,
                     regeneration_per_second_per_10k,
                     mana_regeneration_per_second_per_10k: 0,
@@ -262,6 +295,7 @@ pub(super) fn apply_ability_effect_to_unit(
                 &mut target.status,
                 TimedArmorModifier {
                     id: modifier,
+                    native_buff: None,
                     armor_bonus_per_100,
                     regeneration_per_second_per_10k: 0,
                     mana_regeneration_per_second_per_10k: 0,
@@ -443,6 +477,23 @@ pub(super) fn apply_timed_attack_speed_modifier(
 }
 
 pub(super) fn apply_timed_armor_modifier(status: &mut StatusState, incoming: TimedArmorModifier) {
+    if let Some(buff) = incoming.native_buff {
+        let old_count = usize::from(status.armor_modifier_count);
+        let mut kept = 0;
+        for index in 0..old_count {
+            let active = status.armor_modifiers[index];
+            if active
+                .native_buff
+                .is_some_and(|active| active.rawcode == buff.rawcode)
+            {
+                continue;
+            }
+            status.armor_modifiers[kept] = active;
+            kept += 1;
+        }
+        status.armor_modifiers[kept..old_count].fill(TimedArmorModifier::default());
+        status.armor_modifier_count = u8::try_from(kept).expect("bounded modifier count");
+    }
     let count = usize::from(status.armor_modifier_count);
     debug_assert!(count <= MAX_TIMED_ARMOR_MODIFIERS);
     let active = &status.armor_modifiers[..count];

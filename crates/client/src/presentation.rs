@@ -3173,6 +3173,11 @@ fn prewarm_timed_wc3_effects(
                 }
                 let automatic = definition.automatic_abilities().map(|ability| {
                     let status = match ability.effect {
+                        AbilityEffect::StatBuff {
+                            modifier,
+                            duration_ticks,
+                            ..
+                        } => Some((modifier.0, duration_ticks)),
                         AbilityEffect::ModifyMovementSpeedPercent {
                             modifier,
                             duration_ticks,

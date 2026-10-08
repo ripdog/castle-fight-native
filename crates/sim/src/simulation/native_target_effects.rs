@@ -4,6 +4,8 @@ use crate::components::{
     CriticalStrikeEffectProfile, EvasionEffectProfile, FeedbackEffectProfile, ManaProfile,
 };
 
+mod stat_buffs;
+
 fn unit(team: u8, x: i32, damage: i32, delivery: AttackDelivery) -> UnitSpawn {
     UnitSpawn {
         team: Team(team),

@@ -62,6 +62,31 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
 
     kind = recipe["kind"]
     effect: dict[str, Any] = dict(recipe)
+    if kind == "inner-fire":
+        if unit is None or set(fields["targs1"].split(",")) != {"air", "ground", "friend", "neutral", "self"}:
+            raise ValueError("Inner Fire requires the audited native friendly unit mask")
+        identity = int.from_bytes(recipe["source_key"].encode("ascii"), "big")
+        buff = fields["buffid1"]
+        if len(buff) != 4:
+            raise ValueError("Inner Fire requires a single buff family")
+        tick = lambda value: scaled(value, 30)
+        rate = scaled(unit["mana_regen"], 10_000)
+        return {"kind": "scripted-automatic", "source_kind": recipe["source_kind"],
+            "source_key": recipe["source_key"], "unit_rawcode": recipe["unit_rawcode"],
+            "spellcasting": {"mana": {"maximum": scaled(unit["mana_max"]), "starting": scaled(unit["mana_start"]),
+                "regen_per_tick_per_10k": (1 << 31) | rate}, "ability": {"id": identity,
+                "mana_cost": scaled(protected.get("mana_cost", fields["cost1"])),
+                "cooldown_ticks": tick(protected.get("cooldown", fields["cool1"])),
+                "range": number("Rng1", 1024), "target_policy": "FriendlyUnitInCombat",
+                "effect": {"StatBuff": {"modifier": identity,
+                    "buff": {"rawcode": int.from_bytes(buff.encode("ascii"), "big"), "positive": True, "stealable": True},
+                    "armor_bonus_per_100": number("DataB1", 100), "damage_bonus_per_10k": number("DataA1", 10_000),
+                    "regeneration_per_second_per_10k": number("DataD1", 10_000),
+                    "duration_ticks": tick(fields["dur1"]), "hero_duration_ticks": tick(fields["herodur1"]),
+                    "autocast_range": number("DataC1", 1024)}}}},
+            "mana_regen_per_second_per_10k": rate, "effect_ability_rawcode": None,
+            "provenance": {"source": "resolved/object-fields.tsv", "unit": "resolved/units.tsv",
+                "protected": "resolved/protected-ability-fields.tsv"}}
     if kind in {"war-stomp", "howl-of-terror", "frost-nova"}:
         return project_scripted_area(recipe, fields, unit, protected, mechanics)
     if kind in {"healing-wave", "solar-strike", "phoenix-fire"}:
@@ -320,6 +345,8 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             if field:
                 abilities.setdefault(row["rawcode"], {})[field] = scalar(row["recovered_value_json"])
     units = {row["rawcode"]: row for row in rows(retained("resolved/units.tsv"))}
+    default_autocast = {row["rawcode"]: scalar(row["recovered_value_json"])
+        for row in rows(retained("resolved/object-fields.tsv")) if row["category"] == "units" and row["field_id"] == "udaa"}
     protected: dict[str, dict[str, str]] = {}
     for row in rows(retained("resolved/protected-ability-fields.tsv")):
         if row["level"] == "1":
@@ -349,6 +376,8 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             if unit is None or recipe["source_key"] not in unit["abilities"].split(","):
                 raise ValueError(f"recipe {key} is not in its source unit's extracted ability inventory")
         source = recipe["source_key"]
+        if recipe["kind"] == "inner-fire" and default_autocast.get(recipe.get("unit_rawcode")) != source:
+            raise ValueError("Inner Fire source must retain default-active autocast")
         spell = spell_mechanics.get(source)
         if spell is None and recipe["kind"] in {"healing-wave", "solar-strike", "war-stomp", "howl-of-terror", "frost-nova"}:
             matches = [row for row in spell_mechanics.values() if row["unit_rawcode"] == recipe.get("unit_rawcode")

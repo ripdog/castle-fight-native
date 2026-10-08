@@ -1667,6 +1667,14 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     debug_assert!(count <= MAX_TIMED_ARMOR_MODIFIERS);
     for modifier in &status.armor_modifiers[..count] {
         hash.write_u64(u64::from(modifier.id.0));
+        if let Some(buff) = modifier.native_buff {
+            hash.write_u8(1);
+            hash.write_u32(buff.rawcode);
+            hash.write_u8(u8::from(buff.positive));
+            hash.write_u8(u8::from(buff.stealable));
+        } else {
+            hash.write_u8(0);
+        }
         hash.write_i32(i32::from(modifier.armor_bonus_per_100));
         hash.write_u64(u64::from(modifier.regeneration_per_second_per_10k));
         hash.write_u64(u64::from(modifier.mana_regeneration_per_second_per_10k));
@@ -2046,6 +2054,27 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
     hash.write_u8(ability.target_policy.stable_tag());
     hash.write_u8(ability.effect.stable_tag());
     match ability.effect {
+        AbilityEffect::StatBuff {
+            modifier,
+            buff,
+            armor_bonus_per_100,
+            damage_bonus_per_10k,
+            regeneration_per_second_per_10k,
+            duration_ticks,
+            hero_duration_ticks,
+            autocast_range,
+        } => {
+            hash.write_u32(modifier.0);
+            hash.write_u32(buff.rawcode);
+            hash.write_u8(u8::from(buff.positive));
+            hash.write_u8(u8::from(buff.stealable));
+            hash.write_i32(i32::from(armor_bonus_per_100));
+            hash.write_i32(i32::from(damage_bonus_per_10k));
+            hash.write_u32(regeneration_per_second_per_10k);
+            hash.write_u16(duration_ticks);
+            hash.write_u16(hero_duration_ticks);
+            hash.write_i32(autocast_range);
+        }
         AbilityEffect::Hailstone(profile) => hash_hailstone_profile(hash, profile),
         AbilityEffect::WorldFreezer(p) => {
             for word in p.canonical_words() {

@@ -1060,6 +1060,8 @@ pub enum AbilityTargetPolicy {
     /// Native Always Autocast debuffs consider any viable hostile in range.
     NativeBuildingSpellTrigger,
     RandomEnemyDebuff,
+    /// Native positive autocast buffs select unbuffed allies engaged in combat.
+    FriendlyUnitInCombat,
 }
 
 impl AbilityTargetPolicy {
@@ -1080,6 +1082,7 @@ impl AbilityTargetPolicy {
             Self::RandomEnemyUnitOrBuilding => 11,
             Self::NativeBuildingSpellTrigger => 12,
             Self::RandomEnemyDebuff => 20,
+            Self::FriendlyUnitInCombat => 21,
         }
     }
 }
@@ -1092,6 +1095,16 @@ pub enum AreaDamageOrigin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AbilityEffect {
+    StatBuff {
+        modifier: ModifierId,
+        buff: NativeBuffIdentity,
+        armor_bonus_per_100: i16,
+        damage_bonus_per_10k: i16,
+        regeneration_per_second_per_10k: u32,
+        duration_ticks: u16,
+        hero_duration_ticks: u16,
+        autocast_range: i32,
+    },
     Damage {
         amount: i32,
     },
@@ -1221,6 +1234,7 @@ impl AbilityEffect {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::StatBuff { .. } => 22,
             Self::Damage { .. } => 0,
             Self::Stun { .. } => 1,
             Self::ModifyMovementSpeedPercent { .. } => 2,
@@ -1303,6 +1317,7 @@ pub struct TimedAttackSpeedModifier {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimedArmorModifier {
     pub id: ModifierId,
+    pub native_buff: Option<NativeBuffIdentity>,
     pub armor_bonus_per_100: i16,
     pub regeneration_per_second_per_10k: u32,
     pub mana_regeneration_per_second_per_10k: u32,
@@ -1312,6 +1327,15 @@ pub struct TimedArmorModifier {
     pub reactive_movement_percent_delta: i16,
     pub reactive_attack_speed_percent_delta: i16,
     pub revealed_to: Option<Team>,
+}
+
+/// Native buff family controls replacement independently of its granting ability.
+/// Script bonuses and intrinsic auras have no such transferable identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct NativeBuffIdentity {
+    pub rawcode: u32,
+    pub positive: bool,
+    pub stealable: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

@@ -9,6 +9,22 @@ import build_runtime_catalog as catalog
 
 
 class NativeTuningProjectionTest(unittest.TestCase):
+    def test_native_stat_buff_projection_preserves_exact_mana_clock_and_rejects_extra_target_qualifiers(self) -> None:
+        recipe = {"kind": "inner-fire", "source_kind": "unit-ability", "source_key": "TEST", "unit_rawcode": "UNIT"}
+        fields = {"targs1": "air,ground,friend,neutral,self", "buffid1": "BUFF", "cost1": "4", "cool1": "9",
+            "rng1": "120", "dataa1": "0.25", "datab1": "2", "datac1": "80", "datad1": "3",
+            "dur1": "7", "herodur1": "2"}
+        unit = {"mana_max": "20", "mana_start": "10", "mana_regen": "0.8"}
+        effect = native.project_effect(recipe, fields, unit, {"cooldown": "3"}, {})
+        mana = effect["spellcasting"]["mana"]
+        self.assertEqual(mana["regen_per_tick_per_10k"], (1 << 31) | effect["mana_regen_per_second_per_10k"])
+        buff = effect["spellcasting"]["ability"]["effect"]["StatBuff"]
+        self.assertLess(buff["autocast_range"], effect["spellcasting"]["ability"]["range"])
+        self.assertLess(buff["hero_duration_ticks"], buff["duration_ticks"])
+        for qualifier in ("structure", "organic", "invulnerable"):
+            with self.assertRaisesRegex(ValueError, "friendly unit mask"):
+                native.project_effect(recipe, {**fields, "targs1": fields["targs1"] + "," + qualifier}, unit, {}, {})
+
     def test_committed_tuning_is_a_projection_of_retained_evidence(self) -> None:
         root = Path(__file__).resolve().parents[2]
         release = catalog._load_release(catalog.DEFAULT_RELEASES, "9.27", "r1")

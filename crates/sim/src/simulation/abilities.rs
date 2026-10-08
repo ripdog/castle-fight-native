@@ -116,7 +116,7 @@ impl Simulation {
         let additional_evaluations: Vec<_> = self.pool.install(|| {
             additional_sources
                 .par_iter()
-                .map(|source| self.evaluate_automatic_ability(*source, units, grid))
+                .map(|source| self.evaluate_automatic_ability(*source, units, buildings, grid))
                 .collect()
         });
         let building_evaluations: Vec<_> = self.pool.install(|| {
@@ -140,6 +140,7 @@ impl Simulation {
                             ability_state: source.ability_state,
                         },
                         units,
+                        buildings,
                         grid,
                     )
                 })
@@ -170,6 +171,7 @@ impl Simulation {
                             ability_state: source.ability_state,
                         },
                         units,
+                        buildings,
                         grid,
                     )
                 })
@@ -302,8 +304,16 @@ impl Simulation {
                     && !state.autocast_enabled
                     && !state.manual_cast_requested)
                 || mana < intent.ability.mana_cost
-                || (!intent.completing_windup
-                    && !self.ability_target_is_valid(source, intent.target, intent.ability, units))
+                || ((!intent.completing_windup
+                    || matches!(intent.ability.effect, AbilityEffect::StatBuff { .. }))
+                    && !self.ability_target_is_valid(
+                        source,
+                        intent.target,
+                        intent.ability,
+                        units,
+                        buildings,
+                        !intent.completing_windup,
+                    ))
                 || (intent.completing_windup
                     && !self.pending_cast_target_is_present(intent.target, units, buildings))
             {
@@ -1207,6 +1217,7 @@ impl Simulation {
         &self,
         source: AbilitySourceSnapshot,
         units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
         grid: &SpatialGrid,
     ) -> AbilityEvaluation {
         let Some(spellcasting) = source.spellcasting else {
@@ -1299,6 +1310,27 @@ impl Simulation {
                     index,
                     id: units[index].id,
                 }),
+            AbilityTargetPolicy::FriendlyUnitInCombat => units
+                .iter()
+                .enumerate()
+                .filter_map(|(index, target)| {
+                    candidate_checks += 1;
+                    self.friendly_stat_buff_target_is_valid(
+                        source,
+                        spellcasting.ability,
+                        target,
+                        units,
+                        buildings,
+                        true,
+                    )
+                    .then_some((
+                        self.ability_source_distance_sq(source.origin, target.position),
+                        target.id,
+                        index,
+                    ))
+                })
+                .min()
+                .map(|(_, id, index)| AbilityIntentTarget::Unit { index, id }),
             AbilityTargetPolicy::WoundedFriendlyUnit => self
                 .wounded_friendly_ability_target(
                     source,
@@ -1594,6 +1626,55 @@ impl Simulation {
                     .is_some_and(|reveal| reveal.only_if_hidden))
     }
 
+    fn friendly_stat_buff_target_is_valid(
+        &self,
+        source: AbilitySourceSnapshot,
+        ability: AutomaticAbilityProfile,
+        target: &UnitSnapshot,
+        units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
+        combat_required: bool,
+    ) -> bool {
+        let AbilityEffect::StatBuff {
+            buff,
+            autocast_range,
+            ..
+        } = ability.effect
+        else {
+            return false;
+        };
+        target.health > 0
+            && target.team == source.team
+            && !target.classifications.invulnerable
+            && self.ability_source_distance_sq(source.origin, target.position)
+                <= square_i32(ability.range.min(autocast_range))
+            && (!combat_required
+                || (target.attack.damage > 0
+                    && (self.enemy_is_in_combat(target, units)
+                        || target
+                            .target
+                            .and_then(|id| find_building_index(buildings, id))
+                            .is_some_and(|index| {
+                                let building = &buildings[index];
+                                building.health > 0
+                                    && building.team != target.team
+                                    && target.attack_targets.can_target_buildings()
+                                    && point_to_footprint_distance_sq(
+                                        target.position,
+                                        building.footprint,
+                                        self.config.navigation_cell_size,
+                                    ) <= square_i32(target.attack.range)
+                            }))))
+            && !target.status.armor_modifiers[..usize::from(target.status.armor_modifier_count)]
+                .iter()
+                .any(|active| {
+                    active
+                        .native_buff
+                        .is_some_and(|active| active.rawcode == buff.rawcode)
+                        && self.next_tick < active.expires_tick
+                })
+    }
+
     fn enemy_is_in_combat(&self, candidate: &UnitSnapshot, units: &[UnitSnapshot]) -> bool {
         candidate
             .target
@@ -1793,6 +1874,8 @@ impl Simulation {
         target: AbilityIntentTarget,
         ability: AutomaticAbilityProfile,
         units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
+        combat_required: bool,
     ) -> bool {
         match target {
             AbilityIntentTarget::Unit { index, id } => {
@@ -1925,6 +2008,15 @@ impl Simulation {
                                 && self.ability_source_distance_sq(source.origin, target.position)
                                     <= square_i32(ability.range)
                         }
+                        AbilityTargetPolicy::FriendlyUnitInCombat => self
+                            .friendly_stat_buff_target_is_valid(
+                                source,
+                                ability,
+                                target,
+                                units,
+                                buildings,
+                                combat_required,
+                            ),
                     }
             }
             AbilityIntentTarget::Building { id, position } => {
