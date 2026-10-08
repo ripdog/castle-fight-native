@@ -67,6 +67,10 @@
     {"source_kind": "unit-ability", "source_key": "A02I", "unit_rawcode": "n00V", "kind": "kill-berserk"},
     {"source_kind": "unit-ability", "source_key": "A0A6", "unit_rawcode": "o00F", "kind": "spell-steal"},
     {"source_kind": "unit-ability", "source_key": "A06I", "unit_rawcode": "n01O", "kind": "ensnare"},
-    {"source_kind": "ability-effect", "source_key": "A06H", "unit_rawcode": "n01O", "kind": "ensnare"}
+    {"source_kind": "ability-effect", "source_key": "A06H", "unit_rawcode": "n01O", "kind": "ensnare"},
+    {"source_kind": "unit-ability", "source_key": "A0AG", "unit_rawcode": "n02G", "kind": "critical-strike"},
+    {"source_kind": "unit-ability", "source_key": "A0FB", "unit_rawcode": "n02G", "kind": "ensnare"},
+    {"source_kind": "ability-effect", "source_key": "A0FC", "unit_rawcode": "n02G", "kind": "ensnare"},
+    {"source_kind": "ability-effect", "source_key": "A0HR", "unit_rawcode": "n02G", "kind": "damage-threshold"}
   ]
 }

@@ -206,19 +206,29 @@ impl Simulation {
                 && center(p, id).distance_sq(point) <= square_i32(p.explosion_radius)
             {
                 // DAMAGE_TYPE_UNIVERSAL bypasses armor/Defend/spell resistance, but the global snow listener still applies.
+                super::damage_thresholds::observe_damage(target, target.health);
                 target.health = target.health.saturating_sub(scale_damage_per_10k(
-                    p.explosion_damage,
+                    super::native_kill_effects::damage_after_native_incoming(
+                        target,
+                        p.explosion_damage,
+                        self.next_tick,
+                    ),
                     target.snow_damage_taken_per_10k,
                 ));
-                damage_updates.push((target.entity, target.health));
+                damage_updates.push((target.entity, target.health, target.status));
             }
         }
-        for (entity, health) in damage_updates {
+        for (entity, health, status) in damage_updates {
             self.world
                 .entity_mut(entity)
                 .get_mut::<Health>()
                 .unwrap()
                 .current = health;
+            *self
+                .world
+                .entity_mut(entity)
+                .get_mut::<StatusState>()
+                .unwrap() = status;
         }
         let mut entity = self.world.entity_mut(entity);
         let mut state = entity.get_mut::<SnowveilState>().unwrap();

@@ -177,6 +177,7 @@ impl Simulation {
                             .damage_rules
                             .apply_spell(profile.damage, target.armor.armor_type);
                         let damage = spell_damage_after_defend(*target, damage, self.next_tick);
+                        super::damage_thresholds::observe_damage(target, target.health);
                         target.health = target.health.saturating_sub(damage);
                         if damage > 0 && profile.cleanse {
                             cleanse_native_status(&mut target.status);
@@ -345,7 +346,7 @@ pub(super) fn resolve_native_building_damage_over_time(
     }
 }
 
-fn cleanse_native_status(status: &mut StatusState) {
+pub(super) fn cleanse_native_status(status: &mut StatusState) {
     status.stunned_until_tick = 0;
     status.native_stun_until_tick = 0;
     status.native_stun_ability = None;

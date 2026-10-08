@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r42";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r43";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 28;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 29;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1654,6 +1654,9 @@ fn build_content_bundle_927() -> Result<CastleFightContentBundle, CastleFightCon
         )
         .chain(towers.values().map(|definition| definition.rawcode));
     for rawcode in playable_rawcodes {
+        root_set.extend(crate::native_effects::script_granted_ability_sources_for(
+            version, rawcode,
+        ));
         let abilities = extracted
             .unit_abilities
             .get(&rawcode)
@@ -1746,6 +1749,18 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0AG") => {
+            0x4000_0073
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0FB") => {
+            0x4000_0074
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A0FC") => {
+            0x4000_0075
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A0HR") => {
+            0x4000_0076
+        }
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A06I") => {
             0x4000_0071
         }
@@ -2489,6 +2504,18 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
     hash.write_u64(effects.len() as u64);
     for effect in effects {
         match effect {
+            PassiveUnitEffect::DamageThreshold(profile) => {
+                hash.write_u8(14);
+                hash.write_u32(profile.ability.0);
+                for threshold in profile.thresholds {
+                    hash.write_u16(threshold.hp_ratio_below_per_10k);
+                    hash.write_i32(threshold.attack_bonus);
+                    for channel in threshold.vertex_rgba {
+                        hash.write_u8(channel);
+                    }
+                    hash.write_u8(u8::from(threshold.adds_if_absent));
+                }
+            }
             PassiveUnitEffect::KillBerserk(profile) => {
                 hash.write_u8(13);
                 hash.write_u32(profile.ability.0);
@@ -5406,6 +5433,15 @@ mod tests {
             }));
 
         for rawcode in playable_rawcodes {
+            for source in crate::native_effects::script_granted_ability_sources_for(
+                MapVersion::CASTLE_FIGHT_9_27,
+                rawcode,
+            ) {
+                assert!(
+                    resolved_sources.contains(&source),
+                    "script-granted {source} was not resolved"
+                );
+            }
             for &ability in extracted
                 .unit_abilities
                 .get(&rawcode)

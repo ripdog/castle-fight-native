@@ -6,6 +6,7 @@ import argparse
 import csv
 import io
 import json
+import re
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -71,6 +72,30 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
 
     kind = recipe["kind"]
     effect: dict[str, Any] = dict(recipe)
+    if kind == "damage-threshold":
+        trace = mechanics["damage_threshold"]
+        if trace["bonus_ability_rawcode"] != recipe["source_key"] or not trace["levels_only_increase"] or not trace["healing_does_not_downgrade_reached_level"]:
+            raise ValueError("damage threshold requires the audited permanent ability controller")
+        handler = mechanics["damage_threshold_handler"]
+        if f'unit_getTypeId(o8n)=={int.from_bytes(recipe["unit_rawcode"].encode(), "big")}' not in handler:
+            raise ValueError("damage threshold handler must identify its source unit")
+        branches = re.findall(r'p8n<([0-9.]+)\)then(.*?)(?=elseif|end end end end$)', handler)
+        thresholds = []
+        for threshold, (ratio, branch) in zip(trace["thresholds"], reversed(branches), strict=True):
+            level = threshold["ability_level"]
+            bonus = scaled(mechanics["ability_levels"][f"dataa{level}"])
+            color = re.search(r'SetUnitVertexColor\([^,]+,(\d+),(\d+),(\d+),(\d+)\)', branch)
+            if scaled(ratio, 10_000) != scaled(threshold["hp_ratio_below"], 10_000) or bonus != scaled(threshold["attack_bonus"]) or color is None or list(map(int, color.groups())) != threshold["vertex_rgba"]:
+                raise ValueError("damage threshold projection disagrees with script/native evidence")
+            adds = "addProtectedAbility(" in branch
+            if not adds and f"SetUnitAbilityLevel(" not in branch:
+                raise ValueError("damage threshold branch needs an explicit native grant/level operation")
+            thresholds.append({"hp_ratio_below_per_10k": scaled(ratio, 10_000), "attack_bonus": bonus,
+                "vertex_rgba": list(map(int, color.groups())), "adds_if_absent": adds})
+        effect.update(thresholds=thresholds, provenance={"git_tree": mechanics["git_tree"],
+            "source": "resolved/production-unit-special-mechanics.tsv", "fields": "resolved/object-fields.tsv",
+            "handler": "DamageListener_addListener_TrollBlood_onEvent_addListener_TrollBlood", "phase": "pre-health-commit-reduced-damage-event"})
+        return effect
     if kind == "ensnare":
         return project_ensnare(recipe, fields, unit, protected, mechanics)
     if kind == "kill-berserk":
@@ -419,8 +444,11 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         return catalog._retained_file_bytes(repo_root, tree, path)
 
     abilities: dict[str, dict[str, str]] = {}
+    ability_levels: dict[str, dict[str, str]] = {}
     ability_bases: dict[str, str] = {}
     for row in rows(retained("resolved/object-fields.tsv")):
+        if row["category"] == "abilities" and row["source_field"]:
+            ability_levels.setdefault(row["rawcode"], {})[row["source_field"].lower()] = scalar(row["recovered_value_json"])
         if row["category"] == "abilities" and row["level"] in {"0", "1"}:
             ability_bases[row["rawcode"]] = row["base_rawcode"]
             field = row["source_field"].lower()
@@ -441,6 +469,12 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
     kill_mechanics = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "kill-triggered-native-berserk"}
+    damage_thresholds = {row["unit_rawcode"]: json.loads(row["parameters_json"])
+        for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
+        if row["mechanic_kind"] == "damage-triggered-persistent-low-hp-attack-bonus"}
+    lua = retained("script/war3map.lua")
+    functions = {row["name"]: lua[int(row["start_byte_offset"]):int(row["end_byte_offset"])].decode()
+        for row in rows(retained("script/function-spans.tsv"))}
     spell_mechanics = {row["ability_rawcode"]: row for row in rows(retained("resolved/unit-spell-mechanics.tsv"))}
     spell_semantics = {row["ability_rawcode"]: row for row in rows(retained("resolved/unit-spell-semantics.tsv"))}
     misc = dict(line.split("=", 1) for line in retained("war3mapMisc.txt").decode().splitlines() if "=" in line and not line.startswith("//"))
@@ -472,6 +506,13 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             spell = matches[0]
         detail = dict(mechanics.get(recipe.get("unit_rawcode", ""), {}))
         detail["kill_mechanics"] = kill_mechanics.get(recipe.get("unit_rawcode", ""))
+        if recipe["kind"] == "damage-threshold":
+            init = functions["IN"]
+            if f'jS={int.from_bytes(source.encode(), "big")}' not in init or "DamageListener_unreduced=false" not in init:
+                raise ValueError("damage threshold requires its reduced-event listener registration")
+            detail.update(damage_threshold=damage_thresholds[recipe["unit_rawcode"]],
+                damage_threshold_handler=functions["DamageListener_addListener_TrollBlood_onEvent_addListener_TrollBlood"],
+                ability_levels=ability_levels[source], git_tree=tree)
         detail["misc"] = misc
         if spell is not None:
             semantics = spell_semantics[spell["ability_rawcode"]]

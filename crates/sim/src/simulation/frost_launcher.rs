@@ -158,8 +158,13 @@ impl Simulation {
                     target.armor.armor_type,
                     effective_armor_points_per_100(target),
                 );
+            super::damage_thresholds::observe_damage(target, target.health);
             target.health = target.health.saturating_sub(scale_damage_per_10k(
-                damage,
+                super::native_kill_effects::damage_after_native_incoming(
+                    target,
+                    damage,
+                    self.next_tick,
+                ),
                 target.snow_damage_taken_per_10k,
             ));
             if target.health > 0

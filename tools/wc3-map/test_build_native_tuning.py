@@ -9,6 +9,19 @@ import build_runtime_catalog as catalog
 
 
 class NativeTuningProjectionTest(unittest.TestCase):
+    def test_damage_controller_preserves_native_grant_vs_failed_level_assignment(self) -> None:
+        recipe = {"kind": "damage-threshold", "source_kind": "ability-effect", "source_key": "BONU", "unit_rawcode": "UNIT"}
+        handler = f"unit_getTypeId(o8n)=={int.from_bytes(b'UNIT', 'big')} p8n<0.4)then SetUnitAbilityLevel(a,b,3) SetUnitVertexColor(a,77,88,99,255) elseif(p8n<0.6)then SetUnitAbilityLevel(a,b,2) SetUnitVertexColor(a,44,55,66,255) elseif(p8n<0.8)then addProtectedAbility(a,b) SetUnitVertexColor(a,11,22,33,255) end end end end"
+        thresholds = [{"ability_level": level, "attack_bonus": bonus, "hp_ratio_below": ratio, "vertex_rgba": color}
+            for level, bonus, ratio, color in [(1, 7, 0.8, [11,22,33,255]), (2, 13, 0.6, [44,55,66,255]), (3, 29, 0.4, [77,88,99,255])]]
+        mechanics = {"damage_threshold": {"bonus_ability_rawcode": "BONU", "levels_only_increase": True,
+            "healing_does_not_downgrade_reached_level": True, "thresholds": thresholds},
+            "damage_threshold_handler": handler, "ability_levels": {"dataa1": "7", "dataa2": "13", "dataa3": "29"}, "git_tree": "synthetic"}
+        output = native.project_effect(recipe, {}, None, {}, mechanics)
+        self.assertEqual([row["adds_if_absent"] for row in output["thresholds"]], [True, False, False])
+        with self.assertRaisesRegex(ValueError, "disagrees"):
+            native.project_effect(recipe, {}, None, {}, {**mechanics, "ability_levels": {"dataa1": "7", "dataa2": "13", "dataa3": "31"}})
+
     def test_net_projects_separate_trigger_range_native_flight_and_hero_duration(self) -> None:
         recipe = {"kind": "ensnare", "source_kind": "unit-ability", "source_key": "TEST", "unit_rawcode": "UNIT"}
         fields = {"rng1": "100", "cost1": "9999", "cool1": "99"}

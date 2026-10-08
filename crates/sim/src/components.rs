@@ -572,6 +572,7 @@ pub(crate) struct ProductionUnitClassifications(pub UnitClassifications);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PassiveUnitEffect {
+    DamageThreshold(DamageThresholdProfile),
     KillBerserk(KillBerserkProfile),
     Bash(BashEffectProfile),
     CriticalStrike(CriticalStrikeEffectProfile),
@@ -595,6 +596,29 @@ pub struct KillBerserkProfile {
     pub movement_percent_delta: i16,
     pub attack_speed_percent_delta: i16,
     pub damage_taken_bonus_per_10k: i16,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DamageThreshold {
+    pub hp_ratio_below_per_10k: u16,
+    pub attack_bonus: i32,
+    pub vertex_rgba: [u8; 4],
+    pub adds_if_absent: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DamageThresholdProfile {
+    pub ability: AbilityId,
+    pub thresholds: [DamageThreshold; 3],
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DamageThresholdState {
+    pub ability: Option<AbilityId>,
+    pub ability_level: u8,
+    pub color_level: u8,
+    pub attack_bonus: i32,
+    pub vertex_rgba: Option<[u8; 4]>,
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -755,6 +779,7 @@ pub(crate) struct ProductionAdditionalAutomaticAbilities(pub AdditionalAutomatic
 
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Corpse {
+    pub vertex_rgba: Option<[u8; 4]>,
     pub source_unit: SimId,
     pub source_owner: PlayerId,
     pub source_team: Team,
@@ -1437,6 +1462,7 @@ pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
 
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusState {
+    pub damage_threshold: DamageThresholdState,
     pub ensnare: Option<EnsnareState>,
     pub action_animation: Option<ActionAnimationState>,
     pub pending_attack: Option<PendingAttackState>,

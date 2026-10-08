@@ -28,6 +28,7 @@ const TUNING_9_27_JSON: &str = include_str!("../data/castle-fight/9.27/native-ef
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum NativeEffectImplementationId {
+    WarcraftDamageThresholdV1,
     WarcraftKillBerserkV1,
     WarcraftMarkerOnlyV1,
     WarcraftZeroDamageBarrageV1,
@@ -65,6 +66,7 @@ impl NativeEffectImplementationId {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::WarcraftDamageThresholdV1 => 67,
             Self::WarcraftKillBerserkV1 => 66,
             Self::WarcraftMarkerOnlyV1 => 0,
             Self::WarcraftZeroDamageBarrageV1 => 1,
@@ -516,6 +518,12 @@ fn native_buff_from_tuning(tuning: &TuningFile, source: u32) -> Option<crate::Na
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum TuningEffect {
+    DamageThreshold {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        thresholds: [crate::components::DamageThreshold; 3],
+    },
     KillBerserk {
         source_kind: String,
         source_key: String,
@@ -759,7 +767,8 @@ impl TuningEffect {
 
     fn source_kind(&self) -> &str {
         match self {
-            Self::KillBerserk { source_kind, .. }
+            Self::DamageThreshold { source_kind, .. }
+            | Self::KillBerserk { source_kind, .. }
             | Self::NativeAura { source_kind, .. }
             | Self::Pulverize { source_kind, .. }
             | Self::FrostAttack { source_kind, .. }
@@ -783,7 +792,8 @@ impl TuningEffect {
 
     fn source_key(&self) -> &str {
         match self {
-            Self::KillBerserk { source_key, .. }
+            Self::DamageThreshold { source_key, .. }
+            | Self::KillBerserk { source_key, .. }
             | Self::NativeAura { source_key, .. }
             | Self::Pulverize { source_key, .. }
             | Self::FrostAttack { source_key, .. }
@@ -807,7 +817,8 @@ impl TuningEffect {
 
     fn unit_rawcode(&self) -> Option<&str> {
         match self {
-            Self::KillBerserk { unit_rawcode, .. }
+            Self::DamageThreshold { unit_rawcode, .. }
+            | Self::KillBerserk { unit_rawcode, .. }
             | Self::NativeAura { unit_rawcode, .. }
             | Self::Pulverize { unit_rawcode, .. }
             | Self::FrostAttack { unit_rawcode, .. }
@@ -842,6 +853,7 @@ impl TuningEffect {
             Self::Cleave { .. } => NativeEffectImplementationId::WarcraftCleaveV1,
             Self::FrostAttack { .. } => NativeEffectImplementationId::WarcraftFrostAttackV1,
             Self::Pulverize { .. } => NativeEffectImplementationId::WarcraftPulverizeV1,
+            Self::DamageThreshold { .. } => NativeEffectImplementationId::WarcraftDamageThresholdV1,
             Self::KillBerserk { .. } => NativeEffectImplementationId::WarcraftKillBerserkV1,
             Self::NativeAura { .. } => NativeEffectImplementationId::WarcraftNativeAuraV1,
             Self::Defend { .. } => NativeEffectImplementationId::WarcraftDefendV1,
@@ -866,6 +878,7 @@ impl TuningEffect {
             Self::Cleave { .. } => "cleave",
             Self::FrostAttack { .. } => "frost-attack",
             Self::Pulverize { .. } => "pulverize",
+            Self::DamageThreshold { .. } => "damage-threshold",
             Self::KillBerserk { .. } => "kill-berserk",
             Self::NativeAura { .. } => "native-aura",
             Self::Defend { .. } => "defend",
@@ -926,6 +939,25 @@ pub fn resolve_native_effect_requirements(
     }
     resolved.sort_unstable_by_key(|binding| binding.source);
     Ok(resolved)
+}
+
+pub(crate) fn script_granted_ability_sources_for(
+    version: MapVersion,
+    unit_rawcode: u32,
+) -> impl Iterator<Item = NativeEffectSource> {
+    catalog()
+        .tuning(version)
+        .into_iter()
+        .flat_map(move |tuning| {
+            tuning
+                .effects
+                .iter()
+                .filter(move |effect| {
+                    matches!(effect, TuningEffect::DamageThreshold { unit_rawcode: source_unit, .. }
+                if rawcode(source_unit).ok() == Some(unit_rawcode))
+                })
+                .map(|effect| effect.source().expect("validated script-granted source"))
+        })
 }
 
 pub fn native_unit_mechanics_for(
@@ -1002,7 +1034,9 @@ fn native_unit_mechanics_from_tuning(
                         passive = Some(candidate);
                     }
                 }
-                TuningEffect::ChainLightning { .. } | TuningEffect::EntanglingRoots { .. } => {
+                TuningEffect::DamageThreshold { .. }
+                | TuningEffect::ChainLightning { .. }
+                | TuningEffect::EntanglingRoots { .. } => {
                     unreachable!("ability-effect tuning cannot match a unit-ability source")
                 }
             }
@@ -1016,6 +1050,12 @@ fn native_unit_mechanics_from_tuning(
         }
     }
 
+    for effect in tuning.effects.iter().filter(|effect| {
+        matches!(effect, TuningEffect::DamageThreshold { unit_rawcode: source_unit, .. }
+            if rawcode(source_unit).ok() == Some(unit_rawcode))
+    }) {
+        passive_effects.push(build_passive_effect(tuning, effect));
+    }
     let (spellcasting, additional_abilities) =
         compose_spellcasting_profiles(None, automatic_profiles).map_err(|reason| {
             NativeEffectCatalogError::InvalidAutomaticAbilities {
@@ -1069,6 +1109,24 @@ pub fn native_effect_implementation_for(
 
 fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUnitEffect {
     match effect {
+        TuningEffect::DamageThreshold {
+            source_key,
+            thresholds,
+            ..
+        } => {
+            assert!(thresholds.iter().all(|t| t.hp_ratio_below_per_10k > 0
+                && t.hp_ratio_below_per_10k <= 10_000
+                && t.attack_bonus >= 0));
+            assert!(
+                thresholds
+                    .windows(2)
+                    .all(|pair| pair[0].hp_ratio_below_per_10k > pair[1].hp_ratio_below_per_10k)
+            );
+            PassiveUnitEffect::DamageThreshold(crate::components::DamageThresholdProfile {
+                ability: AbilityId(rawcode(source_key).expect("damage threshold source")),
+                thresholds: *thresholds,
+            })
+        }
         TuningEffect::KillBerserk {
             source_key,
             duration_ticks,

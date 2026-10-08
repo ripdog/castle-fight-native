@@ -62,6 +62,7 @@ pub(super) fn apply_ability_effect_to_unit(
         AbilityEffect::Damage { amount } => {
             let adjusted = damage_rules.apply_spell(amount, target.armor.armor_type);
             let adjusted = spell_damage_after_defend(*target, adjusted, completed_tick);
+            super::damage_thresholds::observe_damage(target, target.health);
             target.health = target
                 .health
                 .checked_sub(adjusted)
@@ -107,6 +108,7 @@ pub(super) fn apply_ability_effect_to_unit(
             }
             let damage = damage_rules.apply_spell(area_damage, target.armor.armor_type);
             let damage = spell_damage_after_defend(*target, damage, completed_tick);
+            super::damage_thresholds::observe_damage(target, target.health);
             target.health = target
                 .health
                 .checked_sub(damage)
@@ -175,6 +177,7 @@ pub(super) fn apply_ability_effect_to_unit(
             }
             let adjusted = damage_rules.apply_spell(damage, target.armor.armor_type);
             let adjusted = spell_damage_after_defend(*target, adjusted, completed_tick);
+            super::damage_thresholds::observe_damage(target, target.health);
             target.health = target
                 .health
                 .checked_sub(adjusted)
@@ -193,6 +196,7 @@ pub(super) fn apply_ability_effect_to_unit(
         AbilityEffect::AreaDamage { amount, .. } => {
             let adjusted = damage_rules.apply_spell(amount, target.armor.armor_type);
             let adjusted = spell_damage_after_defend(*target, adjusted, completed_tick);
+            super::damage_thresholds::observe_damage(target, target.health);
             target.health = target
                 .health
                 .checked_sub(adjusted)
@@ -642,6 +646,12 @@ pub(super) fn resolve_periodic_unit_statuses(
                 };
                 let adjusted = spell_damage_taken_per_10k
                     .map_or(adjusted, |factor| scale_damage_per_10k(adjusted, factor));
+                super::damage_thresholds::observe_damage_state(
+                    unit.passive_effects,
+                    &mut unit.status.damage_threshold,
+                    unit.health,
+                    unit.health_max,
+                );
                 unit.health = unit
                     .health
                     .checked_sub(scale_damage_per_10k(

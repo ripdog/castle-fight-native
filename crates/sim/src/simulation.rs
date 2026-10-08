@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 45;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 46;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -46,6 +46,7 @@ mod combat;
 mod construction;
 #[cfg(test)]
 mod content_lifecycle_tests;
+mod damage_thresholds;
 mod economy;
 mod line_projectiles;
 mod movement;
@@ -430,6 +431,7 @@ pub struct ProjectileView {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CorpseView {
+    pub vertex_rgba: Option<[u8; 4]>,
     pub id: SimId,
     pub position: SimPoint,
     pub source_unit: SimId,
@@ -1002,6 +1004,10 @@ impl Simulation {
                 .get::<ShrineRevivalState>(entity)
                 .copied()
                 .unwrap_or_default();
+            let vertex_rgba = self
+                .world
+                .get::<StatusState>(entity)
+                .and_then(|status| status.damage_threshold.vertex_rgba);
             self.world.despawn(entity);
             let Some(profile) = corpse else {
                 continue;
@@ -1020,6 +1026,7 @@ impl Simulation {
                 id,
                 Position(position),
                 Corpse {
+                    vertex_rgba,
                     source_unit,
                     source_owner,
                     source_team,
@@ -1325,6 +1332,15 @@ impl Simulation {
         position: SimPoint,
         properties: UnitGameplayProperties,
     ) {
+        assert!(
+            properties
+                .passive_effects
+                .iter()
+                .filter(|effect| matches!(effect, PassiveUnitEffect::DamageThreshold(_)))
+                .count()
+                <= 1,
+            "a unit supports one persistent damage-threshold controller"
+        );
         if let Some(corpse) = properties.corpse {
             validate_corpse_profile(corpse);
         }
@@ -1662,7 +1678,7 @@ impl Simulation {
         let mut next_defense_alerts = Vec::new();
 
         let chain_lightning_hops = self.resolve_due_chain_lightning_hops(
-            &units,
+            &mut units,
             &mut unit_health,
             &positions,
             completed_tick,
@@ -1805,7 +1821,7 @@ impl Simulation {
         });
 
         self.resolve_overheat_deaths(
-            &units,
+            &mut units,
             &buildings,
             &positions,
             &mut unit_health,
@@ -1855,6 +1871,7 @@ impl Simulation {
                         profile,
                         resurrection,
                         shrine_state,
+                        unit.status.damage_threshold.vertex_rgba,
                     ));
                 }
                 self.world.despawn(unit.entity);
@@ -1930,6 +1947,7 @@ impl Simulation {
             profile,
             resurrection,
             shrine_state,
+            vertex_rgba,
         ) in corpse_spawns
         {
             let id = self.allocate_id();
@@ -1945,6 +1963,7 @@ impl Simulation {
                 id,
                 Position(position),
                 Corpse {
+                    vertex_rgba,
                     source_unit,
                     source_owner,
                     source_team,
@@ -4336,6 +4355,7 @@ fn spiral_cells(center: NavCell, radius: u16) -> impl Iterator<Item = NavCell> {
 fn corpse_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<CorpseView> {
     let corpse = *entity.get::<Corpse>()?;
     Some(CorpseView {
+        vertex_rgba: corpse.vertex_rgba,
         id: *entity.get::<SimId>()?,
         position: entity.get::<Position>()?.0,
         source_unit: corpse.source_unit,
@@ -4555,11 +4575,14 @@ fn unit_view_from_entity(
         })
         .flatten();
     let status = *entity.get::<StatusState>()?;
-    let attack = native_actions::ensnare::ensnared_attack(
+    let mut attack = native_actions::ensnare::ensnared_attack(
         *entity.get::<AttackProfile>()?,
         *entity.get::<MovementClass>()?,
         status,
     );
+    attack.damage = attack
+        .damage
+        .saturating_add(status.damage_threshold.attack_bonus);
     Some(UnitView {
         id: *entity.get::<SimId>()?,
         content: entity.get::<ContentIdentity>().copied(),
@@ -4828,6 +4851,7 @@ fn apply_damage_to_target(
                 state.units[index].armor.armor_type,
                 effective_armor_points_per_100(&state.units[index]),
             );
+            damage_thresholds::observe_damage(&mut state.units[index], state.unit_health[index]);
             state.unit_health[index] = state.unit_health[index]
                 .checked_sub(scale_damage_per_10k(
                     native_kill_effects::damage_after_native_incoming(
@@ -4986,6 +5010,7 @@ fn apply_pending_attack_effects(
             units[index].armor.armor_type,
         );
         let damage = spell_damage_after_defend(units[index], damage, completed_tick);
+        damage_thresholds::observe_damage(&mut units[index], unit_health[index]);
         unit_health[index] = unit_health[index]
             .checked_sub(damage)
             .expect("Feedback health overflow");
@@ -5012,6 +5037,7 @@ fn apply_pending_attack_effects(
                         .apply_spell(profile.initial_damage, units[index].armor.armor_type);
                     let adjusted =
                         spell_damage_after_defend(units[index], adjusted, completed_tick);
+                    damage_thresholds::observe_damage(&mut units[index], unit_health[index]);
                     unit_health[index] = unit_health[index]
                         .checked_sub(adjusted)
                         .expect("Chain Lightning damage overflow");

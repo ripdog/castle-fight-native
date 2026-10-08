@@ -900,6 +900,12 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u64(corpse.id.0);
                 hash.write_i32(corpse.position.x);
                 hash.write_i32(corpse.position.y);
+                hash.write_u8(u8::from(corpse.corpse.vertex_rgba.is_some()));
+                if let Some(color) = corpse.corpse.vertex_rgba {
+                    for channel in color {
+                        hash.write_u8(channel);
+                    }
+                }
                 hash.write_u64(corpse.corpse.source_unit.0);
                 hash.write_u8(corpse.corpse.source_owner.0);
                 hash.write_u8(corpse.corpse.source_team.0);
@@ -1641,6 +1647,19 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     if let Some(a) = status.native_stun_ability {
         hash.write_u32(a.0);
     }
+    hash.write_u8(u8::from(status.damage_threshold.ability.is_some()));
+    if let Some(ability) = status.damage_threshold.ability {
+        hash.write_u32(ability.0);
+    }
+    hash.write_u8(status.damage_threshold.ability_level);
+    hash.write_u8(status.damage_threshold.color_level);
+    hash.write_i32(status.damage_threshold.attack_bonus);
+    hash.write_u8(u8::from(status.damage_threshold.vertex_rgba.is_some()));
+    if let Some(color) = status.damage_threshold.vertex_rgba {
+        for channel in color {
+            hash.write_u8(channel);
+        }
+    }
     hash.write_u64(status.rooted_until_tick);
     hash.write_u8(u8::from(status.ensnare.is_some()));
     if let Some(net) = status.ensnare {
@@ -1835,6 +1854,18 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
     hash.write_u8(u8::try_from(effects.len()).expect("passive effect count fits u8"));
     for effect in effects {
         match effect {
+            PassiveUnitEffect::DamageThreshold(profile) => {
+                hash.write_u8(14);
+                hash.write_u32(profile.ability.0);
+                for threshold in profile.thresholds {
+                    hash.write_u16(threshold.hp_ratio_below_per_10k);
+                    hash.write_i32(threshold.attack_bonus);
+                    for channel in threshold.vertex_rgba {
+                        hash.write_u8(channel);
+                    }
+                    hash.write_u8(u8::from(threshold.adds_if_absent));
+                }
+            }
             PassiveUnitEffect::KillBerserk(profile) => {
                 hash.write_u8(13);
                 hash.write_u32(profile.ability.0);

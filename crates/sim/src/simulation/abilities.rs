@@ -890,6 +890,7 @@ impl Simulation {
                             && target.team != source.team
                             && position.distance_sq(target.position) <= square_i32(radius)
                         {
+                            super::damage_thresholds::observe_damage(target, target.health);
                             target.health = target.health.saturating_sub(scale_damage_per_10k(
                                 super::native_kill_effects::damage_after_native_incoming(
                                     target,
@@ -2251,6 +2252,7 @@ mod tests {
             id,
             Position(position),
             Corpse {
+                vertex_rgba: None,
                 source_unit: id,
                 source_owner: PlayerId(0),
                 source_team: Team(0),
@@ -2326,6 +2328,7 @@ mod tests {
                 id,
                 Position(position),
                 Corpse {
+                    vertex_rgba: None,
                     source_unit: id,
                     source_owner: PlayerId(team.0),
                     source_team: team,

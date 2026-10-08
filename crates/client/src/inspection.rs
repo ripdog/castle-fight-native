@@ -2146,6 +2146,21 @@ fn active_effect_badges(
     let Some(unit) = samples.current.units.get(&id) else {
         return effects;
     };
+    if let Some(ability) = unit
+        .status
+        .damage_threshold
+        .ability
+        .filter(|_| unit.status.damage_threshold.ability_level > 0)
+    {
+        effects.push(ActiveEffectBadgeData {
+            icon: UiIconKey::ability(ability.0, UiIconRole::Normal),
+            description: format!(
+                "Permanent attack bonus: +{}",
+                unit.status.damage_threshold.attack_bonus
+            ),
+            beneficial: true,
+        });
+    }
     if let Some(net) = unit.status.ensnare.filter(|net| tick < net.expires_tick) {
         effects.push(ActiveEffectBadgeData {
             icon: UiIconKey::StatusEffect {

@@ -69,7 +69,26 @@ impl Simulation {
         let mut ballistic_projectile_launches = Vec::new();
         let mut bounce_projectile_launches = Vec::new();
         let mut chain_lightning_launches = Vec::new();
-        for intent in intents {
+        for mut intent in intents {
+            if let AttackSourceIndex::Unit(index) = intent.source {
+                let source = &units[index];
+                let percent = source.status.armor_modifiers
+                    [..usize::from(source.status.armor_modifier_count)]
+                    .iter()
+                    .filter(|modifier| completed_tick < modifier.expires_tick)
+                    .map(|modifier| i32::from(modifier.damage_bonus_per_10k))
+                    .sum::<i32>();
+                let base = intent
+                    .attack
+                    .damage
+                    .saturating_add(source.status.damage_threshold.attack_bonus);
+                intent.attack.damage = base
+                    .saturating_add(
+                        i32::try_from(i64::from(base) * i64::from(percent) / 10_000)
+                            .expect("buffed attack damage exceeds i32"),
+                    )
+                    .max(0);
+            }
             let source_alive = match intent.source {
                 AttackSourceIndex::Unit(index) => unit_health[index] > 0,
                 AttackSourceIndex::Building(index) => building_health[index] > 0,
@@ -172,7 +191,7 @@ impl Simulation {
                 {
                     continue;
                 }
-                for (index, target) in units.iter().enumerate() {
+                for (index, target) in units.iter_mut().enumerate() {
                     let distance = intent.source_position.distance_sq(positions[index]);
                     if target.team == intent.source_team
                         || unit_health[index] <= 0
@@ -195,6 +214,7 @@ impl Simulation {
                         .combat_rules
                         .damage_rules
                         .apply_spell(damage, target.armor.armor_type);
+                    super::damage_thresholds::observe_damage(target, unit_health[index]);
                     unit_health[index] = unit_health[index]
                         .checked_sub(scale_damage_per_10k(
                             super::native_kill_effects::damage_after_native_incoming(
@@ -781,7 +801,8 @@ impl Simulation {
                     );
                     on_hit.splash_falloff = Some(profile);
                 }
-                PassiveUnitEffect::KillBerserk(_)
+                PassiveUnitEffect::DamageThreshold(_)
+                | PassiveUnitEffect::KillBerserk(_)
                 | PassiveUnitEffect::Pulverize(_)
                 | PassiveUnitEffect::Evasion(_)
                 | PassiveUnitEffect::Defend(_)
@@ -861,22 +882,6 @@ impl Simulation {
                     if !attack.in_range(distance_sq) {
                         return None;
                     }
-                    let mut attack = attack;
-                    let damage_bonus_per_10k: i32 = source.status.armor_modifiers
-                        [..usize::from(source.status.armor_modifier_count)]
-                        .iter()
-                        .filter(|modifier| self.next_tick < modifier.expires_tick)
-                        .map(|modifier| i32::from(modifier.damage_bonus_per_10k))
-                        .sum();
-                    attack.damage = attack
-                        .damage
-                        .saturating_add(
-                            i32::try_from(
-                                i64::from(attack.damage) * i64::from(damage_bonus_per_10k) / 10_000,
-                            )
-                            .expect("buffed attack damage exceeds i32"),
-                        )
-                        .max(0);
                     Some(AttackIntent {
                         source: AttackSourceIndex::Unit(source_index),
                         target,

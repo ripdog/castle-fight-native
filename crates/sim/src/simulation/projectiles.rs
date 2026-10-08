@@ -78,7 +78,7 @@ pub(super) struct TargetProjectileResolution {
 impl Simulation {
     pub(super) fn resolve_due_chain_lightning_hops(
         &mut self,
-        units: &[UnitSnapshot],
+        units: &mut [UnitSnapshot],
         unit_health: &mut [i32],
         positions: &[SimPoint],
         completed_tick: u64,
@@ -131,6 +131,10 @@ impl Simulation {
                 .damage_rules
                 .apply_spell(state.next_damage, units[next_index].armor.armor_type);
             let adjusted = spell_damage_after_defend(units[next_index], adjusted, completed_tick);
+            super::damage_thresholds::observe_damage(
+                &mut units[next_index],
+                unit_health[next_index],
+            );
             unit_health[next_index] = unit_health[next_index]
                 .checked_sub(adjusted)
                 .expect("Chain Lightning damage overflow");
@@ -903,7 +907,7 @@ impl Simulation {
                     for unit in units.iter_mut() {
                         if unit.health <= 0
                             || unit.team == zone.source_team
-                            || unit.movement_class != MovementClass::Ground
+                            || unit.target_movement_class() != MovementClass::Ground
                             || zone.center.distance_sq(unit.position) > radius_sq
                         {
                             continue;
@@ -913,6 +917,7 @@ impl Simulation {
                             .damage_rules
                             .apply_spell(damage, unit.armor.armor_type);
                         let adjusted = spell_damage_after_defend(*unit, adjusted, completed_tick);
+                        super::damage_thresholds::observe_damage(unit, unit.health);
                         unit.health = unit
                             .health
                             .checked_sub(adjusted)

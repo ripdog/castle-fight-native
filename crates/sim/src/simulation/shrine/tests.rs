@@ -78,6 +78,7 @@ fn fatality(sim: &mut Simulation, id: SimId) {
         corpse,
         Position(position),
         Corpse {
+            vertex_rgba: None,
             source_unit: id,
             source_owner: PlayerId(0),
             source_team: Team(0),

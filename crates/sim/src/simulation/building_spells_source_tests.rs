@@ -246,13 +246,13 @@ fn overheat_shield_roll_precedence_progression_and_ground_death_splash_follow_ev
             ..Default::default()
         },
     );
-    let units = sim.snapshot_units();
+    let mut units = sim.snapshot_units();
     let mut health: Vec<_> = units
         .iter()
         .map(|u| if u.id == target { 0 } else { u.health })
         .collect();
     let positions: Vec<_> = units.iter().map(|u| u.position).collect();
-    sim.resolve_overheat_deaths(&units, &[], &positions, &mut health, &mut []);
+    sim.resolve_overheat_deaths(&mut units, &[], &positions, &mut health, &mut []);
     let damage = sim.damage_rules().apply_spell(
         shield.explosions[usize::from(level - 1)].full_damage,
         units[1].armor.armor_type,

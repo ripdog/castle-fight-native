@@ -1427,6 +1427,157 @@
         "script": "resolved/unit-spell-mechanics.tsv",
         "semantics": "resolved/unit-spell-semantics.tsv"
       }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0AG",
+      "unit_rawcode": "n02G",
+      "kind": "critical-strike",
+      "chance_per_10k": 1500,
+      "damage_multiplier_per_10k": 20000,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A0AG",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0FB",
+      "unit_rawcode": "n02G",
+      "spellcasting": {
+        "mana": {
+          "maximum": 0,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147483648
+        },
+        "ability": {
+          "id": 1093682754,
+          "mana_cost": 0,
+          "cooldown_ticks": 240,
+          "range": 614400,
+          "target_policy": "FlyingEnemyUnit",
+          "effect": {
+            "Ensnare": {
+              "profile": {
+                "ability": 1093682755,
+                "duration_ticks": 480,
+                "hero_duration_ticks": 94,
+                "range": 819200,
+                "speed_per_tick": 40960,
+                "lowering_ticks": 18,
+                "air_height": 204800,
+                "melee_range": 131072
+              },
+              "search_radius": 819200,
+              "maximum_targets": 5
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 0,
+      "effect_ability_rawcode": "A0FC",
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "semantics": "resolved/unit-spell-semantics.tsv"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "ability-effect",
+      "source_key": "A0FC",
+      "unit_rawcode": "n02G",
+      "spellcasting": {
+        "mana": {
+          "maximum": 0,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147483648
+        },
+        "ability": {
+          "id": 1093682755,
+          "mana_cost": 0,
+          "cooldown_ticks": 0,
+          "range": 0,
+          "target_policy": "FlyingEnemyUnit",
+          "effect": {
+            "Ensnare": {
+              "profile": {
+                "ability": 1093682755,
+                "duration_ticks": 480,
+                "hero_duration_ticks": 94,
+                "range": 819200,
+                "speed_per_tick": 40960,
+                "lowering_ticks": 18,
+                "air_height": 204800,
+                "melee_range": 131072
+              },
+              "search_radius": 819200,
+              "maximum_targets": 5
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 0,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "semantics": "resolved/unit-spell-semantics.tsv"
+      }
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A0HR",
+      "unit_rawcode": "n02G",
+      "kind": "damage-threshold",
+      "thresholds": [
+        {
+          "hp_ratio_below_per_10k": 7500,
+          "attack_bonus": 30,
+          "vertex_rgba": [
+            229,
+            138,
+            138,
+            255
+          ],
+          "adds_if_absent": true
+        },
+        {
+          "hp_ratio_below_per_10k": 5000,
+          "attack_bonus": 60,
+          "vertex_rgba": [
+            179,
+            66,
+            66,
+            255
+          ],
+          "adds_if_absent": false
+        },
+        {
+          "hp_ratio_below_per_10k": 2500,
+          "attack_bonus": 90,
+          "vertex_rgba": [
+            143,
+            8,
+            8,
+            255
+          ],
+          "adds_if_absent": false
+        }
+      ],
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/production-unit-special-mechanics.tsv",
+        "fields": "resolved/object-fields.tsv",
+        "handler": "DamageListener_addListener_TrollBlood_onEvent_addListener_TrollBlood",
+        "phase": "pre-health-commit-reduced-damage-event"
+      }
     }
   ],
   "buff_families": [

@@ -684,7 +684,7 @@ impl Simulation {
     /// Every dead source resolves once; cascading explosions are bounded by the unit count.
     pub(super) fn resolve_overheat_deaths(
         &self,
-        units: &[UnitSnapshot],
+        units: &mut [UnitSnapshot],
         buildings: &[BuildingSnapshot],
         positions: &[SimPoint],
         unit_health: &mut [i32],
@@ -693,7 +693,8 @@ impl Simulation {
         let mut resolved = vec![false; units.len()];
         loop {
             let mut changed = false;
-            for (index, unit) in units.iter().enumerate() {
+            for index in 0..units.len() {
+                let unit = units[index];
                 if resolved[index] || unit_health[index] > 0 {
                     continue;
                 }
@@ -721,10 +722,10 @@ impl Simulation {
                         0
                     }
                 };
-                for (target_index, target) in units.iter().enumerate() {
+                for (target_index, target) in units.iter_mut().enumerate() {
                     if unit_health[target_index] <= 0
                         || target.team == unit.team
-                        || target.movement_class != MovementClass::Ground
+                        || target.target_movement_class() != MovementClass::Ground
                         || target.classifications.spell_immune
                     {
                         continue;
@@ -734,6 +735,7 @@ impl Simulation {
                         target.armor.armor_type,
                     );
                     let damage = spell_damage_after_defend(*target, damage, self.next_tick);
+                    super::damage_thresholds::observe_damage(target, unit_health[target_index]);
                     unit_health[target_index] -= damage;
                 }
                 for (target_index, target) in buildings.iter().enumerate() {

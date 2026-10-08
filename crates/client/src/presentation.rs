@@ -4385,6 +4385,11 @@ fn sync_render_entities(
         let desired_imported = visual_rawcode.filter(|rawcode| unit_models.get(*rawcode).is_some());
         if let Some(entry) = render_map.units.get(&unit.id) {
             if entry.imported_rawcode == desired_imported {
+                if let Some(root) = entry.model_root
+                    && let Some([r, g, b, _]) = unit.status.damage_threshold.vertex_rgba
+                {
+                    commands.entity(root).insert(Wc3VertexTint([r, g, b]));
+                }
                 continue;
             }
             retire_target_status_visuals(
@@ -4436,7 +4441,13 @@ fn sync_render_entities(
                     ))
                     .id();
                 commands.entity(entity).add_child(model_root);
-                if let Some(tint) = model.tint_rgb {
+                if let Some(tint) = unit
+                    .status
+                    .damage_threshold
+                    .vertex_rgba
+                    .map(|[r, g, b, _]| [r, g, b])
+                    .or(model.tint_rgb)
+                {
                     commands.entity(model_root).insert(Wc3VertexTint(tint));
                 }
                 if !model.ribbon_emitters.is_empty() {
@@ -4755,6 +4766,13 @@ fn sync_render_entities(
                     },
                 ))
                 .id();
+            if let Some(tint) = corpse
+                .vertex_rgba
+                .map(|[r, g, b, _]| [r, g, b])
+                .or(model.tint_rgb)
+            {
+                commands.entity(model_root).insert(Wc3VertexTint(tint));
+            }
             if !model.ribbon_emitters.is_empty() {
                 commands
                     .entity(model_root)
@@ -7714,6 +7732,7 @@ mod tests {
     #[test]
     fn authoritative_corpse_timing_maps_to_death_flesh_and_bone_phases() {
         let corpse = CorpseView {
+            vertex_rgba: None,
             id: SimId(20),
             position: SimPoint::new(0, 0),
             source_unit: SimId(7),
