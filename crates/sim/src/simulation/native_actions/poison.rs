@@ -3,7 +3,6 @@ use crate::{PoisonProfile, PoisonStatus, components::PoisonState};
 
 pub(in crate::simulation) fn eligible(target: &UnitSnapshot, profile: PoisonProfile) -> bool {
     !target.mechanical
-        && !target.classifications.spell_immune
         && !target.classifications.invulnerable
         && profile
             .targets

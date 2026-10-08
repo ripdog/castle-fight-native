@@ -168,7 +168,7 @@ fn poison_waits_for_a_landed_weapon_and_revalidates_live_native_target_classes()
         }
         assert_eq!(
             sim.unit(target).unwrap().status.poison.is_some(),
-            !(mechanical || immune || invulnerable)
+            !(mechanical || invulnerable)
         );
     }
     let mut sim = simulation(1);
