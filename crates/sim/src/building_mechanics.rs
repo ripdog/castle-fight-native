@@ -13,6 +13,9 @@ pub(crate) use aura_carrier::{
     aura_carrier_bindings_for_version, aura_carrier_source_for_version,
     endurance_aura_spellcasting_for_version, healing_aura_spellcasting_for_version,
 };
+mod weather;
+pub(crate) use weather::WeatherState;
+pub use weather::{BuildingWeatherProfile, WeatherWaveProfile};
 mod enchantment;
 mod orc;
 pub use enchantment::BuildingEnchantmentProfile;

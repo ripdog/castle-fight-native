@@ -7,6 +7,7 @@ fn timed_simulation(rounds_to_win: u8) -> Simulation {
             time_limit_outcome: crate::TimeLimitOutcome::MoreStrikesThenIncome,
             rounds_to_win,
             rescue_strikes_enabled: true,
+            artillery_enabled: true,
         },
         rescue_strike_rules: crate::RescueStrikeRules::for_version(
             crate::MapVersion::CASTLE_FIGHT_9_27,

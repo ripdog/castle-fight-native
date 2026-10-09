@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 64;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 65;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -30,6 +30,7 @@ mod builder;
 mod building_bolts;
 mod enchantments;
 mod permanent_grants;
+mod weather;
 mod world_freezer;
 use world_freezer::WorldFreezerState;
 mod building_spells;
@@ -4465,6 +4466,25 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
         AbilityEffect::BuildingStasis(p) => {
             assert!(p.detection_radius >= 0 && p.detonation_radius >= 0 && p.lifetime_ticks > 0);
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::NativeBuildingSpellTrigger
+            );
+        }
+        AbilityEffect::NativeWeatherVisual { .. } => {
+            panic!("weather art is a presentation event, not a cast profile")
+        }
+        AbilityEffect::BuildingWeather(p) => {
+            assert!((1..=2).contains(&p.option_count) && p.dummy_lifetime_ticks > 0);
+            for wave in p.options.into_iter().flatten() {
+                assert!(
+                    wave.radius >= 0
+                        && wave.damage >= 0
+                        && wave.maximum_damage > 0
+                        && wave.waves > 0
+                        && wave.interval_ticks > 0
+                );
+            }
             assert_eq!(
                 spellcasting.ability.target_policy,
                 AbilityTargetPolicy::NativeBuildingSpellTrigger

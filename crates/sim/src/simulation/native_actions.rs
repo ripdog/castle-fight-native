@@ -155,12 +155,25 @@ impl Simulation {
             })
             .collect::<Vec<_>>();
         actions.sort_unstable_by_key(|(id, _, _)| *id);
+        let weather = actions
+            .iter()
+            .filter_map(|(id, _, action)| {
+                if let NativeAction::Weather(state) = action {
+                    Some((*id, state.clone()))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
         self.refresh_carrier_auras(units);
         for (_, entity, action) in actions {
             if self.world.get::<NativeAction>(entity).is_none() {
                 continue;
             }
             match action {
+                NativeAction::Weather(state) => {
+                    self.advance_weather(entity, state, units, buildings, &weather)
+                }
                 NativeAction::MasterProjectiles(state) => {
                     self.advance_master_projectiles(entity, state, units);
                 }

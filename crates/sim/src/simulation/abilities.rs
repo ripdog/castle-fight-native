@@ -596,6 +596,15 @@ impl Simulation {
                     } else if let AbilityEffect::WorldFreezer(profile) = intent.ability.effect {
                         self.start_world_freezer(source, profile);
                         metrics.effects += 1;
+                    } else if let AbilityEffect::BuildingWeather(profile) = intent.ability.effect {
+                        metrics.effects += usize::from(self.cast_building_weather(
+                            source,
+                            intent.ability.id,
+                            profile,
+                            intent.cast_sequence,
+                            units,
+                        ));
+                        emit_cast_visual = false;
                     } else if let AbilityEffect::BuildingEnchantment(profile) =
                         intent.ability.effect
                     {
@@ -885,6 +894,15 @@ impl Simulation {
                     } else if let AbilityEffect::WorldFreezer(profile) = intent.ability.effect {
                         self.start_world_freezer(source, profile);
                         metrics.effects += 1;
+                    } else if let AbilityEffect::BuildingWeather(profile) = intent.ability.effect {
+                        metrics.effects += usize::from(self.cast_building_weather(
+                            source,
+                            intent.ability.id,
+                            profile,
+                            intent.cast_sequence,
+                            units,
+                        ));
+                        emit_cast_visual = false;
                     } else if let AbilityEffect::BuildingEnchantment(profile) =
                         intent.ability.effect
                     {

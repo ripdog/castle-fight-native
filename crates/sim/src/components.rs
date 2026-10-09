@@ -1493,6 +1493,11 @@ pub enum AreaDamageOrigin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AbilityEffect {
+    /// Released native weather art has its own lifetime, independent of logical caster life.
+    NativeWeatherVisual {
+        duration_ticks: u16,
+    },
+    BuildingWeather(crate::building_mechanics::BuildingWeatherProfile),
     BuildingEnchantment(crate::building_mechanics::BuildingEnchantmentProfile),
     MasterProjectiles(crate::MapVersion),
     BuildingAura(crate::building_mechanics::BuildingAuraProfile),
@@ -1650,6 +1655,8 @@ impl AbilityEffect {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::NativeWeatherVisual { .. } => 38,
+            Self::BuildingWeather(_) => 37,
             Self::BuildingEnchantment(_) => 36,
             Self::BuildingAura(_) => 28,
             Self::BuildingStasis(_) => 27,

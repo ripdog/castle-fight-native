@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r74";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r75";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 46;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 47;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1828,6 +1828,22 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0EI") => {
+            0x4000_0128
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A0D1") => {
+            0x4000_0129
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A0D2") => {
+            0x4000_012a
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A0E3") => {
+            0x4000_012b
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A0E4") => {
+            0x4000_012c
+        }
+
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0DV") => {
             0x4000_0121
         }
@@ -3194,6 +3210,12 @@ fn hash_automatic_ability_profile(hash: &mut ContentHash64, ability: AutomaticAb
             }
         }
         AbilityEffect::Hailstone(profile) => hash_hailstone_content(hash, profile),
+        AbilityEffect::NativeWeatherVisual { duration_ticks } => hash.write_u16(duration_ticks),
+        AbilityEffect::BuildingWeather(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         AbilityEffect::BuildingEnchantment(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);

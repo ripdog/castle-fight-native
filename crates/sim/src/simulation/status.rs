@@ -406,6 +406,8 @@ pub(super) fn apply_ability_effect_to_unit(
         | AbilityEffect::WorldFreezer(_)
         | AbilityEffect::BuildingAura(_)
         | AbilityEffect::BuildingStasis(_)
+        | AbilityEffect::NativeWeatherVisual { .. }
+        | AbilityEffect::BuildingWeather(_)
         | AbilityEffect::BuildingEnchantment(_)
         | AbilityEffect::BuildingPermanentGrant(_)
         | AbilityEffect::BuildingAcidBomb(_)

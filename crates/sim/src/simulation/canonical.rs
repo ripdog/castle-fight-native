@@ -89,6 +89,7 @@ pub(super) fn canonical_configuration_identity(
     hash.write_u16(config.match_rules.time_limit_minutes);
     hash.write_u8(config.match_rules.rounds_to_win);
     hash.write_u8(u8::from(config.match_rules.rescue_strikes_enabled));
+    hash.write_u8(u8::from(config.match_rules.artillery_enabled));
     hash.write_u8(u8::from(matches!(
         config.match_rules.time_limit_outcome,
         crate::TimeLimitOutcome::Draw
@@ -458,6 +459,12 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(10);
                 hash.write_u64(id.0);
                 match action {
+                    NativeAction::Weather(state) => {
+                        hash.write_u8(11);
+                        for word in state.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                    }
                     NativeAction::MasterProjectiles(state) => {
                         hash.write_u8(10);
                         state.visit_canonical_words(|word| hash.write_u64(word));
@@ -2620,6 +2627,12 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             }
         }
         AbilityEffect::BuildingStasis(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
+        AbilityEffect::NativeWeatherVisual { duration_ticks } => hash.write_u16(duration_ticks),
+        AbilityEffect::BuildingWeather(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);
             }

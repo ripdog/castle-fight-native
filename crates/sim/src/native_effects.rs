@@ -29,6 +29,7 @@ const TUNING_9_27_JSON: &str = include_str!("../data/castle-fight/9.27/native-ef
 #[serde(rename_all = "kebab-case")]
 pub enum NativeEffectImplementationId {
     WarcraftBuildingImprovementV1,
+    WarcraftWeatherWaveV1,
     WarcraftSourceDamageDispatcherV1,
     WarcraftHealthScaledAftershockV1,
     WarcraftDamageRetaliationV1,
@@ -84,6 +85,7 @@ impl NativeEffectImplementationId {
     pub const fn stable_tag(self) -> u8 {
         match self {
             Self::WarcraftBuildingImprovementV1 => 79,
+            Self::WarcraftWeatherWaveV1 => 81,
             Self::WarcraftSourceDamageDispatcherV1 => 80,
             Self::WarcraftHealthScaledAftershockV1 => 78,
             Self::WarcraftDamageRetaliationV1 => 76,
@@ -552,6 +554,11 @@ fn native_buff_from_tuning(tuning: &TuningFile, source: u32) -> Option<crate::Na
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum TuningEffect {
+    NativeWeatherWave {
+        source_kind: String,
+        source_key: String,
+        profile: crate::building_mechanics::WeatherWaveProfile,
+    },
     NativeEnchantmentGrant {
         source_kind: String,
         source_key: String,
@@ -936,7 +943,8 @@ impl TuningEffect {
 
     fn source_kind(&self) -> &str {
         match self {
-            Self::SourceDamageDispatcher { source_kind, .. }
+            Self::NativeWeatherWave { source_kind, .. }
+            | Self::SourceDamageDispatcher { source_kind, .. }
             | Self::NativeEnchantmentGrant { source_kind, .. }
             | Self::BuildingImprovement { source_kind, .. }
             | Self::BuildingManaRegeneration { source_kind, .. }
@@ -977,7 +985,8 @@ impl TuningEffect {
 
     fn source_key(&self) -> &str {
         match self {
-            Self::SourceDamageDispatcher { source_key, .. }
+            Self::NativeWeatherWave { source_key, .. }
+            | Self::SourceDamageDispatcher { source_key, .. }
             | Self::NativeEnchantmentGrant { source_key, .. }
             | Self::BuildingImprovement { source_key, .. }
             | Self::BuildingManaRegeneration { source_key, .. }
@@ -1046,7 +1055,8 @@ impl TuningEffect {
             | Self::OrbSpellProc { unit_rawcode, .. }
             | Self::BurningOil { unit_rawcode, .. }
             | Self::FrostArmor { unit_rawcode, .. } => Some(unit_rawcode),
-            Self::NativeEnchantmentGrant { .. }
+            Self::NativeWeatherWave { .. }
+            | Self::NativeEnchantmentGrant { .. }
             | Self::BuildingManaRegeneration { .. }
             | Self::RetaliationProjectile { .. }
             | Self::ForkedLightning { .. }
@@ -1059,6 +1069,7 @@ impl TuningEffect {
 
     const fn expected_implementation(&self) -> NativeEffectImplementationId {
         match self {
+            Self::NativeWeatherWave { .. } => NativeEffectImplementationId::WarcraftWeatherWaveV1,
             Self::NativeEnchantmentGrant { .. } => {
                 NativeEffectImplementationId::WarcraftPermanentAbilityGrantsV1
             }
@@ -1112,6 +1123,7 @@ impl TuningEffect {
 
     const fn kind_name(&self) -> &'static str {
         match self {
+            Self::NativeWeatherWave { .. } => "native-weather-wave",
             Self::NativeEnchantmentGrant { .. } => "native-enchantment-grant",
             Self::SourceDamageDispatcher { .. } => "source-damage-dispatcher",
             Self::ElvenAutomatic { .. } => "elven-automatic",
@@ -1334,7 +1346,7 @@ fn native_unit_mechanics_from_tuning(
                         passive = Some(candidate);
                     }
                 }
-                TuningEffect::NativeEnchantmentGrant { .. } | TuningEffect::BuildingManaRegeneration { .. } | TuningEffect::RetaliationProjectile { .. } | TuningEffect::ForkedLightning { .. }
+                TuningEffect::NativeWeatherWave { .. } | TuningEffect::NativeEnchantmentGrant { .. } | TuningEffect::BuildingManaRegeneration { .. } | TuningEffect::RetaliationProjectile { .. } | TuningEffect::ForkedLightning { .. }
                 | TuningEffect::SelfDestruct { .. }
                 | TuningEffect::DamageThreshold { .. }
                 | TuningEffect::ConeWave { .. }
@@ -1783,7 +1795,8 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             target_ground_units: *target_ground_units,
             target_buildings: *target_buildings,
         }),
-        TuningEffect::NativeEnchantmentGrant { .. }
+        TuningEffect::NativeWeatherWave { .. }
+        | TuningEffect::NativeEnchantmentGrant { .. }
         | TuningEffect::BuildingImprovement { .. }
         | TuningEffect::BuildingManaRegeneration { .. }
         | TuningEffect::ConeWave { .. }
@@ -1865,6 +1878,11 @@ fn build_spellcasting(tuning: &TuningFile, effect: &TuningEffect) -> Spellcastin
             (1 << 31) | *mana_regen_per_second_per_10k,
             "generated automatic profile must retain its exact per-second rate unit"
         );
+        if let crate::AbilityEffect::BuildingWeather(p) = spellcasting.ability.effect {
+            for expected in p.options.into_iter().flatten() {
+                assert!(tuning.effects.iter().any(|child| matches!(child, TuningEffect::NativeWeatherWave { profile, .. } if *profile == expected)));
+            }
+        }
         if let crate::AbilityEffect::BuildingEnchantment(p) = spellcasting.ability.effect {
             for expected in p.options {
                 assert!(

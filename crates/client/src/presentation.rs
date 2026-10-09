@@ -3494,6 +3494,8 @@ fn prewarm_timed_wc3_effects(
                         | AbilityEffect::Hailstone(_)
                         | AbilityEffect::BuildingAura(_)
                         | AbilityEffect::BuildingStasis(_)
+                        | AbilityEffect::NativeWeatherVisual { .. }
+                        | AbilityEffect::BuildingWeather(_)
                         | AbilityEffect::BuildingEnchantment(_)
                         | AbilityEffect::BuildingPermanentGrant(_)
                         | AbilityEffect::BuildingAcidBomb(_)
@@ -4418,6 +4420,13 @@ fn sync_render_entities(
                     .and_then(|building| building.content.map(|content| content.rawcode))
             });
         for visual in wc3_visuals.ability_for_source(cast.ability.0, source_rawcode) {
+            if matches!(cast.effect, AbilityEffect::NativeWeatherVisual { .. })
+                && visual.source_unit_rawcode.is_some()
+            {
+                // The global child binding renders released weather after source removal;
+                // source aliases retain catalog ownership and loading without doubling art.
+                continue;
+            }
             if visual.anchor == Wc3AbilityVisualAnchor::Target
                 && wc3_visuals.lightning(cast.ability.0, 0).is_some()
             {
@@ -4464,9 +4473,14 @@ fn sync_render_entities(
                     attachment_point: point.to_owned(),
                 });
             }
-            let lifetime = visual
-                .model
-                .effect_lifetime_seconds(ABILITY_MODEL_EFFECT_SECONDS);
+            let lifetime = match cast.effect {
+                AbilityEffect::NativeWeatherVisual { duration_ticks } => {
+                    f32::from(duration_ticks) / CASTLE_FIGHT_SIMULATION_HZ as f32
+                }
+                _ => visual
+                    .model
+                    .effect_lifetime_seconds(ABILITY_MODEL_EFFECT_SECONDS),
+            };
             timed_effects.0.push(TimedWc3Effect {
                 entity,
                 remaining: lifetime,

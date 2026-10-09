@@ -47,7 +47,7 @@ struct DoodadAssetSpec {
     placements: Vec<DoodadPlacementSpec>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 struct VisualAssetSpec {
     owner_kind: String,
     owner_rawcode: String,
@@ -197,6 +197,53 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
         .as_array()
         .ok_or("native tuning effects")?
     {
+        if let Some(modes) =
+            row["spellcasting"]["ability"]["effect"]["BuildingWeather"]["options"].as_array()
+        {
+            let source = row["unit_rawcode"]
+                .as_str()
+                .ok_or("weather building identity")?;
+            let mut children = BTreeSet::new();
+            for option in modes
+                .iter()
+                .filter_map(serde_json::Value::as_array)
+                .flatten()
+            {
+                let rawcode = (option["ability"]
+                    .as_u64()
+                    .ok_or("weather ability identity")? as u32)
+                    .to_be_bytes();
+                children.insert(std::str::from_utf8(&rawcode)?.to_owned());
+                if option["shards"].as_u64() == Some(0) {
+                    let rawcode = (option["buff_rawcode"]
+                        .as_u64()
+                        .ok_or("weather target buff")? as u32)
+                        .to_be_bytes();
+                    children.insert(std::str::from_utf8(&rawcode)?.to_owned());
+                }
+            }
+            let aliases: Vec<_> = visuals
+                .assets
+                .iter()
+                .filter(|asset| {
+                    asset.owner_kind == "abilities"
+                        && children.contains(&asset.owner_rawcode)
+                        && matches!(asset.role.as_str(), "effect" | "target")
+                })
+                .cloned()
+                .collect();
+            for mut alias in aliases {
+                alias.source_unit_rawcode = Some(source.to_owned());
+                if !visuals.assets.iter().any(|asset| {
+                    asset.owner_rawcode == alias.owner_rawcode
+                        && asset.source_unit_rawcode == alias.source_unit_rawcode
+                        && asset.role == alias.role
+                        && asset.model_path == alias.model_path
+                }) {
+                    visuals.assets.push(alias);
+                }
+            }
+        }
         if let Some(rows) = row["provenance"]["script_visuals"].as_array() {
             for visual in rows {
                 visuals.assets.push(VisualAssetSpec {
@@ -714,6 +761,24 @@ fn load_visual_assets(
             }
         }
 
+        if kind == "abilities"
+            && base_rawcode == "ACmo"
+            && field == "abuf"
+            && row.get(level).unwrap_or_default() == "1"
+        {
+            for buff in parse_json_comma_list(row.get(recovered).unwrap_or_default()) {
+                if let Some(visual) = buff_visuals.get(buff.as_str()) {
+                    for path in &visual.target_art {
+                        assets.insert((
+                            "abilities".to_owned(),
+                            buff.clone(),
+                            "target".to_owned(),
+                            path.clone(),
+                        ));
+                    }
+                }
+            }
+        }
         let role = match (kind, field) {
             ("units", "ua1m") => Some("attack1_projectile"),
             ("units", "ua2m") => Some("attack2_projectile"),

@@ -848,6 +848,37 @@ mod tests {
     }
 
     #[test]
+    fn released_weather_art_preserves_native_child_and_source_loading_identity() {
+        let catalog = load_embedded_visuals().unwrap();
+        let tuning: serde_json::Value = serde_json::from_str(include_str!(
+            "../../sim/data/castle-fight/9.27/native-effect-tuning.json"
+        ))
+        .unwrap();
+        for row in tuning["effects"].as_array().unwrap() {
+            let Some(modes) =
+                row["spellcasting"]["ability"]["effect"]["BuildingWeather"]["options"].as_array()
+            else {
+                continue;
+            };
+            let source = row["unit_rawcode"].as_str().unwrap();
+            for wave in modes.iter().flat_map(|mode| mode.as_array().unwrap()) {
+                let code = (wave["ability"].as_u64().unwrap() as u32).to_be_bytes();
+                let child = std::str::from_utf8(&code).unwrap();
+                assert!(catalog.assets.iter().any(|a| a.owner_rawcode == child
+                    && a.source_unit_rawcode.as_deref() == Some(source)
+                    && a.role == "effect"));
+                if wave["shards"].as_u64() == Some(0) {
+                    let code = (wave["buff_rawcode"].as_u64().unwrap() as u32).to_be_bytes();
+                    let buff = std::str::from_utf8(&code).unwrap();
+                    assert!(catalog.assets.iter().any(|a| a.owner_rawcode == buff
+                        && a.source_unit_rawcode.as_deref() == Some(source)
+                        && a.role == "target"));
+                }
+            }
+        }
+    }
+
+    #[test]
     fn script_grant_visuals_preserve_source_owner_and_distinct_cast_anchors() {
         let catalog = load_embedded_visuals().unwrap();
         let projection: serde_json::Value = serde_json::from_str(include_str!(

@@ -159,6 +159,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    ElementalRain = 0x2100_001a => b"h06F",
     BooksOfConjuration = 0x2100_0019 => b"h05Z",
     ObeliskOfElements = 0x2100_0018 => b"h060",
     ManaGenerator = 0x2100_0017 => b"h062",

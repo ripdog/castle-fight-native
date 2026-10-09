@@ -19,6 +19,8 @@ pub struct MatchRules {
     pub rounds_to_win: u8,
     /// nrs disables Rescue Strike on builders.
     pub rescue_strikes_enabled: bool,
+    /// Source artillery mode controls alternative native weather objects.
+    pub artillery_enabled: bool,
 }
 
 impl Default for MatchRules {
@@ -28,6 +30,7 @@ impl Default for MatchRules {
             time_limit_outcome: TimeLimitOutcome::MoreStrikesThenIncome,
             rounds_to_win: 1,
             rescue_strikes_enabled: false,
+            artillery_enabled: true,
         }
     }
 }
@@ -41,6 +44,7 @@ impl MatchRules {
                 time_limit_outcome: TimeLimitOutcome::MoreStrikesThenIncome,
                 rounds_to_win: 1,
                 rescue_strikes_enabled: true,
+                artillery_enabled: true,
             }
         } else {
             Self {
@@ -48,6 +52,7 @@ impl MatchRules {
                 time_limit_outcome: TimeLimitOutcome::MoreStrikesThenIncome,
                 rounds_to_win: 1,
                 rescue_strikes_enabled: false,
+                artillery_enabled: true,
             }
         }
     }

@@ -83,7 +83,7 @@ def project(recipe, fields, unit, protected, mechanics, scaled):
         or any(scaled(fields[k]) != 0 for k in ['dataa1','datab1','datac1','datad1'])):
         raise ValueError('native Parasite trigger differs from enchantment effect picker')
     rate = scaled(unit['mana_regen'],10_000)
-    profile = {'map_version':mechanics['map_version'],'trigger_targets':6,'trigger_invulnerable':True,'trigger_spell_immune':False,
+    profile = {'map_version':mechanics['map_version'],'trigger_targets':(1 if 'ground' in tokens else 0)|(2 if 'air' in tokens else 0)|(4 if 'structure' in tokens else 0),'trigger_invulnerable':True,'trigger_spell_immune':False,
         'heal_if_missing_hp_gt':params['heal_if_missing_hp_gt'],'heal_amount':params['heal_amount'],
         'retry_marker':marker,'dispatcher':dispatcher,'dispatcher_option_index':2,'options':grants}
     return {'kind':'scripted-automatic','source_kind':recipe['source_kind'],'source_key':recipe['source_key'],'unit_rawcode':recipe['unit_rawcode'],
