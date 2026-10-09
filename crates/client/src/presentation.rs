@@ -849,6 +849,8 @@ enum ImportedUnitAnimationState {
     Walk,
     Attack,
     Cast,
+    CastSlam,
+    CastThrow,
     Death,
     DecayFlesh,
     DecayBone,
@@ -869,6 +871,8 @@ struct ImportedUnitAnimationController {
     defend_walk_reference_speed: Option<f32>,
     defend_attack: Option<UnitAnimationClip>,
     cast: Option<UnitAnimationClip>,
+    cast_slam: Option<UnitAnimationClip>,
+    cast_throw: Option<UnitAnimationClip>,
     death: Option<UnitAnimationClip>,
     decay_flesh: Option<UnitAnimationClip>,
     decay_bone: Option<UnitAnimationClip>,
@@ -1804,6 +1808,8 @@ fn setup_imported_unit_animation_players(
                 defend_walk_reference_speed: animations.defend_walk_reference_speed,
                 defend_attack: animations.defend_attack,
                 cast: animations.cast,
+                cast_slam: animations.cast_slam,
+                cast_throw: animations.cast_throw,
                 death: animations.death,
                 decay_flesh: animations.decay_flesh,
                 decay_bone: animations.decay_bone,
@@ -2204,6 +2210,12 @@ fn unit_animation_sequence_name(
         ImportedUnitAnimationState::Walk => names.walk.as_deref().or(Some(names.stand.as_str())),
         ImportedUnitAnimationState::Attack => names.attack.as_deref(),
         ImportedUnitAnimationState::Cast => names.cast.as_deref(),
+        ImportedUnitAnimationState::CastSlam => {
+            names.cast_slam.as_deref().or(names.cast.as_deref())
+        }
+        ImportedUnitAnimationState::CastThrow => {
+            names.cast_throw.as_deref().or(names.cast.as_deref())
+        }
         ImportedUnitAnimationState::Death => names.death.as_deref(),
         ImportedUnitAnimationState::DecayFlesh => names
             .decay_flesh
@@ -2466,6 +2478,14 @@ fn update_live_imported_unit_animation(
                 },
             ),
             ActionAnimationKind::Cast => (ImportedUnitAnimationState::Cast, controller.cast),
+            ActionAnimationKind::CastSlam => (
+                ImportedUnitAnimationState::CastSlam,
+                controller.cast_slam.or(controller.cast),
+            ),
+            ActionAnimationKind::CastThrow => (
+                ImportedUnitAnimationState::CastThrow,
+                controller.cast_throw.or(controller.cast),
+            ),
         };
         if let Some(clip) = clip {
             if controller.action_animation != Some(action)
@@ -2512,6 +2532,8 @@ fn update_live_imported_unit_animation(
         ImportedUnitAnimationState::Walk => controller.walk.unwrap_or(controller.stand),
         ImportedUnitAnimationState::Attack
         | ImportedUnitAnimationState::Cast
+        | ImportedUnitAnimationState::CastSlam
+        | ImportedUnitAnimationState::CastThrow
         | ImportedUnitAnimationState::Death
         | ImportedUnitAnimationState::DecayFlesh
         | ImportedUnitAnimationState::DecayBone => {
@@ -2521,7 +2543,10 @@ fn update_live_imported_unit_animation(
     if controller.state != desired || controller.defend_active != defend_active {
         let transition = if matches!(
             controller.state,
-            ImportedUnitAnimationState::Attack | ImportedUnitAnimationState::Cast
+            ImportedUnitAnimationState::Attack
+                | ImportedUnitAnimationState::Cast
+                | ImportedUnitAnimationState::CastSlam
+                | ImportedUnitAnimationState::CastThrow
         ) {
             player.stop_all();
             Duration::ZERO
@@ -3465,6 +3490,7 @@ fn prewarm_timed_wc3_effects(
                         | AbilityEffect::BuildingPermanentGrant(_)
                         | AbilityEffect::BuildingAcidBomb(_)
                         | AbilityEffect::BuildingBolt(_)
+                        | AbilityEffect::MasterProjectiles(_)
                         | AbilityEffect::WorldFreezer(_)
                         | AbilityEffect::Snowfall { .. }
                         | AbilityEffect::Hex { .. }
@@ -7785,6 +7811,8 @@ mod tests {
             defend_walk_reference_speed: None,
             defend_attack: None,
             cast: Some(cast),
+            cast_slam: None,
+            cast_throw: None,
             death: None,
             decay_flesh: None,
             decay_bone: None,

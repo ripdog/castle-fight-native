@@ -55,6 +55,8 @@ pub struct UnitAnimationSequenceNames {
     pub defend_walk: Option<String>,
     pub defend_attack: Option<String>,
     pub cast: Option<String>,
+    pub cast_slam: Option<String>,
+    pub cast_throw: Option<String>,
     pub death: Option<String>,
     pub decay_flesh: Option<String>,
     pub decay_bone: Option<String>,
@@ -73,6 +75,8 @@ pub struct UnitAnimationSet {
     pub defend_walk_reference_speed: Option<f32>,
     pub defend_attack: Option<UnitAnimationClip>,
     pub cast: Option<UnitAnimationClip>,
+    pub cast_slam: Option<UnitAnimationClip>,
+    pub cast_throw: Option<UnitAnimationClip>,
     pub death: Option<UnitAnimationClip>,
     pub decay_flesh: Option<UnitAnimationClip>,
     pub decay_bone: Option<UnitAnimationClip>,
@@ -203,6 +207,8 @@ impl UnitModelSet {
             let defend_walk = find_animation(gltf, AnimationRole::DefendWalk);
             let defend_attack = find_animation(gltf, AnimationRole::DefendAttack);
             let cast = find_animation(gltf, AnimationRole::Cast);
+            let cast_slam = find_animation(gltf, AnimationRole::CastSlam);
+            let cast_throw = find_animation(gltf, AnimationRole::CastThrow);
             let death = find_animation(gltf, AnimationRole::Death);
             let decay_flesh = find_animation(gltf, AnimationRole::DecayFlesh);
             let decay_bone = find_animation(gltf, AnimationRole::DecayBone);
@@ -215,6 +221,8 @@ impl UnitModelSet {
                 defend_walk.as_ref(),
                 defend_attack.as_ref(),
                 cast.as_ref(),
+                cast_slam.as_ref(),
+                cast_throw.as_ref(),
                 death.as_ref(),
                 decay_flesh.as_ref(),
                 decay_bone.as_ref(),
@@ -239,6 +247,8 @@ impl UnitModelSet {
                     .as_ref()
                     .map(|animation| animation.name.clone()),
                 cast: cast.as_ref().map(|animation| animation.name.clone()),
+                cast_slam: cast_slam.as_ref().map(|animation| animation.name.clone()),
+                cast_throw: cast_throw.as_ref().map(|animation| animation.name.clone()),
                 death: death.as_ref().map(|animation| animation.name.clone()),
                 decay_flesh: decay_flesh.as_ref().map(|animation| animation.name.clone()),
                 decay_bone: decay_bone.as_ref().map(|animation| animation.name.clone()),
@@ -268,6 +278,10 @@ impl UnitModelSet {
             let defend_attack_slot =
                 append_optional_clip(&mut clips, defend_attack.map(|animation| animation.clip));
             let cast_slot = append_optional_clip(&mut clips, cast.map(|animation| animation.clip));
+            let cast_slam_slot =
+                append_optional_clip(&mut clips, cast_slam.map(|animation| animation.clip));
+            let cast_throw_slot =
+                append_optional_clip(&mut clips, cast_throw.map(|animation| animation.clip));
             let death_slot =
                 append_optional_clip(&mut clips, death.map(|animation| animation.clip));
             let decay_flesh_slot =
@@ -303,6 +317,14 @@ impl UnitModelSet {
                     duration_seconds: durations[slot],
                 }),
                 cast: cast_slot.map(|slot| UnitAnimationClip {
+                    node: nodes[slot],
+                    duration_seconds: durations[slot],
+                }),
+                cast_slam: cast_slam_slot.map(|slot| UnitAnimationClip {
+                    node: nodes[slot],
+                    duration_seconds: durations[slot],
+                }),
+                cast_throw: cast_throw_slot.map(|slot| UnitAnimationClip {
                     node: nodes[slot],
                     duration_seconds: durations[slot],
                 }),
@@ -348,6 +370,8 @@ enum AnimationRole {
     DefendWalk,
     DefendAttack,
     Cast,
+    CastSlam,
+    CastThrow,
     Death,
     DecayFlesh,
     DecayBone,
@@ -407,6 +431,8 @@ fn animation_score(name: &str, role: AnimationRole) -> Option<u8> {
             _ if name.starts_with("spell") => Some(4),
             _ => None,
         },
+        AnimationRole::CastSlam => name.starts_with("spell slam").then_some(0),
+        AnimationRole::CastThrow => name.starts_with("spell throw").then_some(0),
         AnimationRole::Death => match name.as_str() {
             "death" => Some(0),
             _ if name.starts_with("death") => Some(1),

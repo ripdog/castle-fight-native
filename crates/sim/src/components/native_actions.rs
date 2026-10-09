@@ -161,6 +161,7 @@ pub(crate) struct HailstoneState {
 
 #[derive(Component, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum NativeAction {
+    MasterProjectiles(MasterProjectileState),
     ConeWave(ConeWaveState),
     SphereFlight(SphereFlightState),
     AuraCarrier(AuraCarrierState),

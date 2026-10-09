@@ -480,6 +480,74 @@
       ]
     },
     {
+      "building_rawcode": "h04E",
+      "source_registration": "wK",
+      "source_factory": "Hu:create851",
+      "source_callback": "BuildingAttachmentHandler_registerBuildingAttach_RaceElemental_call_registerBuildingAttach_RaceElemental12",
+      "visuals": [
+        {
+          "model_path": "Doodads\\Cityscape\\Structures\\City_ColumnSemiCircle\\City_ColumnSemiCircle.mdl",
+          "yaw_degrees": 270.0,
+          "offset_world": [
+            0.0,
+            28.0,
+            0.0
+          ],
+          "scale": 0.2
+        },
+        {
+          "model_path": "Doodads\\Cityscape\\Structures\\City_ColumnSemiCircle\\City_ColumnSemiCircle.mdl",
+          "yaw_degrees": 90.0,
+          "offset_world": [
+            0.0,
+            -28.0,
+            0.0
+          ],
+          "scale": 0.2
+        },
+        {
+          "model_path": "Abilities\\Spells\\Other\\Tornado\\Tornado_Target.mdl",
+          "yaw_degrees": 270.0,
+          "offset_world": [
+            0.0,
+            0.0,
+            350.0
+          ],
+          "scale": 1.0
+        },
+        {
+          "model_path": "Abilities\\Spells\\Items\\AIfb\\AIfbTarget.mdl",
+          "yaw_degrees": 270.0,
+          "offset_world": [
+            0.0,
+            0.0,
+            250.0
+          ],
+          "scale": 2.0
+        },
+        {
+          "model_path": "Abilities\\Spells\\Items\\AIlb\\AIlbTarget.mdl",
+          "yaw_degrees": 270.0,
+          "offset_world": [
+            0.0,
+            0.0,
+            130.0
+          ],
+          "scale": 2.0
+        },
+        {
+          "model_path": "Abilities\\Spells\\Human\\slow\\slowtarget.mdl",
+          "yaw_degrees": 270.0,
+          "offset_world": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": 1.1
+        }
+      ]
+    },
+    {
       "building_rawcode": "h04M",
       "visuals": [],
       "native_abilities": [

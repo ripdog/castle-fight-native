@@ -56,6 +56,7 @@ mod damage_thresholds;
 mod economy;
 mod lava_spawns;
 mod line_projectiles;
+mod master_projectiles;
 mod match_rules;
 #[cfg(test)]
 mod match_rules_tests;
@@ -1904,6 +1905,7 @@ impl Simulation {
             &mut building_health,
         );
         self.release_spheres(&mut units);
+        self.observe_master_parasite_deaths(&units, &unit_health, &positions);
         let mut deaths = 0;
         let mut corpse_spawns = Vec::new();
         // Team contributions are phase-local derived state, never a stale persistent counter.
@@ -1997,9 +1999,16 @@ impl Simulation {
                 },
                 None => RetaliationState::default(),
             };
+            let mut status = unit.status;
+            if positions[index] != unit.position {
+                status.facing_direction = SimPoint::new(
+                    positions[index].x - unit.position.x,
+                    positions[index].y - unit.position.y,
+                );
+            }
             *entity
                 .get_mut::<StatusState>()
-                .expect("unit status state missing") = unit.status;
+                .expect("unit status state missing") = status;
             if unit.spellcasting.is_some() {
                 entity
                     .get_mut::<ManaState>()
@@ -2355,6 +2364,14 @@ impl Simulation {
                     );
                 usize::from(ordinary)
                     + entity
+                        .get::<crate::components::NativeAction>()
+                        .map_or(0, |action| match action {
+                            crate::components::NativeAction::MasterProjectiles(state) => {
+                                state.lightning.len() + state.frost.len() + state.minions.len()
+                            }
+                            _ => 0,
+                        })
+                    + entity
                         .get::<WorldFreezerState>()
                         .map_or(0, |state| state.orbs.len())
             })
@@ -2476,6 +2493,7 @@ impl Simulation {
                 }));
             }
         }
+        self.append_master_projectile_views(&mut projectiles);
         projectiles.sort_unstable_by_key(|projectile| projectile.id);
         projectiles
     }
@@ -2641,6 +2659,7 @@ impl Simulation {
             RetaliationState::default(),
             StatusState {
                 spawn_building,
+                facing_direction: SimPoint::new(if unit.team.0 == 0 { 1 } else { -1 }, 0),
                 summon_order_refresh_tick: lava_spawns::initial_state(properties.passive_effects)
                     .map(|state| self.next_tick + u64::from(state.profile.order_refresh_ticks)),
                 lava_spawn: lava_spawns::initial_state(properties.passive_effects),
@@ -4467,6 +4486,9 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
             for form in [profile.ground, profile.air] {
                 assert!(form.speed_per_tick >= 0 && form.collision_radius > 0);
             }
+        }
+        AbilityEffect::MasterProjectiles(version) => {
+            crate::native_effects::master_projectile_profile_for_version(version).validate();
         }
         AbilityEffect::Damage { amount } => assert!(amount >= 0),
         AbilityEffect::Stun { duration_ticks } => assert!(duration_ticks > 0),

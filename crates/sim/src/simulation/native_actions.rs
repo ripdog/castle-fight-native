@@ -129,6 +129,9 @@ impl Simulation {
                 continue;
             }
             match action {
+                NativeAction::MasterProjectiles(state) => {
+                    self.advance_master_projectiles(entity, state, units);
+                }
                 NativeAction::ConeWave(state) => {
                     self.advance_cone_wave(entity, state, units);
                 }

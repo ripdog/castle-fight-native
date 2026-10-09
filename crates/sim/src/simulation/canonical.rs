@@ -385,6 +385,10 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(10);
                 hash.write_u64(id.0);
                 match action {
+                    NativeAction::MasterProjectiles(state) => {
+                        hash.write_u8(10);
+                        state.visit_canonical_words(|word| hash.write_u64(word));
+                    }
                     NativeAction::ConeWave(state) => {
                         hash.write_u8(9);
                         hash.write_u64(state.source.0);
@@ -1779,6 +1783,8 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         hash.write_u64(poison.expires_tick);
     }
 
+    hash.write_i32(status.facing_direction.x);
+    hash.write_i32(status.facing_direction.y);
     hash.write_u8(u8::from(status.spawn_building.is_some()));
     if let Some(id) = status.spawn_building {
         hash.write_u64(id.0);
@@ -1884,6 +1890,8 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         hash.write_u8(match action.kind {
             ActionAnimationKind::Attack => 0,
             ActionAnimationKind::Cast => 1,
+            ActionAnimationKind::CastSlam => 2,
+            ActionAnimationKind::CastThrow => 3,
         });
         hash.write_u64(action.started_tick);
         hash.write_u64(action.until_tick);
@@ -2473,6 +2481,15 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_u16(duration_ticks);
             hash.write_u16(hero_duration_ticks);
             hash.write_i32(autocast_range);
+        }
+        AbilityEffect::MasterProjectiles(version) => {
+            hash.write_u16(version.major);
+            hash.write_u16(version.minor);
+            for word in crate::native_effects::master_projectile_profile_for_version(version)
+                .canonical_words()
+            {
+                hash.write_u64(word);
+            }
         }
         AbilityEffect::Hailstone(profile) => hash_hailstone_profile(hash, profile),
         AbilityEffect::BuildingAura(p) => {

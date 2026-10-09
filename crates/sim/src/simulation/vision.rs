@@ -188,6 +188,54 @@ impl Simulation {
                 }));
             }
         }
+        for entity in self.world.iter_entities() {
+            let Some(crate::components::NativeAction::MasterProjectiles(state)) =
+                entity.get::<crate::components::NativeAction>()
+            else {
+                continue;
+            };
+            for (movers, profile) in [
+                (&state.lightning, state.profile.lightning),
+                (&state.frost, state.profile.frost),
+            ] {
+                let sight =
+                    crate::castle_fight_sight_for_version(state.map_version, profile.rawcode)
+                        .expect("native mover sight");
+                sources.extend(movers.iter().map(|m| {
+                    (
+                        m.id,
+                        m.team,
+                        m.position(),
+                        sight.radius(rules.is_night(self.next_tick)),
+                        true,
+                        0,
+                        None,
+                        None,
+                        Some(m.owner),
+                        None,
+                    )
+                }));
+            }
+            let sight = crate::castle_fight_sight_for_version(
+                state.map_version,
+                state.profile.parasite_child_rawcode,
+            )
+            .expect("native minion sight");
+            sources.extend(state.minions.iter().map(|m| {
+                (
+                    m.id,
+                    m.team,
+                    m.position,
+                    sight.radius(rules.is_night(self.next_tick)),
+                    false,
+                    0,
+                    None,
+                    None,
+                    Some(m.owner),
+                    None,
+                )
+            }));
+        }
         sources.sort_unstable_by_key(|source| source.0);
         for &(_, team, position, radius, flying, revealed_teams, _, _, _, _) in &sources {
             // Capture size outside the closure so mutating the visibility grid needs no clone.

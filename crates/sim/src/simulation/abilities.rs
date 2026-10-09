@@ -329,6 +329,14 @@ impl Simulation {
                 && !intent.completing_windup
                 && !intent.ability.effect.ignores_order_interruptions()
             {
+                if let Some(point) = match intent.target {
+                    AbilityIntentTarget::Unit { index: i, .. } => Some(units[i].position),
+                    _ => None,
+                } {
+                    let origin = units[index].position;
+                    units[index].status.facing_direction =
+                        SimPoint::new(point.x - origin.x, point.y - origin.y);
+                }
                 let cast_point_ticks = units[index].action_timing.cast_point_ticks;
                 if cast_point_ticks > 0 {
                     let cast_ticks = units[index].action_timing.cast_ticks;
@@ -682,6 +690,17 @@ impl Simulation {
                                 metrics.effects += 1;
                             }
                         }
+                    } else if let AbilityEffect::MasterProjectiles(version) = intent.ability.effect
+                    {
+                        self.start_master_projectiles(
+                            source,
+                            *crate::native_effects::master_projectile_profile_for_version(version),
+                            index,
+                            intent.cast_sequence,
+                            units,
+                            buildings,
+                        );
+                        metrics.effects += 1;
                     } else if let AbilityEffect::FrostNova {
                         ability,
                         radius,
@@ -1059,7 +1078,7 @@ impl Simulation {
                         && source.status.ability_retreat_end_tick
                             > source.status.ability_retreat_start_tick
                         && let Some(action) = source.status.action_animation.as_mut()
-                        && action.kind == ActionAnimationKind::Cast
+                        && action.kind.is_cast()
                     {
                         action.until_tick = action
                             .until_tick
@@ -1582,6 +1601,7 @@ impl Simulation {
                         ability.effect,
                         AbilityEffect::AreaStun { .. }
                             | AbilityEffect::AreaDebuff { .. }
+                            | AbilityEffect::MasterProjectiles(_)
                             | AbilityEffect::FrostNova { .. }
                     ) && (!candidate.classifications.combat_sapper
                         || candidate.classifications.invulnerable
@@ -2047,6 +2067,7 @@ impl Simulation {
                                 ability.effect,
                                 AbilityEffect::AreaStun { .. }
                                     | AbilityEffect::AreaDebuff { .. }
+                                    | AbilityEffect::MasterProjectiles(_)
                                     | AbilityEffect::FrostNova { .. }
                             ) || (target.classifications.combat_sapper
                                 && !target.classifications.invulnerable

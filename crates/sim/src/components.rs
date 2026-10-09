@@ -6,6 +6,11 @@ pub use native_grants::{
     MAX_PERMANENT_NATIVE_ABILITIES, NativeAbilityGrant, NativeAbilityGrantEffect,
     NativeAbilityGrants,
 };
+mod master_projectiles;
+pub(crate) use master_projectiles::{
+    MasterFan, MasterMinion, MasterMover, MasterParasite, MasterProjectileState,
+};
+pub use master_projectiles::{MasterMoverProfile, MasterProjectileProfile, NativeNovaProfile};
 mod native_actions;
 pub(crate) use native_actions::{
     AcidBombMissileState, AuraCarrierState, ConeWaveState, EnsnareMissileState, HailstoneState,
@@ -129,6 +134,14 @@ pub struct ActionTimingProfile {
 pub enum ActionAnimationKind {
     Attack,
     Cast,
+    CastSlam,
+    CastThrow,
+}
+impl ActionAnimationKind {
+    #[must_use]
+    pub const fn is_cast(self) -> bool {
+        matches!(self, Self::Cast | Self::CastSlam | Self::CastThrow)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1400,6 +1413,7 @@ pub enum AreaDamageOrigin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AbilityEffect {
+    MasterProjectiles(crate::MapVersion),
     BuildingAura(crate::building_mechanics::BuildingAuraProfile),
     BuildingStasis(crate::building_mechanics::BuildingStasisProfile),
     BuildingPermanentGrant(crate::building_mechanics::BuildingPermanentGrantProfile),
@@ -1579,6 +1593,7 @@ impl AbilityEffect {
             Self::Hex { .. } => 14,
             Self::AreaStun { .. } => 15,
             Self::AreaDebuff { .. } => 16,
+            Self::MasterProjectiles(_) => 35,
             Self::FrostNova { .. } => 17,
             Self::Snowfall { .. } => 18,
             Self::Hailstone(_) => 19,
@@ -1737,6 +1752,8 @@ pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
 
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusState {
+    /// Last authoritative order/movement heading, normalized by consumers.
+    pub facing_direction: SimPoint,
     pub spawn_building: Option<SimId>,
     pub lava_spawn: Option<LavaSpawnState>,
     pub summon_order_refresh_tick: Option<u64>,
@@ -1785,9 +1802,8 @@ impl StatusState {
 
     #[must_use]
     pub fn is_casting(&self, tick: u64) -> bool {
-        self.action_animation.is_some_and(|action| {
-            action.kind == ActionAnimationKind::Cast && action.is_active(tick)
-        })
+        self.action_animation
+            .is_some_and(|action| action.kind.is_cast() && action.is_active(tick))
     }
 
     pub(crate) fn begin_action_animation(
@@ -1796,7 +1812,7 @@ impl StatusState {
         tick: u64,
         duration_ticks: u16,
     ) {
-        if kind == ActionAnimationKind::Cast {
+        if kind.is_cast() {
             self.pending_attack = None;
         }
         if duration_ticks > 0 {

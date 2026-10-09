@@ -14,6 +14,7 @@ mod damage_threshold;
 mod ensnare;
 mod kill_berserk;
 mod lava_spawn;
+mod master_projectiles;
 mod mirror_image;
 mod poison;
 mod speed_aura;

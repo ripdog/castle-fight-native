@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind": "unit-ability", "source_key": "A0E1", "unit_rawcode": "h03V", "kind": "master-projectiles"},
     {"kind":"lava-spawn","source_kind":"unit-ability","source_key":"A0DY","unit_rawcode":"u00F"},
     {"kind":"orb-spell-proc","source_kind":"unit-ability","source_key":"A0CM","unit_rawcode":"h030"},
     {"kind":"cone-wave","source_kind":"ability-effect","source_key":"A0CN"},

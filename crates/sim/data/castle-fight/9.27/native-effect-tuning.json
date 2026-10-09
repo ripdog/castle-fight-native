@@ -3,6 +3,140 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0E1",
+      "unit_rawcode": "h03V",
+      "spellcasting": {
+        "mana": {
+          "maximum": 0,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147483648
+        },
+        "ability": {
+          "id": 1093682481,
+          "mana_cost": 0,
+          "cooldown_ticks": 240,
+          "range": 819200,
+          "target_policy": "RandomGroundEnemyUnit",
+          "effect": {
+            "MasterProjectiles": {
+              "major": 9,
+              "minor": 27
+            }
+          }
+        }
+      },
+      "master_profile": {
+        "ability": 1093682481,
+        "buildings": [
+          [
+            1747989557,
+            1747989558,
+            0
+          ],
+          [
+            1747989552,
+            1747989553,
+            0
+          ],
+          [
+            1747989554,
+            1747989556,
+            0
+          ],
+          [
+            1747989336,
+            1747989337,
+            1747989338
+          ],
+          [
+            1747989569,
+            1747989571,
+            1747989572
+          ]
+        ],
+        "lightning": {
+          "rawcode": 1747989320,
+          "step": 20480,
+          "radius": 34816,
+          "budget": 409600,
+          "decrement": 20480,
+          "interval_millis": 30,
+          "height": 60
+        },
+        "frost": {
+          "rawcode": 1747990072,
+          "step": 26624,
+          "radius": 38912,
+          "budget": 409600,
+          "decrement": 20480,
+          "interval_millis": 30,
+          "height": 60
+        },
+        "damage": 75,
+        "damage_count_cap": 4,
+        "branch_roll_size": 100,
+        "lightning_roll_below": 50,
+        "lightning_initial_count": 2,
+        "lightning_count_divisor": 3,
+        "split_initial_count": 2,
+        "split_count_divisor": 2,
+        "lane_spacing": 51200,
+        "forward_offset": 30720,
+        "split_angle_millidegrees": 30000,
+        "stub_budget": 51200,
+        "frost_initial_count": 5,
+        "frost_count_factor": 2,
+        "fan_spread_millidegrees": 35000,
+        "fan_interval_millis": 40,
+        "nova": {
+          "ability": 1093678131,
+          "radius": 307200,
+          "primary_damage": 150,
+          "area_damage": 75,
+          "duration_ticks": 180,
+          "hero_duration_ticks": 90,
+          "movement_percent_delta": -50,
+          "attack_speed_percent_delta": -25
+        },
+        "nova_reveal_radius": 131072,
+        "nova_reveal_ticks": 3,
+        "parasite_speed": 64853,
+        "parasite_duration_ticks": 1,
+        "parasite_child_rawcode": 1852203634,
+        "parasite_child_duration_ticks": 1
+      },
+      "mana_regen_per_second_per_10k": 0,
+      "effect_ability_rawcode": "A043",
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "semantics": "resolved/unit-spell-semantics.tsv",
+        "script_functions": [
+          "dummyCastTargetWithVision1",
+          "findMasterLightningHit",
+          "onLightningBolt",
+          "onMasterSpell",
+          "processMasterLightningBolts",
+          "processSnowMissiles",
+          "spawnSnowMissileFanStep"
+        ],
+        "fields": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "nova_requested_level_formula": "clamp(floor(wind_building_count / 4), 1, 3)",
+        "nova_actual_levels": 1,
+        "script_visuals": [
+          {
+            "owner_rawcode": "h03H",
+            "source_unit_rawcode": null,
+            "source_entity_rawcode": "h03V",
+            "role": "target",
+            "model_path": "Abilities\\Weapons\\Bolt\\BoltImpact.mdl"
+          }
+        ]
+      }
+    },
+    {
       "kind": "lava-spawn",
       "source_kind": "unit-ability",
       "source_key": "A0DY",

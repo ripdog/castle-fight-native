@@ -189,6 +189,36 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
         "cargo:rerun-if-changed={}",
         building_mechanics_path.display()
     );
+    let native_tuning =
+        manifest_dir.join("../sim/data/castle-fight/9.27/native-effect-tuning.json");
+    println!("cargo:rerun-if-changed={}", native_tuning.display());
+    let tuning: serde_json::Value = serde_json::from_str(&fs::read_to_string(native_tuning)?)?;
+    for row in tuning["effects"]
+        .as_array()
+        .ok_or("native tuning effects")?
+    {
+        if let Some(rows) = row["provenance"]["script_visuals"].as_array() {
+            for visual in rows {
+                visuals.assets.push(VisualAssetSpec {
+                    owner_kind: "abilities".to_owned(),
+                    owner_rawcode: visual["owner_rawcode"]
+                        .as_str()
+                        .ok_or("script effect owner")?
+                        .to_owned(),
+                    source_unit_rawcode: visual["source_unit_rawcode"].as_str().map(str::to_owned),
+                    role: visual["role"]
+                        .as_str()
+                        .ok_or("script effect role")?
+                        .to_owned(),
+                    model_path: visual["model_path"]
+                        .as_str()
+                        .ok_or("script effect path")?
+                        .to_owned(),
+                    missile_arc: None,
+                });
+            }
+        }
+    }
     append_building_script_visuals(&mut visuals, &building_mechanics_path)?;
     let attachment_path = manifest_dir.join(format!(
         "data/castle-fight/{catalog_version}/native-building-attachments-r1.json"

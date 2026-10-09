@@ -116,6 +116,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
 
     kind = recipe["kind"]
     effect: dict[str, Any] = dict(recipe)
+    if kind == "master-projectiles":
+        from project_master_projectiles import project
+        return project(recipe, fields, unit, protected, mechanics)
     if kind == "lava-spawn":
         trace = mechanics["lava_spawn"]
         if mechanics["native_base"] != "ANlm" or fields["unitid1"] != trace["runtime_combat_unit_rawcode"]:
@@ -613,6 +616,10 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             field = row["source_field"].lower()
             if field:
                 abilities.setdefault(row["rawcode"], {})[field] = scalar(row["recovered_value_json"])
+    unit_fields = {}
+    for row in rows(retained("resolved/object-fields.tsv")):
+        if row["category"] == "units" and row["source_field"]:
+            unit_fields.setdefault(row["rawcode"], {})[row["source_field"].lower()] = scalar(row["recovered_value_json"])
     units = {row["rawcode"]: row for row in rows(retained("resolved/units.tsv"))}
     default_autocast = {row["rawcode"]: scalar(row["recovered_value_json"])
         for row in rows(retained("resolved/object-fields.tsv")) if row["category"] == "units" and row["field_id"] == "udaa"}
@@ -675,6 +682,12 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
                 raise ValueError(f"proxy child {source} needs one semantic parent for its source unit")
             spell = matches[0]
         detail = dict(mechanics.get(recipe.get("unit_rawcode", ""), {}))
+        if recipe["kind"] == "master-projectiles":
+            names = ["onMasterSpell", "onLightningBolt", "processMasterLightningBolts", "findMasterLightningHit", "spawnSnowMissileFanStep", "processSnowMissiles", "dummyCastTargetWithVision1"]
+            detail.update(map_version=dict(zip(["major","minor"],map(int,release["map_version"].split(".")))), master_trace=json.loads(spell_semantics[source]["parameters_json"]),
+                master_functions={name:functions[name] for name in names}, master_nova=abilities["A043"],
+                master_nova_protected=protected["A043"], master_dummy=unit_fields["e008"],
+                master_units={key:unit_fields[key] for key in ["h03H","h068"]}, git_tree=tree)
         if recipe["kind"] == "lava-spawn":
             trace = lava_spawns[recipe["unit_rawcode"]]
             summon = functions["EventListener_add_FireElemental_onEvent_add_FireElemental"]
@@ -708,7 +721,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             detail.update(mirror_image=trace, mirror_image_handler=functions["randomN02YOrder"], git_tree=tree)
         detail["misc"] = misc
         detail["native_base"] = ability_bases[source]
-        if spell is not None:
+        if spell is not None and recipe["kind"] != "master-projectiles":
             semantics = spell_semantics[spell["ability_rawcode"]]
             effect_key = semantics["effect_rawcodes"].split(",")[0]
             detail.update(effect_key=effect_key, effect_fields=abilities[effect_key],

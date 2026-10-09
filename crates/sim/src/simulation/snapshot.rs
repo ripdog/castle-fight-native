@@ -154,6 +154,9 @@ impl SimulationSnapshot {
                     validate_content_version(state.profile.map_version, content)?;
                 }
                 CanonicalEntity::NativeAction { action, .. } => {
+                    if let NativeAction::MasterProjectiles(state) = action {
+                        validate_content_version(state.map_version, content)?;
+                    }
                     if let NativeAction::AuraCarrier(state) = action {
                         validate_content_version(state.profile.map_version, content)?;
                     }

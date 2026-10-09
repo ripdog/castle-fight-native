@@ -639,6 +639,8 @@ enum TuningEffect {
         targets: String,
     },
     ScriptedAutomatic {
+        #[serde(default)]
+        master_profile: Option<Box<crate::MasterProjectileProfile>>,
         source_kind: String,
         source_key: String,
         unit_rawcode: String,
@@ -1861,6 +1863,28 @@ const fn ranges_overlap(left: MapVersionRange, right: MapVersionRange) -> bool {
 }
 
 /// Intrinsic ANlm split state is installed by the native summoner, not an ability in the body's inventory.
+pub(crate) fn master_projectile_profile_for_version(
+    version: MapVersion,
+) -> &'static crate::MasterProjectileProfile {
+    catalog()
+        .tuning(version)
+        .expect("registered Master version")
+        .effects
+        .iter()
+        .find_map(|effect| {
+            if let TuningEffect::ScriptedAutomatic {
+                master_profile: Some(profile),
+                ..
+            } = effect
+            {
+                Some(profile.as_ref())
+            } else {
+                None
+            }
+        })
+        .expect("registered Master source tuning")
+}
+
 pub(crate) fn lava_spawn_profile_for_version(
     version: MapVersion,
     body_rawcode: u32,
