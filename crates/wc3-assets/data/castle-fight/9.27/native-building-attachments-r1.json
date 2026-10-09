@@ -224,6 +224,34 @@
       ]
     },
     {
+      "building_rawcode": "h03Y",
+      "source_registration": "wK",
+      "source_factory": "wu:create840",
+      "source_callback": "BuildingAttachmentHandler_registerBuildingAttach_RaceElemental_call_registerBuildingAttach_RaceElemental1",
+      "visuals": [
+        {
+          "model_path": "Doodads\\Cityscape\\Structures\\City_ColumnSemiCircle\\City_ColumnSemiCircle.mdl",
+          "yaw_degrees": 270.0,
+          "offset_world": [
+            0.0,
+            28.0,
+            0.0
+          ],
+          "scale": 0.2
+        },
+        {
+          "model_path": "Doodads\\Cityscape\\Structures\\City_ColumnSemiCircle_Ruined\\City_ColumnSemiCircle_Ruined.mdl",
+          "yaw_degrees": 90.0,
+          "offset_world": [
+            0.0,
+            -28.0,
+            0.0
+          ],
+          "scale": 0.2
+        }
+      ]
+    },
+    {
       "building_rawcode": "h04A",
       "source_registration": "wK",
       "source_factory": "Eu:create848",

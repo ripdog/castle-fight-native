@@ -4,6 +4,28 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0CT",
+      "unit_rawcode": "h02X",
+      "kind": "evasion",
+      "chance_per_10k": 6000,
+      "provenance": {
+        "ability": "A0CT",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0FI",
+      "unit_rawcode": "h02X",
+      "kind": "spell-resistance",
+      "damage_taken_per_10k": 6000,
+      "provenance": {
+        "ability": "A0FI",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A0CS",
       "unit_rawcode": "h02W",
       "kind": "evasion",

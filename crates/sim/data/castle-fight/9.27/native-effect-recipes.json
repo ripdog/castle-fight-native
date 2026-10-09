@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0CT","unit_rawcode":"h02X","kind":"evasion"},
+    {"source_kind":"unit-ability","source_key":"A0FI","unit_rawcode":"h02X","kind":"spell-resistance"},
     {"source_kind":"unit-ability","source_key":"A0CS","unit_rawcode":"h02W","kind":"evasion"},
     {"source_kind":"unit-ability","source_key":"A0FH","unit_rawcode":"h02W","kind":"spell-resistance"},
     {"source_kind":"unit-ability","source_key":"A0C5","unit_rawcode":"o00E","kind":"damage-charge"},

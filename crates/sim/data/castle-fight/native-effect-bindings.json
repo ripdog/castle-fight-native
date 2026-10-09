@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A0CT","implementation":"warcraft-evasion-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Water evasion from retained resolved fields."},
+    {"source_kind":"unit-ability","source_key":"A0FI","implementation":"warcraft-spell-resistance-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Water spell-resistance from retained resolved fields."},
     {"source_kind":"unit-ability","source_key":"A0CS","implementation":"warcraft-evasion-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Lesser Water evasion from retained resolved fields."},
     {"source_kind":"unit-ability","source_key":"A0FH","implementation":"warcraft-spell-resistance-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Lesser Water spell-resistance from retained resolved fields."},
     {"source_kind": "unit-ability", "source_key": "A03Q", "implementation": "warcraft-marker-only-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Hidden zero-visibility Channel source-damage dispatcher marker; Greater Wind has no matching source-damage child controller."},
