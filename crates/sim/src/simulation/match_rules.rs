@@ -1,5 +1,31 @@
 use super::*;
 
+/// Per-player figures displayed live and snapshotted at the end of every round.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlayerRoundScore {
+    pub player: PlayerId,
+    pub team: Team,
+    pub gold: u32,
+    pub lumber: u32,
+    pub income: u32,
+    pub units: u32,
+    pub buildings: u32,
+    pub rescue_strikes: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RoundScoreboard {
+    pub round: u16,
+    pub outcome: MatchOutcome,
+    pub ended_tick: u64,
+    pub elapsed_ticks: u64,
+    pub players: Vec<PlayerRoundScore>,
+    pub round_wins: [u8; 2],
+}
+
+/// Castle Fight 9.27's between-round statistics review is 15 seconds.
+const ROUND_REVIEW_SECONDS_927: u64 = 15;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(super) struct PlayerStrikeState {
     pub player: PlayerId,
@@ -47,6 +73,45 @@ impl Simulation {
     #[must_use]
     pub fn round_index(&self) -> u16 {
         self.round_index
+    }
+
+    #[must_use]
+    pub fn current_round_scores(&self) -> Vec<PlayerRoundScore> {
+        let units = self.units();
+        let buildings = self.buildings();
+        self.players
+            .iter()
+            .map(|player| PlayerRoundScore {
+                player: player.id,
+                team: player.team,
+                gold: player.resources.gold,
+                lumber: player.resources.lumber,
+                income: self.player_income_for(player.id).unwrap_or(0),
+                units: units.iter().filter(|unit| unit.owner == player.id).count() as u32,
+                buildings: buildings
+                    .iter()
+                    .filter(|building| building.owner == Some(player.id))
+                    .count() as u32,
+                rescue_strikes: u32::from(
+                    self.player_strikes
+                        .iter()
+                        .any(|strike| strike.player == player.id && strike.available),
+                ),
+            })
+            .collect()
+    }
+
+    #[must_use]
+    pub fn last_round_scoreboard(&self) -> Option<&RoundScoreboard> {
+        self.last_round_scoreboard.as_ref()
+    }
+
+    #[must_use]
+    pub fn review_seconds_remaining(&self) -> Option<u64> {
+        self.review_until_tick.map(|ends| {
+            ends.saturating_sub(self.next_tick)
+                .div_ceil(crate::CASTLE_FIGHT_SIMULATION_HZ as u64)
+        })
     }
 
     #[must_use]
@@ -156,9 +221,10 @@ impl Simulation {
                     Option<&BuildingFootprint>,
                     Option<&UnitClassifications>,
                     Option<&Builder>,
+                    Option<&ArmorProfile>,
                     &mut Health,
                 )>();
-                for (id, team, position, footprint, classifications, builder, mut health) in
+                for (id, team, position, footprint, classifications, builder, armor, mut health) in
                     query.iter_mut(&mut self.world)
                 {
                     if *team == source_team || builder.is_some() {
@@ -190,11 +256,25 @@ impl Simulation {
                     if health.current <= 0 {
                         continue;
                     }
-                    // Both 9.27 4444-damage packets are delivered in the same impact step.
-                    // The scripted strike bypasses ordinary attack target acquisition.
-                    health.current = health
-                        .current
-                        .saturating_sub(rules.damage_each_packet.saturating_mul(2));
+                    // Source map invokes UnitDamageTarget twice: CHAOS/DEATH and
+                    // NORMAL/MAGIC. The first uses physical armor; magic damage
+                    // preserves normal attack-vs-armor-type scaling but ignores armor
+                    // points. Keep the packets separate for deterministic mitigation.
+                    let armor = armor.copied().unwrap_or_default();
+                    let damage_rules = self.combat_rules.damage_rules;
+                    let death_packet = damage_rules.apply_attack(
+                        rules.damage_each_packet,
+                        DamageType::Chaos,
+                        armor,
+                    );
+                    let magic_packet = damage_rules.apply_attack_with_armor_per_100(
+                        rules.damage_each_packet,
+                        DamageType::Normal,
+                        armor.armor_type,
+                        0,
+                    );
+                    health.current = health.current.saturating_sub(death_packet);
+                    health.current = health.current.saturating_sub(magic_packet);
                     // The original map counts eligible victims, not confirmed deaths,
                     // for deciding whether to refund an unused strike.
                     kills += 1;
@@ -293,13 +373,35 @@ impl Simulation {
             return;
         }
         if self.initial_round.is_some() {
-            self.reset_for_next_round(completed_tick + 1);
+            self.capture_round_scoreboard(outcome, completed_tick);
+            let next_round_tick = completed_tick
+                + 1
+                + ROUND_REVIEW_SECONDS_927 * crate::CASTLE_FIGHT_SIMULATION_HZ as u64;
+            self.review_until_tick = Some(next_round_tick);
+            self.lifecycle = MatchLifecycle::RoundReview {
+                outcome,
+                ended_tick: completed_tick,
+                next_round_tick,
+            };
         } else {
             self.finish_round_match(outcome, completed_tick);
         }
     }
 
+    pub(super) fn capture_round_scoreboard(&mut self, outcome: MatchOutcome, completed_tick: u64) {
+        self.last_round_scoreboard = Some(RoundScoreboard {
+            round: self.round_index,
+            outcome,
+            ended_tick: completed_tick,
+            elapsed_ticks: completed_tick + 1 - self.round_start_tick,
+            players: self.current_round_scores(),
+            round_wins: self.round_wins,
+        });
+    }
+
     fn finish_round_match(&mut self, outcome: MatchOutcome, completed_tick: u64) {
+        self.capture_round_scoreboard(outcome, completed_tick);
+        self.review_until_tick = None;
         self.invalidate_pending_golden_shrine_revivals();
         self.clear_snow();
         self.clear_world_freezer();

@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 59;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 60;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -61,8 +61,8 @@ mod match_rules;
 #[cfg(test)]
 mod match_rules_tests;
 mod mirror_images;
-pub use match_rules::RescueStrikeVisualEvent;
 use match_rules::{PendingRescueStrike, PlayerStrikeState};
+pub use match_rules::{PlayerRoundScore, RescueStrikeVisualEvent, RoundScoreboard};
 mod movement;
 mod native_actions;
 pub use native_actions::aura_carrier::AuraCarrierView;
@@ -246,6 +246,11 @@ pub enum MatchLifecycle {
     Running,
     PausedForDisconnect {
         disconnected_teams_mask: u8,
+    },
+    RoundReview {
+        outcome: MatchOutcome,
+        ended_tick: u64,
+        next_round_tick: u64,
     },
     Finished {
         outcome: MatchOutcome,
@@ -692,6 +697,8 @@ pub struct Simulation {
     round_index: u16,
     round_wins: [u8; 2],
     round_start_tick: u64,
+    review_until_tick: Option<u64>,
+    last_round_scoreboard: Option<RoundScoreboard>,
     initial_round: Option<Box<SimulationSnapshot>>,
     players: Vec<PlayerState>,
     lifecycle: MatchLifecycle,
@@ -864,6 +871,8 @@ impl Simulation {
             round_index: 1,
             round_wins: [0; 2],
             round_start_tick: 0,
+            review_until_tick: None,
+            last_round_scoreboard: None,
             initial_round: None,
             players,
             lifecycle: MatchLifecycle::Running,
@@ -957,6 +966,10 @@ impl Simulation {
         if matches!(self.lifecycle, MatchLifecycle::Finished { .. }) {
             return false;
         }
+        if self.review_until_tick.is_none() {
+            self.capture_round_scoreboard(outcome, self.next_tick.saturating_sub(1));
+        }
+        self.review_until_tick = None;
         self.invalidate_pending_golden_shrine_revivals();
         self.clear_snow();
         self.clear_world_freezer();
@@ -1157,7 +1170,19 @@ impl Simulation {
             }
         }
         self.lifecycle = if disconnected_teams_mask == 0 {
-            MatchLifecycle::Running
+            if let Some(next_round_tick) = self.review_until_tick {
+                let score = self
+                    .last_round_scoreboard
+                    .as_ref()
+                    .expect("review requires scoreboard");
+                MatchLifecycle::RoundReview {
+                    outcome: score.outcome,
+                    ended_tick: score.ended_tick,
+                    next_round_tick,
+                }
+            } else {
+                MatchLifecycle::Running
+            }
         } else {
             MatchLifecycle::PausedForDisconnect {
                 disconnected_teams_mask,
@@ -1582,6 +1607,26 @@ impl Simulation {
     }
 
     pub fn step(&mut self) -> TickResult {
+        if let MatchLifecycle::RoundReview {
+            next_round_tick, ..
+        } = self.lifecycle
+        {
+            self.clear_presentation_events();
+            let completed_tick = self.next_tick;
+            self.next_tick += 1;
+            if self.next_tick >= next_round_tick {
+                self.reset_for_next_round(next_round_tick);
+            }
+            return TickResult {
+                completed_tick,
+                units_alive: self.unit_count(),
+                buildings_alive: self.building_count(),
+                corpses_alive: self.corpse_count(),
+                projectiles_alive: self.projectile_count(),
+                checksum: self.checksum(),
+                ..Default::default()
+            };
+        }
         if self.lifecycle != MatchLifecycle::Running {
             // Presentation events describe one completed gameplay tick. A paused/terminal step has
             // no gameplay tick, so do not keep replaying the previous tick's cosmetic events while
@@ -2154,6 +2199,8 @@ impl Simulation {
                 player_strikes: &self.player_strikes,
                 pending_rescue_strikes: &self.pending_rescue_strikes,
                 team_rescue_ready_ticks: self.team_rescue_ready_ticks,
+                review_until_tick: self.review_until_tick,
+                last_round_scoreboard: self.last_round_scoreboard.as_ref(),
             },
         );
         let checksum_time = phase_start.elapsed();
@@ -2275,6 +2322,8 @@ impl Simulation {
                 player_strikes: &self.player_strikes,
                 pending_rescue_strikes: &self.pending_rescue_strikes,
                 team_rescue_ready_ticks: self.team_rescue_ready_ticks,
+                review_until_tick: self.review_until_tick,
+                last_round_scoreboard: self.last_round_scoreboard.as_ref(),
             },
         )
     }

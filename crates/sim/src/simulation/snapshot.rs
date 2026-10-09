@@ -6,7 +6,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 54;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 55;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -24,6 +24,8 @@ pub struct SimulationSnapshot {
     round_index: u16,
     round_start_tick: u64,
     round_wins: [u8; 2],
+    review_until_tick: Option<u64>,
+    last_round_scoreboard: Option<RoundScoreboard>,
     player_strikes: Vec<PlayerStrikeState>,
     pending_rescue_strikes: Vec<PendingRescueStrike>,
     team_rescue_ready_ticks: [u64; 2],
@@ -305,6 +307,8 @@ impl Simulation {
         self.next_visual_id = template.next_visual_id;
         self.round_index += 1;
         self.round_start_tick = start_tick;
+        self.review_until_tick = None;
+        self.lifecycle = MatchLifecycle::Running;
         self.player_strikes.clone_from(&template.player_strikes);
         self.team_rescue_ready_ticks = [0; 2];
         self.pending_rescue_strikes.clear();
@@ -335,6 +339,8 @@ impl Simulation {
             round_index: self.round_index,
             round_start_tick: self.round_start_tick,
             round_wins: self.round_wins,
+            review_until_tick: self.review_until_tick,
+            last_round_scoreboard: self.last_round_scoreboard.clone(),
             player_strikes: self.player_strikes.clone(),
             pending_rescue_strikes: self.pending_rescue_strikes.clone(),
             team_rescue_ready_ticks: self.team_rescue_ready_ticks,
@@ -424,6 +430,8 @@ impl Simulation {
                 round_index: snapshot.round_index,
                 round_start_tick: snapshot.round_start_tick,
                 round_wins: snapshot.round_wins,
+                review_until_tick: snapshot.review_until_tick,
+                last_round_scoreboard: snapshot.last_round_scoreboard.as_ref(),
                 player_strikes: &snapshot.player_strikes,
                 pending_rescue_strikes: &snapshot.pending_rescue_strikes,
                 team_rescue_ready_ticks: snapshot.team_rescue_ready_ticks,
@@ -452,6 +460,9 @@ impl Simulation {
         self.round_index = snapshot.round_index;
         self.round_start_tick = snapshot.round_start_tick;
         self.round_wins = snapshot.round_wins;
+        self.review_until_tick = snapshot.review_until_tick;
+        self.last_round_scoreboard
+            .clone_from(&snapshot.last_round_scoreboard);
         self.player_strikes.clone_from(&snapshot.player_strikes);
         self.pending_rescue_strikes
             .clone_from(&snapshot.pending_rescue_strikes);

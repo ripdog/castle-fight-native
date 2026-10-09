@@ -240,6 +240,10 @@ The rules MUST define outcomes when multiple victory conditions become true on t
 
 The current 9.27 development mode evaluates both registered team objectives together after structural death resolution. If exactly one objective is gone, the opposing team wins. If both objectives are gone at that boundary, the result is a **draw**. The outcome therefore does not depend on worker order or which castle happened to be observed first.
 
+For multi-round modes, each round's outcome and all player scoreboard figures are captured at the authoritative completion boundary. The map's 9.27 round-review gate lasts **15 seconds** of canonical simulation time. During review, normal gameplay and new commands MUST be disabled; only empty canonical ticks advance the countdown. A finished round's scoreboard MUST remain stable during review and across snapshot/restore or multiplayer replay. Once the gate expires, restore the initial round's world and player economy while preserving the match score and canonical stream position. A team reaching the configured required round wins ends the match instead of entering review.
+
+Timed victory compares each team's **available rescue strikes**, then total taxed player income; an exact tie is drawn. Rescue Strike resolves two authored damage packets, `CHAOS/DEATH` followed by `NORMAL/MAGIC`, at the delayed impact tick. Eligibility and the zero-target refund are based on enemies enumerated by the authored AoE predicate, not confirmed deaths.
+
 Once match outcome is final, the authoritative gameplay simulation is terminal: production, movement, combat, abilities, and other gameplay ticks MUST NOT continue advancing. The server MAY retain the final frozen state for results, replay, spectators, or post-match UI, but further gameplay commands are rejected or ignored according to protocol state.
 
 ## 17. Player elimination

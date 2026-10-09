@@ -219,6 +219,8 @@ pub(super) struct CanonicalMatchState<'a> {
     pub(super) round_index: u16,
     pub(super) round_start_tick: u64,
     pub(super) round_wins: [u8; 2],
+    pub(super) review_until_tick: Option<u64>,
+    pub(super) last_round_scoreboard: Option<&'a RoundScoreboard>,
     pub(super) player_strikes: &'a [PlayerStrikeState],
     pub(super) pending_rescue_strikes: &'a [PendingRescueStrike],
     pub(super) team_rescue_ready_ticks: [u64; 2],
@@ -241,6 +243,8 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
         round_index,
         round_start_tick,
         round_wins,
+        review_until_tick,
+        last_round_scoreboard,
         player_strikes,
         pending_rescue_strikes,
         team_rescue_ready_ticks,
@@ -302,6 +306,43 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
     for wins in round_wins {
         hash.write_u8(wins);
     }
+    match review_until_tick {
+        Some(tick) => {
+            hash.write_u8(1);
+            hash.write_u64(tick);
+        }
+        None => hash.write_u8(0),
+    }
+    match last_round_scoreboard {
+        Some(score) => {
+            hash.write_u8(1);
+            hash.write_u16(score.round);
+            hash.write_u64(score.ended_tick);
+            hash.write_u64(score.elapsed_ticks);
+            match score.outcome {
+                MatchOutcome::Victory(team) => {
+                    hash.write_u8(0);
+                    hash.write_u8(team.0);
+                }
+                MatchOutcome::Draw => hash.write_u8(1),
+            }
+            for wins in score.round_wins {
+                hash.write_u8(wins);
+            }
+            hash.write_u64(score.players.len() as u64);
+            for player in &score.players {
+                hash.write_u8(player.player.0);
+                hash.write_u8(player.team.0);
+                hash.write_u32(player.gold);
+                hash.write_u32(player.lumber);
+                hash.write_u32(player.income);
+                hash.write_u32(player.units);
+                hash.write_u32(player.buildings);
+                hash.write_u32(player.rescue_strikes);
+            }
+        }
+        None => hash.write_u8(0),
+    }
     for ready in team_rescue_ready_ticks {
         hash.write_u64(ready);
     }
@@ -338,6 +379,22 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
         } => {
             hash.write_u8(1);
             hash.write_u8(disconnected_teams_mask);
+        }
+        MatchLifecycle::RoundReview {
+            outcome,
+            ended_tick,
+            next_round_tick,
+        } => {
+            hash.write_u8(3);
+            match outcome {
+                MatchOutcome::Victory(team) => {
+                    hash.write_u8(0);
+                    hash.write_u8(team.0);
+                }
+                MatchOutcome::Draw => hash.write_u8(1),
+            }
+            hash.write_u64(ended_tick);
+            hash.write_u64(next_round_tick);
         }
         MatchLifecycle::Finished {
             outcome,

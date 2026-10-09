@@ -218,7 +218,9 @@ impl TcpAuthoritativeServer {
             MatchLifecycle::PausedForDisconnect {
                 disconnected_teams_mask,
             } => disconnected_teams_mask,
-            MatchLifecycle::Running | MatchLifecycle::Finished { .. } => {
+            MatchLifecycle::Running
+            | MatchLifecycle::RoundReview { .. }
+            | MatchLifecycle::Finished { .. } => {
                 self.team_disconnect_since = [None; 2];
                 return Ok(());
             }

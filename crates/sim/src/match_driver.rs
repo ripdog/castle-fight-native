@@ -357,7 +357,10 @@ impl MatchDriver {
         &mut self,
         simulation: &mut Simulation,
     ) -> Result<DriverTickResult, CanonicalStreamError> {
-        if simulation.lifecycle() != MatchLifecycle::Running {
+        if !matches!(
+            simulation.lifecycle(),
+            MatchLifecycle::Running | MatchLifecycle::RoundReview { .. }
+        ) {
             return Err(CanonicalStreamError::MatchNotRunning(
                 simulation.lifecycle(),
             ));
@@ -406,7 +409,17 @@ impl MatchDriver {
             return Err(CanonicalStreamError::PendingLocalCommands);
         }
         self.validate_stream_position(finalized.stream_position)?;
-        if simulation.lifecycle() != MatchLifecycle::Running {
+        if !matches!(
+            simulation.lifecycle(),
+            MatchLifecycle::Running | MatchLifecycle::RoundReview { .. }
+        ) {
+            return Err(CanonicalStreamError::MatchNotRunning(
+                simulation.lifecycle(),
+            ));
+        }
+        if matches!(simulation.lifecycle(), MatchLifecycle::RoundReview { .. })
+            && !finalized.commands.is_empty()
+        {
             return Err(CanonicalStreamError::MatchNotRunning(
                 simulation.lifecycle(),
             ));
