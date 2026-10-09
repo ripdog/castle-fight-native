@@ -487,6 +487,23 @@ impl ForkedLightningProfile {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HealthScaledAftershockProfile {
+    pub marker: AbilityId,
+    pub dispatcher: AbilityId,
+    pub maximum_damage: i32,
+}
+
+impl HealthScaledAftershockProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 3] {
+        [
+            u64::from(self.marker.0),
+            u64::from(self.dispatcher.0),
+            self.maximum_damage as u64,
+        ]
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DamageRetaliationProfile {
     pub marker: AbilityId,
     pub chance_per_10k: u16,
@@ -866,6 +883,7 @@ pub(crate) struct ProductionUnitClassifications(pub UnitClassifications);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PassiveUnitEffect {
+    HealthScaledAftershock(HealthScaledAftershockProfile),
     DamageRetaliation(DamageRetaliationProfile),
     LavaSpawn(LavaSpawnProfile),
     MirrorImage(MirrorImageProfile),

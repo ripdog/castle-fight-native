@@ -9,6 +9,22 @@ import build_runtime_catalog as catalog
 
 
 class NativeTuningProjectionTest(unittest.TestCase):
+    def test_aftershock_requires_health_formula_and_disabled_nested_dispatch(self):
+        recipe = {"kind":"health-scaled-aftershock", "source_kind":"unit-ability", "source_key":"TEST", "unit_rawcode":"UNIT"}
+        trace = {"aftershock_marker_ability_id":1,"source_damage_marker_ability_id":2,
+            "bonus_damage_formula":"17 * unit_level * current_hp / max_hp", "object_unit_level":3,"unit_level":3,
+            "maximum_bonus_damage_at_full_hp":51,"recursion_guard_trigger_disabled_during_bonus_hit":True,
+            "attack_type":"siege","damage_type":"demolition","is_attack":True,"is_ranged":False}
+        handler = "unit_getAbilityLevel(Qpq,2)<=0 elseif(unit_getAbilityLevel(Qpq,1)>0) dqq=hhb __wurst_safe_DisableTrigger(dqq) (((17.*unit_getLevel(Qpq))*widget_getLife(Qpq))/unit_getMaxHP(Qpq)) true,false,ATTACK_TYPE_SIEGE,DAMAGE_TYPE_DEMOLITION,WEAPON_TYPE_WHOKNOWS eqq=hhb __wurst_safe_EnableTrigger(eqq)"
+        detail = {"aftershock":trace,"aftershock_handler":handler,"damage_runtime":"handleSourceDamageEffects(sqq,tqq)handleTargetDamageEffects(sqq,tqq)",
+            "sapper_registration":"if(not isCombatSapper(ocs))then return end registerSapperDamage(ocs)",
+            "damage_registration":"TriggerRegisterUnitEvent(hhb,vqq,EVENT_UNIT_DAMAGED)","git_tree":"synthetic"}
+        result = native.project_effect(recipe, {}, None, {}, detail)["profile"]
+        self.assertEqual(result, {"marker":1,"dispatcher":2,"maximum_damage":51})
+        for replacement in ["unit_getLevel(Qpq)","widget_getLife(Qpq)","__wurst_safe_DisableTrigger(dqq)","ATTACK_TYPE_SIEGE"]:
+            with self.assertRaises(ValueError):
+                native.project_effect(recipe, {}, None, {}, {**detail,"aftershock_handler":handler.replace(replacement,"changed")})
+
     def test_lava_split_projects_generation_limit_healing_and_converted_child(self):
         recipe = {"kind":"lava-spawn", "source_kind":"unit-ability", "source_key":"TEST", "unit_rawcode":"UNIT"}
         fields = {"unitid1":"BODY", "dataa1":"1", "dur1":"0", "datae1":"0", "datac1":"7",

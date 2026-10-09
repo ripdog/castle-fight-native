@@ -1,7 +1,7 @@
 use super::*;
 use crate::{DamageChargeProfile, SelfDestructProfile};
 
-fn profile() -> DamageChargeProfile {
+pub(super) fn profile() -> DamageChargeProfile {
     DamageChargeProfile {
         marker: AbilityId(109),
         mana_maximum: 100,

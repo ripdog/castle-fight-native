@@ -118,6 +118,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
 
     kind = recipe["kind"]
     effect: dict[str, Any] = dict(recipe)
+    if kind == "health-scaled-aftershock":
+        from project_aftershock import project
+        return project(recipe, mechanics, scaled)
     if kind in {"damage-retaliation", "retaliation-projectile"}:
         from project_damage_retaliation import project
         return project(recipe, mechanics, scaled)
@@ -358,7 +361,7 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
             mana_regeneration_per_second_per_10k=mana, affects_melee=melee, affects_ranged=ranged,
             linger_ticks=int((Decimal(fields["dur1"]) * 30).to_integral_value(rounding="ROUND_CEILING")))
     elif kind == "pulverize":
-        if set(fields["targs1"].split(",")) - {"ground", "enemy", "enemies", "neutral"}:
+        if set(fields["targs1"].split(",")) - {"ground", "enemy", "enemies", "neutral", "ward"}:
             raise ValueError("unsupported native Pulverize mask")
         effect.update(chance_per_10k=number("DataA1", 100), damage=number("DataB1"),
             full_radius_world=number("DataC1"), half_radius_world=number("DataD1"), targets=unit_targets(fields["targs1"]))
@@ -660,6 +663,9 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
     damage_charges = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "damage-to-mana-kaboom-charge"}
+    aftershocks = {row["unit_rawcode"]: json.loads(row["parameters_json"])
+        for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
+        if row["mechanic_kind"] == "source-damage-health-scaled-aftershock"}
     retaliations = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "target-damage-melee-thunderbolt-retaliation"}
@@ -684,7 +690,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         if recipe["source_kind"] not in {"unit-ability", "ability-effect"}:
             raise ValueError("unsupported native recipe source kind")
         key = (recipe["source_kind"], recipe["source_key"])
-        if recipe["kind"] in {"damage-charge", "damage-retaliation"}:
+        if recipe["kind"] in {"damage-charge", "damage-retaliation", "health-scaled-aftershock"}:
             key += (recipe["unit_rawcode"],)
         if key in seen:
             raise ValueError(f"duplicate recipe source: {key}")
@@ -704,6 +710,10 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
                 raise ValueError(f"proxy child {source} needs one semantic parent for its source unit")
             spell = matches[0]
         detail = dict(mechanics.get(recipe.get("unit_rawcode", ""), {}))
+        if recipe["kind"] == "health-scaled-aftershock":
+            detail.update(aftershock=aftershocks[recipe["unit_rawcode"]], aftershock_handler=functions["handleSourceDamageEffects"],
+                damage_runtime=functions["code__addAction_DamageRuntime"], sapper_registration=functions["onUnitEnteredMap"],
+                damage_registration=functions["registerSapperDamage"], git_tree=tree)
         if recipe["kind"] in {"damage-retaliation", "retaliation-projectile"}:
             detail.update(retaliation=retaliations[recipe["unit_rawcode"]], retaliation_handler=functions["castLightningShield"],
                 retaliation_dispatch=functions["handleTargetDamageEffects"], retaliation_fields=ability_levels["A0D5"],

@@ -253,7 +253,8 @@ impl Simulation {
                 {
                     continue;
                 }
-                for (index, target) in units.iter_mut().enumerate() {
+                for index in 0..units.len() {
+                    let target = &units[index];
                     let distance = intent.source_position.distance_sq(positions[index]);
                     if target.team == intent.source_team
                         || unit_health[index] <= 0
@@ -284,8 +285,18 @@ impl Simulation {
                         ),
                         target.snow_damage_taken_per_10k,
                     );
+                    super::source_damage_runtime::apply_aftershock(
+                        intent.source_id,
+                        index,
+                        super::source_damage_runtime::SourceDamageState {
+                            units,
+                            health: unit_health,
+                            rules: self.combat_rules.damage_rules,
+                            tick: completed_tick,
+                        },
+                    );
                     super::damage_thresholds::observe_damage_event(
-                        target,
+                        &mut units[index],
                         unit_health[index],
                         event_damage,
                     );
@@ -918,7 +929,8 @@ impl Simulation {
                     );
                     on_hit.splash_falloff = Some(profile);
                 }
-                PassiveUnitEffect::DamageRetaliation(_)
+                PassiveUnitEffect::HealthScaledAftershock(_)
+                | PassiveUnitEffect::DamageRetaliation(_)
                 | PassiveUnitEffect::LavaSpawn(_)
                 | PassiveUnitEffect::MirrorImage(_)
                 | PassiveUnitEffect::DamageThreshold(_)

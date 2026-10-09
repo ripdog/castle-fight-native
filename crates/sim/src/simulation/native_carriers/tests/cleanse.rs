@@ -246,3 +246,34 @@ fn zero_damage_or_removed_source_does_not_cleanse_morph_shield_or_passive_baseli
         );
     }
 }
+
+#[test]
+fn source_damage_controller_is_revoked_by_dispatcher_identity() {
+    let mut sim = simulation(1);
+    let effect = PassiveUnitEffect::HealthScaledAftershock(crate::HealthScaledAftershockProfile {
+        marker: AbilityId(801),
+        dispatcher: AbilityId(802),
+        maximum_damage: 80,
+    });
+    let id = victim(
+        &mut sim,
+        100,
+        UnitGameplayProperties {
+            passive_effects: PassiveUnitEffects::single(effect),
+            ..Default::default()
+        },
+    );
+    let mut units = sim.snapshot_units();
+    let mut profile = carrier_for_version(MapVersion::CASTLE_FIGHT_9_27)
+        .unwrap()
+        .clone();
+    let mut baseline = units[0].passive_effects;
+    let mut health = units[0].health;
+    profile.removed_persistent_abilities = vec![AbilityId(803)];
+    cleanse_native_effects(&mut units[0], &mut health, &mut baseline, &profile);
+    assert_eq!(baseline.iter().count(), 1);
+    profile.removed_persistent_abilities = vec![AbilityId(802)];
+    cleanse_native_effects(&mut units[0], &mut health, &mut baseline, &profile);
+    assert_eq!(baseline.iter().count(), 0);
+    assert!(sim.unit(id).is_some());
+}

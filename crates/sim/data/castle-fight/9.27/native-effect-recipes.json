@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind": "unit-ability", "source_key": "A0DW", "unit_rawcode": "h034", "kind": "health-scaled-aftershock"},
+    {"source_kind": "unit-ability", "source_key": "A0CO", "unit_rawcode": "h034", "kind": "pulverize"},
     {"kind": "damage-retaliation", "source_kind": "unit-ability", "source_key": "A0DX", "unit_rawcode": "h03R"},
     {"kind": "orb-spell-proc", "source_kind": "unit-ability", "source_key": "A0CI", "unit_rawcode": "h03R"},
     {"kind": "orb-spell-proc", "source_kind": "unit-ability", "source_key": "A0F0", "unit_rawcode": "h03R"},

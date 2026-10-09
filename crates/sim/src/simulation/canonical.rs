@@ -2251,6 +2251,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                 hash.write_u16(profile.damage_per_10k);
                 hash.write_u8(profile.targets.bits());
             }
+            PassiveUnitEffect::HealthScaledAftershock(profile) => {
+                hash.write_u8(22);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
             PassiveUnitEffect::DamageRetaliation(profile) => {
                 hash.write_u8(21);
                 for word in profile.canonical_words() {

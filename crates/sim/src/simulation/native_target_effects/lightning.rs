@@ -4,7 +4,7 @@ use crate::{
     TriggeredSpellProcProfile,
 };
 
-fn shield(chance: u16) -> PassiveUnitEffects {
+pub(super) fn shield(chance: u16) -> PassiveUnitEffects {
     PassiveUnitEffects::single(PassiveUnitEffect::DamageRetaliation(
         DamageRetaliationProfile {
             marker: AbilityId(701),

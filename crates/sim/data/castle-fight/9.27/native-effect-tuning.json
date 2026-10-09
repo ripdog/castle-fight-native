@@ -3,6 +3,40 @@
   "map_version": "9.27",
   "effects": [
     {
+      "source_kind": "unit-ability",
+      "source_key": "A0DW",
+      "unit_rawcode": "h034",
+      "kind": "health-scaled-aftershock",
+      "profile": {
+        "marker": 1093682263,
+        "dispatcher": 1093677905,
+        "maximum_damage": 50
+      },
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/production-unit-special-mechanics.tsv",
+        "handler": "handleSourceDamageEffects",
+        "registration": "onUnitEnteredMap,registerSapperDamage",
+        "phase": "source-before-target-pre-health-commit",
+        "nested_damage": "hhb-disabled-independent-listeners-active"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0CO",
+      "unit_rawcode": "h034",
+      "kind": "pulverize",
+      "chance_per_10k": 2000,
+      "damage": 100,
+      "full_radius_world": 200,
+      "half_radius_world": 300,
+      "targets": "ground-units",
+      "provenance": {
+        "ability": "A0CO",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
       "kind": "damage-retaliation",
       "source_kind": "unit-ability",
       "source_key": "A0DX",

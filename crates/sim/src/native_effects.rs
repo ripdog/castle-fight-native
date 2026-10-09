@@ -28,6 +28,7 @@ const TUNING_9_27_JSON: &str = include_str!("../data/castle-fight/9.27/native-ef
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum NativeEffectImplementationId {
+    WarcraftHealthScaledAftershockV1,
     WarcraftDamageRetaliationV1,
     WarcraftForkedLightningV1,
     WarcraftAuraCarrierV1,
@@ -80,6 +81,7 @@ impl NativeEffectImplementationId {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::WarcraftHealthScaledAftershockV1 => 78,
             Self::WarcraftDamageRetaliationV1 => 76,
             Self::WarcraftForkedLightningV1 => 77,
             Self::WarcraftAuraCarrierV1 => 36,
@@ -546,6 +548,12 @@ fn native_buff_from_tuning(tuning: &TuningFile, source: u32) -> Option<crate::Na
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum TuningEffect {
+    HealthScaledAftershock {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        profile: crate::HealthScaledAftershockProfile,
+    },
     DamageRetaliation {
         source_kind: String,
         source_key: String,
@@ -874,7 +882,8 @@ impl TuningEffect {
 
     fn source_kind(&self) -> &str {
         match self {
-            Self::DamageRetaliation { source_kind, .. }
+            Self::HealthScaledAftershock { source_kind, .. }
+            | Self::DamageRetaliation { source_kind, .. }
             | Self::RetaliationProjectile { source_kind, .. }
             | Self::ForkedLightning { source_kind, .. }
             | Self::LavaSpawn { source_kind, .. }
@@ -910,7 +919,8 @@ impl TuningEffect {
 
     fn source_key(&self) -> &str {
         match self {
-            Self::DamageRetaliation { source_key, .. }
+            Self::HealthScaledAftershock { source_key, .. }
+            | Self::DamageRetaliation { source_key, .. }
             | Self::RetaliationProjectile { source_key, .. }
             | Self::ForkedLightning { source_key, .. }
             | Self::LavaSpawn { source_key, .. }
@@ -946,7 +956,8 @@ impl TuningEffect {
 
     fn unit_rawcode(&self) -> Option<&str> {
         match self {
-            Self::DamageRetaliation { unit_rawcode, .. }
+            Self::HealthScaledAftershock { unit_rawcode, .. }
+            | Self::DamageRetaliation { unit_rawcode, .. }
             | Self::LavaSpawn { unit_rawcode, .. }
             | Self::MirrorImage { unit_rawcode, .. }
             | Self::DamageCharge { unit_rawcode, .. }
@@ -1000,6 +1011,9 @@ impl TuningEffect {
             Self::NativeAura { .. } => NativeEffectImplementationId::WarcraftNativeAuraV1,
             Self::SpeedAura { .. } => NativeEffectImplementationId::WarcraftSpeedAuraV1,
             Self::Sphere { .. } => NativeEffectImplementationId::WarcraftSphereV1,
+            Self::HealthScaledAftershock { .. } => {
+                NativeEffectImplementationId::WarcraftHealthScaledAftershockV1
+            }
             Self::DamageRetaliation { .. } | Self::RetaliationProjectile { .. } => {
                 NativeEffectImplementationId::WarcraftDamageRetaliationV1
             }
@@ -1039,6 +1053,7 @@ impl TuningEffect {
             Self::NativeAura { .. } => "native-aura",
             Self::SpeedAura { .. } => "speed-aura",
             Self::Sphere { .. } => "sphere",
+            Self::HealthScaledAftershock { .. } => "health-scaled-aftershock",
             Self::DamageRetaliation { .. } => "damage-retaliation",
             Self::RetaliationProjectile { .. } => "retaliation-projectile",
             Self::ForkedLightning { .. } => "forked-lightning",
@@ -1188,7 +1203,7 @@ fn native_unit_mechanics_from_tuning(
             .effects
             .iter()
             .filter(|effect| effect.source().ok() == Some(source))
-            .filter(|effect| !matches!(effect, TuningEffect::DamageCharge { unit_rawcode: code, .. } | TuningEffect::DamageRetaliation { unit_rawcode: code, .. } if rawcode(code).ok() != Some(unit_rawcode)))
+            .filter(|effect| !matches!(effect, TuningEffect::DamageCharge { unit_rawcode: code, .. } | TuningEffect::DamageRetaliation { unit_rawcode: code, .. } | TuningEffect::HealthScaledAftershock { unit_rawcode: code, .. } if rawcode(code).ok() != Some(unit_rawcode)))
         {
             match effect {
                 TuningEffect::ScriptedAutomatic { .. }
@@ -1208,7 +1223,7 @@ fn native_unit_mechanics_from_tuning(
                         automatic_spell = Some(candidate);
                     }
                 }
-                TuningEffect::DamageRetaliation { .. } | TuningEffect::LavaSpawn { .. } | TuningEffect::MirrorImage { .. }
+                TuningEffect::HealthScaledAftershock { .. } | TuningEffect::DamageRetaliation { .. } | TuningEffect::LavaSpawn { .. } | TuningEffect::MirrorImage { .. }
                 | TuningEffect::DamageCharge { .. }
                 | TuningEffect::Poison { .. }
                 | TuningEffect::KillBerserk { .. }
@@ -1356,6 +1371,9 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
                 .expect("validated native retaliation dependency");
             assert!(child.contains(&profile.projectile));
             PassiveUnitEffect::DamageRetaliation(*profile)
+        }
+        TuningEffect::HealthScaledAftershock { profile, .. } => {
+            PassiveUnitEffect::HealthScaledAftershock(*profile)
         }
         TuningEffect::LavaSpawn { profile, .. } => PassiveUnitEffect::LavaSpawn(*profile),
         TuningEffect::MirrorImage { profile, .. } => PassiveUnitEffect::MirrorImage(*profile),

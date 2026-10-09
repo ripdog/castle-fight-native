@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 61;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 62;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -63,6 +63,7 @@ mod match_rules;
 #[cfg(test)]
 mod match_rules_tests;
 mod mirror_images;
+mod source_damage_runtime;
 use match_rules::{PendingRescueStrike, PlayerStrikeState};
 pub use match_rules::{PlayerRoundScore, RescueStrikeVisualEvent, RoundScoreboard};
 mod movement;
@@ -5426,6 +5427,16 @@ impl Simulation {
                         completed_tick,
                     ),
                     state.units[index].snow_damage_taken_per_10k,
+                );
+                source_damage_runtime::apply_aftershock(
+                    source_id,
+                    index,
+                    source_damage_runtime::SourceDamageState {
+                        units: state.units,
+                        health: state.unit_health,
+                        rules: state.damage_rules,
+                        tick: completed_tick,
+                    },
                 );
                 if damage_type != DamageType::Spells {
                     self.observe_damage_retaliation(
