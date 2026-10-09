@@ -342,27 +342,30 @@ impl Simulation {
                                 units,
                             )
                             .damage;
-                            if apply_damage_to_target(
-                                TargetIndex::Unit(index),
-                                bolt.source,
-                                damage,
-                                damage_type,
-                                completed_tick,
-                                self.debug_buildings_invulnerable,
-                                DamageTargetState {
-                                    match_seed: self.config.match_seed,
-                                    damage_rules: self.combat_rules.damage_rules,
-                                    units,
-                                    buildings,
-                                    unit_positions: positions,
-                                    unit_health,
-                                    building_health,
-                                    attackers_this_tick,
-                                    next_defense_alerts,
-                                    navigation_cell_size: self.config.navigation_cell_size,
-                                },
-                            )
-                            .is_some()
+                            if self
+                                .apply_damage_to_target(
+                                    TargetIndex::Unit(index),
+                                    WeaponDamageEvent {
+                                        source_id: bolt.source,
+                                        damage,
+                                        damage_type,
+                                        completed_tick,
+                                    },
+                                    self.debug_buildings_invulnerable,
+                                    DamageTargetState {
+                                        match_seed: self.config.match_seed,
+                                        damage_rules: self.combat_rules.damage_rules,
+                                        units,
+                                        buildings,
+                                        unit_positions: positions,
+                                        unit_health,
+                                        building_health,
+                                        attackers_this_tick,
+                                        next_defense_alerts,
+                                        navigation_cell_size: self.config.navigation_cell_size,
+                                    },
+                                )
+                                .is_some()
                             {
                                 result.effects += 1;
                             }
@@ -481,6 +484,7 @@ fn cleanse_native_effects(
     status.damage_over_time_count = 0;
     passive_baseline.retain(|effect| {
         let ability = match effect {
+            PassiveUnitEffect::DamageRetaliation(p) => Some(p.marker),
             PassiveUnitEffect::LavaSpawn(_) => None,
             PassiveUnitEffect::MirrorImage(profile) => Some(profile.ability),
             PassiveUnitEffect::DamageCharge(profile) => Some(profile.marker),

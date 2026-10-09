@@ -454,9 +454,66 @@ pub struct EntanglingRootsEffectProfile {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TriggeredAttackEffect {
+    ForkedLightning(ForkedLightningProfile),
     ConeWave(ConeWaveProfile),
     ChainLightning(ChainLightningEffectProfile),
     EntanglingRoots(EntanglingRootsEffectProfile),
+}
+
+/// Simultaneous native lightning branches in a caster-oriented expanding cone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ForkedLightningProfile {
+    pub ability: AbilityId,
+    pub damage: i32,
+    pub maximum_targets: u8,
+    pub distance: i32,
+    pub initial_radius: i32,
+    pub final_radius: i32,
+    pub targets: AttackTargetMask,
+}
+
+impl ForkedLightningProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 7] {
+        [
+            u64::from(self.ability.0),
+            self.damage as u64,
+            u64::from(self.maximum_targets),
+            self.distance as u64,
+            self.initial_radius as u64,
+            self.final_radius as u64,
+            u64::from(self.targets.bits()),
+        ]
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DamageRetaliationProfile {
+    pub marker: AbilityId,
+    pub chance_per_10k: u16,
+    pub range: i32,
+    pub organic_only: bool,
+    pub projectile: NativeBoltProfile,
+}
+
+impl DamageRetaliationProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 13] {
+        let p = self.projectile;
+        [
+            u64::from(self.marker.0),
+            u64::from(self.chance_per_10k),
+            self.range as u64,
+            u64::from(self.organic_only),
+            u64::from(p.ability.0),
+            p.damage as u64,
+            u64::from(p.stun_ticks),
+            u64::from(p.hero_stun_ticks),
+            p.damage_per_second as u64,
+            u64::from(p.duration_ticks),
+            p.speed_per_tick as u64,
+            u64::from(p.cleanse),
+            u64::from(p.targets.bits()),
+        ]
+    }
 }
 
 /// Native traveling cone (Carrion Swarm / Breath of Fire family), independent of its trigger target.
@@ -763,6 +820,9 @@ pub struct FeedbackEffectProfile {
 /// Intrinsic target classifications, independent of armor type or presentation.
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnitClassifications {
+    /// Native melee-attacker handle classification, independent of the current damage event.
+    #[serde(default)]
+    pub melee_attacker: bool,
     pub hero: bool,
     pub summoned: bool,
     pub spell_immune: bool,
@@ -806,6 +866,7 @@ pub(crate) struct ProductionUnitClassifications(pub UnitClassifications);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PassiveUnitEffect {
+    DamageRetaliation(DamageRetaliationProfile),
     LavaSpawn(LavaSpawnProfile),
     MirrorImage(MirrorImageProfile),
     DamageCharge(DamageChargeProfile),
@@ -1752,6 +1813,7 @@ pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
 
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusState {
+    pub retaliation_sequence: u64,
     /// Last authoritative order/movement heading, normalized by consumers.
     pub facing_direction: SimPoint,
     pub spawn_building: Option<SimId>,

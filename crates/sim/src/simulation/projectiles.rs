@@ -299,27 +299,30 @@ impl Simulation {
                     if defense.damage <= 0 && defense.reflected {
                         continue;
                     }
-                    if apply_damage_to_target(
-                        target,
-                        snapshot.projectile.source,
-                        defense.damage,
-                        snapshot.projectile.damage_type,
-                        completed_tick,
-                        self.debug_buildings_invulnerable,
-                        DamageTargetState {
-                            match_seed: self.config.match_seed,
-                            damage_rules: self.combat_rules.damage_rules,
-                            units,
-                            buildings,
-                            unit_positions: positions,
-                            unit_health,
-                            building_health,
-                            attackers_this_tick,
-                            next_defense_alerts,
-                            navigation_cell_size: self.config.navigation_cell_size,
-                        },
-                    )
-                    .is_some()
+                    if self
+                        .apply_damage_to_target(
+                            target,
+                            WeaponDamageEvent {
+                                source_id: snapshot.projectile.source,
+                                damage: defense.damage,
+                                damage_type: snapshot.projectile.damage_type,
+                                completed_tick,
+                            },
+                            self.debug_buildings_invulnerable,
+                            DamageTargetState {
+                                match_seed: self.config.match_seed,
+                                damage_rules: self.combat_rules.damage_rules,
+                                units,
+                                buildings,
+                                unit_positions: positions,
+                                unit_health,
+                                building_health,
+                                attackers_this_tick,
+                                next_defense_alerts,
+                                navigation_cell_size: self.config.navigation_cell_size,
+                            },
+                        )
+                        .is_some()
                     {
                         if !defense.reflected {
                             let pending = apply_pending_attack_effects(
@@ -331,6 +334,7 @@ impl Simulation {
                                     team: snapshot.projectile.source_team,
                                 },
                                 PendingAttackEffectState {
+                                    navigation_cell_size: self.config.navigation_cell_size,
                                     completed_tick,
                                     units,
                                     unit_health,
@@ -350,6 +354,7 @@ impl Simulation {
                                     completed_tick,
                                 );
                             }
+                            self.last_chain_lightnings.extend(pending.fork_events);
                             if let Some(event) = pending.chain_event {
                                 self.last_chain_lightnings.push(event);
                             }
@@ -375,27 +380,30 @@ impl Simulation {
                         projectile_invalidations += 1;
                         continue;
                     };
-                    if apply_damage_to_target(
-                        target,
-                        snapshot.projectile.reflector,
-                        snapshot.projectile.damage,
-                        snapshot.projectile.damage_type,
-                        completed_tick,
-                        self.debug_buildings_invulnerable,
-                        DamageTargetState {
-                            match_seed: self.config.match_seed,
-                            damage_rules: self.combat_rules.damage_rules,
-                            units,
-                            buildings,
-                            unit_positions: positions,
-                            unit_health,
-                            building_health,
-                            attackers_this_tick,
-                            next_defense_alerts,
-                            navigation_cell_size: self.config.navigation_cell_size,
-                        },
-                    )
-                    .is_some()
+                    if self
+                        .apply_damage_to_target(
+                            target,
+                            WeaponDamageEvent {
+                                source_id: snapshot.projectile.reflector,
+                                damage: snapshot.projectile.damage,
+                                damage_type: snapshot.projectile.damage_type,
+                                completed_tick,
+                            },
+                            self.debug_buildings_invulnerable,
+                            DamageTargetState {
+                                match_seed: self.config.match_seed,
+                                damage_rules: self.combat_rules.damage_rules,
+                                units,
+                                buildings,
+                                unit_positions: positions,
+                                unit_health,
+                                building_health,
+                                attackers_this_tick,
+                                next_defense_alerts,
+                                navigation_cell_size: self.config.navigation_cell_size,
+                            },
+                        )
+                        .is_some()
                     {
                         projectile_impacts += 1;
                         projectile_effects += 1;
@@ -465,27 +473,30 @@ impl Simulation {
                             continue;
                         }
                     }
-                    if apply_damage_to_target(
-                        target,
-                        snapshot.projectile.source,
-                        defense.damage,
-                        snapshot.projectile.damage_type,
-                        completed_tick,
-                        self.debug_buildings_invulnerable,
-                        DamageTargetState {
-                            match_seed: self.config.match_seed,
-                            damage_rules: self.combat_rules.damage_rules,
-                            units,
-                            buildings,
-                            unit_positions: positions,
-                            unit_health,
-                            building_health,
-                            attackers_this_tick,
-                            next_defense_alerts,
-                            navigation_cell_size: self.config.navigation_cell_size,
-                        },
-                    )
-                    .is_none()
+                    if self
+                        .apply_damage_to_target(
+                            target,
+                            WeaponDamageEvent {
+                                source_id: snapshot.projectile.source,
+                                damage: defense.damage,
+                                damage_type: snapshot.projectile.damage_type,
+                                completed_tick,
+                            },
+                            self.debug_buildings_invulnerable,
+                            DamageTargetState {
+                                match_seed: self.config.match_seed,
+                                damage_rules: self.combat_rules.damage_rules,
+                                units,
+                                buildings,
+                                unit_positions: positions,
+                                unit_health,
+                                building_health,
+                                attackers_this_tick,
+                                next_defense_alerts,
+                                navigation_cell_size: self.config.navigation_cell_size,
+                            },
+                        )
+                        .is_none()
                     {
                         projectile_entities_to_remove.push(snapshot.entity);
                         projectile_invalidations += 1;
@@ -686,27 +697,30 @@ impl Simulation {
                         completed_tick,
                         units,
                     );
-                    if apply_damage_to_target(
-                        target,
-                        snapshot.projectile.source,
-                        damage,
-                        snapshot.projectile.damage_type,
-                        completed_tick,
-                        self.debug_buildings_invulnerable,
-                        DamageTargetState {
-                            match_seed: self.config.match_seed,
-                            damage_rules: self.combat_rules.damage_rules,
-                            units,
-                            buildings,
-                            unit_positions: positions,
-                            unit_health,
-                            building_health,
-                            attackers_this_tick,
-                            next_defense_alerts,
-                            navigation_cell_size: self.config.navigation_cell_size,
-                        },
-                    )
-                    .is_some()
+                    if self
+                        .apply_damage_to_target(
+                            target,
+                            WeaponDamageEvent {
+                                source_id: snapshot.projectile.source,
+                                damage,
+                                damage_type: snapshot.projectile.damage_type,
+                                completed_tick,
+                            },
+                            self.debug_buildings_invulnerable,
+                            DamageTargetState {
+                                match_seed: self.config.match_seed,
+                                damage_rules: self.combat_rules.damage_rules,
+                                units,
+                                buildings,
+                                unit_positions: positions,
+                                unit_health,
+                                building_health,
+                                attackers_this_tick,
+                                next_defense_alerts,
+                                navigation_cell_size: self.config.navigation_cell_size,
+                            },
+                        )
+                        .is_some()
                     {
                         projectile_effects += 1;
                         if let TargetIndex::Unit(index) = target

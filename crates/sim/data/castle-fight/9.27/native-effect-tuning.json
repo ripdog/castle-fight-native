@@ -3,6 +3,134 @@
   "map_version": "9.27",
   "effects": [
     {
+      "source_kind": "unit-ability",
+      "source_key": "A0DX",
+      "unit_rawcode": "h03P",
+      "kind": "damage-retaliation",
+      "effect_ability_rawcode": "A0D5",
+      "profile": {
+        "marker": 1093682264,
+        "chance_per_10k": 1600,
+        "range": 614400,
+        "organic_only": true,
+        "projectile": {
+          "ability": 1093682229,
+          "damage": 25,
+          "stun_ticks": 60,
+          "hero_stun_ticks": 60,
+          "damage_per_second": 0,
+          "duration_ticks": 0,
+          "speed_per_tick": 34133,
+          "cleanse": false,
+          "targets": 3
+        }
+      },
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/production-unit-special-mechanics.tsv",
+        "fields": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "handler": "handleTargetDamageEffects,castLightningShield",
+        "phase": "pre-health-commit",
+        "native_melee_classification": "resolved/units.tsv:attack1_weapon_type=normal"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0CH",
+      "unit_rawcode": "h03P",
+      "kind": "orb-spell-proc",
+      "chance_per_10k": 10000,
+      "effect_ability_rawcode": "A0CJ",
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A0CH",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0F7",
+      "unit_rawcode": "h03P",
+      "kind": "orb-spell-proc",
+      "chance_per_10k": 10000,
+      "effect_ability_rawcode": "A0F8",
+      "targets": "buildings",
+      "provenance": {
+        "ability": "A0F7",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A0CJ",
+      "unit_rawcode": "h03P",
+      "kind": "forked-lightning",
+      "profile": {
+        "ability": 1093681994,
+        "damage": 50,
+        "maximum_targets": 3,
+        "distance": 358400,
+        "initial_radius": 128000,
+        "final_radius": 409600,
+        "targets": 3
+      }
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A0F8",
+      "unit_rawcode": "h03P",
+      "kind": "forked-lightning",
+      "profile": {
+        "ability": 1093682744,
+        "damage": 25,
+        "maximum_targets": 1,
+        "distance": 358400,
+        "initial_radius": 128000,
+        "final_radius": 409600,
+        "targets": 4
+      }
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A0D5",
+      "unit_rawcode": "h03P",
+      "kind": "retaliation-projectile",
+      "profiles": [
+        {
+          "ability": 1093682229,
+          "damage": 25,
+          "stun_ticks": 60,
+          "hero_stun_ticks": 60,
+          "damage_per_second": 0,
+          "duration_ticks": 0,
+          "speed_per_tick": 34133,
+          "cleanse": false,
+          "targets": 3
+        },
+        {
+          "ability": 1093682229,
+          "damage": 50,
+          "stun_ticks": 120,
+          "hero_stun_ticks": 120,
+          "damage_per_second": 0,
+          "duration_ticks": 0,
+          "speed_per_tick": 34133,
+          "cleanse": false,
+          "targets": 3
+        }
+      ],
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/production-unit-special-mechanics.tsv",
+        "fields": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "handler": "handleTargetDamageEffects,castLightningShield",
+        "phase": "pre-health-commit",
+        "native_melee_classification": "resolved/units.tsv:attack1_weapon_type=normal"
+      }
+    },
+    {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
       "source_key": "A0E1",

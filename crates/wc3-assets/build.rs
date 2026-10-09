@@ -1658,10 +1658,11 @@ fn parse_json_model_paths(value: &str) -> Vec<String> {
 }
 
 fn is_renderable_model_path(path: &str) -> bool {
-    !matches!(
-        path.trim().to_ascii_lowercase().as_str(),
-        ".mdl" | ".mdx" | "none" | "none.mdl" | "none.mdx"
-    )
+    !path.trim().is_empty()
+        && !matches!(
+            path.trim().to_ascii_lowercase().as_str(),
+            ".mdl" | ".mdx" | "none" | "none.mdl" | "none.mdx"
+        )
 }
 
 fn parse_json_f32(value: &str) -> Option<f32> {

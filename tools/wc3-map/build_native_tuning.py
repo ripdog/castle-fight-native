@@ -61,6 +61,8 @@ def unit_targets(value: str, *, allow_structures: bool = False) -> str:
         return "air-units"
     if movement == {"ground"}:
         return "ground-units-and-buildings" if "structure" in tokens else "ground-units"
+    if tokens == {"enemies", "structure"} and allow_structures:
+        return "buildings"
     raise ValueError(f"unsupported native proc targets: {value!r}")
 
 
@@ -116,6 +118,20 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
 
     kind = recipe["kind"]
     effect: dict[str, Any] = dict(recipe)
+    if kind in {"damage-retaliation", "retaliation-projectile"}:
+        from project_damage_retaliation import project
+        return project(recipe, mechanics, scaled)
+    if kind == "forked-lightning":
+        if mechanics["native_base"] != "ACfl" or scaled(protected["mana_cost"]) != 0:
+            raise ValueError("forked lightning requires a free protected native effect")
+        tokens = set(fields["targs1"].split(","))
+        if tokens not in ({"air","ground","enemies","ward"}, {"enemies","structure"}):
+            raise ValueError("forked lightning effect target constraints changed")
+        effect.update(profile={"ability":int.from_bytes(recipe["source_key"].encode(),"big"),
+            "damage":number("DataA1"), "maximum_targets":number("DataB1"),
+            "distance":number("DataC1",1024), "initial_radius":number("Area1",1024),
+            "final_radius":number("DataD1",1024), "targets":3 if "ground" in tokens else 4})
+        return effect
     if kind == "master-projectiles":
         from project_master_projectiles import project
         return project(recipe, fields, unit, protected, mechanics)
@@ -644,6 +660,12 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
     damage_charges = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "damage-to-mana-kaboom-charge"}
+    retaliations = {row["unit_rawcode"]: json.loads(row["parameters_json"])
+        for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
+        if row["mechanic_kind"] == "target-damage-melee-thunderbolt-retaliation"}
+    all_protected = {}
+    for row in rows(retained("resolved/protected-ability-fields.tsv")):
+        all_protected.setdefault(row["rawcode"],{}).setdefault(row["level"],{})[row["field"]] = row["runtime_value"]
     lava_spawns = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "native-lava-spawn-split-with-child-conversion"}
@@ -662,7 +684,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         if recipe["source_kind"] not in {"unit-ability", "ability-effect"}:
             raise ValueError("unsupported native recipe source kind")
         key = (recipe["source_kind"], recipe["source_key"])
-        if recipe["kind"] == "damage-charge":
+        if recipe["kind"] in {"damage-charge", "damage-retaliation"}:
             key += (recipe["unit_rawcode"],)
         if key in seen:
             raise ValueError(f"duplicate recipe source: {key}")
@@ -682,6 +704,10 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
                 raise ValueError(f"proxy child {source} needs one semantic parent for its source unit")
             spell = matches[0]
         detail = dict(mechanics.get(recipe.get("unit_rawcode", ""), {}))
+        if recipe["kind"] in {"damage-retaliation", "retaliation-projectile"}:
+            detail.update(retaliation=retaliations[recipe["unit_rawcode"]], retaliation_handler=functions["castLightningShield"],
+                retaliation_dispatch=functions["handleTargetDamageEffects"], retaliation_fields=ability_levels["A0D5"],
+                retaliation_protected=all_protected["A0D5"], retaliation_base=ability_bases["A0D5"], git_tree=tree)
         if recipe["kind"] == "master-projectiles":
             names = ["onMasterSpell", "onLightningBolt", "processMasterLightningBolts", "findMasterLightningHit", "spawnSnowMissileFanStep", "processSnowMissiles", "dummyCastTargetWithVision1"]
             detail.update(map_version=dict(zip(["major","minor"],map(int,release["map_version"].split(".")))), master_trace=json.loads(spell_semantics[source]["parameters_json"]),

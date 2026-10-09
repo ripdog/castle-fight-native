@@ -1813,6 +1813,7 @@ fn hash_action_timing(hash: &mut Fnv64, timing: ActionTimingProfile) {
 }
 
 fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
+    hash.write_u64(status.retaliation_sequence);
     hash.write_u8(u8::from(status.acid_bomb.is_some()));
     if let Some(acid) = status.acid_bomb {
         for word in acid.profile.canonical_words() {
@@ -2250,6 +2251,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                 hash.write_u16(profile.damage_per_10k);
                 hash.write_u8(profile.targets.bits());
             }
+            PassiveUnitEffect::DamageRetaliation(profile) => {
+                hash.write_u8(21);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
             PassiveUnitEffect::LavaSpawn(profile) => {
                 hash.write_u8(20);
                 for word in profile.canonical_words() {
@@ -2332,6 +2339,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
 
 fn hash_triggered_attack_effect(hash: &mut Fnv64, effect: TriggeredAttackEffect) {
     match effect {
+        TriggeredAttackEffect::ForkedLightning(profile) => {
+            hash.write_u8(3);
+            for word in profile.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         TriggeredAttackEffect::ConeWave(profile) => {
             hash.write_u8(2);
             for word in profile.canonical_words() {
@@ -2391,6 +2404,7 @@ fn hash_unit_classifications(hash: &mut Fnv64, flags: UnitClassifications) {
     hash.write_u8(u8::from(flags.legendary));
     hash.write_u8(u8::from(flags.summoned_marker));
     hash.write_u8(u8::from(flags.illusion));
+    hash.write_u8(u8::from(flags.melee_attacker));
 }
 
 fn hash_shrine_state(hash: &mut Fnv64, state: ShrineRevivalState) {

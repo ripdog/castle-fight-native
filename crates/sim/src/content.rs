@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r67";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r68";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 42;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 43;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1608,6 +1608,7 @@ impl CastleFightTowerDefinition {
                 movement_class: MovementClass::Ground,
                 mechanical: false,
                 classifications: UnitClassifications {
+                    melee_attacker: false,
                     hero: false,
                     summoned: false,
                     spell_immune: false,
@@ -1827,6 +1828,24 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0DX") => {
+            0x4000_0112
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0CH") => {
+            0x4000_0113
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0F7") => {
+            0x4000_0114
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A0CJ") => {
+            0x4000_0115
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A0F8") => {
+            0x4000_0116
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A0D5") => {
+            0x4000_0117
+        }
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0E1") => {
             0x4000_0111
         }
@@ -2573,6 +2592,7 @@ fn hash_classifications(hash: &mut ContentHash64, flags: UnitClassifications) {
     hash.write_u8(u8::from(flags.summoned_marker));
     hash.write_u8(u8::from(flags.illusion));
     hash.write_u8(u8::from(flags.invisible));
+    hash.write_u8(u8::from(flags.melee_attacker));
 }
 
 fn hash_production_definition(
@@ -2863,6 +2883,12 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
                 hash.write_u16(profile.damage_per_10k);
                 hash.write_u8(profile.targets.bits());
             }
+            PassiveUnitEffect::DamageRetaliation(profile) => {
+                hash.write_u8(21);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
             PassiveUnitEffect::LavaSpawn(profile) => {
                 hash.write_u8(20);
                 for word in profile.canonical_words() {
@@ -2949,6 +2975,12 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
 
 fn hash_triggered_effect(hash: &mut ContentHash64, effect: TriggeredAttackEffect) {
     match effect {
+        TriggeredAttackEffect::ForkedLightning(profile) => {
+            hash.write_u8(3);
+            for word in profile.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         TriggeredAttackEffect::ConeWave(profile) => {
             hash.write_u8(2);
             for word in profile.canonical_words() {
@@ -4048,6 +4080,7 @@ impl ExtractedContent927 {
                 move_speed_per_tick,
                 mechanical,
                 target_classifications: UnitClassifications {
+                    melee_attacker: attack1_enabled && columns[28] == "normal",
                     hero: columns[2]
                         .as_bytes()
                         .first()

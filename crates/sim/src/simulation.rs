@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 60;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 61;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -52,8 +52,10 @@ mod construction;
 #[cfg(test)]
 mod content_lifecycle_tests;
 mod damage_charge;
+mod damage_retaliation;
 mod damage_thresholds;
 mod economy;
+mod forked_lightning;
 mod lava_spawns;
 mod line_projectiles;
 mod master_projectiles;
@@ -5384,101 +5386,127 @@ fn spell_damage_after_defend(unit: UnitSnapshot, damage: i32, completed_tick: u6
     })
 }
 
-fn apply_damage_to_target(
-    target: TargetIndex,
+#[derive(Debug, Clone, Copy)]
+struct WeaponDamageEvent {
     source_id: SimId,
     damage: i32,
     damage_type: DamageType,
     completed_tick: u64,
-    buildings_invulnerable: bool,
-    state: DamageTargetState<'_>,
-) -> Option<SimPoint> {
-    match target {
-        TargetIndex::Unit(index) => {
-            if state.unit_health[index] <= 0 {
-                return None;
-            }
-            let adjusted_damage = state.damage_rules.apply_attack_with_armor_per_100(
-                damage,
-                damage_type,
-                state.units[index].armor.armor_type,
-                effective_armor_points_per_100(&state.units[index]),
-            );
-            let event_damage = scale_damage_per_10k(
-                native_kill_effects::damage_after_native_incoming(
-                    &state.units[index],
-                    adjusted_damage,
-                    completed_tick,
-                ),
-                state.units[index].snow_damage_taken_per_10k,
-            );
-            damage_thresholds::observe_damage_event(
-                &mut state.units[index],
-                state.unit_health[index],
-                event_damage,
-            );
-            if state.units[index].classifications.combat_sapper
-                && let Some(source_index) = find_unit_index(state.units, source_id)
-                && state.unit_health[source_index] > 0
-            {
-                mirror_images::observe_source_damage(
-                    &mut state.units[source_index],
-                    completed_tick,
-                    state.match_seed,
-                );
-            }
-            state.unit_health[index] = state.unit_health[index]
-                .checked_sub(event_damage)
-                .expect("unit damage arithmetic overflowed validated bounds");
-            let source_index = find_unit_index(state.units, source_id);
-            if state.unit_health[index] <= 0
-                && state.units[index].classifications.combat_sapper
-                && let Some(source_index) = source_index
-                && state.unit_health[source_index] > 0
-            {
-                native_kill_effects::activate_kill_berserk(
-                    &mut state.units[source_index],
-                    completed_tick,
-                );
-            }
-            let source_is_unit = source_index.is_some();
-            let recorded_attacker_is_building = state.attackers_this_tick[index]
-                .is_some_and(|attacker| find_building_index(state.buildings, attacker).is_some());
-            if state.attackers_this_tick[index].is_none()
-                || (source_is_unit && recorded_attacker_is_building)
-            {
-                state.attackers_this_tick[index] = Some(source_id);
-            }
-            state.next_defense_alerts.push(DefenseAlert {
-                victim_id: state.units[index].id,
-                victim_team: state.units[index].team,
-                victim_position: state.unit_positions[index],
-                attacker_id: source_id,
-                attacked_tick: completed_tick,
-            });
-            Some(state.unit_positions[index])
-        }
-        TargetIndex::Building(index) => {
-            if state.building_health[index] <= 0 {
-                return None;
-            }
-            if !buildings_invulnerable {
-                let adjusted_damage = state.damage_rules.apply_attack(
+}
+
+impl Simulation {
+    fn apply_damage_to_target(
+        &mut self,
+        target: TargetIndex,
+        event: WeaponDamageEvent,
+        buildings_invulnerable: bool,
+        state: DamageTargetState<'_>,
+    ) -> Option<SimPoint> {
+        let WeaponDamageEvent {
+            source_id,
+            damage,
+            damage_type,
+            completed_tick,
+        } = event;
+        match target {
+            TargetIndex::Unit(index) => {
+                if state.unit_health[index] <= 0 {
+                    return None;
+                }
+                let adjusted_damage = state.damage_rules.apply_attack_with_armor_per_100(
                     damage,
                     damage_type,
-                    state.buildings[index].armor,
+                    state.units[index].armor.armor_type,
+                    effective_armor_points_per_100(&state.units[index]),
                 );
-                state.building_health[index] = state.building_health[index]
-                    .checked_sub(scale_damage_per_10k(
+                let event_damage = scale_damage_per_10k(
+                    native_kill_effects::damage_after_native_incoming(
+                        &state.units[index],
                         adjusted_damage,
-                        state.buildings[index].snow_damage_taken_per_10k,
-                    ))
-                    .expect("building damage arithmetic overflowed validated bounds");
+                        completed_tick,
+                    ),
+                    state.units[index].snow_damage_taken_per_10k,
+                );
+                if damage_type != DamageType::Spells {
+                    self.observe_damage_retaliation(
+                        source_id,
+                        index,
+                        completed_tick,
+                        state.units,
+                        state.unit_health,
+                        state.unit_positions,
+                    );
+                }
+                damage_thresholds::observe_damage_event(
+                    &mut state.units[index],
+                    state.unit_health[index],
+                    event_damage,
+                );
+                if state.units[index].classifications.combat_sapper
+                    && let Some(source_index) = find_unit_index(state.units, source_id)
+                    && state.unit_health[source_index] > 0
+                {
+                    mirror_images::observe_source_damage(
+                        &mut state.units[source_index],
+                        completed_tick,
+                        state.match_seed,
+                    );
+                }
+                state.unit_health[index] = state.unit_health[index]
+                    .checked_sub(event_damage)
+                    .expect("unit damage arithmetic overflowed validated bounds");
+                let source_index = find_unit_index(state.units, source_id);
+                if state.unit_health[index] <= 0
+                    && state.units[index].classifications.combat_sapper
+                    && let Some(source_index) = source_index
+                    && state.unit_health[source_index] > 0
+                {
+                    native_kill_effects::activate_kill_berserk(
+                        &mut state.units[source_index],
+                        completed_tick,
+                    );
+                }
+                let source_is_unit = source_index.is_some();
+                let recorded_attacker_is_building =
+                    state.attackers_this_tick[index].is_some_and(|attacker| {
+                        find_building_index(state.buildings, attacker).is_some()
+                    });
+                if state.attackers_this_tick[index].is_none()
+                    || (source_is_unit && recorded_attacker_is_building)
+                {
+                    state.attackers_this_tick[index] = Some(source_id);
+                }
+                state.next_defense_alerts.push(DefenseAlert {
+                    victim_id: state.units[index].id,
+                    victim_team: state.units[index].team,
+                    victim_position: state.unit_positions[index],
+                    attacker_id: source_id,
+                    attacked_tick: completed_tick,
+                });
+                Some(state.unit_positions[index])
             }
-            Some(footprint_center_point(
-                state.buildings[index].footprint,
-                state.navigation_cell_size,
-            ))
+            TargetIndex::Building(index) => {
+                if state.building_health[index] <= 0 {
+                    return None;
+                }
+                if !buildings_invulnerable {
+                    let adjusted_damage = state.damage_rules.apply_attack(
+                        damage,
+                        damage_type,
+                        state.buildings[index].armor,
+                    );
+                    state.building_health[index] = state.building_health[index]
+                        .checked_sub(scale_damage_per_10k(
+                            adjusted_damage,
+                            state.buildings[index].snow_damage_taken_per_10k,
+                        ))
+                        .expect("building damage arithmetic overflowed validated bounds");
+                }
+                Some(footprint_center_point(
+                    state.buildings[index].footprint,
+                    state.navigation_cell_size,
+                ))
+            }
         }
     }
 }
@@ -5491,6 +5519,7 @@ struct PendingAttackEffectSource {
 }
 
 struct PendingAttackEffectState<'a> {
+    navigation_cell_size: i32,
     completed_tick: u64,
     units: &'a mut [UnitSnapshot],
     unit_health: &'a mut [i32],
@@ -5503,6 +5532,7 @@ struct PendingAttackEffectState<'a> {
 struct PendingAttackEffectResult {
     cone_wave: Option<crate::components::ConeWaveState>,
     poison: Option<crate::PoisonProfile>,
+    fork_events: Vec<ChainLightningEvent>,
     chain_event: Option<ChainLightningEvent>,
     chain_state: Option<ChainLightningState>,
 }
@@ -5514,6 +5544,7 @@ fn apply_pending_attack_effects(
     state: PendingAttackEffectState<'_>,
 ) -> PendingAttackEffectResult {
     let PendingAttackEffectState {
+        navigation_cell_size,
         completed_tick,
         units,
         unit_health,
@@ -5526,6 +5557,26 @@ fn apply_pending_attack_effects(
         let TargetIndex::Building(index) = target else {
             unreachable!()
         };
+        if let Some(TriggeredAttackEffect::ForkedLightning(profile)) = effects.triggered_spell {
+            let fork_events = forked_lightning::resolve(
+                target,
+                profile,
+                source,
+                &mut PendingAttackEffectState {
+                    navigation_cell_size,
+                    completed_tick,
+                    units,
+                    unit_health,
+                    buildings,
+                    building_health,
+                    damage_rules,
+                },
+            );
+            return PendingAttackEffectResult {
+                fork_events,
+                ..Default::default()
+            };
+        }
         if let Some(TriggeredAttackEffect::EntanglingRoots(profile)) = effects.triggered_spell
             && profile.targets.can_target_buildings()
             && building_health[index] > 0
@@ -5626,6 +5677,22 @@ fn apply_pending_attack_effects(
     }
     if let Some(effect) = effects.triggered_spell {
         match effect {
+            TriggeredAttackEffect::ForkedLightning(profile) => {
+                result.fork_events = forked_lightning::resolve(
+                    target,
+                    profile,
+                    source,
+                    &mut PendingAttackEffectState {
+                        navigation_cell_size,
+                        completed_tick,
+                        units,
+                        unit_health,
+                        buildings,
+                        building_health,
+                        damage_rules,
+                    },
+                );
+            }
             TriggeredAttackEffect::ConeWave(_) => {}
             TriggeredAttackEffect::ChainLightning(profile) => {
                 let max_targets = usize::from(profile.maximum_targets).min(MAX_BOUNCE_HITS);

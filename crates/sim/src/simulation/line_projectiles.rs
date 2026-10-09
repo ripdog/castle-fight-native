@@ -123,27 +123,30 @@ impl Simulation {
             for (_, id, target) in hits {
                 let damage =
                     ranged_projectile_damage_after_defend(target, p.damage, completed_tick, units);
-                if apply_damage_to_target(
-                    target,
-                    p.source,
-                    damage,
-                    p.damage_type,
-                    completed_tick,
-                    self.debug_buildings_invulnerable,
-                    DamageTargetState {
-                        match_seed: self.config.match_seed,
-                        damage_rules: self.combat_rules.damage_rules,
-                        units,
-                        buildings,
-                        unit_positions: positions,
-                        unit_health,
-                        building_health,
-                        attackers_this_tick,
-                        next_defense_alerts,
-                        navigation_cell_size: self.config.navigation_cell_size,
-                    },
-                )
-                .is_some()
+                if self
+                    .apply_damage_to_target(
+                        target,
+                        WeaponDamageEvent {
+                            source_id: p.source,
+                            damage,
+                            damage_type: p.damage_type,
+                            completed_tick,
+                        },
+                        self.debug_buildings_invulnerable,
+                        DamageTargetState {
+                            match_seed: self.config.match_seed,
+                            damage_rules: self.combat_rules.damage_rules,
+                            units,
+                            buildings,
+                            unit_positions: positions,
+                            unit_health,
+                            building_health,
+                            attackers_this_tick,
+                            next_defense_alerts,
+                            navigation_cell_size: self.config.navigation_cell_size,
+                        },
+                    )
+                    .is_some()
                 {
                     effects += 1;
                 }

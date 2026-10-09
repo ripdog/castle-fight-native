@@ -36,7 +36,7 @@ pub(in crate::simulation) fn new_state(
     }
 }
 
-pub(super) fn hit_distance(
+pub(in crate::simulation) fn hit_distance(
     state: &ConeWaveState,
     point: SimPoint,
     from: i32,

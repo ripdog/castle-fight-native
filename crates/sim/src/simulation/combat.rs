@@ -327,12 +327,14 @@ impl Simulation {
                             building_health,
                         ) =>
                     {
-                        let applied = apply_damage_to_target(
+                        let applied = self.apply_damage_to_target(
                             intent.target,
-                            intent.source_id,
-                            damage,
-                            intent.damage_type,
-                            completed_tick,
+                            WeaponDamageEvent {
+                                source_id: intent.source_id,
+                                damage,
+                                damage_type: intent.damage_type,
+                                completed_tick,
+                            },
                             self.debug_buildings_invulnerable,
                             DamageTargetState {
                                 match_seed: self.config.match_seed,
@@ -393,12 +395,14 @@ impl Simulation {
                                     if target == intent.target {
                                         continue;
                                     }
-                                    apply_damage_to_target(
+                                    self.apply_damage_to_target(
                                         target,
-                                        intent.source_id,
-                                        splash_damage,
-                                        intent.damage_type,
-                                        completed_tick,
+                                        WeaponDamageEvent {
+                                            source_id: intent.source_id,
+                                            damage: splash_damage,
+                                            damage_type: intent.damage_type,
+                                            completed_tick,
+                                        },
                                         self.debug_buildings_invulnerable,
                                         DamageTargetState {
                                             match_seed: self.config.match_seed,
@@ -425,6 +429,7 @@ impl Simulation {
                                 team: intent.source_team,
                             },
                             PendingAttackEffectState {
+                                navigation_cell_size: self.config.navigation_cell_size,
                                 completed_tick,
                                 units,
                                 unit_health,
@@ -444,6 +449,7 @@ impl Simulation {
                                 completed_tick,
                             );
                         }
+                        self.last_chain_lightnings.extend(pending.fork_events);
                         if let Some(event) = pending.chain_event {
                             self.last_chain_lightnings.push(event);
                         }
@@ -912,7 +918,8 @@ impl Simulation {
                     );
                     on_hit.splash_falloff = Some(profile);
                 }
-                PassiveUnitEffect::LavaSpawn(_)
+                PassiveUnitEffect::DamageRetaliation(_)
+                | PassiveUnitEffect::LavaSpawn(_)
                 | PassiveUnitEffect::MirrorImage(_)
                 | PassiveUnitEffect::DamageThreshold(_)
                 | PassiveUnitEffect::DamageCharge(_)

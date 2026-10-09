@@ -280,6 +280,44 @@
       ]
     },
     {
+      "building_rawcode": "h042",
+      "source_registration": "wK",
+      "source_factory": "Au:create844",
+      "source_callback": "BuildingAttachmentHandler_registerBuildingAttach_RaceElemental_call_registerBuildingAttach_RaceElemental5",
+      "visuals": [
+        {
+          "model_path": "Doodads\\Cityscape\\Structures\\City_ColumnSemiCircle\\City_ColumnSemiCircle.mdl",
+          "yaw_degrees": 270.0,
+          "offset_world": [
+            0.0,
+            28.0,
+            0.0
+          ],
+          "scale": 0.2
+        },
+        {
+          "model_path": "Doodads\\Cityscape\\Structures\\City_ColumnSemiCircle_Ruined\\City_ColumnSemiCircle_Ruined.mdl",
+          "yaw_degrees": 90.0,
+          "offset_world": [
+            0.0,
+            -28.0,
+            0.0
+          ],
+          "scale": 0.2
+        },
+        {
+          "model_path": "Abilities\\Weapons\\FarseerMissile\\FarseerMissile.mdl",
+          "yaw_degrees": 270.0,
+          "offset_world": [
+            0.0,
+            0.0,
+            130.0
+          ],
+          "scale": 0.7
+        }
+      ]
+    },
+    {
       "building_rawcode": "h045",
       "source_registration": "wK",
       "source_factory": "Cu:create846",
