@@ -1,6 +1,12 @@
 {
   "schema_version": 1,
   "effects": [
+    {"kind": "damage-retaliation", "source_kind": "unit-ability", "source_key": "A0DX", "unit_rawcode": "h03R"},
+    {"kind": "orb-spell-proc", "source_kind": "unit-ability", "source_key": "A0CI", "unit_rawcode": "h03R"},
+    {"kind": "orb-spell-proc", "source_kind": "unit-ability", "source_key": "A0F0", "unit_rawcode": "h03R"},
+    {"kind": "forked-lightning", "source_kind": "ability-effect", "source_key": "A0CK", "unit_rawcode": "h03R"},
+    {"kind": "forked-lightning", "source_kind": "ability-effect", "source_key": "A0F6", "unit_rawcode": "h03R"},
+
     {"source_kind": "unit-ability", "source_key": "A0DX", "unit_rawcode": "h03P", "kind": "damage-retaliation"},
     {"source_kind": "unit-ability", "source_key": "A0CH", "unit_rawcode": "h03P", "kind": "orb-spell-proc"},
     {"source_kind": "unit-ability", "source_key": "A0F7", "unit_rawcode": "h03P", "kind": "orb-spell-proc"},

@@ -318,6 +318,44 @@
       ]
     },
     {
+      "building_rawcode": "h044",
+      "source_registration": "wK",
+      "source_factory": "Bu:create845",
+      "source_callback": "BuildingAttachmentHandler_registerBuildingAttach_RaceElemental_call_registerBuildingAttach_RaceElemental6",
+      "visuals": [
+        {
+          "model_path": "Doodads\\Cityscape\\Structures\\City_ColumnSemiCircle\\City_ColumnSemiCircle.mdl",
+          "yaw_degrees": 270.0,
+          "offset_world": [
+            0.0,
+            28.0,
+            0.0
+          ],
+          "scale": 0.2
+        },
+        {
+          "model_path": "Doodads\\Cityscape\\Structures\\City_ColumnSemiCircle\\City_ColumnSemiCircle.mdl",
+          "yaw_degrees": 90.0,
+          "offset_world": [
+            0.0,
+            -28.0,
+            0.0
+          ],
+          "scale": 0.2
+        },
+        {
+          "model_path": "Abilities\\Spells\\Orc\\LightningShield\\LightningShieldTarget.mdl",
+          "yaw_degrees": 270.0,
+          "offset_world": [
+            0.0,
+            0.0,
+            120.0
+          ],
+          "scale": 0.5
+        }
+      ]
+    },
+    {
       "building_rawcode": "h045",
       "source_registration": "wK",
       "source_factory": "Cu:create846",

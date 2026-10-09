@@ -1,6 +1,11 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind": "unit-ability", "source_key": "A0CI", "implementation": "warcraft-orb-spell-proc-v1", "valid_from": "9.27", "valid_through": "9.27"},
+    {"source_kind": "unit-ability", "source_key": "A0F0", "implementation": "warcraft-orb-spell-proc-v1", "valid_from": "9.27", "valid_through": "9.27"},
+    {"source_kind": "ability-effect", "source_key": "A0CK", "implementation": "warcraft-forked-lightning-v1", "valid_from": "9.27", "valid_through": "9.27"},
+    {"source_kind": "ability-effect", "source_key": "A0F6", "implementation": "warcraft-forked-lightning-v1", "valid_from": "9.27", "valid_through": "9.27"},
+
     {"source_kind": "unit-ability", "source_key": "A0DX", "implementation": "warcraft-damage-retaliation-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "unit-ability", "source_key": "A0CH", "implementation": "warcraft-orb-spell-proc-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "unit-ability", "source_key": "A0F7", "implementation": "warcraft-orb-spell-proc-v1", "valid_from": "9.27", "valid_through": "9.27"},
