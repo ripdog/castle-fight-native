@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind": "unit-ability", "source_key": "A0CP", "implementation": "warcraft-pulverize-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "unit-ability", "source_key": "A0DW", "implementation": "warcraft-health-scaled-aftershock-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "unit-ability", "source_key": "A0CO", "implementation": "warcraft-pulverize-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "unit-ability", "source_key": "A0CI", "implementation": "warcraft-orb-spell-proc-v1", "valid_from": "9.27", "valid_through": "9.27"},

@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind": "unit-ability", "source_key": "A0DW", "unit_rawcode": "h03N", "kind": "health-scaled-aftershock"},
+    {"source_kind": "unit-ability", "source_key": "A0CP", "unit_rawcode": "h03N", "kind": "pulverize"},
     {"source_kind": "unit-ability", "source_key": "A0DW", "unit_rawcode": "h034", "kind": "health-scaled-aftershock"},
     {"source_kind": "unit-ability", "source_key": "A0CO", "unit_rawcode": "h034", "kind": "pulverize"},
     {"kind": "damage-retaliation", "source_kind": "unit-ability", "source_key": "A0DX", "unit_rawcode": "h03R"},
