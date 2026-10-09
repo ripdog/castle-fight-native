@@ -579,6 +579,7 @@ mod tests {
             0,
         );
         authoritative.network_lobby_status = Some(castle_fight_protocol::LobbyStatus {
+            rules: authoritative.simulation.match_rules(),
             host_player_id: 6,
             debug_paused: false,
             debug_speed: DebugSpeed::Normal,

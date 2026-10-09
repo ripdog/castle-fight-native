@@ -192,6 +192,8 @@ pub struct PresentationSnapshot {
     pub(crate) observer: Option<ObserverVision>,
     pub hidden_entities: BTreeSet<SimId>,
     pub tick: u64,
+    /// Round transition barrier: prevents interpolation between reused per-round entity IDs.
+    pub round_index: u16,
     pub damage_rules: DamageRules,
     pub players: BTreeMap<PlayerId, PlayerView>,
     pub player_economy: BTreeMap<PlayerId, PlayerEconomyView>,
@@ -426,6 +428,7 @@ impl PresentationSnapshot {
             observer: None,
             hidden_entities: BTreeSet::new(),
             tick: simulation.tick(),
+            round_index: simulation.round_index(),
             damage_rules: simulation.damage_rules(),
             players,
             player_economy,
@@ -501,8 +504,13 @@ impl PresentationSamples {
         if let Some(observer) = self.observer {
             next.restrict_to_observer(observer);
         }
-        self.tick_advanced = next.tick > self.current.tick;
-        self.previous = std::mem::replace(&mut self.current, next);
+        if next.round_index != self.current.round_index {
+            self.previous = next.clone();
+            self.current = next;
+        } else {
+            self.previous = std::mem::replace(&mut self.current, next);
+        }
+        self.tick_advanced = self.current.tick > self.previous.tick;
         self.revision += 1;
     }
 

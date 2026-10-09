@@ -3432,6 +3432,7 @@ mod tests {
             observer: None,
             hidden_entities: Default::default(),
             tick: 10,
+            round_index: 1,
             damage_rules: castle_fight_sim::DamageRules::warcraft_frozen_throne(),
             players: BTreeMap::from([(
                 PlayerId(0),

@@ -10,12 +10,12 @@ use castle_fight_sim::{
     CanonicalStreamRecord, CastleFightBuildingId, ClientCommandSequence, CommandAdmissionError,
     CommandExecution, CommandExecutionResult, CommandOrder, CommandOutcome, CommandSubmission,
     FinalizedTickInputs, InputStreamPosition, MapVersion, MatchControlEvent, MatchOutcome,
-    PlayerCommand, PlayerConnectionStatus, PlayerId, ResourcePurchaseError, ScheduledCommand,
-    SimId, SimPoint, Team,
+    MatchRules, PlayerCommand, PlayerConnectionStatus, PlayerId, ResourcePurchaseError,
+    ScheduledCommand, SimId, SimPoint, Team,
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-pub const PROTOCOL_SCHEMA_VERSION: u32 = 12;
+pub const PROTOCOL_SCHEMA_VERSION: u32 = 13;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub const MAX_RELEASE_REVISION_BYTES: usize = 64;
 pub const RECONNECT_TOKEN_BYTES: usize = 32;
@@ -482,6 +482,7 @@ pub enum DebugRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LobbyStatus {
+    pub rules: MatchRules,
     pub host_player_id: u8,
     pub debug_paused: bool,
     pub debug_speed: DebugSpeed,
@@ -521,6 +522,7 @@ pub enum ClientMessage {
     StartMatch,
     Debug { request: DebugRequest },
     SelectRace { builder_rawcode: u32 },
+    SelectMatchRules { rules: MatchRules },
     SubmitCommand { request: CommandRequest },
     CheckpointReport { report: CheckpointReport },
 }
@@ -543,6 +545,7 @@ pub enum ServerMessage {
     LobbyRaceRejected {
         reason: LobbyRaceRejectReason,
     },
+    LobbyMatchRulesRejected,
     CommandAcknowledged {
         acknowledgement: CommandAcknowledgement,
     },
@@ -779,6 +782,10 @@ pub enum WirePlayerCommand {
         builder: u64,
         destination: WirePoint,
     },
+    RescueStrike {
+        builder: u64,
+        position: WirePoint,
+    },
     RepairWithBuilder {
         builder: u64,
         target: u64,
@@ -847,6 +854,10 @@ impl From<PlayerCommand> for WirePlayerCommand {
             } => Self::BlinkBuilder {
                 builder: builder.0,
                 destination: destination.into(),
+            },
+            PlayerCommand::RescueStrike { builder, position } => Self::RescueStrike {
+                builder: builder.0,
+                position: position.into(),
             },
             PlayerCommand::RepairWithBuilder { builder, target } => Self::RepairWithBuilder {
                 builder: builder.0,
@@ -934,6 +945,10 @@ impl From<WirePlayerCommand> for PlayerCommand {
             } => Self::BlinkBuilder {
                 builder: SimId(builder),
                 destination: destination.into(),
+            },
+            WirePlayerCommand::RescueStrike { builder, position } => Self::RescueStrike {
+                builder: SimId(builder),
+                position: position.into(),
             },
             WirePlayerCommand::RepairWithBuilder { builder, target } => Self::RepairWithBuilder {
                 builder: SimId(builder),

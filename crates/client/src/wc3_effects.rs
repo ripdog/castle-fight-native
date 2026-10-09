@@ -6001,6 +6001,19 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
             continue;
         };
         let visual = resolve_visual_model(gltf, model, asset_server)?;
+        // Script-spawned Rescue Strike visuals are referenced by model path, not by
+        // native ability art ownership. Expose precisely those converted assets to
+        // the existing scripted-system model lookup rather than copying effect logic.
+        let scripted_key = system_model_identity(&binding.source_model);
+        if matches!(
+            scripted_key.as_str(),
+            "abilities\\\\spells\\\\items\\\\tomeofretraining\\\\tomeofretrainingcaster.mdx"
+                | "units\\\\nightelf\\\\wisp\\\\wispexplode.mdx"
+        ) {
+            system_models
+                .entry(scripted_key)
+                .or_insert_with(|| visual.clone());
+        }
         match (binding.owner_kind.as_str(), binding.role.as_str()) {
             ("systems", "resurrection" | "attachment") => {
                 system_models.insert(system_model_identity(&binding.source_model), visual);

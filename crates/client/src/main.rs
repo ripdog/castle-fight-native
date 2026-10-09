@@ -12,6 +12,7 @@ mod fog;
 mod inspection;
 mod lobby;
 mod main_menu;
+mod match_ui;
 mod network;
 mod particle_renderer;
 mod performance_ui;
@@ -234,6 +235,13 @@ impl AuthoritativeSimulation {
 
     pub(crate) fn request_network_start(&mut self) -> Result<(), String> {
         self.send_network_lobby_request(ClientMessage::StartMatch)
+    }
+
+    pub(crate) fn request_network_match_rules(
+        &mut self,
+        rules: castle_fight_sim::MatchRules,
+    ) -> Result<(), String> {
+        self.send_network_lobby_request(ClientMessage::SelectMatchRules { rules })
     }
 
     pub(crate) fn request_network_race(&mut self, builder_rawcode: u32) -> Result<(), String> {
@@ -599,6 +607,7 @@ fn main() {
             BuildUiPlugin,
             CursorPresentationPlugin,
             ResourceUiPlugin,
+            match_ui::MatchUiPlugin,
             PerformanceUiPlugin,
             InspectionPlugin,
             BuilderControlPlugin,
@@ -838,6 +847,7 @@ struct ClientOptions {
     map_version: MapVersion,
     release_revision: String,
     match_seed: u64,
+    rules: castle_fight_sim::MatchRules,
     team_size: usize,
     builder_rawcodes: [Option<u32>; 9],
     server: Option<std::net::SocketAddr>,
@@ -865,6 +875,7 @@ impl ClientOptions {
             map_version: MapVersion::CASTLE_FIGHT_9_27,
             release_revision: "r1".to_owned(),
             match_seed: DEVELOPMENT_MATCH_SEED,
+            rules: castle_fight_sim::MatchRules::for_version(MapVersion::CASTLE_FIGHT_9_27),
             team_size: 1,
             builder_rawcodes: [None; 9],
             server: None,
@@ -1084,12 +1095,14 @@ fn client_match_config(
             Ok(participant)
         })
         .collect::<Result<Vec<_>, CastleFightMatchSetupError>>()?;
-    CastleFightMatchConfig::development_subset_with_participants(
+    let mut config = CastleFightMatchConfig::development_subset_with_participants(
         options.map_version,
         &options.release_revision,
         options.match_seed,
         participants,
-    )
+    )?;
+    config.rules = options.rules;
+    Ok(config)
 }
 
 fn compatibility_identity_for_demo(demo: &demo::DemoWorld) -> CompatibilityIdentity {
@@ -1516,6 +1529,10 @@ fn process_network_events(
                     authoritative.network_lobby_error = None;
                     authoritative.network_lobby_status = Some(status);
                 }
+                ServerMessage::LobbyMatchRulesRejected => {
+                    authoritative.network_lobby_error =
+                        Some("Only the host may change match settings before start.".to_owned());
+                }
                 ServerMessage::LobbyRaceRejected { reason } => {
                     authoritative.network_lobby_error = Some(match reason {
                         castle_fight_protocol::LobbyRaceRejectReason::AlreadyStarted => {
@@ -1763,6 +1780,7 @@ fn apply_network_lobby_roster(
         return Err("server lobby changed the authenticated player slots".to_owned());
     }
     let mut config = match_config.clone();
+    config.rules = status.rules;
     for (wire, participant) in roster.iter().zip(&mut config.participants) {
         participant.builder_race = selected_match
             .content
@@ -1785,14 +1803,6 @@ fn apply_network_lobby_roster(
         config.clone(),
     )
     .map_err(|error| format!("invalid server lobby roster: {error}"))?;
-    if demo.simulation.capture_snapshot().configuration_identity()
-        != authoritative
-            .simulation
-            .capture_snapshot()
-            .configuration_identity()
-    {
-        return Err("server lobby changed the handshake configuration".to_owned());
-    }
     authoritative.driver = MatchDriver::new(&demo.simulation, demo.content);
     authoritative.simulation = demo.simulation;
     authoritative.pending_feedback.clear();
@@ -2028,6 +2038,7 @@ fn local_command_feedback_text(execution: CommandExecution) -> String {
         PlayerCommand::FollowWithBuilder { .. } => "Follow",
         PlayerCommand::StopBuilder { .. } => "Stop",
         PlayerCommand::BlinkBuilder { .. } => "Blink",
+        PlayerCommand::RescueStrike { .. } => "Rescue Strike",
         PlayerCommand::RepairWithBuilder { .. } => "Repair",
         PlayerCommand::SetBuilderRepairAutocast { .. } => "Repair autocast",
         PlayerCommand::PlaceBuilding { .. } => "Build",
@@ -2272,6 +2283,7 @@ mod tests {
         );
         assert!(!authoritative.debug_available());
         authoritative.network_lobby_status = Some(castle_fight_protocol::LobbyStatus {
+            rules: authoritative.simulation.match_rules(),
             host_player_id: 6,
             debug_paused: false,
             debug_speed: castle_fight_protocol::DebugSpeed::Normal,
@@ -2326,6 +2338,7 @@ mod tests {
         let content =
             castle_fight_sim::castle_fight_content_bundle(config.release.map_version).unwrap();
         let status = LobbyStatus {
+            rules: selected_config.rules,
             host_player_id: 0,
             debug_paused: false,
             debug_speed: castle_fight_protocol::DebugSpeed::Normal,

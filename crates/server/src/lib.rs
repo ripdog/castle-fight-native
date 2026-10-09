@@ -315,11 +315,41 @@ impl AuthoritativeMatch {
             .map_err(|_| LobbyRaceRejectReason::RaceUnavailable)?;
         debug_assert_eq!(
             game.simulation.capture_snapshot().configuration_identity(),
-            self.compatibility.configuration_identity
+            self.game
+                .simulation
+                .capture_snapshot()
+                .configuration_identity()
         );
         self.driver = MatchDriver::new(&game.simulation, game.content);
         self.game = game;
         Ok(())
+    }
+
+    /// Host-only rule selection is guarded by the TCP lobby. Rebuild canonical tick zero so
+    /// the selected rules are included in the simulation's configuration identity.
+    pub(crate) fn select_lobby_match_rules(&mut self, rules: castle_fight_sim::MatchRules) -> bool {
+        if self.game.simulation.tick() != 0
+            || self.driver.next_stream_position().0 != 0
+            || !rules.valid()
+        {
+            return false;
+        }
+        if self.game.match_config.rules == rules {
+            return true;
+        }
+        let mut config = self.game.match_config.clone();
+        config.rules = rules;
+        let Ok(game) = create_castle_fight_match(config, self.game.simulation.worker_count())
+        else {
+            return false;
+        };
+        self.driver = MatchDriver::new(&game.simulation, game.content);
+        self.game = game;
+        true
+    }
+
+    pub(crate) fn lobby_match_rules(&self) -> castle_fight_sim::MatchRules {
+        self.game.match_config.rules
     }
 
     pub(crate) fn set_lobby_session_connected(&mut self, session_id: SessionId, connected: bool) {
@@ -606,6 +636,7 @@ impl AuthoritativeMatch {
             ClientMessage::Hello { .. }
             | ClientMessage::Reconnect { .. }
             | ClientMessage::SelectRace { .. }
+            | ClientMessage::SelectMatchRules { .. }
             | ClientMessage::StartMatch
             | ClientMessage::Debug { .. } => {
                 vec![OutboundMessage::to_session(

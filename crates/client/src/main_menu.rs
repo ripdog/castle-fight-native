@@ -585,6 +585,9 @@ mod tests {
             map_version: castle_fight_sim::MapVersion::CASTLE_FIGHT_9_27,
             release_revision: "r1".to_owned(),
             match_seed: 1,
+            rules: castle_fight_sim::MatchRules::for_version(
+                castle_fight_sim::MapVersion::CASTLE_FIGHT_9_27,
+            ),
             team_size: 1,
             builder_rawcodes: [None; 9],
             server: None,

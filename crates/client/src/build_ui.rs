@@ -87,6 +87,7 @@ pub(crate) enum TargetingAction {
     Move,
     Repair,
     Blink,
+    RescueStrike,
     Attack,
     Build(BuildKind),
 }
@@ -973,6 +974,7 @@ fn action_hotkey(action: PanelAction, content: &CastleFightContentBundle) -> Opt
         PanelAction::OpenBuildMenu => Some(content.command_card.build_hotkey),
         PanelAction::Target(TargetingAction::SnowExplosion) => None,
         PanelAction::Target(TargetingAction::Blink) => Some(content.command_card.blink_hotkey),
+        PanelAction::Target(TargetingAction::RescueStrike) => Some('V'),
         PanelAction::Target(TargetingAction::Build(kind)) => Some(kind.hotkey(content)),
         PanelAction::Building(BuildingPanelAction::Upgrade(target)) => Some(target.hotkey(content)),
         PanelAction::TrainUnit => None,
@@ -1152,6 +1154,9 @@ fn action_icon_key(
             UiIconRole::Normal,
         ),
         PanelAction::Target(TargetingAction::Blink) => presentation.blink_command,
+        PanelAction::Target(TargetingAction::RescueStrike) => {
+            UiIconKey::ability(u32::from_be_bytes(*b"A005"), UiIconRole::Normal)
+        }
         PanelAction::Target(TargetingAction::Attack) => presentation.attack_command,
         PanelAction::Target(TargetingAction::Build(kind)) => {
             UiIconKey::unit_game_interface(kind.rawcode(content))
@@ -1297,6 +1302,14 @@ fn action_layout(
                     Some(PanelAction::Target(TargetingAction::Repair));
                 slots[command_slot(command_card.blink_ability)] =
                     Some(PanelAction::Target(TargetingAction::Blink));
+                if authoritative
+                    .simulation
+                    .match_rules()
+                    .rescue_strikes_enabled
+                {
+                    slots[command_slot(command_card.rescue_strike_ability)] =
+                        Some(PanelAction::Target(TargetingAction::RescueStrike));
+                }
                 slots[command_slot(command_card.build_command)] = Some(PanelAction::OpenBuildMenu);
             } else if let Some(building) = authoritative.simulation.building(actor) {
                 if building.construction_complete_tick.is_some() {
@@ -1493,6 +1506,10 @@ fn handle_action_panel_buttons(
                     }
                     TargetingAction::Blink => {
                         "Blink: left-click a destination; Esc cancels.".into()
+                    }
+                    TargetingAction::RescueStrike => {
+                        "Rescue Strike: position the blast circle and left-click; Esc cancels."
+                            .into()
                     }
                     TargetingAction::Attack => {
                         "Attack: left-click an enemy unit or building; Esc cancels.".into()
@@ -1725,6 +1742,14 @@ fn style_action_panel_buttons(
                     )
             }
             PanelAction::TrainUnit => !production_queue_has_room(&state, &authoritative),
+            PanelAction::Target(TargetingAction::RescueStrike) => state
+                .actor
+                .and_then(|actor| authoritative.simulation.builder(actor))
+                .is_none_or(|builder| {
+                    !authoritative
+                        .simulation
+                        .can_cast_rescue_strike(builder.owner, builder.id)
+                }),
             PanelAction::Target(TargetingAction::SnowExplosion) => state
                 .actor
                 .and_then(|actor| authoritative.simulation.building(actor))
@@ -2489,6 +2514,7 @@ fn action_label(action: PanelAction, content: &CastleFightContentBundle) -> Stri
         PanelAction::Target(TargetingAction::Move) => "Move".into(),
         PanelAction::Target(TargetingAction::Repair) => "Repair".into(),
         PanelAction::Target(TargetingAction::Blink) => "Blink".into(),
+        PanelAction::Target(TargetingAction::RescueStrike) => "Rescue Strike".into(),
         PanelAction::Target(TargetingAction::Attack) => "Attack".into(),
         PanelAction::Target(TargetingAction::Build(kind)) => build_button_label(kind, content),
     }

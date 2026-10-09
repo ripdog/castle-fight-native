@@ -381,6 +381,17 @@ impl TcpAuthoritativeServer {
         if matches!(message, ClientMessage::StartMatch) {
             return self.process_start_match(connection_id, session_id);
         }
+        if let ClientMessage::SelectMatchRules { rules } = message {
+            if !self.lobby_mode
+                || self.started
+                || self.host_session != Some(session_id)
+                || !self.authoritative.select_lobby_match_rules(rules)
+            {
+                return self
+                    .send_to_connection(connection_id, ServerMessage::LobbyMatchRulesRejected);
+            }
+            return self.broadcast_lobby_status();
+        }
         if let ClientMessage::SelectRace { builder_rawcode } = message {
             let result = if !self.lobby_mode || self.started {
                 Err(LobbyRaceRejectReason::AlreadyStarted)
@@ -561,6 +572,7 @@ impl TcpAuthoritativeServer {
             ClientMessage::Debug { .. }
             | ClientMessage::StartMatch
             | ClientMessage::SelectRace { .. }
+            | ClientMessage::SelectMatchRules { .. }
             | ClientMessage::SubmitCommand { .. }
             | ClientMessage::CheckpointReport { .. } => self.send_to_connection(
                 connection_id,
@@ -640,6 +652,7 @@ impl TcpAuthoritativeServer {
         let host_player_id = self.authoritative.session_player(host_session)?.0;
         let required_players = u8::try_from(self.authoritative.required_player_count()).ok()?;
         Some(LobbyStatus {
+            rules: self.authoritative.lobby_match_rules(),
             host_player_id,
             debug_paused: self.debug_paused,
             debug_speed: self.debug_speed,

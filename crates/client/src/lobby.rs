@@ -1,5 +1,7 @@
 use bevy::{ecs::system::SystemParam, prelude::*};
-use castle_fight_sim::{CastleFightBuilderRace, CastleFightContentBundle, PlayerId};
+use castle_fight_sim::{
+    CastleFightBuilderRace, CastleFightContentBundle, PlayerId, TimeLimitOutcome,
+};
 
 use crate::{
     AuthoritativeSimulation, ClientOptions, SelectedMatch, SimulationPlayback,
@@ -89,6 +91,10 @@ impl LobbyState {
             LobbyAction::Position(player) => player == self.local_player,
             LobbyAction::Race(player, race) => self.race(player) == race,
             LobbyAction::Start => true,
+            LobbyAction::RoundTarget(wins) => self.options.rules.rounds_to_win == wins,
+            LobbyAction::RescueToggle => self.options.rules.rescue_strikes_enabled,
+            LobbyAction::TimeOutcome(mode) => self.options.rules.time_limit_outcome == mode,
+            LobbyAction::TimeDelta(_) => false,
             LobbyAction::RaceDropdown(_) => false,
         }
     }
@@ -115,6 +121,10 @@ impl LobbyState {
         }
         match action {
             LobbyAction::TeamSize(_) | LobbyAction::Position(_) => true,
+            LobbyAction::TimeDelta(_)
+            | LobbyAction::RoundTarget(_)
+            | LobbyAction::RescueToggle
+            | LobbyAction::TimeOutcome(_) => self.host_player != Some(self.local_player),
             LobbyAction::Start => {
                 self.host_player != Some(self.local_player)
                     || self.connected_players.len() < self.required_players
@@ -139,6 +149,10 @@ enum LobbyAction {
     Position(PlayerId),
     RaceDropdown(u8),
     Race(u8, CastleFightBuilderRace),
+    TimeDelta(i16),
+    RoundTarget(u8),
+    RescueToggle,
+    TimeOutcome(TimeLimitOutcome),
     Start,
 }
 
@@ -229,6 +243,38 @@ fn spawn_lobby(commands: &mut Commands, lobby: &LobbyState) {
                             }
                         });
                     });
+                panel.spawn(Node {
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(7.0),
+                    ..default()
+                }).with_children(|settings| {
+                    label(settings, "MATCH SETTINGS", 14.0, Color::srgb(0.45, 0.79, 0.89));
+                    settings.spawn(Node { column_gap: px(7.0), align_items: AlignItems::Center, ..default() })
+                        .with_children(|row| {
+                            label(row, format!("Time limit: {}", if lobby.options.rules.time_limit_minutes == 0 { "Off".to_owned() } else { format!("{} minutes", lobby.options.rules.time_limit_minutes) }), 13.0, TEXT);
+                            for (caption, delta) in [("-10", -10), ("-1", -1), ("+1", 1), ("+10", 10)] {
+                                button(row, caption, LobbyAction::TimeDelta(delta), false, lobby.action_disabled(LobbyAction::TimeDelta(delta)));
+                            }
+                        });
+                    settings.spawn(Node { column_gap: px(7.0), align_items: AlignItems::Center, ..default() })
+                        .with_children(|row| {
+                            label(row, "At time limit:", 13.0, TEXT);
+                            for (caption, outcome) in [("Strikes → Income", TimeLimitOutcome::MoreStrikesThenIncome), ("Draw", TimeLimitOutcome::Draw)] {
+                                let action = LobbyAction::TimeOutcome(outcome);
+                                button(row, caption, action, lobby.selected(action), lobby.action_disabled(action));
+                            }
+                        });
+                    settings.spawn(Node { column_gap: px(7.0), align_items: AlignItems::Center, ..default() })
+                        .with_children(|row| {
+                            label(row, "First to:", 13.0, TEXT);
+                            for wins in 1..=3 {
+                                let action = LobbyAction::RoundTarget(wins);
+                                button(row, format!("{wins} round{}", if wins == 1 { "" } else { "s" }), action, lobby.selected(action), lobby.action_disabled(action));
+                            }
+                            let action = LobbyAction::RescueToggle;
+                            button(row, if lobby.options.rules.rescue_strikes_enabled { "Rescue strikes: ON" } else { "Rescue strikes: OFF" }, action, lobby.selected(action), lobby.action_disabled(action));
+                        });
+                });
                 panel
                     .spawn(Node {
                         width: percent(100.0),
@@ -546,6 +592,10 @@ fn handle_lobby_buttons(
                     redraw = true;
                 }
             }
+            if lobby.options.rules != status.rules {
+                lobby.options.rules = status.rules;
+                redraw = true;
+            }
             let connected_players = status
                 .connected_player_ids
                 .into_iter()
@@ -595,6 +645,55 @@ fn handle_lobby_buttons(
                 }
                 LobbyAction::Position(player) if !lobby.networked => {
                     lobby.local_player = player;
+                    redraw = true;
+                }
+                LobbyAction::TimeDelta(delta) => {
+                    let current = i32::from(lobby.options.rules.time_limit_minutes);
+                    let mut rules = lobby.options.rules;
+                    rules.time_limit_minutes = (current + i32::from(delta)).clamp(0, 999) as u16;
+                    if lobby.networked {
+                        if let Err(error) = game.authoritative.request_network_match_rules(rules) {
+                            lobby.error = Some(error);
+                        }
+                    } else {
+                        lobby.options.rules = rules;
+                    }
+                    redraw = true;
+                }
+                LobbyAction::RoundTarget(wins) => {
+                    let mut rules = lobby.options.rules;
+                    rules.rounds_to_win = wins;
+                    if lobby.networked {
+                        if let Err(error) = game.authoritative.request_network_match_rules(rules) {
+                            lobby.error = Some(error);
+                        }
+                    } else {
+                        lobby.options.rules = rules;
+                    }
+                    redraw = true;
+                }
+                LobbyAction::RescueToggle => {
+                    let mut rules = lobby.options.rules;
+                    rules.rescue_strikes_enabled = !rules.rescue_strikes_enabled;
+                    if lobby.networked {
+                        if let Err(error) = game.authoritative.request_network_match_rules(rules) {
+                            lobby.error = Some(error);
+                        }
+                    } else {
+                        lobby.options.rules = rules;
+                    }
+                    redraw = true;
+                }
+                LobbyAction::TimeOutcome(outcome) => {
+                    let mut rules = lobby.options.rules;
+                    rules.time_limit_outcome = outcome;
+                    if lobby.networked {
+                        if let Err(error) = game.authoritative.request_network_match_rules(rules) {
+                            lobby.error = Some(error);
+                        }
+                    } else {
+                        lobby.options.rules = rules;
+                    }
                     redraw = true;
                 }
                 LobbyAction::RaceDropdown(player) => {
@@ -695,6 +794,7 @@ mod tests {
             map_version: MapVersion::CASTLE_FIGHT_9_27,
             release_revision: "r1".to_owned(),
             match_seed: 1,
+            rules: castle_fight_sim::MatchRules::for_version(MapVersion::CASTLE_FIGHT_9_27),
             team_size: 1,
             builder_rawcodes: [None; 9],
             server: None,
@@ -822,6 +922,7 @@ mod tests {
         let mut authoritative = AuthoritativeSimulation::new(demo.simulation, demo.content);
         authoritative.commands_enabled = false;
         authoritative.network_lobby_status = Some(castle_fight_protocol::LobbyStatus {
+            rules: authoritative.simulation.match_rules(),
             host_player_id: 0,
             debug_paused: false,
             debug_speed: castle_fight_protocol::DebugSpeed::Normal,
