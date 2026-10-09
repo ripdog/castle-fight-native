@@ -12,6 +12,7 @@ import build_runtime_catalog as catalog
 
 # Source identities only. Model, geometry and scale belong to retained script.
 RECIPES = [
+    ("h045", "wK", "Cu:create846", "BuildingAttachmentHandler_registerBuildingAttach_RaceElemental_call_registerBuildingAttach_RaceElemental7"),
     ("h03Z", "wK", "xu:create841", "BuildingAttachmentHandler_registerBuildingAttach_RaceElemental_call_registerBuildingAttach_RaceElemental2"),
     ("h03Y", "wK", "wu:create840", "BuildingAttachmentHandler_registerBuildingAttach_RaceElemental_call_registerBuildingAttach_RaceElemental1"),
     ("h03X", "wK", "vu:create839", "BuildingAttachmentHandler_registerBuildingAttach_RaceElemental_call_registerBuildingAttach_RaceElemental"),
@@ -60,6 +61,7 @@ def project_calls(body: str) -> list[dict]:
 def build(release: dict) -> dict:
     tree = release["extraction"]["git_tree"]
     script = catalog._retained_file_bytes(catalog.REPO_ROOT, tree, "script/war3map.lua")
+    script_text = script.decode()
     spans = list(csv.DictReader(io.StringIO(catalog._retained_file_bytes(catalog.REPO_ROOT, tree, "script/function-spans.tsv").decode()), delimiter="\t"))
     functions = {row["name"]: script[int(row["start_byte_offset"]):int(row["end_byte_offset"])].decode() for row in spans}
     entries = []
@@ -67,6 +69,8 @@ def build(release: dict) -> dict:
         match = re.search(r'(\w+)=' + re.escape(factory) + r'\(\)Dzb:HashMap_put\((\d+),\1\)', functions[registration])
         if match is None or int(match[2]) != int.from_bytes(rawcode.encode(), "big"):
             raise ValueError("building decoration factory does not match retained registration")
+        if factory.split(":")[0] + ".call=" + callback + " " not in script_text:
+            raise ValueError("building decoration callback does not match retained factory dispatch")
         entries.append({"building_rawcode": rawcode, "source_registration": registration,
             "source_factory": factory, "source_callback": callback,
             "visuals": project_calls(functions[callback])})

@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    ElementalOfFire = 0x1000_0036 => b"h02Z",
     GreaterElementalOfWater = 0x1000_0035 => b"h02Y",
     ElementalOfWater = 0x1000_0034 => b"h02X",
     LesserElementalOfWater = 0x1000_0033 => b"h02W",
@@ -89,6 +90,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    AltarOfFire = 0x2000_0036 => b"h045",
     SpellboundFountain = 0x2000_0035 => b"h03Z",
     GoldenFountain = 0x2000_0034 => b"h03Y",
     WaterSpring = 0x2000_0033 => b"h03X",
