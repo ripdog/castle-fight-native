@@ -29,3 +29,32 @@ class WeatherProjectionTests(unittest.TestCase):
                 data=original(repo,tree,path)
                 return data.replace(before.encode(),after.encode()) if path=='script/war3map.lua' else data
             with patch.object(catalog,'_retained_file_bytes',changed),self.assertRaises(ValueError):native.build_tuning(release,root,recipes)
+
+    def test_meteor_picker_rejects_ground_and_retains_free_child_resources(self):
+        root=Path(__file__).resolve().parents[2];release=catalog._load_release(catalog.DEFAULT_RELEASES,'9.27','r1')
+        recipes={'schema_version':1,'effects':[{'kind':'building-weather','source_kind':'unit-ability','source_key':'A0FG','unit_rawcode':'h06E'}]}
+        original=catalog._retained_file_bytes
+        generated=native.build_tuning(release,root,recipes)['effects'][0]
+        profile=generated['spellcasting']['ability']['effect']['BuildingWeather']
+        self.assertFalse(profile['select_ground'])
+        self.assertEqual(profile['option_count'],1)
+        before='UNIT_TYPE_FLYING))and(unit_getAbilityLevel(Qnn,1098282348)'
+        def changed(repo,tree,path):
+            data=original(repo,tree,path)
+            return data.replace(before.encode(),before.replace('FLYING','GROUND').encode()) if path=='script/war3map.lua' else data
+        with patch.object(catalog,'_retained_file_bytes',changed),self.assertRaises(ValueError):native.build_tuning(release,root,recipes)
+
+    def test_weather_parent_rejects_protected_child_mana_drift(self):
+        import csv,io
+        root=Path(__file__).resolve().parents[2];release=catalog._load_release(catalog.DEFAULT_RELEASES,'9.27','r1')
+        recipes={'schema_version':1,'effects':[{'kind':'building-weather','source_kind':'unit-ability','source_key':'A0FG','unit_rawcode':'h06E'}]}
+        original=catalog._retained_file_bytes
+        def changed(repo,tree,path):
+            data=original(repo,tree,path)
+            if path!='resolved/protected-ability-fields.tsv':return data
+            reader=csv.DictReader(io.StringIO(data.decode()),delimiter='\t');rows=list(reader)
+            for row in rows:
+                if row['rawcode']=='A0D0' and row['field']=='mana_cost':row['runtime_value']='5'
+            output=io.StringIO();writer=csv.DictWriter(output,fieldnames=reader.fieldnames,delimiter='\t');writer.writeheader();writer.writerows(rows)
+            return output.getvalue().encode()
+        with patch.object(catalog,'_retained_file_bytes',changed),self.assertRaises(ValueError):native.build_tuning(release,root,recipes)

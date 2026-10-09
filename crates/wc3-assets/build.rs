@@ -1047,6 +1047,11 @@ fn load_visual_assets(
                 &["damage_over_time"]
             }
             "Abof" | "ANab" => &["damage_over_time"],
+            // Weather burns stack by their recipient buff, independently of wave families.
+            "AHbz" | "ACrg" | "ANrf" | "ACrf" => {
+                buffs.truncate(1);
+                &["damage_over_time"]
+            }
             // Bloodlust-family effects persist for the attack-speed buff lifetime.
             "Ablo" => &["attack_speed"],
             _ => continue,
@@ -1060,7 +1065,11 @@ fn load_visual_assets(
                     return Err(format!("unsupported projected buff model {model_path}").into());
                 }
                 status_visuals.push(StatusVisualSpec {
-                    ability_rawcode: ability_rawcode.clone(),
+                    ability_rawcode: if matches!(base_rawcode, "AHbz" | "ACrg" | "ANrf" | "ACrf") {
+                        buff_rawcode.clone()
+                    } else {
+                        ability_rawcode.clone()
+                    },
                     status_kind: status_kind.to_owned(),
                     model_path: model_path.clone(),
                     buff_rawcode: buff_rawcode.clone(),
@@ -1076,6 +1085,12 @@ fn load_visual_assets(
             &right.status_kind,
             &right.model_path,
         ))
+    });
+
+    status_visuals.dedup_by(|left, right| {
+        left.ability_rawcode == right.ability_rawcode
+            && left.status_kind == right.status_kind
+            && left.model_path == right.model_path
     });
 
     let mut visual_assets: Vec<_> = assets

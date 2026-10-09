@@ -5,6 +5,148 @@
     {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
+      "source_key": "A0FG",
+      "unit_rawcode": "h06E",
+      "spellcasting": {
+        "mana": {
+          "maximum": 16,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093682759,
+          "mana_cost": 15,
+          "cooldown_ticks": 30,
+          "range": 102398976,
+          "target_policy": "NativeBuildingSpellTrigger",
+          "effect": {
+            "BuildingWeather": {
+              "map_version": {
+                "major": 9,
+                "minor": 27
+              },
+              "trigger_targets": 6,
+              "trigger_invulnerable": true,
+              "trigger_spell_immune": false,
+              "select_ground": false,
+              "selector_excluded_ability": 0,
+              "option_count": 1,
+              "dummy_lifetime_ticks": 300,
+              "options": [
+                [
+                  {
+                    "ability": 1093682224,
+                    "radius": 307200,
+                    "damage": 30,
+                    "maximum_damage": 99999,
+                    "building_damage_per_10k": 5000,
+                    "waves": 5,
+                    "shards": 5,
+                    "interval_ticks": 3,
+                    "first_impact_ticks": 27,
+                    "damage_per_second": 15,
+                    "duration_ticks": 90,
+                    "hero_duration_ticks": 90,
+                    "buff_rawcode": 1112437348,
+                    "wave_buff_rawcode": 1112437350,
+                    "targets": 2
+                  },
+                  {
+                    "ability": 1093682224,
+                    "radius": 307200,
+                    "damage": 30,
+                    "maximum_damage": 99999,
+                    "building_damage_per_10k": 5000,
+                    "waves": 5,
+                    "shards": 5,
+                    "interval_ticks": 3,
+                    "first_impact_ticks": 27,
+                    "damage_per_second": 15,
+                    "duration_ticks": 90,
+                    "hero_duration_ticks": 90,
+                    "buff_rawcode": 1112437348,
+                    "wave_buff_rawcode": 1112437350,
+                    "targets": 2
+                  }
+                ],
+                [
+                  {
+                    "ability": 1093682224,
+                    "radius": 307200,
+                    "damage": 30,
+                    "maximum_damage": 99999,
+                    "building_damage_per_10k": 5000,
+                    "waves": 5,
+                    "shards": 5,
+                    "interval_ticks": 3,
+                    "first_impact_ticks": 27,
+                    "damage_per_second": 15,
+                    "duration_ticks": 90,
+                    "hero_duration_ticks": 90,
+                    "buff_rawcode": 1112437348,
+                    "wave_buff_rawcode": 1112437350,
+                    "targets": 2
+                  },
+                  {
+                    "ability": 1093682224,
+                    "radius": 307200,
+                    "damage": 30,
+                    "maximum_damage": 99999,
+                    "building_damage_per_10k": 5000,
+                    "waves": 5,
+                    "shards": 5,
+                    "interval_ticks": 3,
+                    "first_impact_ticks": 27,
+                    "damage_per_second": 15,
+                    "duration_ticks": 90,
+                    "hero_duration_ticks": 90,
+                    "buff_rawcode": 1112437348,
+                    "wave_buff_rawcode": 1112437350,
+                    "targets": 2
+                  }
+                ]
+              ]
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": null,
+      "dependencies": [
+        "A0D0"
+      ],
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/building-spell-mechanics.tsv",
+        "functions": "BuildingSpellClosure_registerBuildingSpell_RaceElementalAbilities_cast_registerBuildingSpell_RaceElementalAbilities2,frostSpell,ForGroupCallback_forUnitsInRect_RaceElementalAbilities_callback_forUnitsInRect_RaceElementalAbilities",
+        "native_timing_insight": "https://github.com/Cokemonkey11/wc3-ability-doc/blob/main/sources/screwthetrees-wc3-editor-ability-insight-document/2023-11-14.md"
+      }
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A0D0",
+      "kind": "native-weather-wave",
+      "profile": {
+        "ability": 1093682224,
+        "radius": 307200,
+        "damage": 30,
+        "maximum_damage": 99999,
+        "building_damage_per_10k": 5000,
+        "waves": 5,
+        "shards": 5,
+        "interval_ticks": 3,
+        "first_impact_ticks": 27,
+        "damage_per_second": 15,
+        "duration_ticks": 90,
+        "hero_duration_ticks": 90,
+        "buff_rawcode": 1112437348,
+        "wave_buff_rawcode": 1112437350,
+        "targets": 2
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
       "source_key": "A0EI",
       "unit_rawcode": "h06F",
       "spellcasting": {

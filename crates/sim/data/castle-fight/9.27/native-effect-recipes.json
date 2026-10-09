@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind": "unit-ability", "source_key": "A0FG", "unit_rawcode": "h06E", "kind": "building-weather"},
+    {"source_kind": "ability-effect", "source_key": "A0D0", "kind": "native-weather-wave"},
     {"source_kind": "unit-ability", "source_key": "A0EI", "unit_rawcode": "h06F", "kind": "building-weather"},
     {"source_kind": "ability-effect", "source_key": "A0D1", "kind": "native-weather-wave"},
     {"source_kind": "ability-effect", "source_key": "A0D2", "kind": "native-weather-wave"},

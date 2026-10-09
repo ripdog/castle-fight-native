@@ -372,3 +372,256 @@ fn inert_choice_building_regenerates_and_preserves_its_pool_through_upgrade_or_c
         }
     }
 }
+
+#[test]
+fn air_weather_burn_starts_at_impact_refreshes_without_stacking_and_restores() {
+    let mut sim = simulation();
+    let target = unit(&mut sim, 1, 50, MovementClass::Air, Default::default());
+    let hero = unit(
+        &mut sim,
+        1,
+        51,
+        MovementClass::Air,
+        UnitClassifications {
+            hero: true,
+            ..Default::default()
+        },
+    );
+    let ground = unit(&mut sim, 1, 50, MovementClass::Ground, Default::default());
+    let mut p = wave();
+    p.targets = AttackTargetMask::AIR_UNITS;
+    p.damage_per_second = 7;
+    p.duration_ticks = 60;
+    p.hero_duration_ticks = 30;
+    storm(&mut sim, p, sim_point(50));
+    for _ in 0..5 {
+        sim.step();
+    }
+    assert_eq!(sim.unit(target).unwrap().health, 1000);
+    sim.step();
+    assert_eq!(
+        sim.unit(target).unwrap().health,
+        1000 - p.damage - p.damage_per_second
+    );
+    assert_eq!(sim.unit(ground).unwrap().health, 1000);
+    for _ in 0..4 {
+        sim.step();
+    }
+    let status = sim.world.get::<StatusState>(entity(&sim, target)).unwrap();
+    assert_eq!(status.damage_over_time_count, 1);
+    let burn = status.damage_over_time[0];
+    assert_eq!(burn.next_pulse_tick, 5 + CASTLE_FIGHT_SIMULATION_HZ as u64);
+    assert_eq!(burn.source, None);
+    assert_eq!(burn.expires_tick, 9 + u64::from(p.duration_ticks));
+    let mut other = restore(&sim);
+    while sim.next_tick < 85 {
+        assert_eq!(sim.step().checksum, other.step().checksum);
+    }
+    assert_eq!(
+        sim.unit(target).unwrap().health,
+        1000 - 3 * p.damage - 3 * p.damage_per_second
+    );
+    assert_eq!(
+        sim.unit(hero).unwrap().health,
+        1000 - 3 * p.damage - 2 * p.damage_per_second
+    );
+    assert_eq!(
+        sim.world
+            .get::<StatusState>(entity(&sim, target))
+            .unwrap()
+            .damage_over_time_count,
+        0
+    );
+}
+fn sim_point(x: i32) -> SimPoint {
+    SimPoint::new(x * SUBUNITS_PER_WORLD_UNIT, 10 * SUBUNITS_PER_WORLD_UNIT)
+}
+
+#[test]
+fn weather_wave_and_burn_families_choose_independent_strongest_payloads() {
+    for distinct_burn in [false, true] {
+        let mut sim = simulation();
+        let target = unit(&mut sim, 1, 50, MovementClass::Ground, Default::default());
+        let mut strong_wave = wave();
+        strong_wave.damage = 25;
+        strong_wave.damage_per_second = 3;
+        strong_wave.duration_ticks = 60;
+        strong_wave.waves = 1;
+        let mut strong_burn = strong_wave;
+        strong_burn.damage = 10;
+        strong_burn.damage_per_second = 11;
+        if distinct_burn {
+            strong_burn.buff_rawcode += 1;
+        }
+        storm(&mut sim, strong_wave, sim_point(50));
+        storm(&mut sim, strong_burn, sim_point(50));
+        for _ in 0..6 {
+            sim.step();
+        }
+        assert_eq!(
+            sim.unit(target).unwrap().health,
+            1000 - strong_wave.damage
+                - strong_burn.damage_per_second
+                - if distinct_burn {
+                    strong_wave.damage_per_second
+                } else {
+                    0
+                }
+        );
+        let status = sim.world.get::<StatusState>(entity(&sim, target)).unwrap();
+        assert_eq!(
+            status.damage_over_time_count,
+            if distinct_burn { 2 } else { 1 }
+        );
+    }
+}
+
+#[test]
+fn zero_wave_damage_prevents_burn_and_live_immunity_or_cleanse_never_defers_pulses() {
+    for zero in [false, true] {
+        let mut sim = simulation();
+        let target = unit(&mut sim, 1, 50, MovementClass::Ground, Default::default());
+        let mut p = wave();
+        p.waves = 1;
+        p.damage_per_second = 7;
+        p.duration_ticks = 90;
+        if zero {
+            p.damage = 0;
+        }
+        storm(&mut sim, p, sim_point(50));
+        for _ in 0..6 {
+            sim.step();
+        }
+        let health = sim.unit(target).unwrap().health;
+        if zero {
+            assert_eq!(health, 1000);
+            assert_eq!(
+                sim.world
+                    .get::<StatusState>(entity(&sim, target))
+                    .unwrap()
+                    .damage_over_time_count,
+                0
+            );
+            continue;
+        }
+        sim.world
+            .entity_mut(entity(&sim, target))
+            .insert(UnitClassifications {
+                spell_immune: true,
+                ..Default::default()
+            });
+        while sim.next_tick <= 35 {
+            sim.step();
+        }
+        assert_eq!(sim.unit(target).unwrap().health, health);
+        sim.world
+            .get_mut::<UnitClassifications>(entity(&sim, target))
+            .unwrap()
+            .spell_immune = false;
+        sim.step();
+        assert_eq!(sim.unit(target).unwrap().health, health);
+        while sim.next_tick <= 65 {
+            sim.step();
+        }
+        assert_eq!(
+            sim.unit(target).unwrap().health,
+            health - p.damage_per_second
+        );
+        native_actions::cleanse_native_status(
+            &mut sim
+                .world
+                .get_mut::<StatusState>(entity(&sim, target))
+                .unwrap(),
+        );
+        while sim.next_tick <= 100 {
+            sim.step();
+        }
+        assert_eq!(
+            sim.unit(target).unwrap().health,
+            health - p.damage_per_second
+        );
+    }
+}
+
+#[test]
+fn flying_point_picker_keeps_marker_targets_and_native_effect_accepts_non_sappers() {
+    let mut sim = simulation();
+    let definition = CastleFightTowerKind::MeteorShower.definition();
+    let mut spawn = definition.spawn(Team(0), BuildingFootprint::new(2, 2, 1, 1));
+    let casting = spawn.spellcasting.as_mut().unwrap();
+    casting.mana = ManaProfile::per_second(casting.ability.mana_cost, casting.ability.mana_cost, 0);
+    let AbilityEffect::BuildingWeather(mut profile) = casting.ability.effect else {
+        panic!()
+    };
+    let mut child = wave();
+    child.targets = AttackTargetMask::AIR_UNITS;
+    profile.options = [[child; 2]; 2];
+    casting.ability.effect = AbilityEffect::BuildingWeather(profile);
+    let caster = sim.spawn_building_with_properties(spawn, definition.gameplay_properties());
+    let picker = unit(
+        &mut sim,
+        1,
+        50,
+        MovementClass::Air,
+        UnitClassifications {
+            combat_sapper: true,
+            ..Default::default()
+        },
+    );
+    sim.world
+        .get_mut::<StatusState>(entity(&sim, picker))
+        .unwrap()
+        .native_grants
+        .insert(crate::NativeAbilityGrant {
+            ability: AbilityId(u32::from_be_bytes(*b"A08H")),
+            effect: crate::NativeAbilityGrantEffect::AuraMarker,
+        });
+    let recipient = unit(&mut sim, 1, 51, MovementClass::Air, Default::default());
+    let ground = unit(&mut sim, 1, 50, MovementClass::Ground, Default::default());
+    for _ in 0..60 {
+        if sim.building(caster).unwrap().ability_cast_sequence != Some(0) {
+            break;
+        }
+        sim.step();
+    }
+    let state = sim
+        .world
+        .iter_entities()
+        .find_map(|e| match e.get::<crate::components::NativeAction>() {
+            Some(crate::components::NativeAction::Weather(w)) => Some(w.clone()),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(state.center, sim.unit(picker).unwrap().position);
+    sim.world.despawn(entity(&sim, caster));
+    while sim.next_tick <= state.started_tick + u64::from(child.first_impact_ticks) {
+        sim.step();
+    }
+    assert_eq!(sim.unit(recipient).unwrap().health, 1000 - child.damage);
+    assert_eq!(sim.unit(ground).unwrap().health, 1000);
+}
+
+#[test]
+fn immediate_weather_burn_has_no_extra_pulse_at_exact_expiry() {
+    let mut sim = simulation();
+    let target = unit(&mut sim, 1, 50, MovementClass::Ground, Default::default());
+    let mut p = wave();
+    p.waves = 1;
+    p.damage_per_second = 7;
+    p.duration_ticks = 2 * CASTLE_FIGHT_SIMULATION_HZ as u16;
+    storm(&mut sim, p, sim_point(50));
+    for _ in 0..66 {
+        sim.step();
+    }
+    assert_eq!(
+        sim.unit(target).unwrap().health,
+        1000 - p.damage - 2 * p.damage_per_second
+    );
+    assert_eq!(
+        sim.world
+            .get::<StatusState>(entity(&sim, target))
+            .unwrap()
+            .damage_over_time_count,
+        0
+    );
+}

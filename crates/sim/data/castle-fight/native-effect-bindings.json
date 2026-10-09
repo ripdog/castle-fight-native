@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind": "unit-ability", "source_key": "A0FG", "implementation": "warcraft-scripted-automatic-v1", "valid_from": "9.27", "valid_through": "9.27"},
+    {"source_kind": "ability-effect", "source_key": "A0D0", "implementation": "warcraft-weather-wave-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "unit-ability", "source_key": "A0EI", "implementation": "warcraft-scripted-automatic-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Retained native trigger and independently selected point weather."},
     {"source_kind": "ability-effect", "source_key": "A0D1", "implementation": "warcraft-weather-wave-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Retained dummy native weather pulses and masks."},
     {"source_kind": "ability-effect", "source_key": "A0D2", "implementation": "warcraft-weather-wave-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Retained dummy native weather pulses and masks."},

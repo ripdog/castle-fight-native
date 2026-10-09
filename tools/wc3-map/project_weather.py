@@ -34,6 +34,8 @@ def wave(code, fields, bases, scaled):
 
 def project(recipe, fields, unit, protected, mechanics, scaled):
     if recipe['kind'] == 'native-weather-wave':
+        if scaled(protected['mana_cost']) != 0:
+            raise ValueError('native weather dummy child must retain free protected cost')
         return dict(recipe, profile=wave(recipe['source_key'],mechanics['all_fields'],mechanics['all_bases'],scaled))
     row = mechanics['building_spell']; params = json.loads(row['parameters_json'])
     functions = mechanics['functions']
@@ -60,6 +62,8 @@ def project(recipe, fields, unit, protected, mechanics, scaled):
         code=params['effect_ability_id'].to_bytes(4,'big').decode();codes=[[code,code],[code,code]]
     if mechanics['native_base']!='ACpa' or any(scaled(fields[k]) != 0 for k in ['dataa1','datab1','datac1','datad1']):
         raise ValueError('weather parent Parasite must be inert')
+    if any(scaled(mechanics['all_protected'][c]['mana_cost']) != 0 for cs in codes for c in cs):
+        raise ValueError('native weather child cost changed')
     tokens=set(fields['targs1'].split(','));rate=scaled(unit['mana_regen'],10000)
     profile={'map_version':mechanics['map_version'],'trigger_targets':(1 if 'ground' in tokens else 0)|(2 if 'air' in tokens else 0)|(4 if 'structure' in tokens else 0),
         'trigger_invulnerable':'invulnerable' in tokens,'trigger_spell_immune':'magicimmune' in tokens,

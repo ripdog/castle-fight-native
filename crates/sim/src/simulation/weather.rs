@@ -169,14 +169,6 @@ impl Simulation {
                     && !u.classifications.spell_immune
                     && p.targets.can_target_unit(u.target_movement_class())
                     && state.center.distance_sq(u.position) <= square_i32(p.radius)
-                    && weather_family_winner(
-                        *self.world.get::<SimId>(entity).unwrap(),
-                        &state,
-                        u.position,
-                        Some(u.target_movement_class()),
-                        self.next_tick,
-                        active,
-                    )
             })
             .map(|(i, u)| (u.id, false, i))
             .collect();
@@ -194,26 +186,57 @@ impl Simulation {
                                 b.footprint,
                                 self.config.navigation_cell_size,
                             )) <= square_i32(p.radius)
-                            && weather_family_winner(
-                                *self.world.get::<SimId>(entity).unwrap(),
-                                &state,
-                                footprint_center_point(
-                                    b.footprint,
-                                    self.config.navigation_cell_size,
-                                ),
-                                None,
-                                self.next_tick,
-                                active,
-                            )
                     })
                     .map(|(i, b)| (b.id, true, i)),
             );
         }
         recipients.sort_unstable_by_key(|(id, _, _)| *id);
+        let action_id = *self.world.get::<SimId>(entity).unwrap();
+        let recipients: Vec<_> = recipients
+            .into_iter()
+            .map(|(id, building, i)| {
+                let (point, movement, hero) = if building {
+                    (
+                        footprint_center_point(
+                            buildings[i].footprint,
+                            self.config.navigation_cell_size,
+                        ),
+                        None,
+                        false,
+                    )
+                } else {
+                    (
+                        units[i].position,
+                        Some(units[i].target_movement_class()),
+                        units[i].classifications.hero,
+                    )
+                };
+                let winner = |family| {
+                    weather_family_winner(
+                        action_id,
+                        &state,
+                        (point, movement),
+                        self.next_tick,
+                        active,
+                        family,
+                    )
+                };
+                (
+                    id,
+                    building,
+                    i,
+                    winner(WeatherFamily::Wave),
+                    winner(WeatherFamily::Burn { hero }),
+                )
+            })
+            .collect();
         // Native per-wave caps reduce all recipients proportionally, independent of iteration order.
         let total: i64 = recipients
             .iter()
-            .map(|(_, building, _)| {
+            .map(|(_, building, _, wave_winner, _)| {
+                if !wave_winner {
+                    return 0;
+                }
                 if *building {
                     i64::from(p.damage) * i64::from(p.building_damage_per_10k) / 10000
                 } else {
@@ -221,8 +244,10 @@ impl Simulation {
                 }
             })
             .sum();
-        for (_, building, i) in recipients {
-            let raw = if building {
+        for (_, building, i, wave_winner, burn_winner) in recipients {
+            let raw = if !wave_winner {
+                0
+            } else if building {
                 i64::from(p.damage) * i64::from(p.building_damage_per_10k) / 10000
             } else {
                 i64::from(p.damage)
@@ -239,6 +264,19 @@ impl Simulation {
                         .damage_rules
                         .apply_spell(raw, b.armor.armor_type),
                 );
+                if b.health > 0 && burn_winner {
+                    let burn = apply_weather_burn(
+                        b.status.get_or_insert_default(),
+                        p,
+                        false,
+                        self.next_tick,
+                    );
+                    b.health = b.health.saturating_sub(
+                        self.combat_rules
+                            .damage_rules
+                            .apply_spell(burn, b.armor.armor_type),
+                    );
+                }
             } else {
                 let target = &mut units[i];
                 let damage = self
@@ -247,8 +285,27 @@ impl Simulation {
                     .apply_spell(raw, target.armor.armor_type);
                 let damage = spell_damage_after_defend(*target, damage, self.next_tick);
                 // This damage belongs to the recycled native dummy, not the enchanted logical building.
-                damage_thresholds::observe_damage_event(target, target.health, damage);
+                if raw > 0 {
+                    damage_thresholds::observe_damage_event(target, target.health, damage);
+                }
                 target.health = target.health.saturating_sub(damage);
+                if target.health > 0 && burn_winner {
+                    let burn = apply_weather_burn(
+                        &mut target.status,
+                        p,
+                        target.classifications.hero,
+                        self.next_tick,
+                    );
+                    let burn = self
+                        .combat_rules
+                        .damage_rules
+                        .apply_spell(burn, target.armor.armor_type);
+                    let burn = spell_damage_after_defend(*target, burn, self.next_tick);
+                    if burn > 0 {
+                        damage_thresholds::observe_damage_event(target, target.health, burn);
+                    }
+                    target.health = target.health.saturating_sub(burn);
+                }
                 if p.shards == 0 {
                     self.last_ability_casts.push(AbilityCastEvent {
                         source: state.source,
@@ -273,29 +330,54 @@ impl Simulation {
     }
 }
 
+#[derive(Clone, Copy)]
+enum WeatherFamily {
+    Wave,
+    Burn { hero: bool },
+}
+
 fn weather_family_winner(
     id: SimId,
     state: &WeatherState,
-    point: SimPoint,
-    movement: Option<MovementClass>,
+    (point, movement): (SimPoint, Option<MovementClass>),
     tick: u64,
     active: &[(SimId, WeatherState)],
+    family: WeatherFamily,
 ) -> bool {
     // Native caster buff families select the strongest overlapping channel. Sample the
     // entire phase before mutation so a completing action cannot expose a weaker duplicate.
-    if state.profile.shards == 0 {
-        return true;
-    }
-    let damage = |profile: crate::building_mechanics::WeatherWaveProfile| {
-        if movement.is_none() {
-            i64::from(profile.damage) * i64::from(profile.building_damage_per_10k) / 10000
-        } else {
-            i64::from(profile.damage)
+    let eligible = |p: crate::building_mechanics::WeatherWaveProfile| match family {
+        WeatherFamily::Wave => p.shards > 0,
+        WeatherFamily::Burn { hero } => {
+            p.shards > 0
+                && p.damage > 0
+                && p.damage_per_second > 0
+                && p.buff_rawcode != 0
+                && if hero {
+                    p.hero_duration_ticks > 0
+                } else {
+                    p.duration_ticks > 0
+                }
         }
+    };
+    if !eligible(state.profile) {
+        return matches!(family, WeatherFamily::Wave);
+    }
+    let buff = |p: crate::building_mechanics::WeatherWaveProfile| match family {
+        WeatherFamily::Wave => p.wave_buff_rawcode,
+        WeatherFamily::Burn { .. } => p.buff_rawcode,
+    };
+    let damage = |profile: crate::building_mechanics::WeatherWaveProfile| match family {
+        WeatherFamily::Burn { .. } => i64::from(profile.damage_per_second),
+        WeatherFamily::Wave if movement.is_none() => {
+            i64::from(profile.damage) * i64::from(profile.building_damage_per_10k) / 10000
+        }
+        WeatherFamily::Wave => i64::from(profile.damage),
     };
     !active.iter().any(|(other, w)| {
         w.team == state.team
-            && w.profile.wave_buff_rawcode == state.profile.wave_buff_rawcode
+            && eligible(w.profile)
+            && buff(w.profile) == buff(state.profile)
             && tick >= w.started_tick + u64::from(w.profile.first_impact_ticks)
             && tick < w.expires_tick
             && movement.map_or_else(
@@ -306,6 +388,61 @@ fn weather_family_winner(
             && (damage(w.profile) > damage(state.profile)
                 || (damage(w.profile) == damage(state.profile) && *other < id))
     })
+}
+
+// The native DPS family applies its first pulse at wave impact. Refreshes keep
+// the already committed periodic clock; matching recipient buffs never stack.
+fn apply_weather_burn(
+    status: &mut StatusState,
+    p: crate::building_mechanics::WeatherWaveProfile,
+    hero: bool,
+    tick: u64,
+) -> i32 {
+    let duration = if hero {
+        p.hero_duration_ticks
+    } else {
+        p.duration_ticks
+    };
+    if p.damage == 0 || p.damage_per_second <= 0 || duration == 0 || p.buff_rawcode == 0 {
+        return 0;
+    }
+    let id = ModifierId(p.buff_rawcode);
+    let expiry = tick + u64::from(duration);
+    if let Some(effect) = status.damage_over_time[..usize::from(status.damage_over_time_count)]
+        .iter_mut()
+        .find(|e| e.id == id && tick < e.expires_tick)
+    {
+        effect.damage_per_pulse = effect.damage_per_pulse.max(p.damage_per_second);
+        effect.expires_tick = effect.expires_tick.max(expiry);
+        return 0;
+    }
+    // A due expiry pulse has already resolved in the periodic phase.
+    if let Some(effect) = status.damage_over_time[..usize::from(status.damage_over_time_count)]
+        .iter_mut()
+        .find(|e| e.id == id)
+    {
+        effect.damage_per_pulse = p.damage_per_second;
+        effect.pulse_interval_ticks = CASTLE_FIGHT_SIMULATION_HZ as u16;
+        effect.next_pulse_tick = tick + CASTLE_FIGHT_SIMULATION_HZ as u64;
+        effect.expires_tick = expiry;
+        effect.source = None;
+        effect.final_pulse_at_expiry = false;
+    } else {
+        apply_timed_damage_over_time(
+            status,
+            id,
+            p.damage_per_second,
+            CASTLE_FIGHT_SIMULATION_HZ as u16,
+            tick,
+            expiry,
+        );
+        let effect = status.damage_over_time[..usize::from(status.damage_over_time_count)]
+            .iter_mut()
+            .find(|e| e.id == id)
+            .unwrap();
+        effect.final_pulse_at_expiry = false;
+    }
+    p.damage_per_second
 }
 
 #[cfg(test)]

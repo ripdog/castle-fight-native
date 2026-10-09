@@ -867,6 +867,18 @@ mod tests {
                 assert!(catalog.assets.iter().any(|a| a.owner_rawcode == child
                     && a.source_unit_rawcode.as_deref() == Some(source)
                     && a.role == "effect"));
+                if wave["damage_per_second"].as_i64().unwrap() > 0 {
+                    let code = (wave["buff_rawcode"].as_u64().unwrap() as u32).to_be_bytes();
+                    let buff = std::str::from_utf8(&code).unwrap();
+                    assert!(
+                        catalog
+                            .status_visuals
+                            .iter()
+                            .any(|visual| visual.ability_rawcode == buff
+                                && visual.buff_rawcode == buff
+                                && visual.status_kind == "damage_over_time")
+                    );
+                }
                 if wave["shards"].as_u64() == Some(0) {
                     let code = (wave["buff_rawcode"].as_u64().unwrap() as u32).to_be_bytes();
                     let buff = std::str::from_utf8(&code).unwrap();

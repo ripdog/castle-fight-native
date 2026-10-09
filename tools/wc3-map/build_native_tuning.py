@@ -775,7 +775,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         if recipe["kind"] == "building-improvement":
             detail.update(improvement_handler=functions["improveSpecialBuilding"], improvement_cleanup=functions["yK"], improvement_cleanup_registration=re.search(r'_I\[_T\(\d+,"[0-9a-f]+"\)\]=yK',lua.decode()).group(), improvement_death=functions["fJ"], improvement_ui=ability_ui[source], git_tree=tree)
         if recipe["kind"] in {"building-weather", "native-weather-wave", "building-enchantment", "native-enchantment-grant", "source-damage-dispatcher"}:
-            detail.update(all_fields=abilities, all_bases=ability_bases, functions=functions, building_spell=building_spells.get(source), git_tree=tree, map_version=dict(zip(["major","minor"],map(int,release["map_version"].split(".")))))
+            detail.update(all_fields=abilities, all_bases=ability_bases, all_protected=protected, functions=functions, building_spell=building_spells.get(source), git_tree=tree, map_version=dict(zip(["major","minor"],map(int,release["map_version"].split(".")))))
         detail["misc"] = misc
         detail["native_base"] = ability_bases[source]
         if spell is not None and recipe["kind"] != "master-projectiles":
