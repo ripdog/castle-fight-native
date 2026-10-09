@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 63;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 64;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -28,6 +28,7 @@ mod abilities;
 mod automatic_abilities;
 mod builder;
 mod building_bolts;
+mod enchantments;
 mod permanent_grants;
 mod world_freezer;
 use world_freezer::WorldFreezerState;
@@ -692,6 +693,7 @@ pub struct Simulation {
     last_ability_casts: Vec<AbilityCastEvent>,
     last_shrine_revivals: Vec<ShrineRevivalEvent>,
     shrine_death_generation: u64,
+    retired_damage_sources: BTreeMap<SimId, source_damage_runtime::RetiredDamageSource>,
     last_building_spell_visuals: Vec<BuildingSpellVisualEvent>,
     last_chain_lightnings: Vec<ChainLightningEvent>,
     last_rescue_strike_visuals: Vec<RescueStrikeVisualEvent>,
@@ -859,6 +861,7 @@ impl Simulation {
             last_ability_casts: Vec::new(),
             last_shrine_revivals: Vec::new(),
             shrine_death_generation: 1,
+            retired_damage_sources: BTreeMap::new(),
             last_building_spell_visuals: Vec::new(),
             last_chain_lightnings: Vec::new(),
             last_rescue_strike_visuals: Vec::new(),
@@ -1035,6 +1038,14 @@ impl Simulation {
     pub fn debug_damage_all_units(&mut self, damage: i32) -> usize {
         assert!(damage >= 0, "debug unit damage must be non-negative");
 
+        let retained_sources = self
+            .snapshot_units()
+            .iter()
+            .filter_map(|unit| {
+                source_damage_runtime::RetiredDamageSource::capture(unit)
+                    .map(|source| (unit.id, source))
+            })
+            .collect::<BTreeMap<_, _>>();
         let mut affected = 0usize;
         let mut fatalities = Vec::new();
         {
@@ -1087,6 +1098,9 @@ impl Simulation {
                 .world
                 .get::<StatusState>(entity)
                 .and_then(|status| status.damage_threshold.vertex_rgba);
+            if let Some(source) = retained_sources.get(&source_unit) {
+                self.retired_damage_sources.insert(source_unit, *source);
+            }
             self.world.despawn(entity);
             let Some(profile) = corpse else {
                 continue;
@@ -1676,7 +1690,12 @@ impl Simulation {
         let mut units = self.snapshot_units();
         let mut buildings = self.snapshot_buildings();
         self.refresh_snow_protection(&mut units, &mut buildings);
-        resolve_periodic_unit_statuses(&mut units, completed_tick, self.combat_rules.damage_rules);
+        resolve_periodic_unit_statuses(
+            &mut units,
+            completed_tick,
+            self.combat_rules.damage_rules,
+            &self.retired_damage_sources,
+        );
         native_actions::resolve_native_building_damage_over_time(
             &mut buildings,
             completed_tick,
@@ -2003,6 +2022,9 @@ impl Simulation {
                         unit.status.damage_threshold.vertex_rgba,
                     ));
                 }
+                if let Some(source) = source_damage_runtime::RetiredDamageSource::capture(unit) {
+                    self.retired_damage_sources.insert(unit.id, source);
+                }
                 self.world.despawn(unit.entity);
                 deaths += 1;
                 continue;
@@ -2188,6 +2210,7 @@ impl Simulation {
             &self.world,
             CanonicalMatchState {
                 shrine_death_generation: self.shrine_death_generation,
+                retired_damage_sources: &self.retired_damage_sources,
                 debug_buildings_invulnerable: self.debug_buildings_invulnerable,
                 fog: self.fog.as_ref(),
                 next_tick: self.next_tick,
@@ -2311,6 +2334,7 @@ impl Simulation {
             &self.world,
             CanonicalMatchState {
                 shrine_death_generation: self.shrine_death_generation,
+                retired_damage_sources: &self.retired_damage_sources,
                 debug_buildings_invulnerable: self.debug_buildings_invulnerable,
                 fog: self.fog.as_ref(),
                 next_tick: self.next_tick,
@@ -3082,6 +3106,12 @@ impl Simulation {
             .collect();
         expired.sort_unstable_by_key(|(id, _)| *id);
         for (_, entity) in &expired {
+            let original = self
+                .world
+                .get::<Corpse>(*entity)
+                .expect("expired corpse")
+                .source_unit;
+            self.retired_damage_sources.remove(&original);
             self.world.despawn(*entity);
         }
         expired.len()
@@ -4440,6 +4470,14 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                 AbilityTargetPolicy::NativeBuildingSpellTrigger
             );
         }
+        AbilityEffect::BuildingEnchantment(p) => {
+            assert!(p.heal_if_missing_hp_gt >= 0 && p.heal_amount > 0);
+            assert!(usize::from(p.dispatcher_option_index) < p.options.len());
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::NativeBuildingSpellTrigger
+            );
+        }
         AbilityEffect::BuildingPermanentGrant(p) => {
             assert_eq!(
                 spellcasting.ability.target_policy,
@@ -5437,15 +5475,17 @@ impl Simulation {
                     ),
                     state.units[index].snow_damage_taken_per_10k,
                 );
-                source_damage_runtime::apply_aftershock(
+                let dummy_killed = source_damage_runtime::dispatch(
                     source_id,
                     index,
+                    event_damage,
                     source_damage_runtime::SourceDamageState {
                         units: state.units,
                         health: state.unit_health,
                         rules: state.damage_rules,
                         tick: completed_tick,
                     },
+                    &self.retired_damage_sources,
                 );
                 if damage_type != DamageType::Spells {
                     self.observe_damage_retaliation(
@@ -5477,6 +5517,7 @@ impl Simulation {
                     .expect("unit damage arithmetic overflowed validated bounds");
                 let source_index = find_unit_index(state.units, source_id);
                 if state.unit_health[index] <= 0
+                    && !dummy_killed
                     && state.units[index].classifications.combat_sapper
                     && let Some(source_index) = source_index
                     && state.unit_health[source_index] > 0
@@ -5545,6 +5586,7 @@ struct PendingAttackEffectState<'a> {
     unit_health: &'a mut [i32],
     buildings: &'a mut [BuildingSnapshot],
     building_health: &'a mut [i32],
+    retired_sources: &'a BTreeMap<SimId, source_damage_runtime::RetiredDamageSource>,
     damage_rules: DamageRules,
 }
 
@@ -5571,6 +5613,7 @@ fn apply_pending_attack_effects(
         buildings,
         building_health,
         damage_rules,
+        retired_sources,
     } = state;
     lava_spawns::observe_landed_attack(source.id, target, completed_tick, units, buildings);
     let TargetIndex::Unit(index) = target else {
@@ -5590,6 +5633,7 @@ fn apply_pending_attack_effects(
                     buildings,
                     building_health,
                     damage_rules,
+                    retired_sources,
                 },
             );
             return PendingAttackEffectResult {
@@ -5674,6 +5718,18 @@ fn apply_pending_attack_effects(
         );
         let damage = spell_damage_after_defend(units[index], damage, completed_tick);
         let event_damage = damage;
+        source_damage_runtime::dispatch(
+            source.id,
+            index,
+            event_damage,
+            source_damage_runtime::SourceDamageState {
+                units,
+                health: unit_health,
+                rules: damage_rules,
+                tick: completed_tick,
+            },
+            retired_sources,
+        );
         damage_thresholds::observe_damage_event(
             &mut units[index],
             unit_health[index],
@@ -5710,6 +5766,7 @@ fn apply_pending_attack_effects(
                         buildings,
                         building_health,
                         damage_rules,
+                        retired_sources,
                     },
                 );
             }
@@ -5722,6 +5779,18 @@ fn apply_pending_attack_effects(
                     let adjusted =
                         spell_damage_after_defend(units[index], adjusted, completed_tick);
                     let event_damage = adjusted;
+                    source_damage_runtime::dispatch(
+                        source.id,
+                        index,
+                        event_damage,
+                        source_damage_runtime::SourceDamageState {
+                            units,
+                            health: unit_health,
+                            rules: damage_rules,
+                            tick: completed_tick,
+                        },
+                        retired_sources,
+                    );
                     damage_thresholds::observe_damage_event(
                         &mut units[index],
                         unit_health[index],

@@ -108,6 +108,15 @@ impl Simulation {
                 .damage_rules
                 .apply_spell(raw, units[index].armor.armor_type);
             let damage = spell_damage_after_defend(units[index], damage, self.next_tick);
+            super::super::source_damage_runtime::dispatch_inline(
+                state.source,
+                index,
+                damage,
+                units,
+                self.combat_rules.damage_rules,
+                self.next_tick,
+                &self.retired_damage_sources,
+            );
             let health = units[index].health;
             damage_thresholds::observe_damage_event(&mut units[index], health, damage);
             units[index].health = health.saturating_sub(damage);

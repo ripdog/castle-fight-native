@@ -62,6 +62,40 @@
     "target_predicate": "randomAliveEnemy-helper;shield-check-passes",
     "target_selector": "random-alive-enemy"
   },
+  "enchantment": {
+    "ability_name": "ELE: ObeliskOfElements (dummy)",
+    "ability_rawcode": "A0DV",
+    "ability_tip": "Enchant",
+    "ability_ubertip": "Gives 1 of 4 abilities to a random allied unit:|n- Forge Weapon: gives splash damage (250rng, 50%)|n- Rock Shield: adds 15 armor points|n- Haste: increase attack and movement speed by 75% and 25% respectively|n- Rejuvenation: heals 450 hp instantly|n|nHas an extra chance to target units that don't have the enchantment yet",
+    "builder_names": "Elemental Builder",
+    "builder_rawcode": "X051",
+    "building_names": "Obelisk of Elements",
+    "building_rawcode": "h060",
+    "byte_offset": "1435851",
+    "cadence_seconds": "11",
+    "cadence_source": "ability-mana-cost/building-mana-regen",
+    "campaign_only": "0",
+    "effect_objects_json": "[{\"ability_level1\":{\"area\":\"\",\"buffs\":\"\",\"data_fields_labeled_json\":\"{}\",\"duration_hero\":\"\",\"duration_normal\":\"\",\"name\":\"Invulnerable\",\"range\":\"\",\"targets\":\"\"},\"categories\":\"\",\"names\":\"\",\"rawcode\":\"Avul\",\"rawcode_integer\":1098282348},{\"ability_level1\":{\"area\":\"0\",\"buffs\":\"B02B\",\"data_fields_labeled_json\":\"{\\\"Attack Speed Increase (%)\\\":0.7,\\\"Movement Speed Increase (%)\\\":0.15}\",\"duration_hero\":\"0\",\"duration_normal\":\"0\",\"name\":\"ELE: Enchant(Haste)\",\"range\":\"-\",\"targets\":\"self\"},\"categories\":\"abilities\",\"names\":\"ELE: Enchant(Haste)\",\"rawcode\":\"A0D7\",\"rawcode_integer\":1093682231},{\"ability_level1\":{\"area\":\"-\",\"buffs\":\"\",\"data_fields_labeled_json\":\"{\\\"Base Order ID\\\":\\\"spellbook\\\",\\\"Maximum Spells\\\":2,\\\"Minimum Spells\\\":2,\\\"Shared Spell Cooldown\\\":1,\\\"Spell List\\\":\\\"A0D6,A0F2\\\"}\",\"duration_hero\":\"0\",\"duration_normal\":\"0\",\"name\":\"Spell Book\",\"range\":\"-\",\"targets\":\"_\"},\"categories\":\"abilities\",\"names\":\"\",\"rawcode\":\"A0F3\",\"rawcode_integer\":1093682739},{\"ability_level1\":{\"area\":\"100\",\"buffs\":\"B02A\",\"data_fields_labeled_json\":\"{\\\"Always Autocast\\\":\\\" - \\\",\\\"Attack Speed Factor\\\":0,\\\"Movement Speed Factor\\\":0}\",\"duration_hero\":\"0\",\"duration_normal\":\"0\",\"name\":\"Slow Aura\",\"range\":\" - \",\"targets\":\"self\"},\"categories\":\"abilities\",\"names\":\"\",\"rawcode\":\"A0F1\",\"rawcode_integer\":1093682737},{\"ability_level1\":{\"area\":\"-\",\"buffs\":\"\",\"data_fields_labeled_json\":\"{\\\"Art Duration\\\":0.98,\\\"Base Order ID\\\":\\\"channel\\\",\\\"Disable Other Abilities\\\":1,\\\"Follow Through Time\\\":180,\\\"Options\\\":0,\\\"Target Type\\\":0}\",\"duration_hero\":\"0\",\"duration_normal\":\"0\",\"name\":\"Channel\",\"range\":\"500\",\"targets\":\"_\"},\"categories\":\"abilities\",\"names\":\"\",\"rawcode\":\"A03Q\",\"rawcode_integer\":1093677905},{\"ability_level1\":{\"area\":\"-\",\"buffs\":\"\",\"data_fields_labeled_json\":\"{\\\"Art Duration\\\":0.98,\\\"Base Order ID\\\":\\\"channel\\\",\\\"Disable Other Abilities\\\":1,\\\"Follow Through Time\\\":180,\\\"Options\\\":0,\\\"Target Type\\\":0}\",\"duration_hero\":\"0\",\"duration_normal\":\"0\",\"name\":\"Channel\",\"range\":\"500\",\"targets\":\"_\"},\"categories\":\"abilities\",\"names\":\"\",\"rawcode\":\"A0F4\",\"rawcode_integer\":1093682740}]",
+    "evidence_disagreements": "",
+    "evidence_kind": "script-direct",
+    "mechanic_kind": "heal-or-random-missing-buff",
+    "parameters_json": "{\"always_after-buff_ability_id\":1093682740,\"candidate_ability_ids\":[1093682231,1093682739,1093682737],\"candidate_selection\":\"uniform-among-currently-absent-candidates\",\"fallback_if_no_candidate\":\"heal-450\",\"generated_index_note\":\"A03Q is keyed to the selected compacted-array index, not normalized ability identity\",\"generated_selected-index-2_extra_ability_id\":1093677905,\"heal_amount\":450,\"heal_if_missing_hp_gt\":350,\"preferred_missing_ability_id\":1093682740}",
+    "race_index": "4",
+    "source_functions": "BuildingSpellClosure_registerBuildingSpell_RaceElementalAbilities_cast_registerBuildingSpell_RaceElementalAbilities,holyShrineSpell,holyPick,isHolyShrineTarget,ForGroupCallback_forUnitsInRect_RaceElementalAbilities_callback_forUnitsInRect_RaceElementalAbilities1",
+    "target_predicate": "alive-combat-sapper;ally;missing-Avul;first-pass-missing-A0F4",
+    "target_selector": "random-eligible-ally;fallback-relaxes-A0F4-preference"
+  },
+  "enchantment_cast_visuals": [
+    {
+      "attachment": "overhead",
+      "path": "Abilities\\Spells\\Human\\HolyBolt\\HolyBoltSpecialArt.mdl",
+      "role": "target"
+    },
+    {
+      "path": "Abilities\\Spells\\Undead\\ReplenishMana\\ReplenishManaCasterOverhead.mdl",
+      "role": "caster"
+    }
+  ],
   "endurance": {
     "ability_name": "Global Endurance",
     "ability_rawcode": "A0HS",
@@ -6858,6 +6892,10 @@
       "byte_offset": 1555167,
       "source": "function BuildingSpellClosure_registerBuildingSpellWithTarget_SnowveilFountain_cast_registerBuildingSpellWithTarget_SnowveilFountain(JMn,KMn)local LMn=nil local MMn={0.;0.}local NMn=nil LMn=KMn MMn={GetSpellTargetX();GetSpellTargetY()}mIb=unit_getOwner(LMn)NMn=Ez:create1050()NMn.b=LMn nullTimer(NMn)explodeSnowInArea(LMn,MMn)end SKb={__index=Hz}"
     },
+    "BuildingSpellClosure_registerBuildingSpell_RaceElementalAbilities_cast_registerBuildingSpell_RaceElementalAbilities": {
+      "byte_offset": 1435851,
+      "source": "function BuildingSpellClosure_registerBuildingSpell_RaceElementalAbilities_cast_registerBuildingSpell_RaceElementalAbilities(hon,ion)holyShrineSpell(ion)end bPb={__index=tu}"
+    },
     "BuildingSpellClosure_registerBuildingSpell_RaceNorthernAbilities_cast_registerBuildingSpell_RaceNorthernAbilities": {
       "byte_offset": 1489204,
       "source": "function BuildingSpellClosure_registerBuildingSpell_RaceNorthernAbilities_cast_registerBuildingSpell_RaceNorthernAbilities(ayn,byn)local cyn=nil local dyn=nil local eyn={0.;0.}local fyn=nil local gyn=nil local hyn=nil local iyn=nil cyn=byn dyn=unit_getOwner(cyn)eyn=tupleCopy1(unit_getPos(cyn))fyn=(__wurst_ensureInt(lGb[player_getId(dyn)])*180.)gyn=getRoundTimeSeconds()iyn=cyn __wurst_safe_SetUnitAnimation(iyn,\"death\")hyn=Rw:create959()hyn.seconds=gyn hyn.baseAngle=fyn hyn.p=dyn hyn.pos=tupleCopy1(eyn)hyn.building=cyn doAfter(1.5,hyn)end CMb={__index=Yw}"
@@ -6961,6 +6999,10 @@
     "ForGroupCallback_forUnitsInRange_RaceNorthernAbilities_callback_forUnitsInRange_RaceNorthernAbilities": {
       "byte_offset": 1486433,
       "source": "function ForGroupCallback_forUnitsInRange_RaceNorthernAbilities_callback_forUnitsInRange_RaceNorthernAbilities(Bxn,Cxn)if((((isAliveCombatSapper(Cxn)and unit_isEnemyOf(Cxn,Bxn.p))and(unit_getAbilityLevel(Cxn,1098282348)<=0))and(unit_getAbilityLevel(Cxn,1093679176)<=0))and(not(unit_getTypeId(Cxn)==1747990082)))then group_add(Bxn.g,Cxn)end end JMb={__index=Rw}"
+    },
+    "ForGroupCallback_forUnitsInRect_RaceElementalAbilities_callback_forUnitsInRect_RaceElementalAbilities1": {
+      "byte_offset": 1434517,
+      "source": "function ForGroupCallback_forUnitsInRect_RaceElementalAbilities_callback_forUnitsInRect_RaceElementalAbilities1(Snn,Tnn)if isHolyShrineTarget(Tnn,Snn.p,Snn.xoFlag)then group_add(Snn.g,Tnn)end end ePb={__index=qu}"
     },
     "ForGroupCallback_forUnitsInRect_RaceNorthernAbilities_callback_forUnitsInRect_RaceNorthernAbilities": {
       "byte_offset": 1485254,
@@ -7078,6 +7120,14 @@
       "byte_offset": 3573939,
       "source": "function hexSpell(xqr)local yqr=nil local zqr=nil local Aqr=nil local Bqr=nil yqr=unit_getOwner(xqr)zqr=randomAliveEnemy(yqr)if((zqr==nil)or checkForShield(zqr))then return end dummyCastTargetWithVision(yqr,1093677368,852502,zqr,unit_getPos(zqr),1.)Aqr=zqr Bqr=zy:create997()Bqr.c=Aqr doAfter(1.,Bqr)end "
     },
+    "holyPick": {
+      "byte_offset": 3566861,
+      "source": "function holyPick(Bpr,Cpr)local Dpr=nil local Epr=nil local Fpr=nil local Gpr=nil local Hpr=nil local Ipr=nil local Jpr=nil local Kpr=nil local Lpr=nil Dpr=CreateGroup()Gpr=uIb Epr=pu:create833()Epr.p=Bpr Epr.xoFlag=Cpr Epr.g=Dpr Hpr=Gpr Ipr=Epr Jpr=Ipr Kpr=Hib Nib[Kpr]=Jpr Lib[Kpr]=Fib Hib=(Hib+1)__wurst_safe_GroupEnumUnitsInRect(Oib,Hpr,Gib)popCallback(true)Fpr=group_getRandom(Dpr)Lpr=Dpr __wurst_safe_DestroyGroup(Lpr)return Fpr end "
+    },
+    "holyShrineSpell": {
+      "byte_offset": 3567300,
+      "source": "function holyShrineSpell(Mpr)local Npr=nil local Opr=nil local Ppr=nil local Qpr=setmetatable({},jR)local Rpr=nil local Spr=nil local Tpr=nil local Upr=nil local Vpr=nil local Wpr=nil local Xpr=nil local Ypr=nil Npr=unit_getOwner(Mpr)Opr=holyPick(Npr,false)if(Opr==nil)then Opr=holyPick(Npr,true)if(Opr==nil)then return end end Tpr=addEffect1(\"Abilities\\\\Spells\\\\Human\\\\HolyBolt\\\\HolyBoltSpecialArt.mdl\",Opr,\"overhead\")__wurst_safe_DestroyEffect(Tpr)Upr=addEffect(\"Abilities\\\\Spells\\\\Undead\\\\ReplenishMana\\\\ReplenishManaCasterOverhead.mdl\",unit_getPos(Mpr))__wurst_safe_DestroyEffect(Upr)Ppr=widget_getLife(Opr)if((unit_getMaxHP(Opr)-Ppr)>350.)then __wurst_safe_SetWidgetLife(Opr,(Ppr+450.))else Qpr[0]=1093682231 Qpr[1]=1093682739 Qpr[2]=1093682737 Rpr=3 Spr=0 while true do if(Spr>=Rpr)then break end if(unit_getAbilityLevel(Opr,__wurst_ensureInt(Qpr[Spr]))>0)then Rpr=(Rpr-1)Qpr[Spr]=__wurst_ensureInt(Qpr[Rpr])else Spr=(Spr+1)end end if(Rpr<=0)then __wurst_safe_SetWidgetLife(Opr,(Ppr+450.))elseif(widget_getLife(Opr)>0.405)then Spr=GetRandomInt(0,(Rpr-1))Vpr=Opr Wpr=__wurst_ensureInt(Qpr[Spr])addProtectedAbility(Vpr,Wpr)if(Spr==2)then Xpr=Opr addProtectedAbility(Xpr,1093677905)end Ypr=Opr addProtectedAbility(Ypr,1093682740)end end noteActiveBuildingSpellEffectForE2e()end "
+    },
     "iD": {
       "byte_offset": 1735248,
       "source": "function iD()local jho=nil local kho=nil local lho=nil local mho=nil local nho=nil local oho=nil jho=_br()kho=__wurst_safe_GetOwningPlayer(jho)__wurst_safe_GetPlayerId(kho)mho=buildingTypeIndexOfUnit(jho)nho=__wurst_LoadEffectHandle(TGb,__wurst_GetHandleId(jho),1337)if(not(nho==nil))then safeDestroyEffect(nho)__wurst_RemoveSavedHandle(TGb,__wurst_GetHandleId(jho),1337)end if __wurst_ensureBool(jIb[mho])then if __wurst_ensureBool(iIb[mho])then _I[(_d[2423]or _y(2423,_T(444461,\"d65805358a7492b6bce519551d2329af3a93c3790e\")))](jho,__wurst_intDiv((__wurst_ensureInt(lIb[mho])*3),4))else _I[(_d[2424]or _y(2424,_T(636557,\"9d4bcb121fc56733fd8c1ebf0f0d6abcb0571cd803\")))](jho,__wurst_ensureInt(lIb[mho]))end end __wurst_safe_GroupEnumUnitsOfPlayer(nIb,kho,ZGb)__wurst_ForGroup(nIb,(function(...)xpcall((function(...)_I[(_d[2425]or _y(2425,_T(282452,\"e2c2\")))](...)end),(function(pho)if(pho==(_d[2426]or _y(2426,_a(_T(\"\\x005dcd6797fcc2e47c77112a4b615c51ffb1d1091140b1\")))))then return end _dr(((_d[2427]or _y(2427,_a(_T(\"\\x007b79b29bc49aaa6fef2e43209707833dbfb3e53c5c9d\"))))..tostring(pho)))xpcall((function()error1(tostring(pho))end),(function(qho)if(qho==(_d[2428]or _y(2428,_a(_T(\"\\x005dcd6797fcc2e47c77112a4b615c51ffb1d1091140b1\")))))then return end _dr(((_d[2429]or _y(2429,_T(\"\\x01\\x27\\x4a\\x0f\\xc2\\x67\\x2c\\xc7\\x54\\xa5\\x5b\\xae\\xe9\\xd5\\x5d\\xff\\x84\\xc1\\xa0\\xcf\\xce\\x1f\\x44\\xba\\x63\\xf2\")))..tostring(qho)))_dr(((_d[2430]or _y(2430,_T(\"\\x01\\x79\\x68\\xaf\\x6c\\xd2\\xd1\\xb8\\x7b\\x02\\x99\\x60\\x82\\xd8\\x54\\xd4\\x70\\x4b\\xb9\\xe9\")))..tostring(pho)))end))end),...)end))lho=__wurst_ensureInt(hIb[buildingTypeIndexOfUnit(jho)])if(lho>0)then else mho=__wurst_safe_GetUnitTypeId(jho)if(mho==1747989060)then __wurst_safe_TimerStart(YHb,4.,true,(function(...)xpcall((function(...)_I[(_d[2431]or _y(2431,_T(476094,\"71b0\")))](...)end),(function(rho)if(rho==(_d[2432]or _y(2432,_a(_T(\"\\x005dcd6797fcc2e47c77112a4b615c51ffb1d1091140b1\")))))then return end _dr(((_d[2433]or _y(2433,_a(_T(\"\\x007b79b29bc49aaa6fef2e43209707833dbfb3e53c5c9d\"))))..tostring(rho)))xpcall((function()error1(tostring(rho))end),(function(sho)if(sho==(_d[2434]or _y(2434,_a(_T(\"\\x005dcd6797fcc2e47c77112a4b615c51ffb1d1091140b1\")))))then return end _dr(((_d[2435]or _y(2435,_T(\"\\x01\\x27\\x4a\\x0f\\xc2\\x67\\x2c\\xc7\\x54\\xa5\\x5b\\xae\\xe9\\xd5\\x5d\\xff\\x84\\xc1\\xa0\\xcf\\xce\\x1f\\x44\\xba\\x63\\xf2\")))..tostring(sho)))_dr(((_d[2436]or _y(2436,_T(\"\\x01\\x79\\x68\\xaf\\x6c\\xd2\\xd1\\xb8\\x7b\\x02\\x99\\x60\\x82\\xd8\\x54\\xd4\\x70\\x4b\\xb9\\xe9\")))..tostring(rho)))end))end),...)end))elseif(mho==1747988551)then safeUnitAddAbility(jho,1093683289)safeUnitAddAbility(jho,1093677111)elseif(mho==1747990065)then safeUnitAddAbility(jho,1093677905)safeUnitAddAbility(jho,1093682518)elseif((((((((((mho==1747989814)or(mho==1747989324))or(mho==1747988823))or(mho==1747988824))or(mho==1747989842))or(mho==1747990086))or(mho==1747990085))or(mho==1747990360))or(mho==1747990361))or(mho==1747990362))then __wurst_safe_IssueImmediateOrderById(jho,852602)oho=_b[(_d[2437]or _y(2437,_T(568813,\"b4e476215651d12ade24ef\")))]()_I[(_d[2438]or _y(2438,_T(878855,\"2b93b38a012764cd005c8483b7a84bf260dd190fe683\")))](TGb,__wurst_GetHandleId(oho),1,jho)__wurst_safe_TimerStart(oho,.1,false,(function(...)xpcall((function(...)_I[(_d[2439]or _y(2439,_T(721993,\"eaa612e735c37886369546823ce3c46dfbda6881df476a8f\")))](...)end),(function(tho)if(tho==(_d[2440]or _y(2440,_a(_T(\"\\x005dcd6797fcc2e47c77112a4b615c51ffb1d1091140b1\")))))then return end _dr(((_d[2441]or _y(2441,_a(_T(\"\\x007b79b29bc49aaa6fef2e43209707833dbfb3e53c5c9d\"))))..tostring(tho)))xpcall((function()error1(tostring(tho))end),(function(uho)if(uho==(_d[2442]or _y(2442,_a(_T(\"\\x005dcd6797fcc2e47c77112a4b615c51ffb1d1091140b1\")))))then return end _dr(((_d[2443]or _y(2443,_T(\"\\x01\\x27\\x4a\\x0f\\xc2\\x67\\x2c\\xc7\\x54\\xa5\\x5b\\xae\\xe9\\xd5\\x5d\\xff\\x84\\xc1\\xa0\\xcf\\xce\\x1f\\x44\\xba\\x63\\xf2\")))..tostring(uho)))_dr(((_d[2444]or _y(2444,_T(\"\\x01\\x79\\x68\\xaf\\x6c\\xd2\\xd1\\xb8\\x7b\\x02\\x99\\x60\\x82\\xd8\\x54\\xd4\\x70\\x4b\\xb9\\xe9\")))..tostring(tho)))end))end),...)end))elseif(mho==1747988815)then safeUnitAddAbility(jho,1093677398)end end end _I[_T(702242,\"63d07a419f593c792f3847a91f16e542d09e8575\")]=iD "
@@ -7093,6 +7143,10 @@
     "isCombatSapper": {
       "byte_offset": 4237736,
       "source": "function isCombatSapper(Vcs)return(((not(Vcs==nil))and unit_isType(Vcs,UNIT_TYPE_SAPPER))and(not unit_isType(Vcs,UNIT_TYPE_STRUCTURE)))end "
+    },
+    "isHolyShrineTarget": {
+      "byte_offset": 3566643,
+      "source": "function isHolyShrineTarget(ypr,zpr,Apr)return passesRetryTargetGate(((isAliveCombatSapper(ypr)and unit_isAllyOf(ypr,zpr))and(unit_getAbilityLevel(ypr,1098282348)<=0)),Apr,(unit_getAbilityLevel(ypr,1093682740)<=0))end "
     },
     "isSingleLimitBuilding": {
       "byte_offset": 2502108,

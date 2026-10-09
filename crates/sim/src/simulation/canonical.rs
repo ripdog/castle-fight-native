@@ -225,6 +225,8 @@ pub(super) struct CanonicalMatchState<'a> {
     pub(super) pending_rescue_strikes: &'a [PendingRescueStrike],
     pub(super) team_rescue_ready_ticks: [u64; 2],
     pub(super) shrine_death_generation: u64,
+    pub(super) retired_damage_sources:
+        &'a BTreeMap<SimId, super::source_damage_runtime::RetiredDamageSource>,
     pub(super) debug_buildings_invulnerable: bool,
     pub(super) fog: Option<&'a crate::FogOfWar>,
 }
@@ -249,6 +251,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
         pending_rescue_strikes,
         team_rescue_ready_ticks,
         shrine_death_generation,
+        retired_damage_sources,
         debug_buildings_invulnerable,
         fog,
     } = state;
@@ -371,6 +374,19 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
     hash.write_u64(next_id);
     hash.write_u64(next_visual_id);
     hash.write_u64(shrine_death_generation);
+    hash.write_u64(retired_damage_sources.len() as u64);
+    for (id, source) in retired_damage_sources {
+        hash.write_u64(id.0);
+        hash.write_u8(source.team.0);
+        hash.write_u8(u8::from(source.hits_ground));
+        hash.write_u8(u8::from(source.hits_air));
+        hash.write_u64(source.grants.iter().count() as u64);
+        for grant in source.grants.iter() {
+            for word in grant.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
+    }
     hash.write_u8(u8::from(debug_buildings_invulnerable));
     match lifecycle {
         MatchLifecycle::Running => hash.write_u8(0),
@@ -564,6 +580,10 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                     }
                     NativeAction::Bolt(state) => {
                         hash.write_u8(1);
+                        hash.write_u8(u8::from(state.damage_source.is_some()));
+                        if let Some(source) = state.damage_source {
+                            hash.write_u64(source.0);
+                        }
                         hash.write_u64(state.source.0);
                         hash.write_u8(state.team.0);
                         hash.write_u64(state.target.0);
@@ -1829,6 +1849,10 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     hash.write_u64(status.retaliation_sequence);
     hash.write_u8(u8::from(status.acid_bomb.is_some()));
     if let Some(acid) = status.acid_bomb {
+        hash.write_u8(u8::from(acid.source.is_some()));
+        if let Some(source) = acid.source {
+            hash.write_u64(source.0);
+        }
         for word in acid.profile.canonical_words() {
             hash.write_u64(word);
         }
@@ -2068,6 +2092,10 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         hash.write_u64(effect.next_pulse_tick);
         hash.write_u64(effect.expires_tick);
         hash.write_u8(u8::from(effect.final_pulse_at_expiry));
+        hash.write_u8(u8::from(effect.source.is_some()));
+        if let Some(source) = effect.source {
+            hash.write_u64(source.0);
+        }
     }
 }
 
@@ -2263,6 +2291,10 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                 hash.write_i32(profile.radius);
                 hash.write_u16(profile.damage_per_10k);
                 hash.write_u8(profile.targets.bits());
+            }
+            PassiveUnitEffect::SourceDamageDispatcher(ability) => {
+                hash.write_u8(23);
+                hash.write_u32(ability.0);
             }
             PassiveUnitEffect::HealthScaledAftershock(profile) => {
                 hash.write_u8(22);
@@ -2588,6 +2620,11 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             }
         }
         AbilityEffect::BuildingStasis(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
+        AbilityEffect::BuildingEnchantment(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);
             }

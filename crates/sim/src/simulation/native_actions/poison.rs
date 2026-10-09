@@ -166,7 +166,7 @@ impl Simulation {
         mut state: PoisonState,
         units: &mut [UnitSnapshot],
     ) {
-        let Some(target) = units.iter_mut().find(|unit| {
+        let Some(index) = units.iter().position(|unit| {
             unit.id == state.target
                 && unit.health > 0
                 && unit
@@ -179,6 +179,7 @@ impl Simulation {
         };
         while self.next_tick >= state.next_pulse_tick && state.next_pulse_tick <= state.expires_tick
         {
+            let target = &units[index];
             if eligible(target, state.profile) {
                 let damage = self
                     .combat_rules
@@ -186,25 +187,37 @@ impl Simulation {
                     .apply_spell(state.profile.damage_per_second, target.armor.armor_type);
                 let damage = spell_damage_after_defend(*target, damage, self.next_tick);
                 let event_damage = damage;
+                super::super::source_damage_runtime::dispatch_inline(
+                    state.source,
+                    index,
+                    event_damage,
+                    units,
+                    self.combat_rules.damage_rules,
+                    self.next_tick,
+                    &self.retired_damage_sources,
+                );
+                let target = &mut units[index];
                 super::super::damage_thresholds::observe_damage_event(
                     target,
                     target.health,
                     event_damage,
                 );
                 let floor = i32::from(!state.profile.can_kill);
-                target.health = target.health.saturating_sub(event_damage).max(floor);
+                if target.health > 0 {
+                    target.health = target.health.saturating_sub(event_damage).max(floor);
+                }
             }
             state.next_pulse_tick = state
                 .next_pulse_tick
                 .checked_add(CASTLE_FIGHT_SIMULATION_HZ as u64)
                 .expect("poison deadline overflow");
-            if target.health <= 0 {
+            if units[index].health <= 0 {
                 break;
             }
         }
-        if self.next_tick >= state.expires_tick || target.health <= 0 {
+        if self.next_tick >= state.expires_tick || units[index].health <= 0 {
             self.world.despawn(entity);
-            self.refresh_poison_summary(target);
+            self.refresh_poison_summary(&mut units[index]);
         } else {
             *self
                 .world

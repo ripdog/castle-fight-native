@@ -85,6 +85,11 @@ pub(super) fn native_building_trigger(
             p.trigger_invulnerable,
             p.trigger_spell_immune,
         )),
+        AbilityEffect::BuildingEnchantment(p) => Some((
+            p.trigger_targets,
+            p.trigger_invulnerable,
+            p.trigger_spell_immune,
+        )),
         AbilityEffect::BuildingPermanentGrant(p) => Some((
             p.trigger_targets,
             p.trigger_invulnerable,

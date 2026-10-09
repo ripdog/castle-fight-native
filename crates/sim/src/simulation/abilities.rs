@@ -7,6 +7,39 @@ pub(super) fn native_fire_buff_active(status: &StatusState, ability: AbilityId, 
 }
 
 impl Simulation {
+    fn apply_source_ability_to_unit(
+        &self,
+        source: SimId,
+        team: Team,
+        index: usize,
+        effect: AbilityEffect,
+        units: &mut [UnitSnapshot],
+    ) -> bool {
+        if let Some(damage) = super::status::ability_damage_for_unit(
+            &units[index],
+            effect,
+            self.next_tick,
+            self.combat_rules.damage_rules,
+        ) {
+            super::source_damage_runtime::dispatch_inline(
+                source,
+                index,
+                damage,
+                units,
+                self.combat_rules.damage_rules,
+                self.next_tick,
+                &self.retired_damage_sources,
+            );
+        }
+        apply_ability_effect_to_unit(
+            &mut units[index],
+            effect,
+            team,
+            self.next_tick,
+            self.combat_rules.damage_rules,
+        )
+    }
+
     fn restore_pending_cast_target(
         &self,
         target: PendingCastTarget,
@@ -563,6 +596,17 @@ impl Simulation {
                     } else if let AbilityEffect::WorldFreezer(profile) = intent.ability.effect {
                         self.start_world_freezer(source, profile);
                         metrics.effects += 1;
+                    } else if let AbilityEffect::BuildingEnchantment(profile) =
+                        intent.ability.effect
+                    {
+                        metrics.effects += usize::from(self.cast_building_enchantment(
+                            source,
+                            intent.ability.id,
+                            profile,
+                            intent.cast_sequence,
+                            units,
+                        ));
+                        emit_cast_visual = false;
                     } else if let AbilityEffect::BuildingPermanentGrant(profile) =
                         intent.ability.effect
                     {
@@ -715,7 +759,8 @@ impl Simulation {
                     {
                         let center = units[index].position;
                         let primary_id = units[index].id;
-                        for target in units.iter_mut() {
+                        for target_index in 0..units.len() {
+                            let target = &units[target_index];
                             if target.health <= 0
                                 || target.team == source.team
                                 || center.distance_sq(target.position) > square_i32(radius)
@@ -739,12 +784,12 @@ impl Simulation {
                                 attack_speed_percent_delta,
                                 targets,
                             };
-                            if apply_ability_effect_to_unit(
-                                target,
-                                effect,
+                            if self.apply_source_ability_to_unit(
+                                source.id,
                                 source.team,
-                                self.next_tick,
-                                self.combat_rules.damage_rules,
+                                target_index,
+                                effect,
+                                units,
                             ) {
                                 metrics.effects += 1;
                             }
@@ -753,19 +798,20 @@ impl Simulation {
                     | AbilityEffect::AreaDebuff { radius, .. } = intent.ability.effect
                     {
                         let center = target_position.expect("caster-centered area effect");
-                        for target in units.iter_mut() {
+                        for target_index in 0..units.len() {
+                            let target = &units[target_index];
                             if target.health <= 0
                                 || target.team == source.team
                                 || center.distance_sq(target.position) > square_i32(radius)
                             {
                                 continue;
                             }
-                            if apply_ability_effect_to_unit(
-                                target,
-                                intent.ability.effect,
+                            if self.apply_source_ability_to_unit(
+                                source.id,
                                 source.team,
-                                self.next_tick,
-                                self.combat_rules.damage_rules,
+                                target_index,
+                                intent.ability.effect,
+                                units,
                             ) {
                                 metrics.effects += 1;
                             }
@@ -786,19 +832,20 @@ impl Simulation {
                             }
                         };
                         let radius_sq = square_i32(radius);
-                        for target in units.iter_mut() {
+                        for target_index in 0..units.len() {
+                            let target = &units[target_index];
                             if target.health <= 0
                                 || target.team == source.team
                                 || center.distance_sq(target.position) > radius_sq
                             {
                                 continue;
                             }
-                            if apply_ability_effect_to_unit(
-                                target,
-                                intent.ability.effect,
+                            if self.apply_source_ability_to_unit(
+                                source.id,
                                 source.team,
-                                self.next_tick,
-                                self.combat_rules.damage_rules,
+                                target_index,
+                                intent.ability.effect,
+                                units,
                             ) {
                                 metrics.effects += 1;
                             }
@@ -816,12 +863,12 @@ impl Simulation {
                         ) {
                             metrics.effects += 1;
                         }
-                    } else if apply_ability_effect_to_unit(
-                        &mut units[index],
-                        intent.ability.effect,
+                    } else if self.apply_source_ability_to_unit(
+                        source.id,
                         source.team,
-                        self.next_tick,
-                        self.combat_rules.damage_rules,
+                        index,
+                        intent.ability.effect,
+                        units,
                     ) {
                         metrics.effects += 1;
                     }
@@ -838,6 +885,17 @@ impl Simulation {
                     } else if let AbilityEffect::WorldFreezer(profile) = intent.ability.effect {
                         self.start_world_freezer(source, profile);
                         metrics.effects += 1;
+                    } else if let AbilityEffect::BuildingEnchantment(profile) =
+                        intent.ability.effect
+                    {
+                        metrics.effects += usize::from(self.cast_building_enchantment(
+                            source,
+                            intent.ability.id,
+                            profile,
+                            intent.cast_sequence,
+                            units,
+                        ));
+                        emit_cast_visual = false;
                     } else if let AbilityEffect::BuildingPermanentGrant(profile) =
                         intent.ability.effect
                     {
@@ -999,6 +1057,12 @@ impl Simulation {
                         .collect::<Vec<_>>();
                     corpses.sort_unstable_by_key(|(id, _)| *id);
                     for (_, entity) in corpses {
+                        let original = self
+                            .world
+                            .get::<Corpse>(entity)
+                            .expect("consumed corpse")
+                            .source_unit;
+                        self.retired_damage_sources.remove(&original);
                         self.world.despawn(entity);
                     }
                 }
@@ -1299,6 +1363,7 @@ impl Simulation {
             let definition = corpse
                 .resurrection
                 .expect("eligible corpse retains template");
+            self.retired_damage_sources.remove(&corpse.source_unit);
             self.world.despawn(entity);
             let unit = self.spawn_resolved_unit_unchecked(
                 Some(corpse.source_owner),

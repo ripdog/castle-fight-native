@@ -854,21 +854,26 @@ mod tests {
             "../../sim/data/castle-fight/9.27/building-mechanics-r1.json"
         ))
         .unwrap();
-        let row = &projection["ceremonial"];
-        let parent = row["ability_rawcode"].as_str().unwrap();
-        let source = row["building_rawcode"].as_str().unwrap();
-        for visual in projection["ceremonial_cast_visuals"].as_array().unwrap() {
-            let matches = catalog
-                .assets
-                .iter()
-                .filter(|asset| {
-                    asset.owner_rawcode == parent
-                        && asset.source_unit_rawcode.as_deref() == Some(source)
-                        && asset.role == visual["role"].as_str().unwrap()
-                        && asset.model_path == visual["path"].as_str().unwrap()
-                })
-                .count();
-            assert_eq!(matches, 1);
+        for (key, visuals) in [
+            ("ceremonial", "ceremonial_cast_visuals"),
+            ("enchantment", "enchantment_cast_visuals"),
+        ] {
+            let row = &projection[key];
+            let parent = row["ability_rawcode"].as_str().unwrap();
+            let source = row["building_rawcode"].as_str().unwrap();
+            for visual in projection[visuals].as_array().unwrap() {
+                let matches = catalog
+                    .assets
+                    .iter()
+                    .filter(|asset| {
+                        asset.owner_rawcode == parent
+                            && asset.source_unit_rawcode.as_deref() == Some(source)
+                            && asset.role == visual["role"].as_str().unwrap()
+                            && asset.model_path == visual["path"].as_str().unwrap()
+                    })
+                    .count();
+                assert_eq!(matches, 1);
+            }
         }
     }
 

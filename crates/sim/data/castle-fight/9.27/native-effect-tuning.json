@@ -3,6 +3,167 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0DV",
+      "unit_rawcode": "h060",
+      "spellcasting": {
+        "mana": {
+          "maximum": 12,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093682262,
+          "mana_cost": 11,
+          "cooldown_ticks": 30,
+          "range": 102398976,
+          "target_policy": "NativeBuildingSpellTrigger",
+          "effect": {
+            "BuildingEnchantment": {
+              "map_version": {
+                "major": 9,
+                "minor": 27
+              },
+              "trigger_targets": 6,
+              "trigger_invulnerable": true,
+              "trigger_spell_immune": false,
+              "heal_if_missing_hp_gt": 350,
+              "heal_amount": 450,
+              "retry_marker": 1093682740,
+              "dispatcher": 1093677905,
+              "dispatcher_option_index": 2,
+              "options": [
+                {
+                  "ability": 1093682231,
+                  "effect": {
+                    "Speed": {
+                      "attack": 70,
+                      "movement": 15,
+                      "buff_rawcode": 1110454850
+                    }
+                  }
+                },
+                {
+                  "ability": 1093682739,
+                  "effect": {
+                    "SpellBookArmor": {
+                      "bonus_per_100": 1500,
+                      "child": 1093682230,
+                      "badge": 1093682738
+                    }
+                  }
+                },
+                {
+                  "ability": 1093682737,
+                  "effect": {
+                    "SourceDamageSplash": {
+                      "dispatcher": 1093677905,
+                      "damage_per_10k": 5000,
+                      "radius": 256000
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": null,
+      "dependencies": [
+        "A0D7",
+        "A0F3",
+        "A0F1",
+        "A0F4"
+      ],
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/building-spell-mechanics.tsv",
+        "functions": "holyShrineSpell,holyPick,isHolyShrineTarget,handleSourceDamageEffects,cleaveHitsTarget"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A03Q",
+      "unit_rawcode": "h034",
+      "kind": "source-damage-dispatcher",
+      "ability": 1093677905
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A0D7",
+      "kind": "native-enchantment-grant",
+      "grant": {
+        "ability": 1093682231,
+        "effect": {
+          "Speed": {
+            "attack": 70,
+            "movement": 15,
+            "buff_rawcode": 1110454850
+          }
+        }
+      },
+      "dependencies": []
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A0F3",
+      "kind": "native-enchantment-grant",
+      "grant": {
+        "ability": 1093682739,
+        "effect": {
+          "SpellBookArmor": {
+            "bonus_per_100": 1500,
+            "child": 1093682230,
+            "badge": 1093682738
+          }
+        }
+      },
+      "dependencies": [
+        "A0D6",
+        "A0F2"
+      ]
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A0F1",
+      "kind": "native-enchantment-grant",
+      "grant": {
+        "ability": 1093682737,
+        "effect": {
+          "SourceDamageSplash": {
+            "dispatcher": 1093677905,
+            "damage_per_10k": 5000,
+            "radius": 256000
+          }
+        }
+      },
+      "dependencies": []
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A0D6",
+      "kind": "native-enchantment-grant",
+      "grant": {
+        "ability": 1093682230,
+        "effect": {
+          "Armor": 1500
+        }
+      },
+      "dependencies": []
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A0F2",
+      "kind": "native-enchantment-grant",
+      "grant": {
+        "ability": 1093682738,
+        "effect": "AuraMarker"
+      },
+      "dependencies": []
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A0EK",
       "unit_rawcode": "h062",

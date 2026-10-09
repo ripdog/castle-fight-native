@@ -37,6 +37,7 @@ def build(map_version='9.27', revision='r1'):
     stasis = next(r for r in building_rows if r['building_rawcode'] == 'h07X')
     healing = next(r for r in building_rows if r['building_rawcode'] == 'h07Y')
     endurance = next(r for r in building_rows if r['building_rawcode'] == 'h07Z')
+    enchantment = next(r for r in building_rows if r['building_rawcode'] == 'h060')
     grant_params = json.loads(ceremonial['parameters_json'])
     grant_codes = [value.to_bytes(4, 'big').decode() for value in grant_params['always_ability_ids']
                    + [value for option in grant_params['option_ability_ids'] for value in option]]
@@ -71,7 +72,7 @@ def build(map_version='9.27', revision='r1'):
                      'CallbackSingle_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_ReengageRuntime',
                      'CallbackSingle_doAfter_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_doAfter_ReengageRuntime',
                      *snow['source_functions'].split(','), *serpent['source_functions'].split(','), *ceremonial['source_functions'].split(','),
-                     *stasis['source_functions'].split(','), 'dummyCastPointFrom',
+                     *stasis['source_functions'].split(','), *enchantment['source_functions'].split(','), 'dummyCastPointFrom',
                      *healing['source_functions'].split(','), *endurance['source_functions'].split(','), 'dummyCarrierWithAbility', 'createSpellCarrier', 'QL', 'iD', 'hD',
                      'CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities1',
                      'CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities2',
@@ -104,6 +105,15 @@ def build(map_version='9.27', revision='r1'):
     ceremonial_visuals = [
         {'role': 'target', 'path': json.loads('"' + target_art[1] + '"'), 'attachment': target_art[2]},
         {'role': 'caster', 'path': json.loads('"' + source_art[1] + '"')},
+    ]
+    enchantment_source = traces['holyShrineSpell']['source']
+    enchantment_target_art = re.search(r'addEffect1\("(.*?)",\w+,"(.*?)"\)', enchantment_source)
+    enchantment_source_art = re.search(r'addEffect\("(.*?)",unit_getPos\(\w+\)\)', enchantment_source)
+    if not enchantment_target_art or not enchantment_source_art:
+        raise ValueError('enchantment source/recipient art must retain literal calls')
+    enchantment_visuals = [
+        {'role': 'target', 'path': json.loads('"' + enchantment_target_art[1] + '"'), 'attachment': enchantment_target_art[2]},
+        {'role': 'caster', 'path': json.loads('"' + enchantment_source_art[1] + '"')},
     ]
     limit_source = traces['CallbackSingle_doAfter_StasisTrap_call_doAfter_StasisTrap']['source']
     limits = {int(code).to_bytes(4, 'big').decode(): int(limit)
@@ -170,6 +180,7 @@ def build(map_version='9.27', revision='r1'):
                                 'duration': re.search(r'doAfter\((\d+\.\d+),', traces['issueFrostLauncherOrder']['source']).group(1)}, 'protected': protected,
             'overheat_explosions': overheat_explosions,
             'ceremonial': ceremonial, 'ceremonial_retry_marker': retry_marker, 'ceremonial_cast_visuals': ceremonial_visuals,
+            'enchantment': enchantment, 'enchantment_cast_visuals': enchantment_visuals,
             'stasis': stasis, 'stasis_control': stasis_control, 'building_type_limits': limits,
             'healing': healing, 'healing_control': aura_controls['healing'],
             'endurance': endurance, 'endurance_control': aura_controls['endurance'],

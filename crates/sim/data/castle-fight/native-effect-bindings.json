@@ -1,6 +1,13 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind": "unit-ability", "source_key": "A0DV", "implementation": "warcraft-scripted-automatic-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Retained Elemental enchantment inventory and permanent native payload."},
+    {"source_kind": "ability-effect", "source_key": "A0D7", "implementation": "warcraft-permanent-ability-grants-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Retained Elemental enchantment inventory and permanent native payload."},
+    {"source_kind": "ability-effect", "source_key": "A0F3", "implementation": "warcraft-permanent-ability-grants-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Retained Elemental enchantment inventory and permanent native payload."},
+    {"source_kind": "ability-effect", "source_key": "A0F1", "implementation": "warcraft-permanent-ability-grants-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Retained Elemental enchantment inventory and permanent native payload."},
+    {"source_kind": "ability-effect", "source_key": "A0D6", "implementation": "warcraft-permanent-ability-grants-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Retained Elemental enchantment inventory and permanent native payload."},
+    {"source_kind": "ability-effect", "source_key": "A0F2", "implementation": "warcraft-permanent-ability-grants-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Retained Elemental enchantment inventory and permanent native payload."},
+    {"source_kind": "ability-effect", "source_key": "A0F4", "implementation": "warcraft-marker-only-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Retained Elemental enchantment inventory and permanent native payload."},
     {"source_kind": "unit-ability", "source_key": "A0EK", "implementation": "warcraft-building-improvement-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "ability-effect", "source_key": "A0EL", "implementation": "warcraft-building-improvement-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "unit-ability", "source_key": "A0CP", "implementation": "warcraft-pulverize-v1", "valid_from": "9.27", "valid_through": "9.27"},
@@ -32,7 +39,7 @@
     {"source_kind":"unit-ability","source_key":"A0FI","implementation":"warcraft-spell-resistance-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Water spell-resistance from retained resolved fields."},
     {"source_kind":"unit-ability","source_key":"A0CS","implementation":"warcraft-evasion-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Lesser Water evasion from retained resolved fields."},
     {"source_kind":"unit-ability","source_key":"A0FH","implementation":"warcraft-spell-resistance-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Lesser Water spell-resistance from retained resolved fields."},
-    {"source_kind": "unit-ability", "source_key": "A03Q", "implementation": "warcraft-marker-only-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Hidden zero-visibility Channel source-damage dispatcher marker; only bodies with an audited source controller execute its damage callback."},
+    {"source_kind": "unit-ability", "source_key": "A03Q", "implementation": "warcraft-source-damage-dispatcher-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Hidden zero-visibility Channel source-damage dispatcher marker; only bodies with an audited source controller execute its damage callback."},
     {"source_kind":"unit-ability","source_key":"A0C5","implementation":"warcraft-script-damage-controller-v1","valid_from":"9.27","valid_through":"9.27","notes":"Unit-scoped native target damage controllers; Wind converts reduced damage to mana and enables native self-destruct autocasting."},
     {"source_kind":"ability-effect","source_key":"A0EN","implementation":"warcraft-self-destruct-v1","valid_from":"9.27","valid_through":"9.27","notes":"Script-granted Asds contact autocast, armor-point damage falloff and caster death; death flag is corpse appearance only."},
     {"source_kind":"unit-ability","source_key":"A0E6","implementation":"warcraft-sphere-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native three-attachment Sphere, independent visual flights and protected restore cooldown."},

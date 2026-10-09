@@ -17,6 +17,38 @@ pub(super) fn timed_armor_effect_active(
         })
 }
 
+pub(super) fn ability_damage_for_unit(
+    target: &UnitSnapshot,
+    effect: AbilityEffect,
+    tick: u64,
+    rules: DamageRules,
+) -> Option<i32> {
+    let amount = match effect {
+        AbilityEffect::Damage { amount } | AbilityEffect::AreaDamage { amount, .. } => amount,
+        AbilityEffect::FrostNova {
+            area_damage,
+            targets,
+            ..
+        }
+        | AbilityEffect::AreaStun {
+            damage: area_damage,
+            targets,
+            ..
+        } if !target.classifications.invulnerable
+            && !target.classifications.spell_immune
+            && targets.can_target_unit(target.target_movement_class()) =>
+        {
+            area_damage
+        }
+        _ => return None,
+    };
+    Some(spell_damage_after_defend(
+        *target,
+        rules.apply_spell(amount, target.armor.armor_type),
+        tick,
+    ))
+}
+
 pub(super) fn apply_ability_effect_to_unit(
     target: &mut UnitSnapshot,
     effect: AbilityEffect,
@@ -60,10 +92,10 @@ pub(super) fn apply_ability_effect_to_unit(
                 },
             );
         }
-        AbilityEffect::Damage { amount } => {
-            let adjusted = damage_rules.apply_spell(amount, target.armor.armor_type);
-            let adjusted = spell_damage_after_defend(*target, adjusted, completed_tick);
-            let event_damage = adjusted;
+        AbilityEffect::Damage { .. } => {
+            let event_damage =
+                ability_damage_for_unit(target, effect, completed_tick, damage_rules)
+                    .expect("damage effect");
             super::damage_thresholds::observe_damage_event(target, target.health, event_damage);
             target.health = target
                 .health
@@ -94,7 +126,7 @@ pub(super) fn apply_ability_effect_to_unit(
         }
         AbilityEffect::FrostNova {
             ability,
-            area_damage,
+            area_damage: _,
             duration_ticks,
             hero_duration_ticks,
             movement_percent_delta,
@@ -108,9 +140,9 @@ pub(super) fn apply_ability_effect_to_unit(
             {
                 return false;
             }
-            let damage = damage_rules.apply_spell(area_damage, target.armor.armor_type);
-            let damage = spell_damage_after_defend(*target, damage, completed_tick);
-            let event_damage = damage;
+            let event_damage =
+                ability_damage_for_unit(target, effect, completed_tick, damage_rules)
+                    .expect("eligible Nova");
             super::damage_thresholds::observe_damage_event(target, target.health, event_damage);
             target.health = target
                 .health
@@ -167,7 +199,7 @@ pub(super) fn apply_ability_effect_to_unit(
             );
         }
         AbilityEffect::AreaStun {
-            damage,
+            damage: _,
             stun_ticks,
             hero_stun_ticks,
             targets,
@@ -179,9 +211,9 @@ pub(super) fn apply_ability_effect_to_unit(
             {
                 return false;
             }
-            let adjusted = damage_rules.apply_spell(damage, target.armor.armor_type);
-            let adjusted = spell_damage_after_defend(*target, adjusted, completed_tick);
-            let event_damage = adjusted;
+            let event_damage =
+                ability_damage_for_unit(target, effect, completed_tick, damage_rules)
+                    .expect("eligible area stun");
             super::damage_thresholds::observe_damage_event(target, target.health, event_damage);
             target.health = target
                 .health
@@ -198,10 +230,10 @@ pub(super) fn apply_ability_effect_to_unit(
                     .expect("area stun expiry overflow"),
             );
         }
-        AbilityEffect::AreaDamage { amount, .. } => {
-            let adjusted = damage_rules.apply_spell(amount, target.armor.armor_type);
-            let adjusted = spell_damage_after_defend(*target, adjusted, completed_tick);
-            let event_damage = adjusted;
+        AbilityEffect::AreaDamage { .. } => {
+            let event_damage =
+                ability_damage_for_unit(target, effect, completed_tick, damage_rules)
+                    .expect("damage effect");
             super::damage_thresholds::observe_damage_event(target, target.health, event_damage);
             target.health = target
                 .health
@@ -374,6 +406,7 @@ pub(super) fn apply_ability_effect_to_unit(
         | AbilityEffect::WorldFreezer(_)
         | AbilityEffect::BuildingAura(_)
         | AbilityEffect::BuildingStasis(_)
+        | AbilityEffect::BuildingEnchantment(_)
         | AbilityEffect::BuildingPermanentGrant(_)
         | AbilityEffect::BuildingAcidBomb(_)
         | AbilityEffect::BuildingBolt(_)
@@ -626,6 +659,7 @@ pub(super) fn apply_timed_damage_over_time(
             );
             status.damage_over_time.copy_within(index..count, index + 1);
             status.damage_over_time[index] = TimedDamageOverTime {
+                source: None,
                 id: modifier_id,
                 damage_per_pulse,
                 pulse_interval_ticks,
@@ -645,16 +679,21 @@ pub(super) fn resolve_periodic_unit_statuses(
     units: &mut [UnitSnapshot],
     completed_tick: u64,
     damage_rules: DamageRules,
+    retired_sources: &BTreeMap<SimId, super::source_damage_runtime::RetiredDamageSource>,
 ) {
-    for unit in units {
+    for unit_index in 0..units.len() {
+        let unit = &units[unit_index];
         if unit.health <= 0 {
             continue;
         }
         super::native_actions::acid_bomb::resolve_periodic_acid_bomb(
-            unit,
+            units,
+            unit_index,
             completed_tick,
             damage_rules,
+            retired_sources,
         );
+        let unit = &mut units[unit_index];
         let count = usize::from(unit.status.damage_over_time_count);
         debug_assert!(count <= MAX_TIMED_DAMAGE_OVER_TIME);
         let resistance = unit
@@ -672,13 +711,14 @@ pub(super) fn resolve_periodic_unit_statuses(
         let incoming_factor =
             super::native_kill_effects::native_incoming_damage_factor(&unit.status, completed_tick);
         for index in 0..count {
-            let effect = &mut unit.status.damage_over_time[index];
+            let mut effect = units[unit_index].status.damage_over_time[index];
             while completed_tick >= effect.next_pulse_tick
                 && (effect.next_pulse_tick < effect.expires_tick
                     || (effect.final_pulse_at_expiry
                         && effect.next_pulse_tick == effect.expires_tick))
-                && unit.health > 0
+                && units[unit_index].health > 0
             {
+                let unit = &units[unit_index];
                 let adjusted = if unit.classifications.spell_immune
                     || unit.classifications.invulnerable
                 {
@@ -691,15 +731,27 @@ pub(super) fn resolve_periodic_unit_statuses(
                 };
                 let adjusted = spell_damage_taken_per_10k
                     .map_or(adjusted, |factor| scale_damage_per_10k(adjusted, factor));
+                let event_damage = scale_damage_per_10k(
+                    scale_damage_per_10k(adjusted, incoming_factor),
+                    unit.snow_damage_taken_per_10k,
+                );
+                if let Some(source) = effect.source {
+                    super::source_damage_runtime::dispatch_inline(
+                        source,
+                        unit_index,
+                        event_damage,
+                        units,
+                        damage_rules,
+                        completed_tick,
+                        retired_sources,
+                    );
+                }
+                let unit = &mut units[unit_index];
                 super::damage_thresholds::observe_damage_state(
                     unit.passive_effects,
                     &mut unit.status.damage_threshold,
                     unit.health,
                     unit.health_max,
-                );
-                let event_damage = scale_damage_per_10k(
-                    scale_damage_per_10k(adjusted, incoming_factor),
-                    unit.snow_damage_taken_per_10k,
                 );
                 if super::damage_charge::observe_damage_state(
                     &mut unit.status.damage_charge,
@@ -718,8 +770,9 @@ pub(super) fn resolve_periodic_unit_statuses(
                     .checked_add(u64::from(effect.pulse_interval_ticks))
                     .expect("damage-over-time pulse tick overflow");
             }
+            units[unit_index].status.damage_over_time[index] = effect;
         }
-        purge_expired_status_modifiers(&mut unit.status, completed_tick);
+        purge_expired_status_modifiers(&mut units[unit_index].status, completed_tick);
     }
 }
 

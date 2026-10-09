@@ -22,6 +22,24 @@ pub enum NativeAbilityGrantEffect {
         targets: AttackTargetMask,
     },
     ManaRegeneration(u32),
+    Speed {
+        attack: i16,
+        movement: i16,
+        buff_rawcode: u32,
+    },
+    SpellBookArmor {
+        bonus_per_100: i16,
+        child: AbilityId,
+        badge: AbilityId,
+    },
+    SourceDamageSplash {
+        dispatcher: AbilityId,
+        damage_per_10k: u16,
+        radius: i32,
+    },
+    SourceDamageDispatcher {
+        aftershock: Option<HealthScaledAftershockProfile>,
+    },
     AuraMarker,
 }
 
@@ -65,6 +83,35 @@ impl NativeAbilityGrant {
                 ],
             ),
             ManaRegeneration(amount) => (8, [u64::from(amount), 0, 0]),
+            Speed {
+                attack,
+                movement,
+                buff_rawcode,
+            } => (9, [attack as u64, movement as u64, u64::from(buff_rawcode)]),
+            SourceDamageSplash {
+                dispatcher,
+                damage_per_10k,
+                radius,
+            } => (
+                10,
+                [
+                    u64::from(dispatcher.0),
+                    u64::from(damage_per_10k),
+                    radius as u64,
+                ],
+            ),
+            SpellBookArmor {
+                bonus_per_100,
+                child,
+                badge,
+            } => (
+                11,
+                [bonus_per_100 as u64, u64::from(child.0), u64::from(badge.0)],
+            ),
+            SourceDamageDispatcher { aftershock } => (
+                12,
+                aftershock.map_or([0; 3], HealthScaledAftershockProfile::canonical_words),
+            ),
             AuraMarker => (7, [0, 0, 0]),
         };
         [
@@ -125,7 +172,8 @@ impl NativeAbilityGrants {
     }
 
     pub fn contains(&self, ability: AbilityId) -> bool {
-        self.iter().any(|grant| grant.ability == ability)
+        self.iter().any(|grant| grant.ability == ability || matches!(grant.effect,
+            NativeAbilityGrantEffect::SpellBookArmor { child, badge, .. } if ability == child || ability == badge))
     }
 
     /// UnitAddAbility leaves an already installed identity unchanged.
@@ -203,6 +251,9 @@ impl NativeAbilityGrants {
         self.iter()
             .filter_map(|grant| match grant.effect {
                 NativeAbilityGrantEffect::Armor(amount) => Some(i32::from(amount)),
+                NativeAbilityGrantEffect::SpellBookArmor { bonus_per_100, .. } => {
+                    Some(i32::from(bonus_per_100))
+                }
                 _ => None,
             })
             .sum()

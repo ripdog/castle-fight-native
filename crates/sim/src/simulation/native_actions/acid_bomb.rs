@@ -177,7 +177,8 @@ impl Simulation {
         }
         // Missile homing controls flight. The native targeted effect still uses its live recipient.
         let center = units[index].position;
-        for target in units.iter_mut() {
+        for target_index in 0..units.len() {
+            let target = &mut units[target_index];
             if !eligible(target, state.team, state.profile)
                 || (target.id != state.target
                     && center.distance_sq(target.position) > square_i32(state.profile.radius))
@@ -195,32 +196,54 @@ impl Simulation {
                 state.profile.duration_ticks
             };
             target.status.acid_bomb = Some(AcidBombStatus {
+                source: Some(state.source),
                 profile: state.profile,
                 damage_per_pulse: damage,
                 next_pulse_tick: self.next_tick,
                 expires_tick: self.next_tick + u64::from(duration),
             });
-            resolve_periodic_acid_bomb(target, self.next_tick, self.combat_rules.damage_rules);
+            resolve_periodic_acid_bomb(
+                units,
+                target_index,
+                self.next_tick,
+                self.combat_rules.damage_rules,
+                &self.retired_damage_sources,
+            );
         }
     }
 }
 
 pub(in crate::simulation) fn resolve_periodic_acid_bomb(
-    unit: &mut UnitSnapshot,
+    units: &mut [UnitSnapshot],
+    index: usize,
     tick: u64,
     rules: DamageRules,
+    retired_sources: &BTreeMap<SimId, super::super::source_damage_runtime::RetiredDamageSource>,
 ) {
-    let Some(mut acid) = unit.status.acid_bomb else {
+    let Some(mut acid) = units[index].status.acid_bomb else {
         return;
     };
-    while unit.health > 0
+    while units[index].health > 0
         && acid.next_pulse_tick <= tick
         && acid.next_pulse_tick < acid.expires_tick
     {
+        let unit = &units[index];
         if !unit.classifications.invulnerable && !unit.classifications.spell_immune {
             let damage = rules.apply_spell(acid.damage_per_pulse, unit.armor.armor_type);
             let damage = spell_damage_after_defend(*unit, damage, tick);
             let event_damage = damage;
+            if let Some(source) = acid.source {
+                super::super::source_damage_runtime::dispatch_inline(
+                    source,
+                    index,
+                    event_damage,
+                    units,
+                    rules,
+                    tick,
+                    retired_sources,
+                );
+            }
+            let unit = &mut units[index];
             super::super::damage_thresholds::observe_damage_event(unit, unit.health, event_damage);
             unit.health = unit.health.saturating_sub(event_damage);
         }
@@ -229,5 +252,5 @@ pub(in crate::simulation) fn resolve_periodic_acid_bomb(
             .checked_add(u64::from(acid.profile.interval_ticks))
             .expect("acid pulse timeline exhausted");
     }
-    unit.status.acid_bomb = (tick < acid.expires_tick).then_some(acid);
+    units[index].status.acid_bomb = (tick < acid.expires_tick).then_some(acid);
 }

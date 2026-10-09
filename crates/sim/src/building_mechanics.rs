@@ -13,7 +13,9 @@ pub(crate) use aura_carrier::{
     aura_carrier_bindings_for_version, aura_carrier_source_for_version,
     endurance_aura_spellcasting_for_version, healing_aura_spellcasting_for_version,
 };
+mod enchantment;
 mod orc;
+pub use enchantment::BuildingEnchantmentProfile;
 mod stasis;
 pub use stasis::{BuildingStasisProfile, building_type_limit_for_version};
 pub(crate) use stasis::{
@@ -700,6 +702,13 @@ pub(crate) fn holy_aid_life_ability_for_version(version: MapVersion) -> AbilityI
 /// Literal native AddSpecialEffectTarget attachment from the retained cast callback.
 pub fn permanent_grant_target_attachment_for_version(version: MapVersion) -> &'static str {
     evidence(version)["ceremonial_cast_visuals"][0]["attachment"]
+        .as_str()
+        .unwrap()
+}
+
+/// Literal recipient attachment from the Elemental enchantment callback.
+pub fn enchantment_target_attachment_for_version(version: MapVersion) -> &'static str {
+    evidence(version)["enchantment_cast_visuals"][0]["attachment"]
         .as_str()
         .unwrap()
 }

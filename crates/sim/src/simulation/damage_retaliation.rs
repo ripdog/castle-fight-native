@@ -60,7 +60,7 @@ impl Simulation {
         {
             return;
         }
-        self.launch_native_bolt(
+        self.launch_dummy_bolt(
             source.id,
             source.team,
             positions[victim_index],

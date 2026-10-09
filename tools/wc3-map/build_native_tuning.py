@@ -118,6 +118,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
 
     kind = recipe["kind"]
     effect: dict[str, Any] = dict(recipe)
+    if kind in {"building-enchantment", "native-enchantment-grant", "source-damage-dispatcher"}:
+        from project_enchantment import project
+        return project(recipe, fields, unit, protected, mechanics, scaled)
     if kind in {"building-improvement", "building-mana-regeneration"}:
         from project_mana_improvement import project
         return project(recipe, fields, mechanics, scaled)
@@ -685,6 +688,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
     lua = retained("script/war3map.lua")
     functions = {row["name"]: lua[int(row["start_byte_offset"]):int(row["end_byte_offset"])].decode()
         for row in rows(retained("script/function-spans.tsv"))}
+    building_spells = {row["ability_rawcode"]: row for row in rows(retained("resolved/building-spell-mechanics.tsv"))}
     spell_mechanics = {row["ability_rawcode"]: row for row in rows(retained("resolved/unit-spell-mechanics.tsv"))}
     spell_semantics = {row["ability_rawcode"]: row for row in rows(retained("resolved/unit-spell-semantics.tsv"))}
     misc = dict(line.split("=", 1) for line in retained("war3mapMisc.txt").decode().splitlines() if "=" in line and not line.startswith("//"))
@@ -767,6 +771,8 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             detail["improvement_levels"] = ability_levels[child]
         if recipe["kind"] == "building-improvement":
             detail.update(improvement_handler=functions["improveSpecialBuilding"], improvement_cleanup=functions["yK"], improvement_cleanup_registration=re.search(r'_I\[_T\(\d+,"[0-9a-f]+"\)\]=yK',lua.decode()).group(), improvement_death=functions["fJ"], improvement_ui=ability_ui[source], git_tree=tree)
+        if recipe["kind"] in {"building-enchantment", "native-enchantment-grant", "source-damage-dispatcher"}:
+            detail.update(all_fields=abilities, all_bases=ability_bases, functions=functions, building_spell=building_spells.get(source), git_tree=tree, map_version=dict(zip(["major","minor"],map(int,release["map_version"].split(".")))))
         detail["misc"] = misc
         detail["native_base"] = ability_bases[source]
         if spell is not None and recipe["kind"] != "master-projectiles":

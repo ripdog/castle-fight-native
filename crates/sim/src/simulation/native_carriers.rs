@@ -484,6 +484,7 @@ fn cleanse_native_effects(
     status.damage_over_time_count = 0;
     passive_baseline.retain(|effect| {
         let ability = match effect {
+            PassiveUnitEffect::SourceDamageDispatcher(id) => Some(id),
             PassiveUnitEffect::HealthScaledAftershock(p) => Some(p.dispatcher),
             PassiveUnitEffect::DamageRetaliation(p) => Some(p.marker),
             PassiveUnitEffect::LavaSpawn(_) => None,

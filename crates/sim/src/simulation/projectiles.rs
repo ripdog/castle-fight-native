@@ -132,6 +132,18 @@ impl Simulation {
                 .apply_spell(state.next_damage, units[next_index].armor.armor_type);
             let adjusted = spell_damage_after_defend(units[next_index], adjusted, completed_tick);
             let event_damage = adjusted;
+            super::source_damage_runtime::dispatch(
+                state.source,
+                next_index,
+                event_damage,
+                super::source_damage_runtime::SourceDamageState {
+                    units,
+                    health: unit_health,
+                    rules: self.combat_rules.damage_rules,
+                    tick: completed_tick,
+                },
+                &self.retired_damage_sources,
+            );
             super::damage_thresholds::observe_damage_event(
                 &mut units[next_index],
                 unit_health[next_index],
@@ -334,6 +346,7 @@ impl Simulation {
                                     team: snapshot.projectile.source_team,
                                 },
                                 PendingAttackEffectState {
+                                    retired_sources: &self.retired_damage_sources,
                                     navigation_cell_size: self.config.navigation_cell_size,
                                     completed_tick,
                                     units,

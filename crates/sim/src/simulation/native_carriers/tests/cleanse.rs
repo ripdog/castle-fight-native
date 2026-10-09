@@ -60,6 +60,7 @@ fn prepare(simulation: &mut Simulation) -> (SimId, SimId, PassiveUnitEffects, Pa
         .get_mut::<StatusState>(entity(simulation, target))
         .unwrap()
         .acid_bomb = Some(crate::AcidBombStatus {
+        source: None,
         profile: crate::AcidBombProfile {
             ability: AbilityId(9878),
             range: 100,

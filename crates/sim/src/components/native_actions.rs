@@ -42,6 +42,7 @@ impl AcidBombProfile {
 /// One native Acid Bomb family: separate custom buffs cannot multiply its payload.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AcidBombStatus {
+    pub source: Option<SimId>,
     pub profile: AcidBombProfile,
     pub damage_per_pulse: i32,
     pub next_pulse_tick: u64,
@@ -136,6 +137,7 @@ pub struct NativeBoltProfile {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct NativeBoltState {
+    pub damage_source: Option<SimId>,
     pub source: SimId,
     pub team: Team,
     pub target: SimId,

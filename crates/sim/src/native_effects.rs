@@ -29,6 +29,7 @@ const TUNING_9_27_JSON: &str = include_str!("../data/castle-fight/9.27/native-ef
 #[serde(rename_all = "kebab-case")]
 pub enum NativeEffectImplementationId {
     WarcraftBuildingImprovementV1,
+    WarcraftSourceDamageDispatcherV1,
     WarcraftHealthScaledAftershockV1,
     WarcraftDamageRetaliationV1,
     WarcraftForkedLightningV1,
@@ -83,6 +84,7 @@ impl NativeEffectImplementationId {
     pub const fn stable_tag(self) -> u8 {
         match self {
             Self::WarcraftBuildingImprovementV1 => 79,
+            Self::WarcraftSourceDamageDispatcherV1 => 80,
             Self::WarcraftHealthScaledAftershockV1 => 78,
             Self::WarcraftDamageRetaliationV1 => 76,
             Self::WarcraftForkedLightningV1 => 77,
@@ -363,7 +365,7 @@ impl NativeEffectCatalog {
             if let Some(unit_rawcode) = effect.unit_rawcode() {
                 rawcode(unit_rawcode)?;
             }
-            effect.dependency_source()?;
+            effect.dependency_sources()?;
             let source = effect.source()?;
             let implementation = bindings
                 .iter()
@@ -475,8 +477,8 @@ impl NativeEffectCatalog {
                     selected,
                 });
             }
-            if let Some(dependency) = effect
-                .dependency_source()
+            for dependency in effect
+                .dependency_sources()
                 .expect("native-effect dependencies validated at catalog load")
             {
                 self.resolve_requirement(version, tuning, dependency, visiting, resolved)?;
@@ -550,6 +552,18 @@ fn native_buff_from_tuning(tuning: &TuningFile, source: u32) -> Option<crate::Na
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum TuningEffect {
+    NativeEnchantmentGrant {
+        source_kind: String,
+        source_key: String,
+        grant: crate::NativeAbilityGrant,
+        dependencies: Vec<String>,
+    },
+    SourceDamageDispatcher {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        ability: crate::AbilityId,
+    },
     BuildingImprovement {
         source_kind: String,
         source_key: String,
@@ -684,6 +698,8 @@ enum TuningEffect {
     ScriptedAutomatic {
         #[serde(default)]
         master_profile: Option<Box<crate::MasterProjectileProfile>>,
+        #[serde(default)]
+        dependencies: Vec<String>,
         source_kind: String,
         source_key: String,
         unit_rawcode: String,
@@ -864,7 +880,26 @@ impl TuningEffect {
         Ok(NativeEffectSource::new(kind, rawcode(self.source_key())?))
     }
 
-    fn dependency_source(&self) -> Result<Option<NativeEffectSource>, String> {
+    fn dependency_sources(&self) -> Result<Vec<NativeEffectSource>, String> {
+        let mut result = Vec::new();
+        if let Self::ScriptedAutomatic { dependencies, .. }
+        | Self::NativeEnchantmentGrant { dependencies, .. } = self
+        {
+            for code in dependencies {
+                result.push(NativeEffectSource::new(
+                    NativeEffectSourceKind::AbilityEffect,
+                    rawcode(code)?,
+                ));
+            }
+        }
+        if let Self::ScriptedAutomatic { spellcasting, .. } = self
+            && let crate::AbilityEffect::BuildingEnchantment(p) = spellcasting.ability.effect
+        {
+            result.push(NativeEffectSource::new(
+                NativeEffectSourceKind::UnitAbility,
+                p.dispatcher.0,
+            ));
+        }
         let effect_ability_rawcode = match self {
             Self::BuildingImprovement {
                 effect_ability_rawcode,
@@ -890,17 +925,20 @@ impl TuningEffect {
                 effect_ability_rawcode: Some(effect),
                 ..
             } => effect,
-            _ => return Ok(None),
+            _ => return Ok(result),
         };
-        Ok(Some(NativeEffectSource::new(
+        result.push(NativeEffectSource::new(
             NativeEffectSourceKind::AbilityEffect,
             rawcode(effect_ability_rawcode)?,
-        )))
+        ));
+        Ok(result)
     }
 
     fn source_kind(&self) -> &str {
         match self {
-            Self::BuildingImprovement { source_kind, .. }
+            Self::SourceDamageDispatcher { source_kind, .. }
+            | Self::NativeEnchantmentGrant { source_kind, .. }
+            | Self::BuildingImprovement { source_kind, .. }
             | Self::BuildingManaRegeneration { source_kind, .. }
             | Self::HealthScaledAftershock { source_kind, .. }
             | Self::DamageRetaliation { source_kind, .. }
@@ -939,7 +977,9 @@ impl TuningEffect {
 
     fn source_key(&self) -> &str {
         match self {
-            Self::BuildingImprovement { source_key, .. }
+            Self::SourceDamageDispatcher { source_key, .. }
+            | Self::NativeEnchantmentGrant { source_key, .. }
+            | Self::BuildingImprovement { source_key, .. }
             | Self::BuildingManaRegeneration { source_key, .. }
             | Self::HealthScaledAftershock { source_key, .. }
             | Self::DamageRetaliation { source_key, .. }
@@ -978,7 +1018,8 @@ impl TuningEffect {
 
     fn unit_rawcode(&self) -> Option<&str> {
         match self {
-            Self::BuildingImprovement { unit_rawcode, .. }
+            Self::SourceDamageDispatcher { unit_rawcode, .. }
+            | Self::BuildingImprovement { unit_rawcode, .. }
             | Self::HealthScaledAftershock { unit_rawcode, .. }
             | Self::DamageRetaliation { unit_rawcode, .. }
             | Self::LavaSpawn { unit_rawcode, .. }
@@ -1005,7 +1046,8 @@ impl TuningEffect {
             | Self::OrbSpellProc { unit_rawcode, .. }
             | Self::BurningOil { unit_rawcode, .. }
             | Self::FrostArmor { unit_rawcode, .. } => Some(unit_rawcode),
-            Self::BuildingManaRegeneration { .. }
+            Self::NativeEnchantmentGrant { .. }
+            | Self::BuildingManaRegeneration { .. }
             | Self::RetaliationProjectile { .. }
             | Self::ForkedLightning { .. }
             | Self::ConeWave { .. }
@@ -1017,6 +1059,12 @@ impl TuningEffect {
 
     const fn expected_implementation(&self) -> NativeEffectImplementationId {
         match self {
+            Self::NativeEnchantmentGrant { .. } => {
+                NativeEffectImplementationId::WarcraftPermanentAbilityGrantsV1
+            }
+            Self::SourceDamageDispatcher { .. } => {
+                NativeEffectImplementationId::WarcraftSourceDamageDispatcherV1
+            }
             Self::ElvenAutomatic { .. } => NativeEffectImplementationId::WarcraftElvenAutomaticV1,
             Self::ScriptedAutomatic { .. } => {
                 NativeEffectImplementationId::WarcraftScriptedAutomaticV1
@@ -1064,6 +1112,8 @@ impl TuningEffect {
 
     const fn kind_name(&self) -> &'static str {
         match self {
+            Self::NativeEnchantmentGrant { .. } => "native-enchantment-grant",
+            Self::SourceDamageDispatcher { .. } => "source-damage-dispatcher",
             Self::ElvenAutomatic { .. } => "elven-automatic",
             Self::ScriptedAutomatic { .. } => "scripted-automatic",
             Self::SpellResistance { .. } => "spell-resistance",
@@ -1253,7 +1303,7 @@ fn native_unit_mechanics_from_tuning(
                         automatic_spell = Some(candidate);
                     }
                 }
-                TuningEffect::HealthScaledAftershock { .. } | TuningEffect::DamageRetaliation { .. } | TuningEffect::LavaSpawn { .. } | TuningEffect::MirrorImage { .. }
+                TuningEffect::SourceDamageDispatcher { .. } | TuningEffect::HealthScaledAftershock { .. } | TuningEffect::DamageRetaliation { .. } | TuningEffect::LavaSpawn { .. } | TuningEffect::MirrorImage { .. }
                 | TuningEffect::DamageCharge { .. }
                 | TuningEffect::Poison { .. }
                 | TuningEffect::KillBerserk { .. }
@@ -1284,7 +1334,7 @@ fn native_unit_mechanics_from_tuning(
                         passive = Some(candidate);
                     }
                 }
-                TuningEffect::BuildingManaRegeneration { .. } | TuningEffect::RetaliationProjectile { .. } | TuningEffect::ForkedLightning { .. }
+                TuningEffect::NativeEnchantmentGrant { .. } | TuningEffect::BuildingManaRegeneration { .. } | TuningEffect::RetaliationProjectile { .. } | TuningEffect::ForkedLightning { .. }
                 | TuningEffect::SelfDestruct { .. }
                 | TuningEffect::DamageThreshold { .. }
                 | TuningEffect::ConeWave { .. }
@@ -1382,6 +1432,9 @@ pub fn native_effect_implementation_for(
 
 fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUnitEffect {
     match effect {
+        TuningEffect::SourceDamageDispatcher { ability, .. } => {
+            PassiveUnitEffect::SourceDamageDispatcher(*ability)
+        }
         TuningEffect::DamageRetaliation {
             profile,
             effect_ability_rawcode,
@@ -1730,7 +1783,8 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             target_ground_units: *target_ground_units,
             target_buildings: *target_buildings,
         }),
-        TuningEffect::BuildingImprovement { .. }
+        TuningEffect::NativeEnchantmentGrant { .. }
+        | TuningEffect::BuildingImprovement { .. }
         | TuningEffect::BuildingManaRegeneration { .. }
         | TuningEffect::ConeWave { .. }
         | TuningEffect::SelfDestruct { .. }
@@ -1811,6 +1865,15 @@ fn build_spellcasting(tuning: &TuningFile, effect: &TuningEffect) -> Spellcastin
             (1 << 31) | *mana_regen_per_second_per_10k,
             "generated automatic profile must retain its exact per-second rate unit"
         );
+        if let crate::AbilityEffect::BuildingEnchantment(p) = spellcasting.ability.effect {
+            for expected in p.options {
+                assert!(
+                    tuning.effects.iter().any(|child| matches!(child,
+                    TuningEffect::NativeEnchantmentGrant { grant, .. } if *grant == expected)),
+                    "generated enchantment option must match its retained native child"
+                );
+            }
+        }
         let mut profile = *spellcasting;
         profile.mana = ManaProfile::per_second(
             profile.mana.maximum,
@@ -2056,6 +2119,24 @@ pub fn building_improvement_for_version(
             } else {
                 None
             }
+        })
+}
+
+pub(crate) fn aftershock_for_version(
+    version: MapVersion,
+    body: u32,
+) -> Option<crate::HealthScaledAftershockProfile> {
+    catalog()
+        .tuning(version)?
+        .effects
+        .iter()
+        .find_map(|e| match e {
+            TuningEffect::HealthScaledAftershock {
+                unit_rawcode,
+                profile,
+                ..
+            } if rawcode(unit_rawcode).ok() == Some(body) => Some(*profile),
+            _ => None,
         })
 }
 

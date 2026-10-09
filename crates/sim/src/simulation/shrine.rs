@@ -300,6 +300,7 @@ impl Simulation {
                 })
                 .collect();
             originals.sort_unstable_by_key(|(id, _)| *id);
+            self.retired_damage_sources.remove(&pending.source_unit);
             for (_, original) in originals {
                 self.world.despawn(original);
             }

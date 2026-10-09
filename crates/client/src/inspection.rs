@@ -2244,14 +2244,32 @@ fn active_effect_badges(
                 "Demolish: {}× structure damage",
                 f32::from(multiplier_per_10k) / 10_000.0
             ),
+            Speed { .. } => continue,
+            SpellBookArmor { bonus_per_100, .. } => {
+                format!("Permanent armor {:+}", f32::from(bonus_per_100) / 100.0)
+            }
+            SourceDamageSplash {
+                damage_per_10k,
+                radius,
+                ..
+            } => format!(
+                "Forge Weapon: {}% splash within {} range",
+                f32::from(damage_per_10k) / 100.0,
+                radius / castle_fight_sim::SUBUNITS_PER_WORLD_UNIT
+            ),
+            SourceDamageDispatcher { .. } => continue,
             ManaRegeneration(rate) => format!("Mana regeneration +{:.2}/s", rate as f64 / 10_000.0),
             AuraMarker => continue,
         };
         effects.push(ActiveEffectBadgeData {
-            icon: castle_fight_sim::building_mechanics::permanent_grant_badge_for_version(
-                catalog.map_version,
-                grant.ability,
-            )
+            icon: match grant.effect {
+                SpellBookArmor { badge, .. } => Some(badge),
+                SourceDamageSplash { .. } => Some(grant.ability),
+                _ => castle_fight_sim::building_mechanics::permanent_grant_badge_for_version(
+                    catalog.map_version,
+                    grant.ability,
+                ),
+            }
             .map_or_else(
                 || UiIconKey::ability(grant.ability.0, UiIconRole::Normal),
                 |marker| UiIconKey::StatusEffect {

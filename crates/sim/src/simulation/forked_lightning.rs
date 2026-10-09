@@ -88,6 +88,18 @@ pub(super) fn resolve(
                     .apply_spell(profile.damage, state.units[i].armor.armor_type);
                 let damage =
                     spell_damage_after_defend(state.units[i], damage, state.completed_tick);
+                super::source_damage_runtime::dispatch(
+                    source.id,
+                    i,
+                    damage,
+                    super::source_damage_runtime::SourceDamageState {
+                        units: state.units,
+                        health: state.unit_health,
+                        rules: state.damage_rules,
+                        tick: state.completed_tick,
+                    },
+                    state.retired_sources,
+                );
                 damage_thresholds::observe_damage_event(
                     &mut state.units[i],
                     state.unit_health[i],

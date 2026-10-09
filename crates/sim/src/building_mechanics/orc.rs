@@ -152,10 +152,6 @@ pub(crate) fn ceremonial_bindings_for_version(
                 )
             }),
     )
-    .chain(std::iter::once((
-        crate::NativeEffectSourceKind::AbilityEffect,
-        profile.retry_marker.0,
-    )))
     .map(|(kind, key)| crate::ResolvedNativeEffectBinding {
         source: crate::NativeEffectSource::new(kind, key),
         implementation: crate::NativeEffectImplementationId::WarcraftPermanentAbilityGrantsV1,
@@ -175,7 +171,7 @@ pub(crate) fn ceremonial_source_for_version(
         UnitAbility => source.key == u32::from_be_bytes(*b"A039"),
         AbilityEffect => [
             *b"A03B", *b"A03A", *b"A03D", *b"A08L", *b"A05I", *b"A06W", *b"A08M", *b"A06Y",
-            *b"A08R", *b"A06X", *b"A0F1",
+            *b"A08R", *b"A06X",
         ]
         .into_iter()
         .any(|code| source.key == u32::from_be_bytes(code)),

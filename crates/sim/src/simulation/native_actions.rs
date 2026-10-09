@@ -85,10 +85,42 @@ impl Simulation {
         destination: SimPoint,
         profile: NativeBoltProfile,
     ) {
+        self.launch_bolt(
+            (source, Some(source)),
+            team,
+            origin,
+            target,
+            destination,
+            profile,
+        );
+    }
+
+    pub(super) fn launch_dummy_bolt(
+        &mut self,
+        source: SimId,
+        team: Team,
+        origin: SimPoint,
+        target: SimId,
+        destination: SimPoint,
+        profile: NativeBoltProfile,
+    ) {
+        self.launch_bolt((source, None), team, origin, target, destination, profile);
+    }
+
+    fn launch_bolt(
+        &mut self,
+        (source, damage_source): (SimId, Option<SimId>),
+        team: Team,
+        origin: SimPoint,
+        target: SimId,
+        destination: SimPoint,
+        profile: NativeBoltProfile,
+    ) {
         let id = self.allocate_id();
         self.world.spawn((
             id,
             NativeAction::Bolt(NativeBoltState {
+                damage_source,
                 source,
                 team,
                 target,
@@ -206,6 +238,18 @@ impl Simulation {
                             .apply_spell(profile.damage, target.armor.armor_type);
                         let damage = spell_damage_after_defend(*target, damage, self.next_tick);
                         let event_damage = damage;
+                        if let Some(source) = state.damage_source {
+                            super::source_damage_runtime::dispatch_inline(
+                                source,
+                                index,
+                                event_damage,
+                                units,
+                                self.combat_rules.damage_rules,
+                                self.next_tick,
+                                &self.retired_damage_sources,
+                            );
+                        }
+                        let target = &mut units[index];
                         super::damage_thresholds::observe_damage_event(
                             target,
                             target.health,
@@ -233,6 +277,7 @@ impl Simulation {
                             if profile.duration_ticks > 0 {
                                 apply_native_fire_damage_over_time(
                                     &mut target.status,
+                                    state.damage_source,
                                     ModifierId(profile.ability.0),
                                     profile.damage_per_second,
                                     CASTLE_FIGHT_SIMULATION_HZ as u16,
@@ -268,6 +313,7 @@ impl Simulation {
                             if target.health > 0 && profile.duration_ticks > 0 {
                                 apply_native_fire_damage_over_time(
                                     target.status.get_or_insert_default(),
+                                    state.damage_source,
                                     ModifierId(profile.ability.0),
                                     profile.damage_per_second,
                                     CASTLE_FIGHT_SIMULATION_HZ as u16,
@@ -405,6 +451,7 @@ pub(super) fn cleanse_native_status(status: &mut StatusState) {
 
 fn apply_native_fire_damage_over_time(
     status: &mut StatusState,
+    source: Option<SimId>,
     id: ModifierId,
     damage: i32,
     interval: u16,
@@ -416,6 +463,7 @@ fn apply_native_fire_damage_over_time(
         .iter_mut()
         .find(|effect| effect.id == id)
     {
+        effect.source = source;
         effect.final_pulse_at_expiry = true;
     }
 }

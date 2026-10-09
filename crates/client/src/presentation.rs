@@ -3494,6 +3494,7 @@ fn prewarm_timed_wc3_effects(
                         | AbilityEffect::Hailstone(_)
                         | AbilityEffect::BuildingAura(_)
                         | AbilityEffect::BuildingStasis(_)
+                        | AbilityEffect::BuildingEnchantment(_)
                         | AbilityEffect::BuildingPermanentGrant(_)
                         | AbilityEffect::BuildingAcidBomb(_)
                         | AbilityEffect::BuildingBolt(_)
@@ -4430,12 +4431,18 @@ fn sync_render_entities(
             let Some(position) = position else {
                 continue;
             };
-            let attachment = if let AbilityEffect::BuildingPermanentGrant(profile) = cast.effect
+            let target_attachment = match cast.effect {
+                AbilityEffect::BuildingPermanentGrant(profile) => Some(castle_fight_sim::building_mechanics::permanent_grant_target_attachment_for_version(profile.map_version)),
+                AbilityEffect::BuildingEnchantment(profile) => Some(castle_fight_sim::building_mechanics::enchantment_target_attachment_for_version(profile.map_version)),
+                _ => None,
+            };
+            let attachment = if let Some(point) = target_attachment
                 && visual.anchor == Wc3AbilityVisualAnchor::Target
                 && let AbilityCastTarget::Unit(target) = cast.target
             {
-                imported_roots.iter().find_map(|(entity, root)| (root.sim_id == target).then_some((entity,
-                    castle_fight_sim::building_mechanics::permanent_grant_target_attachment_for_version(profile.map_version))))
+                imported_roots
+                    .iter()
+                    .find_map(|(entity, root)| (root.sim_id == target).then_some((entity, point)))
             } else {
                 None
             };
@@ -5767,6 +5774,19 @@ fn status_modifier_visible(
                 }))
 }
 
+fn permanent_grant_status_visual(
+    grant: castle_fight_sim::NativeAbilityGrant,
+) -> Option<(u32, Wc3StatusVisualKind)> {
+    use castle_fight_sim::NativeAbilityGrantEffect::*;
+    match grant.effect {
+        AuraMarker | SourceDamageSplash { .. } => {
+            Some((grant.ability.0, Wc3StatusVisualKind::Movement))
+        }
+        SpellBookArmor { badge, .. } => Some((badge.0, Wc3StatusVisualKind::Movement)),
+        _ => None,
+    }
+}
+
 fn status_visual_sources(
     status: &castle_fight_sim::StatusState,
     tick: u64,
@@ -5787,13 +5807,7 @@ fn status_visual_sources(
             status
                 .native_grants
                 .iter()
-                .filter(|grant| {
-                    matches!(
-                        grant.effect,
-                        castle_fight_sim::NativeAbilityGrantEffect::AuraMarker
-                    )
-                })
-                .map(|grant| (grant.ability.0, Wc3StatusVisualKind::Movement)),
+                .filter_map(permanent_grant_status_visual),
         )
         .chain(
             status
@@ -5862,6 +5876,14 @@ fn status_visual_is_active(
     ability_rawcode: u32,
     kind: Wc3StatusVisualKind,
 ) -> bool {
+    if status
+        .native_grants
+        .iter()
+        .filter_map(permanent_grant_status_visual)
+        .any(|visual| visual == (ability_rawcode, kind))
+    {
+        return true;
+    }
     match kind {
         Wc3StatusVisualKind::AuraCarrier => false,
         Wc3StatusVisualKind::Stun => {
@@ -5877,15 +5899,6 @@ fn status_visual_is_active(
                     .is_some_and(|a| a.0 == ability_rawcode)
         }
         Wc3StatusVisualKind::Movement => {
-            if status.native_grants.iter().any(|grant| {
-                grant.ability.0 == ability_rawcode
-                    && matches!(
-                        grant.effect,
-                        castle_fight_sim::NativeAbilityGrantEffect::AuraMarker
-                    )
-            }) {
-                return true;
-            }
             if status.ensnare.is_some_and(|net| {
                 net.profile.ability.0 == ability_rawcode && tick < net.expires_tick
             }) {
@@ -8811,15 +8824,41 @@ mod tests {
                     ability: AbilityId(124),
                     effect: NativeAbilityGrantEffect::AttackDamage(7),
                 },
+                NativeAbilityGrant {
+                    ability: AbilityId(125),
+                    effect: NativeAbilityGrantEffect::Speed {
+                        attack: 10,
+                        movement: 20,
+                        buff_rawcode: 131,
+                    },
+                },
+                NativeAbilityGrant {
+                    ability: AbilityId(126),
+                    effect: NativeAbilityGrantEffect::SourceDamageSplash {
+                        dispatcher: AbilityId(130),
+                        damage_per_10k: 5000,
+                        radius: 10,
+                    },
+                },
+                NativeAbilityGrant {
+                    ability: AbilityId(127),
+                    effect: NativeAbilityGrantEffect::SpellBookArmor {
+                        bonus_per_100: 300,
+                        child: AbilityId(128),
+                        badge: AbilityId(129),
+                    },
+                },
             ]),
             ..Default::default()
         };
         let kind = Wc3StatusVisualKind::Movement;
         assert_eq!(
             status_visual_sources(&status, 100_000).collect::<Vec<_>>(),
-            [(123, kind)]
+            [(123, kind), (126, kind), (129, kind)]
         );
-        assert!(status_visual_is_active(&status, 100_000, 123, kind));
+        for ability in [123, 126, 129] {
+            assert!(status_visual_is_active(&status, 100_000, ability, kind));
+        }
         assert!(!status_visual_is_active(&status, 100_000, 124, kind));
         status.native_grants = NativeAbilityGrants::default();
         assert!(status_visual_sources(&status, 100_000).next().is_none());
@@ -8831,6 +8870,7 @@ mod tests {
         use castle_fight_sim::{AbilityId, AcidBombProfile, AcidBombStatus, StatusState};
         let mut status = StatusState {
             acid_bomb: Some(AcidBombStatus {
+                source: None,
                 profile: AcidBombProfile {
                     ability: AbilityId(123),
                     range: 100,

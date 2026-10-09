@@ -1154,28 +1154,30 @@ fn append_building_script_visuals(
             });
         }
     }
-    let ceremonial = &data["ceremonial"];
-    let parent = ceremonial["ability_rawcode"]
-        .as_str()
-        .ok_or("grant parent identity")?;
-    let building = ceremonial["building_rawcode"]
-        .as_str()
-        .ok_or("grant source identity")?;
-    for visual in data["ceremonial_cast_visuals"]
-        .as_array()
-        .ok_or("grant cast art")?
-    {
-        visuals.assets.push(VisualAssetSpec {
-            owner_kind: "abilities".to_owned(),
-            owner_rawcode: parent.to_owned(),
-            source_unit_rawcode: Some(building.to_owned()),
-            role: visual["role"].as_str().ok_or("grant art role")?.to_owned(),
-            model_path: visual["path"]
-                .as_str()
-                .ok_or("grant model path")?
-                .to_owned(),
-            missile_arc: None,
-        });
+    for (row, visual_key) in [
+        ("ceremonial", "ceremonial_cast_visuals"),
+        ("enchantment", "enchantment_cast_visuals"),
+    ] {
+        let ceremonial = &data[row];
+        let parent = ceremonial["ability_rawcode"]
+            .as_str()
+            .ok_or("grant parent identity")?;
+        let building = ceremonial["building_rawcode"]
+            .as_str()
+            .ok_or("grant source identity")?;
+        for visual in data[visual_key].as_array().ok_or("grant cast art")? {
+            visuals.assets.push(VisualAssetSpec {
+                owner_kind: "abilities".to_owned(),
+                owner_rawcode: parent.to_owned(),
+                source_unit_rawcode: Some(building.to_owned()),
+                role: visual["role"].as_str().ok_or("grant art role")?.to_owned(),
+                model_path: visual["path"]
+                    .as_str()
+                    .ok_or("grant model path")?
+                    .to_owned(),
+                missile_arc: None,
+            });
+        }
     }
     for row in data["launchers"]
         .as_array()

@@ -229,6 +229,7 @@ fn forked_lightning_is_simultaneous_caster_cone_primary_first_and_keeps_air_immu
             position: units[0].position,
         },
         PendingAttackEffectState {
+            retired_sources: &BTreeMap::new(),
             completed_tick: 1,
             navigation_cell_size: sim.config.navigation_cell_size,
             units: &mut units,

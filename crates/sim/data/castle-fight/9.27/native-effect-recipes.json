@@ -1,6 +1,13 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind": "unit-ability", "source_key": "A0DV", "unit_rawcode": "h060", "kind": "building-enchantment"},
+    {"source_kind": "unit-ability", "source_key": "A03Q", "unit_rawcode": "h034", "kind": "source-damage-dispatcher"},
+    {"source_kind": "ability-effect", "source_key": "A0D7", "kind": "native-enchantment-grant"},
+    {"source_kind": "ability-effect", "source_key": "A0F3", "kind": "native-enchantment-grant"},
+    {"source_kind": "ability-effect", "source_key": "A0F1", "kind": "native-enchantment-grant"},
+    {"source_kind": "ability-effect", "source_key": "A0D6", "kind": "native-enchantment-grant"},
+    {"source_kind": "ability-effect", "source_key": "A0F2", "kind": "native-enchantment-grant"},
     {"source_kind": "unit-ability", "source_key": "A0EK", "unit_rawcode": "h062", "kind": "building-improvement"},
     {"source_kind": "ability-effect", "source_key": "A0EL", "kind": "building-mana-regeneration"},
     {"source_kind": "unit-ability", "source_key": "A0DW", "unit_rawcode": "h03N", "kind": "health-scaled-aftershock"},

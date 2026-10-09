@@ -6,7 +6,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 58;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 59;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -30,6 +30,7 @@ pub struct SimulationSnapshot {
     pending_rescue_strikes: Vec<PendingRescueStrike>,
     team_rescue_ready_ticks: [u64; 2],
     shrine_death_generation: u64,
+    retired_damage_sources: BTreeMap<SimId, super::source_damage_runtime::RetiredDamageSource>,
     debug_buildings_invulnerable: bool,
     defense_alerts: Vec<DefenseAlert>,
     entities: Vec<CanonicalEntity>,
@@ -303,6 +304,8 @@ impl Simulation {
         self.team_objectives = template.team_objectives;
         self.gjallarhorn_constructed_count = template.gjallarhorn_constructed_count;
         self.shrine_death_generation = template.shrine_death_generation;
+        self.retired_damage_sources
+            .clone_from(&template.retired_damage_sources);
         self.next_id = template.next_id;
         self.next_visual_id = template.next_visual_id;
         self.round_index += 1;
@@ -345,6 +348,7 @@ impl Simulation {
             pending_rescue_strikes: self.pending_rescue_strikes.clone(),
             team_rescue_ready_ticks: self.team_rescue_ready_ticks,
             shrine_death_generation: self.shrine_death_generation,
+            retired_damage_sources: self.retired_damage_sources.clone(),
             debug_buildings_invulnerable: self.debug_buildings_invulnerable,
             defense_alerts: self.defense_alerts.clone(),
             entities: canonical_entities(&self.world),
@@ -408,6 +412,18 @@ impl Simulation {
             }
         }
 
+        for id in snapshot.retired_damage_sources.keys() {
+            if snapshot.entities.iter().any(|entity| entity.id() == *id) {
+                return Err(SnapshotRestoreError::DuplicateEntityId(*id));
+            }
+            if id.0 >= snapshot.next_id {
+                return Err(SnapshotRestoreError::AllocatorBehindEntityIds {
+                    next_id: snapshot.next_id,
+                    maximum_live_id: *id,
+                });
+            }
+        }
+
         match (&snapshot.fog, &self.fog) {
             (None, None) => {}
             (Some(fog), Some(expected)) if fog.valid_shape(expected) => {}
@@ -436,6 +452,7 @@ impl Simulation {
                 pending_rescue_strikes: &snapshot.pending_rescue_strikes,
                 team_rescue_ready_ticks: snapshot.team_rescue_ready_ticks,
                 shrine_death_generation: snapshot.shrine_death_generation,
+                retired_damage_sources: &snapshot.retired_damage_sources,
                 debug_buildings_invulnerable: snapshot.debug_buildings_invulnerable,
                 fog: snapshot.fog.as_ref(),
             },
@@ -468,6 +485,8 @@ impl Simulation {
             .clone_from(&snapshot.pending_rescue_strikes);
         self.team_rescue_ready_ticks = snapshot.team_rescue_ready_ticks;
         self.shrine_death_generation = snapshot.shrine_death_generation;
+        self.retired_damage_sources
+            .clone_from(&snapshot.retired_damage_sources);
         self.debug_buildings_invulnerable = snapshot.debug_buildings_invulnerable;
         self.defense_alerts.clone_from(&snapshot.defense_alerts);
         self.next_tick = snapshot.next_tick;
@@ -1277,6 +1296,7 @@ mod tests {
             };
             status.movement_modifier_count = 1;
             status.damage_over_time[0] = TimedDamageOverTime {
+                source: Some(SimId(77)),
                 id: ModifierId(8),
                 damage_per_pulse: 3,
                 pulse_interval_ticks: 20,

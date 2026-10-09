@@ -285,15 +285,17 @@ impl Simulation {
                         ),
                         target.snow_damage_taken_per_10k,
                     );
-                    super::source_damage_runtime::apply_aftershock(
+                    super::source_damage_runtime::dispatch(
                         intent.source_id,
                         index,
+                        event_damage,
                         super::source_damage_runtime::SourceDamageState {
                             units,
                             health: unit_health,
                             rules: self.combat_rules.damage_rules,
                             tick: completed_tick,
                         },
+                        &self.retired_damage_sources,
                     );
                     super::damage_thresholds::observe_damage_event(
                         &mut units[index],
@@ -440,6 +442,7 @@ impl Simulation {
                                 team: intent.source_team,
                             },
                             PendingAttackEffectState {
+                                retired_sources: &self.retired_damage_sources,
                                 navigation_cell_size: self.config.navigation_cell_size,
                                 completed_tick,
                                 units,
@@ -929,7 +932,8 @@ impl Simulation {
                     );
                     on_hit.splash_falloff = Some(profile);
                 }
-                PassiveUnitEffect::HealthScaledAftershock(_)
+                PassiveUnitEffect::SourceDamageDispatcher(_)
+                | PassiveUnitEffect::HealthScaledAftershock(_)
                 | PassiveUnitEffect::DamageRetaliation(_)
                 | PassiveUnitEffect::LavaSpawn(_)
                 | PassiveUnitEffect::MirrorImage(_)

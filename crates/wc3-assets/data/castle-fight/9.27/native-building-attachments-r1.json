@@ -727,6 +727,29 @@
       ]
     },
     {
+      "building_rawcode": "h060",
+      "source_registration": "wK",
+      "source_factory": "Ku:create854",
+      "source_callback": "BuildingAttachmentHandler_registerBuildingAttach_RaceElemental_call_registerBuildingAttach_RaceElemental15",
+      "visuals": [
+        {
+          "model_path": "Doodads\\Outland\\Props\\Standard\\Standard1.mdl",
+          "yaw_degrees": 300.0,
+          "offset_world": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": 1.5,
+          "color_rgb": [
+            0,
+            255,
+            255
+          ]
+        }
+      ]
+    },
+    {
       "building_rawcode": "h06I",
       "source_registration": "UK",
       "source_factory": "by:create984",

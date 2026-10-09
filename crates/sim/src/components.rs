@@ -486,7 +486,7 @@ impl ForkedLightningProfile {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct HealthScaledAftershockProfile {
     pub marker: AbilityId,
     pub dispatcher: AbilityId,
@@ -883,6 +883,7 @@ pub(crate) struct ProductionUnitClassifications(pub UnitClassifications);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PassiveUnitEffect {
+    SourceDamageDispatcher(AbilityId),
     HealthScaledAftershock(HealthScaledAftershockProfile),
     DamageRetaliation(DamageRetaliationProfile),
     LavaSpawn(LavaSpawnProfile),
@@ -1492,6 +1493,7 @@ pub enum AreaDamageOrigin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AbilityEffect {
+    BuildingEnchantment(crate::building_mechanics::BuildingEnchantmentProfile),
     MasterProjectiles(crate::MapVersion),
     BuildingAura(crate::building_mechanics::BuildingAuraProfile),
     BuildingStasis(crate::building_mechanics::BuildingStasisProfile),
@@ -1648,6 +1650,7 @@ impl AbilityEffect {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::BuildingEnchantment(_) => 36,
             Self::BuildingAura(_) => 28,
             Self::BuildingStasis(_) => 27,
             Self::BuildingPermanentGrant(_) => 26,
@@ -1765,6 +1768,7 @@ pub struct NativeBuffIdentity {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimedDamageOverTime {
+    pub source: Option<SimId>,
     pub id: ModifierId,
     pub damage_per_pulse: i32,
     pub pulse_interval_ticks: u16,
