@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0C5","unit_rawcode":"o00E","kind":"damage-charge"},
+    {"source_kind":"ability-effect","source_key":"A0EN","unit_rawcode":"o00E","kind":"self-destruct"},
+    {"source_kind":"unit-ability","source_key":"A0E6","unit_rawcode":"o00E","kind":"sphere"},
+    {"source_kind":"unit-ability","source_key":"A0CR","unit_rawcode":"o00E","kind":"speed-aura"},
     {"source_kind":"unit-ability","source_key":"A0E5","unit_rawcode":"o00D","kind":"sphere"},
     {"source_kind":"unit-ability","source_key":"A0CQ","unit_rawcode":"o00D","kind":"speed-aura"},
     {"source_kind": "unit-ability", "source_key": "A08O", "unit_rawcode": "o00B", "kind": "spell-resistance"},

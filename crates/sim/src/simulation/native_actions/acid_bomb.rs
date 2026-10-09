@@ -220,8 +220,9 @@ pub(in crate::simulation) fn resolve_periodic_acid_bomb(
         if !unit.classifications.invulnerable && !unit.classifications.spell_immune {
             let damage = rules.apply_spell(acid.damage_per_pulse, unit.armor.armor_type);
             let damage = spell_damage_after_defend(*unit, damage, tick);
-            super::super::damage_thresholds::observe_damage(unit, unit.health);
-            unit.health = unit.health.saturating_sub(damage);
+            let event_damage = damage;
+            super::super::damage_thresholds::observe_damage_event(unit, unit.health, event_damage);
+            unit.health = unit.health.saturating_sub(event_damage);
         }
         acid.next_pulse_tick = acid
             .next_pulse_tick

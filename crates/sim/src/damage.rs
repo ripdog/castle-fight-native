@@ -221,10 +221,24 @@ impl DamageRules {
         armor_type: ArmorType,
         armor_points_per_100: i32,
     ) -> i32 {
+        self.apply_armor_points(
+            raw_damage,
+            self.bonus_per_10k(damage_type, armor_type),
+            armor_points_per_100,
+        )
+    }
+
+    /// Physical native ability damage ignores the attack-class table but retains armor points.
+    #[must_use]
+    pub fn apply_physical_ability(self, raw_damage: i32, armor_points_per_100: i32) -> i32 {
+        self.apply_armor_points(raw_damage, DAMAGE_MULTIPLIER_SCALE, armor_points_per_100)
+    }
+
+    fn apply_armor_points(self, raw_damage: i32, bonus: u16, armor_points_per_100: i32) -> i32 {
         if raw_damage <= 0 {
             return raw_damage;
         }
-        let bonus = i128::from(self.bonus_per_10k(damage_type, armor_type));
+        let bonus = i128::from(bonus);
         if bonus == 0 {
             return 0;
         }

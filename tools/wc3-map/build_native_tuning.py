@@ -64,6 +64,50 @@ def unit_targets(value: str, *, allow_structures: bool = False) -> str:
     raise ValueError(f"unsupported native proc targets: {value!r}")
 
 
+def self_destruct_profile(source: str, fields: dict[str, str], base: str) -> dict[str, Any]:
+    if base != "Asds" or set(fields["targs1"].split(",")) != {"air", "enemies", "ward", "structure", "debris"}:
+        raise ValueError("self-destruct requires audited native air/structure/debris targeting")
+    if any(scaled(fields[key]) != 0 for key in ("rng1", "cool1", "cost1")) or scaled(fields["dataf1"]) != 1:
+        raise ValueError("self-destruct requires free contact autocast and corpse explosion flag")
+    return {"ability": int.from_bytes(source.encode(), "big"),
+        "full_radius": scaled(fields["dataa1"], 1024), "full_damage": scaled(fields["datab1"]),
+        "partial_radius": scaled(fields["datac1"], 1024), "partial_damage": scaled(fields["datad1"]),
+        "building_damage_per_10k": scaled(fields["datae1"], 10_000), "targets": 6}
+
+
+def damage_charge_profile(recipe: dict, unit: dict, mechanics: dict) -> dict:
+    trace, handler = mechanics["damage_charge"], mechanics["damage_charge_handler"]
+    marker = int.from_bytes(recipe["source_key"].encode(), "big")
+    shape = (r'function vampireCharge\(vpq,wpq\)local xpq=nil local ypq=nil local zpq=nil '
+        r'xpq=\(unit_getState\(vpq,UNIT_STATE_MANA\)\+wpq\)if\(xpq>=([0-9.]+)\)then '
+        r'unit_removeAbility\(vpq,([0-9]+)\)__wurst_safe_SetUnitMoveSpeed\(vpq,([0-9.]+)\)'
+        r'addProtectedAbility\(vpq,([0-9]+)\)jY=true unit_issueImmediateOrderById\(vpq,852041\)'
+        r'else ypq=UNIT_STATE_MANA zpq=xpq __wurst_safe_SetUnitState\(vpq,ypq,zpq\)end end')
+    matched = re.fullmatch(shape, handler.strip())
+    if matched is None or int(matched[2]) != marker or int(matched[4]) != trace["kaboom_ability_id"]:
+        raise ValueError("damage charge requires exact native controller control flow")
+    threshold = re.search(r'if\(xpq>=([0-9.]+)\)then', handler)
+    speed = re.search(r'SetUnitMoveSpeed\(vpq,([0-9.]+)\)', handler)
+    expected = ('unit_removeAbility(vpq,' + str(marker) + ')')
+    if (trace["charge_resource"] != "mana" or trace["charge_delta"] != "event-damage-amount"
+        or not trace["remove_damage_marker_on_threshold"] or trace["kaboom_order_id"] != 852041
+        or threshold is None or speed is None or expected not in handler
+        or 'xpq=(unit_getState(vpq,UNIT_STATE_MANA)+wpq)' not in handler
+        or 'unit_issueImmediateOrderById(vpq,852041)' not in handler
+        or 'else ypq=UNIT_STATE_MANA zpq=xpq __wurst_safe_SetUnitState(vpq,ypq,zpq)' not in handler):
+        raise ValueError("damage charge requires exact marker removal, native autocast and no threshold mana write")
+    if scaled(threshold[1]) != trace["detonation_threshold"] or scaled(speed[1]) != trace["detonation_move_speed"]:
+        raise ValueError("damage charge script disagrees with retained controller projection")
+    child = trace["kaboom_ability_id"].to_bytes(4, "big").decode()
+    if f'addProtectedAbility(vpq,{trace["kaboom_ability_id"]})' not in handler or unit["move_type"] != "fly":
+        raise ValueError("damage charge requires its native child grant and flying order controller")
+    return {"marker": marker, "mana_maximum": scaled(unit["mana_max"]),
+        "mana_starting": 0 if unit["mana_start"].strip() in {"-", "_"} else scaled(unit["mana_start"]),
+        "mana_regen_per_second_per_10k": scaled(unit["mana_regen"], 10_000),
+        "threshold": scaled(threshold[1]), "armed_speed_per_tick": int(Decimal(speed[1]) * 1024 / 30),
+        "explosion": self_destruct_profile(child, mechanics["charge_child_fields"], mechanics["charge_child_base"])}
+
+
 def project_effect(recipe: dict[str, str], fields: dict[str, str],
                    unit: dict[str, str] | None, protected: dict[str, str],
                    mechanics: dict[str, Any]) -> dict[str, Any]:
@@ -72,6 +116,15 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
 
     kind = recipe["kind"]
     effect: dict[str, Any] = dict(recipe)
+    if kind == "self-destruct":
+        effect.update(profile=self_destruct_profile(recipe["source_key"], fields, mechanics["native_base"]))
+        return effect
+    if kind == "damage-charge":
+        profile = damage_charge_profile(recipe, unit, mechanics)
+        effect.update(profile=profile, effect_ability_rawcode=profile["explosion"]["ability"].to_bytes(4, "big").decode(),
+            provenance={"git_tree": mechanics["git_tree"], "source": "resolved/production-unit-special-mechanics.tsv",
+                "handler": "vampireCharge", "damage_handler": "handleTargetDamageEffects", "phase": "pre-health-commit-reduced-damage-event"})
+        return effect
     if kind == "poison":
         if set(fields["targs1"].split(",")) != {"air", "ground", "organic"} or number("DataD1") != 1:
             raise ValueError("poison requires the audited organic mask and damage-only stacking flags")
@@ -526,6 +579,9 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
     damage_thresholds = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "damage-triggered-persistent-low-hp-attack-bonus"}
+    damage_charges = {row["unit_rawcode"]: json.loads(row["parameters_json"])
+        for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
+        if row["mechanic_kind"] == "damage-to-mana-kaboom-charge"}
     lua = retained("script/war3map.lua")
     functions = {row["name"]: lua[int(row["start_byte_offset"]):int(row["end_byte_offset"])].decode()
         for row in rows(retained("script/function-spans.tsv"))}
@@ -541,6 +597,8 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         if recipe["source_kind"] not in {"unit-ability", "ability-effect"}:
             raise ValueError("unsupported native recipe source kind")
         key = (recipe["source_kind"], recipe["source_key"])
+        if recipe["kind"] == "damage-charge":
+            key += (recipe["unit_rawcode"],)
         if key in seen:
             raise ValueError(f"duplicate recipe source: {key}")
         seen.add(key)
@@ -567,6 +625,14 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             detail.update(damage_threshold=damage_thresholds[recipe["unit_rawcode"]],
                 damage_threshold_handler=functions["DamageListener_addListener_TrollBlood_onEvent_addListener_TrollBlood"],
                 ability_levels=ability_levels[source], git_tree=tree)
+        if recipe["kind"] == "damage-charge":
+            trace = damage_charges[recipe["unit_rawcode"]]
+            child = trace["kaboom_ability_id"].to_bytes(4, "big").decode()
+            handler = functions["handleTargetDamageEffects"]
+            if f'elseif(hqq=={int.from_bytes(recipe["unit_rawcode"].encode(), "big")})then vampireCharge(gqq,GetEventDamage())' not in handler or "widget_getLife(gqq)<=.405" not in handler or f'unit_getAbilityLevel(gqq,{trace["runtime_damage_marker_ability_id"]})<=0' not in handler:
+                raise ValueError("damage charge requires its source unit and native damage event guards")
+            detail.update(damage_charge=trace, damage_charge_handler=functions["vampireCharge"],
+                charge_child_fields=abilities[child], charge_child_base=ability_bases[child], git_tree=tree)
         detail["misc"] = misc
         detail["native_base"] = ability_bases[source]
         if spell is not None:

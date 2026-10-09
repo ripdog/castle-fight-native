@@ -91,6 +91,13 @@ impl Simulation {
         for mut intent in intents {
             if let AttackSourceIndex::Unit(index) = intent.source {
                 let source = &units[index];
+                if source
+                    .status
+                    .damage_charge
+                    .is_some_and(|charge| charge.armed)
+                {
+                    continue;
+                }
                 let percent = source.status.armor_modifiers
                     [..usize::from(source.status.armor_modifier_count)]
                     .iter()
@@ -262,16 +269,21 @@ impl Simulation {
                         .combat_rules
                         .damage_rules
                         .apply_spell(damage, target.armor.armor_type);
-                    super::damage_thresholds::observe_damage(target, unit_health[index]);
+                    let event_damage = scale_damage_per_10k(
+                        super::native_kill_effects::damage_after_native_incoming(
+                            target,
+                            damage,
+                            completed_tick,
+                        ),
+                        target.snow_damage_taken_per_10k,
+                    );
+                    super::damage_thresholds::observe_damage_event(
+                        target,
+                        unit_health[index],
+                        event_damage,
+                    );
                     unit_health[index] = unit_health[index]
-                        .checked_sub(scale_damage_per_10k(
-                            super::native_kill_effects::damage_after_native_incoming(
-                                target,
-                                damage,
-                                completed_tick,
-                            ),
-                            target.snow_damage_taken_per_10k,
-                        ))
+                        .checked_sub(event_damage)
                         .expect("Pulverize damage overflow");
                 }
                 self.last_ability_casts.push(AbilityCastEvent {
@@ -887,6 +899,7 @@ impl Simulation {
                     on_hit.splash_falloff = Some(profile);
                 }
                 PassiveUnitEffect::DamageThreshold(_)
+                | PassiveUnitEffect::DamageCharge(_)
                 | PassiveUnitEffect::KillBerserk(_)
                 | PassiveUnitEffect::Pulverize(_)
                 | PassiveUnitEffect::Evasion(_)
@@ -957,7 +970,11 @@ impl Simulation {
                 .par_iter()
                 .enumerate()
                 .filter_map(|(source_index, source)| {
-                    if source.spawn_tick == self.next_tick
+                    if source
+                        .status
+                        .damage_charge
+                        .is_some_and(|charge| charge.armed)
+                        || source.spawn_tick == self.next_tick
                         || source.status.attacks_disabled(self.next_tick)
                         || source.attacks_disabled
                         || source.orders_suspended

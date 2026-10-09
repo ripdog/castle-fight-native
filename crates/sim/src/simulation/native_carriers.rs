@@ -374,11 +374,13 @@ impl Simulation {
                                 .apply_spell(bolt.damage, units[index].armor.armor_type),
                             completed_tick,
                         );
-                        super::damage_thresholds::observe_damage(
+                        let event_damage = damage.max(0);
+                        super::damage_thresholds::observe_damage_event(
                             &mut units[index],
                             unit_health[index],
+                            event_damage,
                         );
-                        unit_health[index] = unit_health[index].saturating_sub(damage.max(0));
+                        unit_health[index] = unit_health[index].saturating_sub(event_damage);
                         if damage > 0 {
                             result.effects += 1;
                         }
@@ -478,6 +480,7 @@ fn cleanse_native_effects(
     status.damage_over_time_count = 0;
     passive_baseline.retain(|effect| {
         let ability = match effect {
+            PassiveUnitEffect::DamageCharge(profile) => Some(profile.marker),
             PassiveUnitEffect::Poison(p) => Some(p.ability),
             PassiveUnitEffect::KillBerserk(p) => Some(p.ability),
             PassiveUnitEffect::DamageThreshold(p) => Some(p.ability),

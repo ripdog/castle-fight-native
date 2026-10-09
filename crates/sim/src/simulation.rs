@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 55;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 56;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -51,6 +51,7 @@ mod combat;
 mod construction;
 #[cfg(test)]
 mod content_lifecycle_tests;
+mod damage_charge;
 mod damage_thresholds;
 mod economy;
 mod line_projectiles;
@@ -1631,6 +1632,7 @@ impl Simulation {
         self.resolve_native_actions(&mut units, &mut buildings);
         self.apply_passive_auras(&mut units);
         self.apply_speed_auras(&mut units);
+        self.resolve_damage_charge(&mut units, &mut buildings);
         let ability_metrics = self.resolve_automatic_abilities(&mut buildings, &mut units, &grid);
         let abilities = phase_start.elapsed();
 
@@ -2578,7 +2580,10 @@ impl Simulation {
             AttackSequence::default(),
             TargetState::default(),
             RetaliationState::default(),
-            StatusState::default(),
+            StatusState {
+                damage_charge: damage_charge::initial_state(properties.passive_effects),
+                ..Default::default()
+            },
             NavigationState::default(),
             unit.movement,
             SpawnTick(self.next_tick),
@@ -2900,6 +2905,20 @@ impl Simulation {
             }
         }
 
+        let mut charge_query = self.world.query::<(&Health, &mut StatusState)>();
+        for (health, mut status) in charge_query.iter_mut(&mut self.world) {
+            if health.current <= 0 {
+                continue;
+            }
+            let bonus = status.armor_modifiers[..usize::from(status.armor_modifier_count)]
+                .iter()
+                .filter(|modifier| self.next_tick < modifier.expires_tick)
+                .map(|modifier| modifier.mana_regeneration_per_second_per_10k)
+                .sum::<u32>();
+            if let Some(charge) = status.damage_charge.as_mut() {
+                damage_charge::advance_regeneration(charge, bonus);
+            }
+        }
         let mut status_query = self.world.query::<&mut StatusState>();
         for mut status in status_query.iter_mut(&mut self.world) {
             purge_expired_status_modifiers(&mut status, self.next_tick);
@@ -4994,8 +5013,14 @@ fn unit_view_from_entity(
         cooldown_remaining: entity.get::<AttackCooldown>()?.remaining,
         stunned_until_tick: status.stunned_until_tick,
         status,
-        mana_current: entity.get::<ManaState>().map(|mana| mana.current),
-        mana_maximum: spellcasting.map(|profile| profile.mana.maximum),
+        mana_current: status
+            .damage_charge
+            .map(damage_charge::mana_current)
+            .or_else(|| entity.get::<ManaState>().map(|mana| mana.current)),
+        mana_maximum: status
+            .damage_charge
+            .map(|charge| charge.profile.mana_maximum)
+            .or_else(|| spellcasting.map(|profile| profile.mana.maximum)),
         ability_ready_tick: ability_state.map(|state| state.ready_tick),
         ability_cast_sequence: ability_state.map(|state| state.cast_sequence),
         active_defend_ability,
@@ -5221,16 +5246,21 @@ fn apply_damage_to_target(
                 state.units[index].armor.armor_type,
                 effective_armor_points_per_100(&state.units[index]),
             );
-            damage_thresholds::observe_damage(&mut state.units[index], state.unit_health[index]);
+            let event_damage = scale_damage_per_10k(
+                native_kill_effects::damage_after_native_incoming(
+                    &state.units[index],
+                    adjusted_damage,
+                    completed_tick,
+                ),
+                state.units[index].snow_damage_taken_per_10k,
+            );
+            damage_thresholds::observe_damage_event(
+                &mut state.units[index],
+                state.unit_health[index],
+                event_damage,
+            );
             state.unit_health[index] = state.unit_health[index]
-                .checked_sub(scale_damage_per_10k(
-                    native_kill_effects::damage_after_native_incoming(
-                        &state.units[index],
-                        adjusted_damage,
-                        completed_tick,
-                    ),
-                    state.units[index].snow_damage_taken_per_10k,
-                ))
+                .checked_sub(event_damage)
                 .expect("unit damage arithmetic overflowed validated bounds");
             let source_index = find_unit_index(state.units, source_id);
             if state.unit_health[index] <= 0
@@ -5366,6 +5396,12 @@ fn apply_pending_attack_effects(
             let drained = (*mana).min(profile.maximum_mana_drained).max(0);
             *mana -= drained;
             drained
+        } else if let Some(charge) = units[index].status.damage_charge.as_mut() {
+            let drained = damage_charge::mana_current(*charge)
+                .min(profile.maximum_mana_drained)
+                .max(0);
+            damage_charge::restore_mana(charge, -drained);
+            drained
         } else {
             0
         };
@@ -5381,9 +5417,14 @@ fn apply_pending_attack_effects(
             units[index].armor.armor_type,
         );
         let damage = spell_damage_after_defend(units[index], damage, completed_tick);
-        damage_thresholds::observe_damage(&mut units[index], unit_health[index]);
+        let event_damage = damage;
+        damage_thresholds::observe_damage_event(
+            &mut units[index],
+            unit_health[index],
+            event_damage,
+        );
         unit_health[index] = unit_health[index]
-            .checked_sub(damage)
+            .checked_sub(event_damage)
             .expect("Feedback health overflow");
     }
     if unit_health[index] <= 0 {
@@ -5408,9 +5449,14 @@ fn apply_pending_attack_effects(
                         .apply_spell(profile.initial_damage, units[index].armor.armor_type);
                     let adjusted =
                         spell_damage_after_defend(units[index], adjusted, completed_tick);
-                    damage_thresholds::observe_damage(&mut units[index], unit_health[index]);
+                    let event_damage = adjusted;
+                    damage_thresholds::observe_damage_event(
+                        &mut units[index],
+                        unit_health[index],
+                        event_damage,
+                    );
                     unit_health[index] = unit_health[index]
-                        .checked_sub(adjusted)
+                        .checked_sub(event_damage)
                         .expect("Chain Lightning damage overflow");
 
                     let mut points = [SimPoint::default(); MAX_BOUNCE_HITS + 1];

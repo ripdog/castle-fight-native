@@ -127,6 +127,27 @@ class NativeTuningProjectionTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "friendly unit mask"):
                 native.project_effect(recipe, {**fields, "targs1": fields["targs1"] + "," + qualifier}, unit, {}, {})
 
+    def test_damage_charge_preserves_signed_mana_and_rejects_changed_threshold_branch(self) -> None:
+        marker, child = int.from_bytes(b"PARN", "big"), int.from_bytes(b"CHLD", "big")
+        fields = {"targs1":"air,enemies,ward,structure,debris", "rng1":"0", "cool1":"0", "cost1":"0",
+            "dataa1":"10", "datab1":"17", "datac1":"20", "datad1":"9", "datae1":"0.6", "dataf1":"1"}
+        trace = {"charge_resource":"mana", "charge_delta":"event-damage-amount", "remove_damage_marker_on_threshold":True,
+            "kaboom_order_id":852041, "kaboom_ability_id":child, "detonation_threshold":19, "detonation_move_speed":90}
+        handler = (f'function vampireCharge(vpq,wpq)local xpq=nil local ypq=nil local zpq=nil '
+            f'xpq=(unit_getState(vpq,UNIT_STATE_MANA)+wpq)if(xpq>=19.)then unit_removeAbility(vpq,{marker})'
+            f'__wurst_safe_SetUnitMoveSpeed(vpq,90.)addProtectedAbility(vpq,{child})jY=true '
+            'unit_issueImmediateOrderById(vpq,852041)else ypq=UNIT_STATE_MANA zpq=xpq __wurst_safe_SetUnitState(vpq,ypq,zpq)end end ')
+        mechanics = {"damage_charge":trace, "damage_charge_handler":handler, "charge_child_fields":fields, "charge_child_base":"Asds"}
+        unit = {"mana_max":"50", "mana_start":" - ", "mana_regen":"-1.5", "move_type":"fly"}
+        projected = native.damage_charge_profile({"source_key":"PARN"}, unit, mechanics)
+        self.assertEqual((projected["mana_starting"], projected["mana_regen_per_second_per_10k"]), (0, -15000))
+        self.assertEqual(projected["explosion"]["targets"], 6)
+        for changed in (handler.replace('852041', '852040'), handler.replace('jY=true', '__wurst_safe_SetUnitState(vpq,UNIT_STATE_MANA,xpq)jY=true')):
+            with self.assertRaises(ValueError):
+                native.damage_charge_profile({"source_key":"PARN"}, unit, {**mechanics,"damage_charge_handler":changed})
+        with self.assertRaises(ValueError):
+            native.self_destruct_profile("CHLD", {**fields,"targs1":"air,ground,enemies,structure"}, "Asds")
+
     def test_committed_tuning_is_a_projection_of_retained_evidence(self) -> None:
         root = Path(__file__).resolve().parents[2]
         release = catalog._load_release(catalog.DEFAULT_RELEASES, "9.27", "r1")

@@ -1,6 +1,11 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind": "unit-ability", "source_key": "A03Q", "implementation": "warcraft-marker-only-v1", "valid_from": "9.27", "valid_through": "9.27", "notes": "Hidden zero-visibility Channel source-damage dispatcher marker; Greater Wind has no matching source-damage child controller."},
+    {"source_kind":"unit-ability","source_key":"A0C5","implementation":"warcraft-script-damage-controller-v1","valid_from":"9.27","valid_through":"9.27","notes":"Unit-scoped native target damage controllers; Wind converts reduced damage to mana and enables native self-destruct autocasting."},
+    {"source_kind":"ability-effect","source_key":"A0EN","implementation":"warcraft-self-destruct-v1","valid_from":"9.27","valid_through":"9.27","notes":"Script-granted Asds contact autocast, armor-point damage falloff and caster death; death flag is corpse appearance only."},
+    {"source_kind":"unit-ability","source_key":"A0E6","implementation":"warcraft-sphere-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native three-attachment Sphere, independent visual flights and protected restore cooldown."},
+    {"source_kind":"unit-ability","source_key":"A0CR","implementation":"warcraft-speed-aura-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native stronger zero-linger hostile air Endurance Aura in shared B026 family."},
     {
       "source_kind": "unit-ability",
       "source_key": "A08I",

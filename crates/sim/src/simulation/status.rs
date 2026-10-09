@@ -63,10 +63,11 @@ pub(super) fn apply_ability_effect_to_unit(
         AbilityEffect::Damage { amount } => {
             let adjusted = damage_rules.apply_spell(amount, target.armor.armor_type);
             let adjusted = spell_damage_after_defend(*target, adjusted, completed_tick);
-            super::damage_thresholds::observe_damage(target, target.health);
+            let event_damage = adjusted;
+            super::damage_thresholds::observe_damage_event(target, target.health, event_damage);
             target.health = target
                 .health
-                .checked_sub(adjusted)
+                .checked_sub(event_damage)
                 .expect("ability damage overflowed validated bounds");
         }
         AbilityEffect::Stun { duration_ticks } => {
@@ -109,10 +110,11 @@ pub(super) fn apply_ability_effect_to_unit(
             }
             let damage = damage_rules.apply_spell(area_damage, target.armor.armor_type);
             let damage = spell_damage_after_defend(*target, damage, completed_tick);
-            super::damage_thresholds::observe_damage(target, target.health);
+            let event_damage = damage;
+            super::damage_thresholds::observe_damage_event(target, target.health, event_damage);
             target.health = target
                 .health
-                .checked_sub(damage)
+                .checked_sub(event_damage)
                 .expect("Frost Nova damage overflow");
             if target.health > 0 {
                 apply_frost_attack(
@@ -179,10 +181,11 @@ pub(super) fn apply_ability_effect_to_unit(
             }
             let adjusted = damage_rules.apply_spell(damage, target.armor.armor_type);
             let adjusted = spell_damage_after_defend(*target, adjusted, completed_tick);
-            super::damage_thresholds::observe_damage(target, target.health);
+            let event_damage = adjusted;
+            super::damage_thresholds::observe_damage_event(target, target.health, event_damage);
             target.health = target
                 .health
-                .checked_sub(adjusted)
+                .checked_sub(event_damage)
                 .expect("area stun damage overflow");
             let duration = if target.classifications.hero {
                 hero_stun_ticks
@@ -198,10 +201,11 @@ pub(super) fn apply_ability_effect_to_unit(
         AbilityEffect::AreaDamage { amount, .. } => {
             let adjusted = damage_rules.apply_spell(amount, target.armor.armor_type);
             let adjusted = spell_damage_after_defend(*target, adjusted, completed_tick);
-            super::damage_thresholds::observe_damage(target, target.health);
+            let event_damage = adjusted;
+            super::damage_thresholds::observe_damage_event(target, target.health, event_damage);
             target.health = target
                 .health
-                .checked_sub(adjusted)
+                .checked_sub(event_damage)
                 .expect("area ability damage overflowed validated bounds");
         }
         AbilityEffect::HealingWave(_)
@@ -337,6 +341,9 @@ pub(super) fn apply_ability_effect_to_unit(
             resurrection_radius: _,
         } => {
             target.health = target.health.saturating_add(healing).min(target.health_max);
+            if let Some(charge) = target.status.damage_charge.as_mut() {
+                super::damage_charge::restore_mana(charge, mana_restored);
+            }
             if let (Some(profile), Some(mana)) = (target.spellcasting, target.mana_current.as_mut())
             {
                 *mana = mana.saturating_add(mana_restored).min(profile.mana.maximum);
@@ -689,12 +696,21 @@ pub(super) fn resolve_periodic_unit_statuses(
                     unit.health,
                     unit.health_max,
                 );
+                let event_damage = scale_damage_per_10k(
+                    scale_damage_per_10k(adjusted, incoming_factor),
+                    unit.snow_damage_taken_per_10k,
+                );
+                if super::damage_charge::observe_damage_state(
+                    &mut unit.status.damage_charge,
+                    unit.health,
+                    event_damage,
+                ) {
+                    unit.status.pending_attack = None;
+                    unit.status.action_animation = None;
+                }
                 unit.health = unit
                     .health
-                    .checked_sub(scale_damage_per_10k(
-                        scale_damage_per_10k(adjusted, incoming_factor),
-                        unit.snow_damage_taken_per_10k,
-                    ))
+                    .checked_sub(event_damage)
                     .expect("damage-over-time health arithmetic overflow");
                 effect.next_pulse_tick = effect
                     .next_pulse_tick

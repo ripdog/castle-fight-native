@@ -1,5 +1,18 @@
 use super::*;
 
+pub(super) fn observe_damage_event(unit: &mut UnitSnapshot, current_health: i32, damage: i32) {
+    observe_damage(unit, current_health);
+    let armed = super::damage_charge::observe_damage_state(
+        &mut unit.status.damage_charge,
+        current_health,
+        damage,
+    );
+    if armed {
+        unit.status.pending_attack = None;
+        unit.status.action_animation = None;
+    }
+}
+
 pub(super) fn observe_damage(unit: &mut UnitSnapshot, current_health: i32) {
     observe_damage_state(
         unit.passive_effects,

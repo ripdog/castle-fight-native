@@ -206,15 +206,16 @@ impl Simulation {
                 && center(p, id).distance_sq(point) <= square_i32(p.explosion_radius)
             {
                 // DAMAGE_TYPE_UNIVERSAL bypasses armor/Defend/spell resistance, but the global snow listener still applies.
-                super::damage_thresholds::observe_damage(target, target.health);
-                target.health = target.health.saturating_sub(scale_damage_per_10k(
+                let event_damage = scale_damage_per_10k(
                     super::native_kill_effects::damage_after_native_incoming(
                         target,
                         p.explosion_damage,
                         self.next_tick,
                     ),
                     target.snow_damage_taken_per_10k,
-                ));
+                );
+                super::damage_thresholds::observe_damage_event(target, target.health, event_damage);
+                target.health = target.health.saturating_sub(event_damage);
                 damage_updates.push((target.entity, target.health, target.status));
             }
         }

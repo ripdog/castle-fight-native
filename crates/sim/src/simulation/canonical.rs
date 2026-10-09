@@ -1700,6 +1700,18 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         hash.write_u64(poison.expires_tick);
     }
 
+    hash.write_u8(u8::from(status.damage_charge.is_some()));
+    if let Some(charge) = status.damage_charge {
+        for word in charge.profile.canonical_words() {
+            hash.write_u64(word);
+        }
+        hash.write_u64(charge.mana_per_10k_hz as u64);
+        hash.write_u8(u8::from(charge.armed));
+        hash.write_u8(u8::from(charge.detonation_tick.is_some()));
+        if let Some(tick) = charge.detonation_tick {
+            hash.write_u64(tick);
+        }
+    }
     for sphere in status.spheres {
         hash.write_u8(u8::from(sphere.is_some()));
         if let Some(sphere) = sphere {
@@ -2051,6 +2063,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                 hash.write_i32(profile.radius);
                 hash.write_u16(profile.damage_per_10k);
                 hash.write_u8(profile.targets.bits());
+            }
+            PassiveUnitEffect::DamageCharge(profile) => {
+                hash.write_u8(18);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
             }
             PassiveUnitEffect::Sphere(profile) => {
                 hash.write_u8(17);

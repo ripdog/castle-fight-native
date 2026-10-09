@@ -198,8 +198,13 @@ impl Simulation {
                             .damage_rules
                             .apply_spell(profile.damage, target.armor.armor_type);
                         let damage = spell_damage_after_defend(*target, damage, self.next_tick);
-                        super::damage_thresholds::observe_damage(target, target.health);
-                        target.health = target.health.saturating_sub(damage);
+                        let event_damage = damage;
+                        super::damage_thresholds::observe_damage_event(
+                            target,
+                            target.health,
+                            event_damage,
+                        );
+                        target.health = target.health.saturating_sub(event_damage);
                         if damage > 0 && profile.cleanse {
                             cleanse_native_status(&mut target.status);
                         }

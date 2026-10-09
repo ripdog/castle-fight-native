@@ -180,6 +180,29 @@ impl Simulation {
         if unit.orders_suspended || self.next_tick < unit.status.stunned_until_tick {
             return MovementDecision::stationary(current);
         }
+        if unit.status.damage_charge.is_some_and(|charge| charge.armed) && !unit.abilities_disabled
+        {
+            let mut ordered = *unit;
+            ordered.secondary_attack = None;
+            ordered.attack_targets = unit.status.damage_charge.unwrap().profile.explosion.targets;
+            let target = damage_charge::autocast_target(
+                unit,
+                units,
+                buildings,
+                self.config.navigation_cell_size,
+                self.next_tick,
+            );
+            ordered.target = target.map(|target| target.0);
+            ordered.attack.range = target.map_or(unit.collision_radius, |target| target.2);
+            return self.desired_air_position(
+                &ordered,
+                units,
+                buildings,
+                unit_health,
+                building_health,
+                movement_speed,
+            );
+        }
         if unit.movement_class == MovementClass::Air {
             return self.desired_air_position(
                 unit,
@@ -1633,7 +1656,14 @@ pub(super) fn effective_movement_speed(unit: &UnitSnapshot) -> i32 {
             },
         )
         .clamp(0, 1_000);
-    i32::try_from(i64::from(unit.movement.speed_per_tick) * i64::from(percent) / 100)
+    let speed = unit
+        .status
+        .damage_charge
+        .filter(|charge| charge.armed && !unit.abilities_disabled)
+        .map_or(unit.movement.speed_per_tick, |charge| {
+            charge.profile.armed_speed_per_tick
+        });
+    i32::try_from(i64::from(speed) * i64::from(percent) / 100)
         .expect("effective movement speed overflowed validated bounds")
 }
 

@@ -52,6 +52,8 @@ pub enum NativeEffectImplementationId {
     WarcraftNativeAuraV1,
     WarcraftSpeedAuraV1,
     WarcraftSphereV1,
+    WarcraftScriptDamageControllerV1,
+    WarcraftSelfDestructV1,
     WarcraftScriptedAutomaticV1,
     WarcraftHumanSupportV1,
     WarcraftHumanPassiveV1,
@@ -95,6 +97,8 @@ impl NativeEffectImplementationId {
             Self::WarcraftNativeAuraV1 => 22,
             Self::WarcraftSpeedAuraV1 => 69,
             Self::WarcraftSphereV1 => 70,
+            Self::WarcraftScriptDamageControllerV1 => 71,
+            Self::WarcraftSelfDestructV1 => 72,
             Self::WarcraftScriptedAutomaticV1 => 19,
             Self::WarcraftHumanSupportV1 => 11,
             Self::WarcraftHumanPassiveV1 => 12,
@@ -532,6 +536,18 @@ fn native_buff_from_tuning(tuning: &TuningFile, source: u32) -> Option<crate::Na
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum TuningEffect {
+    DamageCharge {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        effect_ability_rawcode: String,
+        profile: crate::components::DamageChargeProfile,
+    },
+    SelfDestruct {
+        source_kind: String,
+        source_key: String,
+        profile: crate::components::SelfDestructProfile,
+    },
     Poison {
         source_kind: String,
         source_key: String,
@@ -782,7 +798,11 @@ impl TuningEffect {
 
     fn dependency_source(&self) -> Result<Option<NativeEffectSource>, String> {
         let effect_ability_rawcode = match self {
-            Self::OrbSpellProc {
+            Self::DamageCharge {
+                effect_ability_rawcode,
+                ..
+            }
+            | Self::OrbSpellProc {
                 effect_ability_rawcode,
                 ..
             } => effect_ability_rawcode,
@@ -804,7 +824,9 @@ impl TuningEffect {
 
     fn source_kind(&self) -> &str {
         match self {
-            Self::Poison { source_kind, .. }
+            Self::DamageCharge { source_kind, .. }
+            | Self::SelfDestruct { source_kind, .. }
+            | Self::Poison { source_kind, .. }
             | Self::DamageThreshold { source_kind, .. }
             | Self::KillBerserk { source_kind, .. }
             | Self::Sphere { source_kind, .. }
@@ -832,7 +854,9 @@ impl TuningEffect {
 
     fn source_key(&self) -> &str {
         match self {
-            Self::Poison { source_key, .. }
+            Self::DamageCharge { source_key, .. }
+            | Self::SelfDestruct { source_key, .. }
+            | Self::Poison { source_key, .. }
             | Self::DamageThreshold { source_key, .. }
             | Self::KillBerserk { source_key, .. }
             | Self::Sphere { source_key, .. }
@@ -860,7 +884,8 @@ impl TuningEffect {
 
     fn unit_rawcode(&self) -> Option<&str> {
         match self {
-            Self::Poison { unit_rawcode, .. }
+            Self::DamageCharge { unit_rawcode, .. }
+            | Self::Poison { unit_rawcode, .. }
             | Self::DamageThreshold { unit_rawcode, .. }
             | Self::KillBerserk { unit_rawcode, .. }
             | Self::Sphere { unit_rawcode, .. }
@@ -881,7 +906,9 @@ impl TuningEffect {
             | Self::OrbSpellProc { unit_rawcode, .. }
             | Self::BurningOil { unit_rawcode, .. }
             | Self::FrostArmor { unit_rawcode, .. } => Some(unit_rawcode),
-            Self::ChainLightning { .. } | Self::EntanglingRoots { .. } => None,
+            Self::SelfDestruct { .. }
+            | Self::ChainLightning { .. }
+            | Self::EntanglingRoots { .. } => None,
         }
     }
 
@@ -905,6 +932,10 @@ impl TuningEffect {
             Self::NativeAura { .. } => NativeEffectImplementationId::WarcraftNativeAuraV1,
             Self::SpeedAura { .. } => NativeEffectImplementationId::WarcraftSpeedAuraV1,
             Self::Sphere { .. } => NativeEffectImplementationId::WarcraftSphereV1,
+            Self::DamageCharge { .. } => {
+                NativeEffectImplementationId::WarcraftScriptDamageControllerV1
+            }
+            Self::SelfDestruct { .. } => NativeEffectImplementationId::WarcraftSelfDestructV1,
             Self::Defend { .. } => NativeEffectImplementationId::WarcraftDefendV1,
             Self::Bash { .. } => NativeEffectImplementationId::WarcraftBashV1,
             Self::OrbSpellProc { .. } => NativeEffectImplementationId::WarcraftOrbSpellProcV1,
@@ -933,6 +964,8 @@ impl TuningEffect {
             Self::NativeAura { .. } => "native-aura",
             Self::SpeedAura { .. } => "speed-aura",
             Self::Sphere { .. } => "sphere",
+            Self::DamageCharge { .. } => "damage-charge",
+            Self::SelfDestruct { .. } => "self-destruct",
             Self::Defend { .. } => "defend",
             Self::Bash { .. } => "bash",
             Self::OrbSpellProc { .. } => "orb-spell-proc",
@@ -1074,6 +1107,7 @@ fn native_unit_mechanics_from_tuning(
             .effects
             .iter()
             .filter(|effect| effect.source().ok() == Some(source))
+            .filter(|effect| !matches!(effect, TuningEffect::DamageCharge { unit_rawcode: code, .. } if rawcode(code).ok() != Some(unit_rawcode)))
         {
             match effect {
                 TuningEffect::ScriptedAutomatic { .. }
@@ -1093,7 +1127,8 @@ fn native_unit_mechanics_from_tuning(
                         automatic_spell = Some(candidate);
                     }
                 }
-                TuningEffect::Poison { .. }
+                TuningEffect::DamageCharge { .. }
+                | TuningEffect::Poison { .. }
                 | TuningEffect::KillBerserk { .. }
                 | TuningEffect::Sphere { .. }
                 | TuningEffect::SpeedAura { .. }
@@ -1122,7 +1157,8 @@ fn native_unit_mechanics_from_tuning(
                         passive = Some(candidate);
                     }
                 }
-                TuningEffect::DamageThreshold { .. }
+                TuningEffect::SelfDestruct { .. }
+                | TuningEffect::DamageThreshold { .. }
                 | TuningEffect::ChainLightning { .. }
                 | TuningEffect::EntanglingRoots { .. } => {
                     unreachable!("ability-effect tuning cannot match a unit-ability source")
@@ -1217,6 +1253,26 @@ pub fn native_effect_implementation_for(
 
 fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUnitEffect {
     match effect {
+        TuningEffect::DamageCharge {
+            profile,
+            effect_ability_rawcode,
+            ..
+        } => {
+            let child = tuning
+                .effects
+                .iter()
+                .find_map(|effect| match effect {
+                    TuningEffect::SelfDestruct {
+                        source_key,
+                        profile,
+                        ..
+                    } if source_key == effect_ability_rawcode => Some(profile),
+                    _ => None,
+                })
+                .expect("validated charge explosion dependency");
+            assert_eq!(profile.explosion, *child);
+            PassiveUnitEffect::DamageCharge(*profile)
+        }
         TuningEffect::Poison { profile, .. } => {
             assert!(profile.damage_per_second >= 0 && profile.duration_ticks > 0);
             PassiveUnitEffect::Poison(*profile)
@@ -1520,7 +1576,8 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             target_ground_units: *target_ground_units,
             target_buildings: *target_buildings,
         }),
-        TuningEffect::ScriptedAutomatic { .. }
+        TuningEffect::SelfDestruct { .. }
+        | TuningEffect::ScriptedAutomatic { .. }
         | TuningEffect::ElvenAutomatic { .. }
         | TuningEffect::ChainLightning { .. }
         | TuningEffect::EntanglingRoots { .. }

@@ -541,6 +541,68 @@ pub struct SphereAttachmentState {
     pub next_slot: u8,
 }
 
+/// Native Asds: physical ability damage uses armor points without attack-class multipliers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SelfDestructProfile {
+    pub ability: AbilityId,
+    pub full_radius: i32,
+    pub full_damage: i32,
+    pub partial_radius: i32,
+    pub partial_damage: i32,
+    pub building_damage_per_10k: u16,
+    pub targets: AttackTargetMask,
+}
+
+impl SelfDestructProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 7] {
+        [
+            u64::from(self.ability.0),
+            self.full_radius as u64,
+            self.full_damage as u64,
+            self.partial_radius as u64,
+            self.partial_damage as u64,
+            u64::from(self.building_damage_per_10k),
+            u64::from(self.targets.bits()),
+        ]
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DamageChargeProfile {
+    pub marker: AbilityId,
+    pub mana_maximum: i32,
+    pub mana_starting: i32,
+    pub mana_regen_per_second_per_10k: i32,
+    pub threshold: i32,
+    pub armed_speed_per_tick: i32,
+    pub explosion: SelfDestructProfile,
+}
+
+impl DamageChargeProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 13] {
+        let mut words = [0; 13];
+        words[..6].copy_from_slice(&[
+            u64::from(self.marker.0),
+            self.mana_maximum as u64,
+            self.mana_starting as u64,
+            self.mana_regen_per_second_per_10k as u64,
+            self.threshold as u64,
+            self.armed_speed_per_tick as u64,
+        ]);
+        words[6..].copy_from_slice(&self.explosion.canonical_words());
+        words
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DamageChargeState {
+    pub profile: DamageChargeProfile,
+    /// Exact signed regeneration and damage accumulation, denominator simulation Hz * 10,000.
+    pub mana_per_10k_hz: i64,
+    pub armed: bool,
+    pub detonation_tick: Option<u64>,
+}
+
 /// Intrinsic zero-linger native Endurance Aura. Buff identity controls stacking.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpeedAuraProfile {
@@ -616,6 +678,7 @@ pub(crate) struct ProductionUnitClassifications(pub UnitClassifications);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PassiveUnitEffect {
+    DamageCharge(DamageChargeProfile),
     Poison(PoisonProfile),
     DamageThreshold(DamageThresholdProfile),
     KillBerserk(KillBerserkProfile),
@@ -1557,6 +1620,7 @@ pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
 
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusState {
+    pub damage_charge: Option<DamageChargeState>,
     pub spheres: [Option<SphereAttachmentState>; 4],
     pub acid_bomb: Option<AcidBombStatus>,
     pub poison: Option<PoisonStatus>,

@@ -8,6 +8,7 @@ mod acid_bomb;
 mod aura_carrier;
 mod buff_transfer;
 mod burning_oil;
+mod damage_charge;
 mod damage_threshold;
 mod ensnare;
 mod kill_berserk;

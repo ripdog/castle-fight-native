@@ -267,6 +267,49 @@
       ]
     },
     {
+      "building_rawcode": "h04D",
+      "source_registration": "wK",
+      "source_factory": "Gu:create850",
+      "source_callback": "BuildingAttachmentHandler_registerBuildingAttach_RaceElemental_call_registerBuildingAttach_RaceElemental11",
+      "visuals": [
+        {
+          "model_path": "Doodads\\Cityscape\\Structures\\City_ColumnSemiCircle\\City_ColumnSemiCircle.mdl",
+          "yaw_degrees": 270.0,
+          "offset_world": [
+            0.0,
+            28.0,
+            0.0
+          ],
+          "scale": 0.2
+        },
+        {
+          "model_path": "Doodads\\Cityscape\\Structures\\City_ColumnSemiCircle\\City_ColumnSemiCircle.mdl",
+          "yaw_degrees": 90.0,
+          "offset_world": [
+            0.0,
+            -28.0,
+            0.0
+          ],
+          "scale": 0.2
+        },
+        {
+          "model_path": "Abilities\\Spells\\Other\\Tornado\\TornadoElementalSmall.mdl",
+          "yaw_degrees": 90.0,
+          "offset_world": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": 0.6,
+          "color_rgb": [
+            90,
+            255,
+            255
+          ]
+        }
+      ]
+    },
+    {
       "building_rawcode": "h04M",
       "visuals": [],
       "native_abilities": [

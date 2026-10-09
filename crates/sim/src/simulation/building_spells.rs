@@ -755,7 +755,12 @@ impl Simulation {
                         target.armor.armor_type,
                     );
                     let damage = spell_damage_after_defend(*target, damage, self.next_tick);
-                    super::damage_thresholds::observe_damage(target, unit_health[target_index]);
+                    let event_damage = damage;
+                    super::damage_thresholds::observe_damage_event(
+                        target,
+                        unit_health[target_index],
+                        event_damage,
+                    );
                     unit_health[target_index] -= damage;
                 }
                 for (target_index, target) in buildings.iter().enumerate() {

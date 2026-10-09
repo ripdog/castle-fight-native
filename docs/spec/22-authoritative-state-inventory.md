@@ -217,3 +217,5 @@ Scripted moving fields own an ordered pending-cast array and mover array indepen
 A native fire buff remains authoritative for its full duration even when its periodic damage is zero. Native fire avoids its live buff, including a native stun that uses the same source buff identity; expiry and dispel release that exclusion. Cold produced-unit spellcasting profiles use optional boxed storage in the canonical projection without changing their serialized definition or checksum ordering.
 
 Native Sphere retains each ability’s attachment-slot deadlines and next slot in status state, and independent visual flights in the canonical native-action inventory. Its visual-ID namespace and allocation counter are separate from gameplay IDs, retained across recovery, and never influence damage or proc selection.
+
+Unit status retains damage-charge controller identity, exact fractional mana, permanent armed state and an optional native self-destruct cast deadline. The controller survives presentation/control projections such as Hex; native order eligibility still controls whether its granted ability can cast.

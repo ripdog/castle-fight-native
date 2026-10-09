@@ -131,12 +131,14 @@ impl Simulation {
                 .damage_rules
                 .apply_spell(state.next_damage, units[next_index].armor.armor_type);
             let adjusted = spell_damage_after_defend(units[next_index], adjusted, completed_tick);
-            super::damage_thresholds::observe_damage(
+            let event_damage = adjusted;
+            super::damage_thresholds::observe_damage_event(
                 &mut units[next_index],
                 unit_health[next_index],
+                event_damage,
             );
             unit_health[next_index] = unit_health[next_index]
-                .checked_sub(adjusted)
+                .checked_sub(event_damage)
                 .expect("Chain Lightning damage overflow");
             let next_position = positions[next_index];
             let mut points = [SimPoint::default(); MAX_BOUNCE_HITS + 1];
@@ -930,10 +932,15 @@ impl Simulation {
                             .damage_rules
                             .apply_spell(damage, unit.armor.armor_type);
                         let adjusted = spell_damage_after_defend(*unit, adjusted, completed_tick);
-                        super::damage_thresholds::observe_damage(unit, unit.health);
+                        let event_damage = adjusted;
+                        super::damage_thresholds::observe_damage_event(
+                            unit,
+                            unit.health,
+                            event_damage,
+                        );
                         unit.health = unit
                             .health
-                            .checked_sub(adjusted)
+                            .checked_sub(event_damage)
                             .expect("Burning Oil unit damage overflow");
                     }
                 }

@@ -185,9 +185,14 @@ impl Simulation {
                     .damage_rules
                     .apply_spell(state.profile.damage_per_second, target.armor.armor_type);
                 let damage = spell_damage_after_defend(*target, damage, self.next_tick);
-                super::super::damage_thresholds::observe_damage(target, target.health);
+                let event_damage = damage;
+                super::super::damage_thresholds::observe_damage_event(
+                    target,
+                    target.health,
+                    event_damage,
+                );
                 let floor = i32::from(!state.profile.can_kill);
-                target.health = target.health.saturating_sub(damage).max(floor);
+                target.health = target.health.saturating_sub(event_damage).max(floor);
             }
             state.next_pulse_tick = state
                 .next_pulse_tick

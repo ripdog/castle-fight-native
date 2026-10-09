@@ -4,6 +4,89 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0C5",
+      "unit_rawcode": "o00E",
+      "kind": "damage-charge",
+      "profile": {
+        "marker": 1093681973,
+        "mana_maximum": 1100,
+        "mana_starting": 0,
+        "mana_regen_per_second_per_10k": -20000,
+        "threshold": 680,
+        "armed_speed_per_tick": 15360,
+        "explosion": {
+          "ability": 1093682510,
+          "full_radius": 256000,
+          "full_damage": 375,
+          "partial_radius": 358400,
+          "partial_damage": 225,
+          "building_damage_per_10k": 7500,
+          "targets": 6
+        }
+      },
+      "effect_ability_rawcode": "A0EN",
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/production-unit-special-mechanics.tsv",
+        "handler": "vampireCharge",
+        "damage_handler": "handleTargetDamageEffects",
+        "phase": "pre-health-commit-reduced-damage-event"
+      }
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A0EN",
+      "unit_rawcode": "o00E",
+      "kind": "self-destruct",
+      "profile": {
+        "ability": 1093682510,
+        "full_radius": 256000,
+        "full_damage": 375,
+        "partial_radius": 358400,
+        "partial_damage": 225,
+        "building_damage_per_10k": 7500,
+        "targets": 6
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0E6",
+      "unit_rawcode": "o00E",
+      "kind": "sphere",
+      "profile": {
+        "ability": 1093682486,
+        "attachment_count": 3,
+        "cooldown_ticks": 3,
+        "speed_per_tick": 13653
+      },
+      "provenance": {
+        "ability": "A0E6",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0CR",
+      "unit_rawcode": "o00E",
+      "kind": "speed-aura",
+      "profile": {
+        "ability": 1093682002,
+        "buff_rawcode": 1110454838,
+        "radius": 716800,
+        "targets": 2,
+        "hostile": true,
+        "organic_only": false,
+        "affects_invulnerable": false,
+        "movement_percent_delta": -35,
+        "attack_speed_percent_delta": -35
+      },
+      "provenance": {
+        "ability": "A0CR",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A0E5",
       "unit_rawcode": "o00D",
       "kind": "sphere",
