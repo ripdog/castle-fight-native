@@ -29,7 +29,7 @@ PassiveRule
 
 ## 3. Mana
 
-Spellcasting buildings and combat units MAY have an authoritative mana pool.
+Spellcasting buildings and combat units MAY have an authoritative mana pool. A native building with mana capacity retains and regenerates its pool even while it has no cast ability; granting an ability or completing an upgrade must not silently discard that pool.
 
 Conceptual mutable state:
 

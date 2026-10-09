@@ -306,3 +306,69 @@ fn release_uses_selected_enemy_point_and_mode_then_survives_building_removal() {
         );
     }
 }
+
+#[test]
+fn inert_choice_building_regenerates_and_preserves_its_pool_through_upgrade_or_cancel() {
+    for cancel in [true, false] {
+        let mut sim = simulation();
+        let source = CastleFightTowerKind::BooksOfConjuration.definition();
+        let target = CastleFightTowerKind::ElementalRain.definition();
+        let footprint = BuildingFootprint::new(2, 2, 4, 4);
+        let building = source.spawn(Team(0), footprint);
+        let properties = source.gameplay_properties();
+        let id = sim.spawn_building_with_properties(building, properties);
+        assert_eq!(sim.building(id).unwrap().ability_ready_tick, None);
+        assert!(sim.building(id).unwrap().mana_maximum.is_some());
+        for _ in 0..75 {
+            sim.step();
+        }
+        let before = *sim.world.get::<ManaState>(entity(&sim, id)).unwrap();
+        assert!(before.current > 0 && before.regen_remainder_per_10k > 0);
+        let mut inert_restore = restore(&sim);
+        assert_eq!(inert_restore.checksum(), sim.checksum());
+        inert_restore
+            .world
+            .get_mut::<ManaState>(entity(&sim, id))
+            .unwrap()
+            .current += 1;
+        assert_ne!(inert_restore.checksum(), sim.checksum());
+        sim.start_building_upgrade_as(
+            PlayerId(0),
+            id,
+            building,
+            properties,
+            target.spawn(Team(0), footprint),
+            target.gameplay_properties(),
+        )
+        .unwrap();
+        let mut other = restore(&sim);
+        if cancel {
+            sim.cancel_building_construction_for_player(PlayerId(0), id)
+                .unwrap();
+            other
+                .cancel_building_construction_for_player(PlayerId(0), id)
+                .unwrap();
+            assert_eq!(sim.world.get::<ManaState>(entity(&sim, id)), Some(&before));
+        } else {
+            let finish = sim
+                .building(id)
+                .unwrap()
+                .construction_complete_tick
+                .unwrap();
+            while sim.next_tick <= finish {
+                assert_eq!(sim.step().checksum, other.step().checksum);
+            }
+            assert!(
+                sim.building(id)
+                    .unwrap()
+                    .construction_complete_tick
+                    .is_none()
+            );
+            assert_eq!(sim.building(id).unwrap().mana_current, Some(before.current));
+            assert_eq!(sim.building(id).unwrap().ability_cast_sequence, Some(0));
+        }
+        for _ in 0..5 {
+            assert_eq!(sim.step().checksum, other.step().checksum);
+        }
+    }
+}

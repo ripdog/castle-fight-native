@@ -504,6 +504,16 @@ impl Simulation {
                 },
             ));
         }
+        if building.spellcasting.is_none()
+            && let Some(mana) = properties.content.and_then(|c| {
+                crate::content::building_native_mana_profile(c.map_version, c.rawcode)
+            })
+        {
+            entity.insert(ManaState {
+                current: mana.starting,
+                regen_remainder_per_10k: 0,
+            });
+        }
         if building.attack.is_some()
             || building.spellcasting.is_some()
             || properties.content.is_some_and(|content| {
@@ -1072,6 +1082,38 @@ impl Simulation {
                 .copied()
                 .filter(|s| s.native_grants.mana_regeneration_per_second_per_10k() > 0);
             self.activate_building_entity(entity, construction.building, construction.properties);
+            if let Some(source) = construction.upgrade_from
+                && let Some(mana) = source.runtime.mana
+            {
+                let source_profile = source.building.spellcasting.map(|p| p.mana).or_else(|| {
+                    source.properties.content.and_then(|c| {
+                        crate::content::building_native_mana_profile(c.map_version, c.rawcode)
+                    })
+                });
+                let target_profile =
+                    construction
+                        .building
+                        .spellcasting
+                        .map(|p| p.mana)
+                        .or_else(|| {
+                            construction.properties.content.and_then(|c| {
+                                crate::content::building_native_mana_profile(
+                                    c.map_version,
+                                    c.rawcode,
+                                )
+                            })
+                        });
+                if let (Some(source), Some(target)) = (source_profile, target_profile)
+                    && source.maximum > 0
+                    && target.maximum > 0
+                {
+                    self.world.entity_mut(entity).insert(rescale_building_mana(
+                        mana,
+                        source.maximum,
+                        target.maximum,
+                    ));
+                }
+            }
             if let Some(permanent) = permanent_status {
                 let mut status = self
                     .world
@@ -1221,4 +1263,56 @@ impl Simulation {
                 .any(|order| footprint_contains_cell(order.building.footprint, cell))
             && !self.footprint_contains_live_unit(footprint)
     }
+}
+
+fn rescale_building_mana(mana: ManaState, source_max: i32, target_max: i32) -> ManaState {
+    let fractional = (mana.current.clamp(0, source_max) as u128) * 10_000
+        + u128::from(mana.regen_remainder_per_10k);
+    let scaled = (fractional * (target_max as u128) / (source_max as u128))
+        .min((target_max as u128) * 10_000);
+    ManaState {
+        current: i32::try_from(scaled / 10_000).expect("bounded native mana"),
+        regen_remainder_per_10k: u16::try_from(scaled % 10_000).expect("bounded mana fraction"),
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn native_upgrade_mana_rescaling_preserves_fraction_and_clamps_capacity() {
+    let scaled = rescale_building_mana(
+        ManaState {
+            current: 3,
+            regen_remainder_per_10k: 5000,
+        },
+        7,
+        14,
+    );
+    assert_eq!(
+        scaled,
+        ManaState {
+            current: 7,
+            regen_remainder_per_10k: 0
+        }
+    );
+    assert_eq!(
+        rescale_building_mana(scaled, 14, 7),
+        ManaState {
+            current: 3,
+            regen_remainder_per_10k: 5000
+        }
+    );
+    assert_eq!(
+        rescale_building_mana(
+            ManaState {
+                current: 7,
+                regen_remainder_per_10k: 1
+            },
+            7,
+            3
+        ),
+        ManaState {
+            current: 3,
+            regen_remainder_per_10k: 0
+        }
+    );
 }

@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 65;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 66;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -3024,12 +3024,26 @@ impl Simulation {
             }
         }
 
-        let mut mana_query = self
-            .world
-            .query::<(&SpellcastingProfile, &mut ManaState, Option<&StatusState>)>();
-        for (profile, mut mana, status) in mana_query.iter_mut(&mut self.world) {
-            if mana.current >= profile.mana.maximum {
-                mana.current = profile.mana.maximum;
+        let mut mana_query = self.world.query::<(
+            Option<&SpellcastingProfile>,
+            &mut ManaState,
+            Option<&StatusState>,
+            Option<&ContentIdentity>,
+            Option<&BuildingFootprint>,
+        )>();
+        for (casting, mut mana, status, content, building) in mana_query.iter_mut(&mut self.world) {
+            let profile = casting.map(|p| p.mana).or_else(|| {
+                building.and_then(|_| {
+                    content.and_then(|c| {
+                        crate::content::building_native_mana_profile(c.map_version, c.rawcode)
+                    })
+                })
+            });
+            let Some(profile) = profile else {
+                continue;
+            };
+            if mana.current >= profile.maximum {
+                mana.current = profile.maximum;
                 mana.regen_remainder_per_10k = 0;
                 continue;
             }
@@ -3054,17 +3068,15 @@ impl Simulation {
             });
             let accumulated = u64::from(mana.regen_remainder_per_10k)
                 + u64::from(
-                    profile
-                        .mana
-                        .regeneration_at_tick(self.next_tick, CASTLE_FIGHT_SIMULATION_HZ as u32),
+                    profile.regeneration_at_tick(self.next_tick, CASTLE_FIGHT_SIMULATION_HZ as u32),
                 )
                 + u64::from(aura_per_tick);
             let whole_mana = accumulated / 10_000;
             let remainder = accumulated % 10_000;
             let regenerated = i64::from(mana.current)
                 + i64::try_from(whole_mana).expect("mana regeneration exceeds i64");
-            if regenerated >= i64::from(profile.mana.maximum) {
-                mana.current = profile.mana.maximum;
+            if regenerated >= i64::from(profile.maximum) {
+                mana.current = profile.maximum;
                 mana.regen_remainder_per_10k = 0;
             } else {
                 mana.current = i32::try_from(regenerated)
@@ -3598,7 +3610,18 @@ impl Simulation {
                     debug_assert_eq!(attack.is_some(), target.is_some());
                     debug_assert_eq!(attack.is_some(), spawn_tick.is_some());
                     debug_assert_eq!(attack.is_some(), attack_targets.is_some());
-                    debug_assert_eq!(spellcasting.is_some(), mana.is_some());
+                    debug_assert_eq!(
+                        spellcasting.is_some()
+                            || (entity_ref.get::<BuildingConstruction>().is_none()
+                                && entity_ref.get::<ContentIdentity>().is_some_and(|c| {
+                                    crate::content::building_native_mana_profile(
+                                        c.map_version,
+                                        c.rawcode,
+                                    )
+                                    .is_some()
+                                })),
+                        mana.is_some()
+                    );
                     debug_assert_eq!(spellcasting.is_some(), ability_state.is_some());
                     debug_assert!(
                         !(attack.is_some() || spellcasting.is_some()) || status.is_some()
@@ -5300,7 +5323,14 @@ fn building_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<B
             .get::<AttackCooldown>()
             .map(|cooldown| cooldown.remaining),
         mana_current: entity.get::<ManaState>().map(|mana| mana.current),
-        mana_maximum: spellcasting.map(|profile| profile.mana.maximum),
+        mana_maximum: spellcasting
+            .map(|profile| profile.mana.maximum)
+            .or_else(|| {
+                entity.get::<ContentIdentity>().and_then(|c| {
+                    crate::content::building_native_mana_profile(c.map_version, c.rawcode)
+                        .map(|p| p.maximum)
+                })
+            }),
         ability_ready_tick: ability_state.map(|state| state.ready_tick),
         ability_cast_sequence: ability_state.map(|state| state.cast_sequence),
         ability_autocast_enabled: ability_state.map(|state| state.autocast_enabled),

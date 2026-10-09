@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r75";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r76";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -3585,6 +3585,7 @@ struct ExtractedBuilding927 {
 struct ExtractedUnit927 {
     action_timing: ActionTimingProfile,
     mana_maximum: i32,
+    native_mana: Option<ManaProfile>,
     name: &'static str,
     basic_tooltip: &'static str,
     extended_tooltip: &'static str,
@@ -4150,6 +4151,25 @@ impl ExtractedContent927 {
                 .collect::<Result<Vec<_>, String>>()?;
             let row = ExtractedUnit927 {
                 mana_maximum: parse_optional_i32_927(columns[14])?.unwrap_or(0),
+                native_mana: if columns[7] == "1"
+                    && parse_optional_i32_927(columns[14])?.unwrap_or(0) > 0
+                {
+                    Some(ManaProfile::per_second(
+                        parse_optional_i32_927(columns[14])?.unwrap_or(0),
+                        parse_optional_i32_927(columns[15])?.unwrap_or(0),
+                        u32::try_from(
+                            parse_optional_decimal_scaled_i32_927(columns[16], 10_000)?
+                                .unwrap_or(0),
+                        )
+                        .map_err(|_| {
+                            format!(
+                                "building {rawcode:#010x} has negative native mana regeneration"
+                            )
+                        })?,
+                    ))
+                } else {
+                    None
+                },
                 action_timing: action_timings.get(&rawcode).copied().ok_or_else(|| {
                     format!("unit {rawcode:#010x} is missing native action timing")
                 })?,
@@ -5723,6 +5743,19 @@ pub(crate) fn building_native_mana_maximum(version: MapVersion, rawcode: u32) ->
         .units
         .get(&rawcode)
         .map(|unit| unit.mana_maximum)
+}
+
+pub(crate) fn building_native_mana_profile(
+    version: MapVersion,
+    rawcode: u32,
+) -> Option<ManaProfile> {
+    if version != MapVersion::CASTLE_FIGHT_9_27 {
+        return None;
+    }
+    extracted_content_927()
+        .units
+        .get(&rawcode)
+        .and_then(|unit| unit.native_mana)
 }
 
 pub(crate) fn building_has_production(version: MapVersion, rawcode: u32) -> bool {
