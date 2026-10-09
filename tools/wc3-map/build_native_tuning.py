@@ -190,6 +190,27 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         effect.update(chance_per_10k=number("DataA1", 100),
                       damage_multiplier_per_10k=number("DataB1", 10_000),
                       targets=unit_targets(fields["targs1"], allow_structures=True))
+    elif kind == "sphere":
+        if mechanics["native_base"] != "Asph" or not 1 <= number("Targetattachcount") <= 3:
+            raise ValueError("Sphere must retain an audited native attachment count")
+        # Native Sphere launches independent visual-only missiles to the attack/cast point.
+        effect.update(profile={"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
+            "attachment_count": number("Targetattachcount"),
+            "cooldown_ticks": int((Decimal(protected.get("cooldown", fields["cool1"])) * 30).to_integral_value(rounding="ROUND_CEILING")),
+            "speed_per_tick": int(Decimal(fields["missilespeed"]) * 1024 / 30)})
+    elif kind == "speed-aura":
+        tokens = set(fields["targs1"].split(","))
+        if mechanics["native_base"] != "AOae" or tokens != {"air", "enemies", "ward"}:
+            raise ValueError("speed aura needs audited native hostile air semantics")
+        if number("dur1") != 0 or number("herodur1") != 0:
+            raise ValueError("speed aura currently supports zero linger only")
+        buffs = fields["buffid1"].split(",")
+        if len(buffs) != 1 or len(buffs[0]) != 4:
+            raise ValueError("speed aura must retain exactly one native buff family")
+        effect.update(profile={"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
+            "buff_rawcode": int.from_bytes(buffs[0].encode(), "big"), "radius": number("Area1", 1024),
+            "targets": 2, "hostile": True, "organic_only": False, "affects_invulnerable": False,
+            "movement_percent_delta": number("DataA1", 100), "attack_speed_percent_delta": number("DataB1", 100)})
     elif kind == "native-aura":
         if set(fields["targs1"].split(",")) != {"air", "ground", "friend", "self", "vuln", "invu"}:
             raise ValueError("native aura requires explicit target semantics")

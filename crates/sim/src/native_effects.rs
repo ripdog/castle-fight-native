@@ -50,6 +50,8 @@ pub enum NativeEffectImplementationId {
     WarcraftFrostAttackV1,
     WarcraftPulverizeV1,
     WarcraftNativeAuraV1,
+    WarcraftSpeedAuraV1,
+    WarcraftSphereV1,
     WarcraftScriptedAutomaticV1,
     WarcraftHumanSupportV1,
     WarcraftHumanPassiveV1,
@@ -91,6 +93,8 @@ impl NativeEffectImplementationId {
             Self::WarcraftFrostAttackV1 => 20,
             Self::WarcraftPulverizeV1 => 21,
             Self::WarcraftNativeAuraV1 => 22,
+            Self::WarcraftSpeedAuraV1 => 69,
+            Self::WarcraftSphereV1 => 70,
             Self::WarcraftScriptedAutomaticV1 => 19,
             Self::WarcraftHumanSupportV1 => 11,
             Self::WarcraftHumanPassiveV1 => 12,
@@ -551,6 +555,18 @@ enum TuningEffect {
         #[allow(dead_code)]
         provenance: serde_json::Value,
     },
+    Sphere {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        profile: crate::components::SphereProfile,
+    },
+    SpeedAura {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        profile: crate::components::SpeedAuraProfile,
+    },
     NativeAura {
         damage_bonus_per_10k: i16,
         armor_bonus_per_100: i16,
@@ -791,6 +807,8 @@ impl TuningEffect {
             Self::Poison { source_kind, .. }
             | Self::DamageThreshold { source_kind, .. }
             | Self::KillBerserk { source_kind, .. }
+            | Self::Sphere { source_kind, .. }
+            | Self::SpeedAura { source_kind, .. }
             | Self::NativeAura { source_kind, .. }
             | Self::Pulverize { source_kind, .. }
             | Self::FrostAttack { source_kind, .. }
@@ -817,6 +835,8 @@ impl TuningEffect {
             Self::Poison { source_key, .. }
             | Self::DamageThreshold { source_key, .. }
             | Self::KillBerserk { source_key, .. }
+            | Self::Sphere { source_key, .. }
+            | Self::SpeedAura { source_key, .. }
             | Self::NativeAura { source_key, .. }
             | Self::Pulverize { source_key, .. }
             | Self::FrostAttack { source_key, .. }
@@ -843,6 +863,8 @@ impl TuningEffect {
             Self::Poison { unit_rawcode, .. }
             | Self::DamageThreshold { unit_rawcode, .. }
             | Self::KillBerserk { unit_rawcode, .. }
+            | Self::Sphere { unit_rawcode, .. }
+            | Self::SpeedAura { unit_rawcode, .. }
             | Self::NativeAura { unit_rawcode, .. }
             | Self::Pulverize { unit_rawcode, .. }
             | Self::FrostAttack { unit_rawcode, .. }
@@ -881,6 +903,8 @@ impl TuningEffect {
             Self::DamageThreshold { .. } => NativeEffectImplementationId::WarcraftDamageThresholdV1,
             Self::KillBerserk { .. } => NativeEffectImplementationId::WarcraftKillBerserkV1,
             Self::NativeAura { .. } => NativeEffectImplementationId::WarcraftNativeAuraV1,
+            Self::SpeedAura { .. } => NativeEffectImplementationId::WarcraftSpeedAuraV1,
+            Self::Sphere { .. } => NativeEffectImplementationId::WarcraftSphereV1,
             Self::Defend { .. } => NativeEffectImplementationId::WarcraftDefendV1,
             Self::Bash { .. } => NativeEffectImplementationId::WarcraftBashV1,
             Self::OrbSpellProc { .. } => NativeEffectImplementationId::WarcraftOrbSpellProcV1,
@@ -907,6 +931,8 @@ impl TuningEffect {
             Self::DamageThreshold { .. } => "damage-threshold",
             Self::KillBerserk { .. } => "kill-berserk",
             Self::NativeAura { .. } => "native-aura",
+            Self::SpeedAura { .. } => "speed-aura",
+            Self::Sphere { .. } => "sphere",
             Self::Defend { .. } => "defend",
             Self::Bash { .. } => "bash",
             Self::OrbSpellProc { .. } => "orb-spell-proc",
@@ -1069,6 +1095,8 @@ fn native_unit_mechanics_from_tuning(
                 }
                 TuningEffect::Poison { .. }
                 | TuningEffect::KillBerserk { .. }
+                | TuningEffect::Sphere { .. }
+                | TuningEffect::SpeedAura { .. }
                 | TuningEffect::NativeAura { .. }
                 | TuningEffect::Pulverize { .. }
                 | TuningEffect::FrostAttack { .. }
@@ -1232,6 +1260,14 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
                 attack_speed_percent_delta: *attack_speed_percent_delta,
                 damage_taken_bonus_per_10k: *damage_taken_bonus_per_10k,
             })
+        }
+        TuningEffect::Sphere { profile, .. } => {
+            assert!((1..=3).contains(&profile.attachment_count) && profile.speed_per_tick > 0);
+            PassiveUnitEffect::Sphere(*profile)
+        }
+        TuningEffect::SpeedAura { profile, .. } => {
+            assert!(profile.radius >= 0 && profile.buff_rawcode != 0);
+            PassiveUnitEffect::SpeedAura(*profile)
         }
         TuningEffect::NativeAura {
             damage_bonus_per_10k,

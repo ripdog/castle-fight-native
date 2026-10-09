@@ -9,6 +9,25 @@ import build_runtime_catalog as catalog
 
 
 class NativeTuningProjectionTest(unittest.TestCase):
+    def test_sphere_uses_protected_cooldown_and_independent_native_visual_speed(self):
+        recipe = {"kind":"sphere", "source_kind":"unit-ability", "source_key":"TEST", "unit_rawcode":"UNIT"}
+        fields = {"targetattachcount":"3", "cool1":"99", "missilespeed":"450"}
+        profile = native.project_effect(recipe, fields, None, {"cooldown":"0.11"}, {"native_base":"Asph"})["profile"]
+        self.assertEqual((profile["attachment_count"], profile["cooldown_ticks"], profile["speed_per_tick"]), (3,4,15*1024))
+        for count in ('0', '4'):
+            with self.assertRaises(ValueError):
+                native.project_effect(recipe, {**fields, "targetattachcount":count}, None, {}, {"native_base":"Asph"})
+
+    def test_speed_aura_projects_signed_native_payload_and_rejects_unsupported_semantics(self):
+        recipe = {"kind":"speed-aura", "source_kind":"unit-ability", "source_key":"TEST", "unit_rawcode":"UNIT"}
+        fields = {"targs1":"air,enemies,ward", "dur1":"0", "herodur1":"0", "buffid1":"BUFF", "area1":"71", "dataa1":"-0.17", "datab1":"-0.29"}
+        profile = native.project_effect(recipe, fields, None, {}, {"native_base":"AOae"})["profile"]
+        self.assertEqual((profile["movement_percent_delta"], profile["attack_speed_percent_delta"]), (-17, -29))
+        self.assertEqual(profile["radius"], 71 * 1024)
+        for changes in ({"dur1":"1"}, {"targs1":"air,ground,enemies,ward"}, {"buffid1":"BUFF,TEST"}):
+            with self.assertRaises(ValueError):
+                native.project_effect(recipe, {**fields, **changes}, None, {}, {"native_base":"AOae"})
+
     def test_native_damage_aura_retains_weapon_eligibility_and_linger(self) -> None:
         recipe = {"kind": "native-aura", "source_kind": "unit-ability", "source_key": "TEST", "unit_rawcode": "UNIT"}
         fields = {"targs1": "air,ground,friend,self,vuln,invu", "area1": "77", "dataa1": "0.17", "datab1": "1", "datac1": "0", "datad1": "0", "dur1": "0.25"}

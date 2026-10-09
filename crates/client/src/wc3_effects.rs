@@ -513,6 +513,7 @@ pub(crate) struct Wc3ModelSequenceClock {
 
 #[derive(Component, Debug, Clone)]
 pub(crate) struct Wc3AnimatedMaterialAlpha {
+    vertex_opacity: f32,
     static_alpha: f32,
     track: Wc3ScalarTrack,
     sequence_windows: Vec<Wc3EmitterSequenceWindow>,
@@ -620,6 +621,9 @@ pub struct Wc3TeamTint {
 
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Wc3VertexTint(pub [u8; 3]);
+
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Wc3VertexOpacity(pub u8);
 
 #[derive(Component)]
 pub(crate) struct Wc3AttachmentOwner;
@@ -1844,6 +1848,7 @@ fn legacy_model_particle_velocity(
 }
 
 pub fn emit_wc3_model_particles(
+    visibility: Query<&Visibility>,
     mut commands: Commands,
     time: Res<Time>,
     asset_server: Res<AssetServer>,
@@ -1860,7 +1865,7 @@ pub fn emit_wc3_model_particles(
         let clock = inherited_wc3_model_sequence_clock(entity, &parents, &clocks);
         let sample = sample_legacy_model_emitter(&emitter, clock);
         emitter.fallback_elapsed_ms += dt_ms;
-        if sample.visibility <= 0.001 {
+        if sample.visibility <= 0.001 || !wc3_effect_visible(entity, &parents, &visibility) {
             emitter.accumulator = 0.0;
             continue;
         }
@@ -3903,7 +3908,10 @@ type Wc3MaterialWorld<'w, 's> = (
     Query<'w, 's, &'static ChildOf>,
     Query<'w, 's, &'static Wc3TeamTint>,
     Query<'w, 's, &'static Wc3VertexTint>,
+    Query<'w, 's, &'static Wc3VertexOpacity>,
 );
+
+type OpacityMaterialCache = HashMap<(AssetId<StandardMaterial>, u32), Handle<StandardMaterial>>;
 
 type Wc3MaterialAssets<'w, 's> = (
     ResMut<'w, Assets<StandardMaterial>>,
@@ -3917,6 +3925,7 @@ type Wc3MaterialAssets<'w, 's> = (
     Local<'s, TeamCompositeMaterialCache>,
     Local<'s, TeamImageCache>,
     Local<'s, HashMap<(AssetId<StandardMaterial>, [u8; 3]), Handle<StandardMaterial>>>,
+    Local<'s, OpacityMaterialCache>,
 );
 
 type Wc3MaterialMeshQuery<'w, 's> = Query<
@@ -3939,7 +3948,7 @@ pub fn fix_wc3_scene_materials(
     experiment: Option<Res<RenderExperiment>>,
     mut meshes: Wc3MaterialMeshQuery<'_, '_>,
 ) {
-    let (asset_server, parents, team_roots, tint_roots) = world;
+    let (asset_server, parents, team_roots, tint_roots, opacity_roots) = world;
     let (
         mut materials,
         mut animated_alpha_materials,
@@ -3952,6 +3961,7 @@ pub fn fix_wc3_scene_materials(
         mut team_composite_cache,
         mut team_images,
         mut tinted_materials,
+        mut opacity_materials,
     ) = material_assets;
     let legacy_team_color = experiment
         .as_ref()
@@ -3968,12 +3978,14 @@ pub fn fix_wc3_scene_materials(
             continue;
         };
         let tint = wc3_vertex_tint(entity, &parents, &tint_roots);
+        let opacity = wc3_vertex_opacity(entity, &parents, &opacity_roots);
         if extras.filter_mode.is_none()
             && extras.alpha_track.is_none()
             && extras.texture_id_track.is_none()
             && !extras.team_color_underlay
             && !extras.team_glow_layer
             && tint.is_none()
+            && opacity == 1.0
         {
             commands.entity(entity).insert(Wc3MaterialProcessed);
             continue;
@@ -4040,6 +4052,7 @@ pub fn fix_wc3_scene_materials(
         {
             let key = (source_material_id, team.index);
             if !legacy_team_color
+                && opacity == 1.0
                 && can_composite_unit_team_color(&extras, team, tint, &material_template)
             {
                 let composite_handle = if let Some(handle) = team_composite_cache.get(&key) {
@@ -4111,6 +4124,17 @@ pub fn fix_wc3_scene_materials(
                     team_materials.insert(key, handle.clone());
                     handle
                 };
+                let underlay_handle = if opacity < 1.0 {
+                    vertex_opacity_material(
+                        &underlay_handle,
+                        opacity,
+                        &mut opacity_materials,
+                        &mut materials,
+                    )
+                    .expect("resolved underlay")
+                } else {
+                    underlay_handle
+                };
                 let mut underlay_entity = commands.spawn((
                     Mesh3d(mesh.0.clone()),
                     MeshMaterial3d(underlay_handle),
@@ -4149,6 +4173,17 @@ pub fn fix_wc3_scene_materials(
             material_handle.0 = tinted;
         }
 
+        if opacity < 1.0 {
+            let Some(material) = vertex_opacity_material(
+                &material_handle.0,
+                opacity,
+                &mut opacity_materials,
+                &mut materials,
+            ) else {
+                continue 'mesh;
+            };
+            material_handle.0 = material;
+        }
         let alpha_track = extras.alpha_track.clone();
         let texture_id_track = extras.texture_id_track.clone();
         let persistent_texture = texture_id_track.is_some()
@@ -4254,6 +4289,11 @@ pub fn fix_wc3_scene_materials(
 
         if let Some(track) = alpha_track {
             commands.entity(entity).insert(Wc3AnimatedMaterialAlpha {
+                vertex_opacity: if alpha_gpu_slot.is_some() {
+                    1.0
+                } else {
+                    opacity
+                },
                 static_alpha: extras.layer_alpha.clamp(0.0, 1.0),
                 track,
                 sequence_windows: extras.sequence_windows.clone(),
@@ -4626,6 +4666,7 @@ pub fn update_wc3_material_alpha(
             &animation.global_sequence_durations_ms,
         )
         .clamp(0.0, 1.0);
+        let alpha = alpha * animation.vertex_opacity;
         let alpha_bits = alpha.to_bits();
         if alpha_bits == animation.last_alpha_bits {
             continue;
@@ -4893,6 +4934,67 @@ fn wc3_vertex_tint(
     None
 }
 
+fn wc3_effect_visible(
+    entity: Entity,
+    parents: &Query<&ChildOf>,
+    roots: &Query<&Visibility>,
+) -> bool {
+    let mut current = entity;
+    for _ in 0..128 {
+        if roots
+            .get(current)
+            .is_ok_and(|visibility| *visibility == Visibility::Hidden)
+        {
+            return false;
+        }
+        let Ok(parent) = parents.get(current) else {
+            return true;
+        };
+        current = parent.parent();
+    }
+    true
+}
+
+fn vertex_opacity_material(
+    source: &Handle<StandardMaterial>,
+    opacity: f32,
+    cache: &mut OpacityMaterialCache,
+    materials: &mut Assets<StandardMaterial>,
+) -> Option<Handle<StandardMaterial>> {
+    let key = (source.id(), opacity.to_bits());
+    if let Some(handle) = cache.get(&key) {
+        return Some(handle.clone());
+    }
+    let mut material = materials.get(source)?.clone();
+    material
+        .base_color
+        .set_alpha(material.base_color.alpha() * opacity);
+    if matches!(material.alpha_mode, AlphaMode::Opaque | AlphaMode::Mask(_)) {
+        material.alpha_mode = AlphaMode::Blend;
+    }
+    let handle = materials.add(material);
+    cache.insert(key, handle.clone());
+    Some(handle)
+}
+
+fn wc3_vertex_opacity(
+    entity: Entity,
+    parents: &Query<&ChildOf>,
+    roots: &Query<&Wc3VertexOpacity>,
+) -> f32 {
+    let mut current = entity;
+    for _ in 0..128 {
+        if let Ok(opacity) = roots.get(current) {
+            return f32::from(opacity.0) / 255.0;
+        }
+        let Ok(parent) = parents.get(current) else {
+            return 1.0;
+        };
+        current = parent.parent();
+    }
+    1.0
+}
+
 pub fn spawn_wc3_ribbon_trails(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -5153,6 +5255,7 @@ type Wc3ParticleQuery<'w, 's> = Query<
 >;
 
 pub fn emit_wc3_particles(
+    visibility_world: (Query<&ChildOf>, Query<&Visibility>),
     mut commands: Commands,
     time: Res<Time>,
     mut assets: Wc3ParticleRenderAssets,
@@ -5160,8 +5263,10 @@ pub fn emit_wc3_particles(
     mut sources: Query<(Entity, &GlobalTransform, &mut Wc3EmitterSource), Without<Wc3EffectWarmup>>,
     transforms: Query<&GlobalTransform>,
 ) {
+    let (parents, visibility) = visibility_world;
     let dt = time.delta_secs().min(0.1);
     for (entity, transform, mut source) in &mut sources {
+        let visible = wc3_effect_visible(entity, &parents, &visibility);
         let sequence_time_ms = source
             .sequence_clock
             .as_ref()
@@ -5176,7 +5281,7 @@ pub fn emit_wc3_particles(
                 global_elapsed_ms,
                 sequence_clock.as_ref(),
             );
-            if sample.visibility <= 0.001 {
+            if sample.visibility <= 0.001 || !visible {
                 emitter.accumulator = 0.0;
                 continue;
             }
@@ -6568,6 +6673,50 @@ mod tests {
     }
 
     #[test]
+    fn native_vertex_opacity_preserves_source_alpha_and_reuses_material_variants() {
+        let mut materials = Assets::<StandardMaterial>::default();
+        let source = materials.add(StandardMaterial {
+            base_color: Color::linear_rgba(0.2, 0.3, 0.4, 0.75),
+            ..Default::default()
+        });
+        let mut cache = OpacityMaterialCache::new();
+        let first = vertex_opacity_material(&source, 0.5, &mut cache, &mut materials).unwrap();
+        let second = vertex_opacity_material(&source, 0.5, &mut cache, &mut materials).unwrap();
+        assert_eq!(first, second);
+        assert_eq!(materials.get(&source).unwrap().base_color.alpha(), 0.75);
+        let translucent = materials.get(&first).unwrap();
+        assert_eq!(translucent.base_color.alpha(), 0.375);
+        assert_eq!(translucent.alpha_mode, AlphaMode::Blend);
+        assert_eq!(cache.len(), 1);
+    }
+
+    #[test]
+    fn effect_visibility_and_vertex_opacity_follow_independent_native_attachment_roots() {
+        use bevy::ecs::system::SystemState;
+        let mut world = World::new();
+        let unit = world
+            .spawn((Visibility::Hidden, Wc3VertexOpacity(128)))
+            .id();
+        let mesh = world.spawn(ChildOf(unit)).id();
+        let effect = world.spawn((ChildOf(unit), Wc3VertexOpacity(255))).id();
+        let effect_mesh = world.spawn(ChildOf(effect)).id();
+        let mut state: SystemState<(
+            Query<&ChildOf>,
+            Query<&Visibility>,
+            Query<&Wc3VertexOpacity>,
+        )> = SystemState::new(&mut world);
+        {
+            let (parents, visibility, opacity) = state.get(&world).unwrap();
+            assert!(!wc3_effect_visible(effect_mesh, &parents, &visibility));
+            assert_eq!(wc3_vertex_opacity(mesh, &parents, &opacity), 128.0 / 255.0);
+            assert_eq!(wc3_vertex_opacity(effect_mesh, &parents, &opacity), 1.0);
+        }
+        world.entity_mut(unit).insert(Visibility::Inherited);
+        let (parents, visibility, _) = state.get(&world).unwrap();
+        assert!(wc3_effect_visible(effect_mesh, &parents, &visibility));
+    }
+
+    #[test]
     fn geoset_visibility_uses_exported_binary_scale() {
         let extras = serde_json::from_str::<Wc3NodeExtras>(r#"{"wc3Geoset":3}"#).unwrap();
         assert_eq!(extras.wc3_geoset, Some(3));
@@ -7687,6 +7836,7 @@ mod tests {
     #[test]
     fn material_sequence_time_uses_selected_wc3_window() {
         let animation = Wc3AnimatedMaterialAlpha {
+            vertex_opacity: 1.0,
             static_alpha: 1.0,
             track: Wc3ScalarTrack {
                 interpolation: Wc3ScalarInterpolation::Linear,

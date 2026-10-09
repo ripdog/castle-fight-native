@@ -4,6 +4,43 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0E5",
+      "unit_rawcode": "o00D",
+      "kind": "sphere",
+      "profile": {
+        "ability": 1093682485,
+        "attachment_count": 1,
+        "cooldown_ticks": 3,
+        "speed_per_tick": 13653
+      },
+      "provenance": {
+        "ability": "A0E5",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0CQ",
+      "unit_rawcode": "o00D",
+      "kind": "speed-aura",
+      "profile": {
+        "ability": 1093682001,
+        "buff_rawcode": 1110454838,
+        "radius": 716800,
+        "targets": 2,
+        "hostile": true,
+        "organic_only": false,
+        "affects_invulnerable": false,
+        "movement_percent_delta": -20,
+        "attack_speed_percent_delta": -20
+      },
+      "provenance": {
+        "ability": "A0CQ",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A08O",
       "unit_rawcode": "o00B",
       "kind": "spell-resistance",

@@ -9,7 +9,7 @@ pub use native_grants::{
 mod native_actions;
 pub(crate) use native_actions::{
     AcidBombMissileState, AuraCarrierState, EnsnareMissileState, HailstoneState, HealingWaveState,
-    NativeAction, NativeBoltState, PoisonState, StasisTrapState,
+    NativeAction, NativeBoltState, PoisonState, SphereFlightState, StasisTrapState,
 };
 pub use native_actions::{
     AcidBombProfile, AcidBombStatus, EnsnareProfile, EnsnareState, HealingWaveProfile,
@@ -525,6 +525,36 @@ pub struct AuraEffectProfile {
     pub suspend_during_spell_cooldown: bool,
 }
 
+/// Native Sphere owns visual-only missiles and attachment cooldowns, never damage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SphereProfile {
+    pub ability: AbilityId,
+    pub attachment_count: u8,
+    pub cooldown_ticks: u16,
+    pub speed_per_tick: i32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SphereAttachmentState {
+    pub ability: AbilityId,
+    pub hidden_until: [u64; 3],
+    pub next_slot: u8,
+}
+
+/// Intrinsic zero-linger native Endurance Aura. Buff identity controls stacking.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SpeedAuraProfile {
+    pub ability: AbilityId,
+    pub buff_rawcode: u32,
+    pub radius: i32,
+    pub targets: AttackTargetMask,
+    pub hostile: bool,
+    pub organic_only: bool,
+    pub affects_invulnerable: bool,
+    pub movement_percent_delta: i16,
+    pub attack_speed_percent_delta: i16,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpellResistanceEffectProfile {
     pub ability: AbilityId,
@@ -598,6 +628,8 @@ pub enum PassiveUnitEffect {
     BurningOil(BurningOilEffectProfile),
     Cleave(CleaveEffectProfile),
     Aura(AuraEffectProfile),
+    SpeedAura(SpeedAuraProfile),
+    Sphere(SphereProfile),
     SpellResistance(SpellResistanceEffectProfile),
     Feedback(FeedbackEffectProfile),
     FrostAttack(FrostAttackEffectProfile),
@@ -1431,6 +1463,8 @@ pub struct TimedAttackSpeedModifier {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimedArmorModifier {
+    /// Last completed tick’s intrinsic aura membership, visible until the next resample.
+    pub aura_membership: bool,
     pub id: ModifierId,
     pub native_buff: Option<NativeBuffIdentity>,
     pub armor_bonus_per_100: i16,
@@ -1523,6 +1557,7 @@ pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
 
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusState {
+    pub spheres: [Option<SphereAttachmentState>; 4],
     pub acid_bomb: Option<AcidBombStatus>,
     pub poison: Option<PoisonStatus>,
     pub damage_threshold: DamageThresholdState,

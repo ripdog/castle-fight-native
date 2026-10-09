@@ -367,6 +367,9 @@ impl PresentationSnapshot {
                     })
                     .or(match projectile.kind {
                         castle_fight_sim::ProjectileViewKind::Line { destination, .. }
+                        | castle_fight_sim::ProjectileViewKind::SphereFlight {
+                            destination, ..
+                        }
                         | castle_fight_sim::ProjectileViewKind::Ballistic { destination, .. } => {
                             Some(destination)
                         }

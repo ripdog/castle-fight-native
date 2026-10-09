@@ -63,7 +63,7 @@ use crate::{
         Wc3ComposedMetadataCache, Wc3ConvertedModelRegistry, Wc3EffectReusePending,
         Wc3EffectWarmup, Wc3EmitterSource, Wc3LightningVisual, Wc3MaterialProcessed,
         Wc3ModelSequenceSelection, Wc3ParticleAssets, Wc3RibbonSource, Wc3SplatMaterial,
-        Wc3StatusVisualKind, Wc3TeamColorMaterial, Wc3TeamTint, Wc3VertexTint,
+        Wc3StatusVisualKind, Wc3TeamColorMaterial, Wc3TeamTint, Wc3VertexOpacity, Wc3VertexTint,
         Wc3VisualAnimationGraphs, Wc3VisualAnimationSource, Wc3VisualModel, Wc3VisualSet,
         advance_wc3_model_sequence_clocks, apply_wc3_non_inheritance, emit_wc3_model_particles,
         emit_wc3_particles, emit_wc3_sound_events, emit_wc3_spawn_events, emit_wc3_splat_events,
@@ -529,6 +529,7 @@ impl PresentationAssets {
     fn projectile_mesh(&self, projectile: &ProjectileView) -> Handle<Mesh> {
         match projectile.kind {
             ProjectileViewKind::NativeMover { .. }
+            | ProjectileViewKind::SphereFlight { .. }
             | ProjectileViewKind::NativeCarrierBolt { .. }
             | ProjectileViewKind::GuaranteedHit { .. }
             | ProjectileViewKind::Reflected { .. }
@@ -541,6 +542,7 @@ impl PresentationAssets {
     fn projectile_material(&self, projectile: &ProjectileView) -> Handle<StandardMaterial> {
         let index = match projectile.kind {
             ProjectileViewKind::NativeMover { .. }
+            | ProjectileViewKind::SphereFlight { .. }
             | ProjectileViewKind::NativeCarrierBolt { .. }
             | ProjectileViewKind::GuaranteedHit { .. }
             | ProjectileViewKind::Reflected { .. }
@@ -1090,6 +1092,7 @@ impl Plugin for CastlePresentationPlugin {
                     (invalidate_wc3_effect_pool_assets, prewarm_timed_wc3_effects).chain(),
                     finish_model_prep_profile,
                     sync_render_entities,
+                    sync_sphere_attachments,
                     finish_entity_sync_profile,
                 )
                     .chain(),
@@ -3175,6 +3178,7 @@ fn spawn_persistent_unit_attachments(
                     visual.model.looping_emitter_source(),
                     Wc3RibbonSource::new(&visual.model.ribbons),
                     Wc3VertexTint([255; 3]),
+                    Wc3VertexOpacity(255),
                     Wc3AttachToNode {
                         owner_root: model_root,
                         attachment_point: attachment.attachment_point.clone(),
@@ -3186,6 +3190,90 @@ fn spawn_persistent_unit_attachments(
             }
             commands.entity(model_root).add_child(effect);
         }
+    }
+}
+
+#[derive(Component)]
+struct PresentedSphereAttachment {
+    unit: SimId,
+    ability: u32,
+    slot: usize,
+}
+
+fn spawn_unit_spheres(
+    commands: &mut Commands,
+    unit: SimId,
+    model_root: Entity,
+    presentation: &crate::unit_models::NativeUnitPresentation,
+    visuals: &Wc3VisualSet,
+) {
+    for sphere in &presentation.spheres {
+        let Ok(rawcode) = <[u8; 4]>::try_from(sphere.ability_rawcode.as_bytes()) else {
+            continue;
+        };
+        let ability = u32::from_be_bytes(rawcode);
+        for (slot, point) in sphere.attachment_points.iter().enumerate() {
+            for visual in visuals
+                .ability(ability)
+                .iter()
+                .filter(|visual| visual.anchor == Wc3AbilityVisualAnchor::Target)
+            {
+                let effect = commands
+                    .spawn((
+                        WorldAssetRoot(visual.model.scene.clone()),
+                        Transform::IDENTITY,
+                        Visibility::default(),
+                        visual.model.looping_emitter_source(),
+                        Wc3RibbonSource::new(&visual.model.ribbons),
+                        Wc3VertexTint([255; 3]),
+                        Wc3VertexOpacity(255),
+                        Wc3AttachToNode {
+                            owner_root: model_root,
+                            attachment_point: point.clone(),
+                        },
+                        PresentedSphereAttachment {
+                            unit,
+                            ability,
+                            slot,
+                        },
+                    ))
+                    .id();
+                if let Some(animation) = visual.model.looping_animation_source() {
+                    commands.entity(effect).insert(animation);
+                }
+                commands.entity(model_root).add_child(effect);
+            }
+        }
+    }
+}
+
+fn sync_sphere_attachments(
+    samples: Res<PresentationSamples>,
+    mut attachments: Query<(&PresentedSphereAttachment, &mut Visibility)>,
+) {
+    for (attachment, mut visibility) in &mut attachments {
+        let hidden = samples
+            .current
+            .units
+            .get(&attachment.unit)
+            .is_some_and(|unit| {
+                unit.status
+                    .spheres
+                    .iter()
+                    .flatten()
+                    .find(|state| state.ability.0 == attachment.ability)
+                    .is_some_and(|state| {
+                        state
+                            .hidden_until
+                            .get(attachment.slot)
+                            .is_some_and(|tick| samples.current.tick < *tick)
+                    })
+            });
+        visibility.set_if_neq(if hidden {
+            Visibility::Hidden
+        } else {
+            Visibility::Inherited
+        });
     }
 }
 
@@ -4491,65 +4579,87 @@ fn sync_render_entities(
             + Vec3::Y * (unit_height(unit) * 0.5);
         let imported_model = visual_rawcode
             .and_then(|rawcode| unit_models.get(rawcode).map(|model| (rawcode, model)));
-        let (entity, model_root, weapon, imported_rawcode) =
-            if let Some((rawcode, model)) = imported_model {
-                let entity = commands
-                    .spawn((Transform::from_translation(position), Visibility::default()))
-                    .id();
-                let model_root = commands
-                    .spawn((
-                        WorldAssetRoot(model.scene.clone()),
-                        ImportedUnitModelRoot {
-                            sim_id: unit.id,
-                            rawcode,
-                            presentation_root: entity,
-                        },
-                        Wc3AttachmentOwner,
-                        Wc3TeamTint::new(unit.owner.0, player_color(unit.owner), "wc3/units"),
-                        Transform {
-                            translation: Vec3::NEG_Y * unit_height(unit) * 0.5,
-                            rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
-                            scale: Vec3::splat(model.scale),
-                        },
-                    ))
-                    .id();
-                commands.entity(entity).add_child(model_root);
-                if let Some(tint) = unit
-                    .status
-                    .damage_threshold
-                    .vertex_rgba
-                    .map(|[r, g, b, _]| [r, g, b])
-                    .or(model.tint_rgb)
-                {
-                    commands.entity(model_root).insert(Wc3VertexTint(tint));
-                }
-                if !model.ribbon_emitters.is_empty() {
+        let (entity, model_root, weapon, imported_rawcode) = if let Some((rawcode, model)) =
+            imported_model
+        {
+            let entity = commands
+                .spawn((Transform::from_translation(position), Visibility::default()))
+                .id();
+            let model_root = commands
+                .spawn((
+                    WorldAssetRoot(model.scene.clone()),
+                    ImportedUnitModelRoot {
+                        sim_id: unit.id,
+                        rawcode,
+                        presentation_root: entity,
+                    },
+                    Wc3AttachmentOwner,
+                    Wc3TeamTint::new(unit.owner.0, player_color(unit.owner), "wc3/units"),
+                    Transform {
+                        translation: Vec3::NEG_Y * unit_height(unit) * 0.5,
+                        rotation: Quat::from_rotation_y(WC3_MODEL_FACING_OFFSET),
+                        scale: Vec3::splat(model.scale),
+                    },
+                ))
+                .id();
+            commands.entity(entity).add_child(model_root);
+            if let Some(tint) = unit
+                .status
+                .damage_threshold
+                .vertex_rgba
+                .map(|[r, g, b, _]| [r, g, b])
+                .or(model.tint_rgb)
+            {
+                commands.entity(model_root).insert(Wc3VertexTint(tint));
+            }
+            if !model.ribbon_emitters.is_empty() {
+                commands
+                    .entity(model_root)
+                    .insert(Wc3RibbonSource::with_asset_prefix(
+                        &model.ribbon_emitters,
+                        "wc3/units",
+                    ));
+            }
+            spawn_persistent_unit_attachments(&mut commands, model_root, model, &wc3_visuals);
+            if let Some(content) = unit.content
+                && let Some(presentation) = crate::unit_models::native_unit_presentation_for_version(
+                    content.map_version,
+                    content.rawcode,
+                )
+            {
+                if let Some([r, g, b, alpha]) = presentation.vertex_rgba {
                     commands
                         .entity(model_root)
-                        .insert(Wc3RibbonSource::with_asset_prefix(
-                            &model.ribbon_emitters,
-                            "wc3/units",
-                        ));
+                        .insert((Wc3VertexTint([r, g, b]), Wc3VertexOpacity(alpha)));
                 }
-                spawn_persistent_unit_attachments(&mut commands, model_root, model, &wc3_visuals);
-                (entity, Some(model_root), None, Some(rawcode))
-            } else {
-                let entity = commands
-                    .spawn((
-                        Mesh3d(assets.unit_mesh(unit.visual_kind)),
-                        MeshMaterial3d(assets.unit_material(unit.owner)),
-                        Transform {
-                            translation: position,
-                            scale: Vec3::splat(unit_render_scale(unit)),
-                            ..default()
-                        },
-                    ))
-                    .id();
-                let weapon =
-                    spawn_unit_weapon(&mut commands, &assets, entity, unit.owner, unit.visual_kind);
-                spawn_air_wings(&mut commands, &assets, entity, unit);
-                (entity, None, Some(weapon), None)
-            };
+                if unit.hex.is_none() {
+                    spawn_unit_spheres(
+                        &mut commands,
+                        unit.id,
+                        model_root,
+                        presentation,
+                        &wc3_visuals,
+                    );
+                }
+            }
+            (entity, Some(model_root), None, Some(rawcode))
+        } else {
+            let entity = commands
+                .spawn((
+                    Mesh3d(assets.unit_mesh(unit.visual_kind)),
+                    MeshMaterial3d(assets.unit_material(unit.owner)),
+                    Transform {
+                        translation: position,
+                        scale: Vec3::splat(unit_render_scale(unit)),
+                        ..default()
+                    },
+                ))
+                .id();
+            let weapon =
+                spawn_unit_weapon(&mut commands, &assets, entity, unit.owner, unit.visual_kind);
+            spawn_air_wings(&mut commands, &assets, entity, unit);
+            (entity, None, Some(weapon), None)
+        };
         render_map.units.insert(
             unit.id,
             PresentedEntry {
@@ -4796,6 +4906,7 @@ fn sync_render_entities(
                     .spawn((
                         WorldAssetRoot(model.scene.clone()),
                         building_script_attachment_transform(attachment, visual_height),
+                        Wc3VertexTint(attachment.color_rgb.unwrap_or([255; 3])),
                         model.looping_emitter_source(),
                         Wc3RibbonSource::new(&model.ribbons),
                     ))
@@ -5288,7 +5399,16 @@ fn projectile_pose(
     }
     let (origin, launch_tick, impact_tick, missile_arc) =
         projectile_segment(projectile, missile_arc);
-    let start = sim_point_to_terrain_world(origin, terrain);
+    let mut start = sim_point_to_terrain_world(origin, terrain);
+    if matches!(
+        projectile.kind,
+        ProjectileViewKind::SphereFlight {
+            source_movement: MovementClass::Air,
+            ..
+        }
+    ) {
+        start.y += AIR_UNIT_ALTITUDE;
+    }
     let target = projectile_target(projectile, samples, metrics, terrain, alpha, start);
     let travel_ticks = impact_tick.saturating_sub(launch_tick).max(1) as f32;
     let progress = ((render_tick - launch_tick as f32) / travel_ticks).clamp(0.0, 1.0);
@@ -5362,6 +5482,17 @@ fn projectile_target(
     fallback: Vec3,
 ) -> Vec3 {
     match projectile.kind {
+        ProjectileViewKind::SphereFlight {
+            destination,
+            target_movement,
+            ..
+        } => {
+            let mut target = sim_point_to_terrain_world(destination, terrain);
+            if target_movement == MovementClass::Air {
+                target.y += AIR_UNIT_ALTITUDE;
+            }
+            target
+        }
         ProjectileViewKind::NativeMover { .. } => {
             sim_point_to_terrain_world(projectile.launch_position, terrain)
         }
@@ -5508,6 +5639,21 @@ fn entity_status_visual_is_active(
     })
 }
 
+fn status_modifier_visible(
+    status: &castle_fight_sim::StatusState,
+    id: castle_fight_sim::ModifierId,
+    expiry: u64,
+    tick: u64,
+) -> bool {
+    tick < expiry
+        || (tick == expiry
+            && status.armor_modifiers[..usize::from(status.armor_modifier_count)]
+                .iter()
+                .any(|anchor| {
+                    anchor.id == id && anchor.aura_membership && anchor.expires_tick == expiry
+                }))
+}
+
 fn status_visual_sources(
     status: &castle_fight_sim::StatusState,
     tick: u64,
@@ -5545,27 +5691,34 @@ fn status_visual_sources(
         .chain(
             status.movement_modifiers[..usize::from(status.movement_modifier_count)]
                 .iter()
-                .filter(move |modifier| modifier.expires_tick > tick)
+                .filter(move |modifier| {
+                    status_modifier_visible(status, modifier.id, modifier.expires_tick, tick)
+                })
                 .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::Movement)),
         )
         .chain(
             status.armor_modifiers[..usize::from(status.armor_modifier_count)]
                 .iter()
-                .filter(move |modifier| modifier.expires_tick > tick)
+                .filter(move |modifier| {
+                    status_modifier_visible(status, modifier.id, modifier.expires_tick, tick)
+                })
                 .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::Armor)),
         )
         .chain(
             status.armor_modifiers[..usize::from(status.armor_modifier_count)]
                 .iter()
                 .filter(move |modifier| {
-                    modifier.expires_tick > tick && modifier.regeneration_per_second_per_10k > 0
+                    status_modifier_visible(status, modifier.id, modifier.expires_tick, tick)
+                        && modifier.regeneration_per_second_per_10k > 0
                 })
                 .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::Regeneration)),
         )
         .chain(
             status.attack_speed_modifiers[..usize::from(status.attack_speed_modifier_count)]
                 .iter()
-                .filter(move |modifier| modifier.expires_tick > tick)
+                .filter(move |modifier| {
+                    status_modifier_visible(status, modifier.id, modifier.expires_tick, tick)
+                })
                 .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::AttackSpeed)),
         )
         .chain(
@@ -5583,7 +5736,9 @@ fn status_visual_sources(
         .chain(
             status.damage_over_time[..usize::from(status.damage_over_time_count)]
                 .iter()
-                .filter(move |modifier| modifier.expires_tick > tick)
+                .filter(move |modifier| {
+                    status_modifier_visible(status, modifier.id, modifier.expires_tick, tick)
+                })
                 .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::DamageOverTime)),
         )
 }
@@ -5624,9 +5779,10 @@ fn status_visual_is_active(
                 return true;
             }
             let count = usize::from(status.movement_modifier_count);
-            status.movement_modifiers[..count]
-                .iter()
-                .any(|modifier| modifier.id.0 == ability_rawcode && modifier.expires_tick > tick)
+            status.movement_modifiers[..count].iter().any(|modifier| {
+                modifier.id.0 == ability_rawcode
+                    && status_modifier_visible(status, modifier.id, modifier.expires_tick, tick)
+            })
         }
         Wc3StatusVisualKind::Regeneration => status.armor_modifiers
             [..usize::from(status.armor_modifier_count)]
@@ -5634,19 +5790,23 @@ fn status_visual_is_active(
             .any(|modifier| {
                 modifier.id.0 == ability_rawcode
                     && modifier.regeneration_per_second_per_10k > 0
-                    && modifier.expires_tick > tick
+                    && status_modifier_visible(status, modifier.id, modifier.expires_tick, tick)
             }),
         Wc3StatusVisualKind::Armor => {
             let count = usize::from(status.armor_modifier_count);
-            status.armor_modifiers[..count]
-                .iter()
-                .any(|modifier| modifier.id.0 == ability_rawcode && modifier.expires_tick > tick)
+            status.armor_modifiers[..count].iter().any(|modifier| {
+                modifier.id.0 == ability_rawcode
+                    && status_modifier_visible(status, modifier.id, modifier.expires_tick, tick)
+            })
         }
         Wc3StatusVisualKind::AttackSpeed => {
             let count = usize::from(status.attack_speed_modifier_count);
             status.attack_speed_modifiers[..count]
                 .iter()
-                .any(|modifier| modifier.id.0 == ability_rawcode && modifier.expires_tick > tick)
+                .any(|modifier| {
+                    modifier.id.0 == ability_rawcode
+                        && status_modifier_visible(status, modifier.id, modifier.expires_tick, tick)
+                })
         }
         Wc3StatusVisualKind::DamageOverTime => {
             if status.acid_bomb.is_some_and(|acid| {
@@ -5665,9 +5825,10 @@ fn status_visual_is_active(
             }
 
             let count = usize::from(status.damage_over_time_count);
-            status.damage_over_time[..count]
-                .iter()
-                .any(|modifier| modifier.id.0 == ability_rawcode && modifier.expires_tick > tick)
+            status.damage_over_time[..count].iter().any(|modifier| {
+                modifier.id.0 == ability_rawcode
+                    && status_modifier_visible(status, modifier.id, modifier.expires_tick, tick)
+            })
         }
     }
 }
@@ -7462,6 +7623,7 @@ fn building_height(building: &BuildingSample) -> f32 {
 
 fn projectile_effect_color(kind: ProjectileViewKind) -> Color {
     match kind {
+        ProjectileViewKind::SphereFlight { .. } => Color::WHITE,
         ProjectileViewKind::NativeMover { .. } => Color::srgb(0.48, 0.90, 1.0),
         ProjectileViewKind::NativeCarrierBolt { .. } => Color::srgb(0.92, 0.92, 1.0),
         ProjectileViewKind::GuaranteedHit { .. } => Color::srgb(0.48, 0.90, 1.0),
@@ -7519,6 +7681,7 @@ mod tests {
     fn building_script_attachment_preserves_world_geometry_without_model_scale_inheritance() {
         let visual = crate::building_models::BuildingScriptAttachment {
             model_path: "synthetic.mdl".to_owned(),
+            color_rgb: None,
             yaw_degrees: 90.0,
             offset_world: [12.0, -34.0, -20.0],
             scale: 0.5,
@@ -8365,6 +8528,43 @@ mod tests {
     }
 
     #[test]
+    fn intrinsic_zero_linger_aura_art_survives_the_completed_tick_boundary_only() {
+        use castle_fight_sim::ModifierId;
+        let mut status = castle_fight_sim::StatusState::default();
+        status.armor_modifiers[0].id = ModifierId(123);
+        status.armor_modifiers[0].aura_membership = true;
+        status.armor_modifiers[0].expires_tick = 10;
+        status.armor_modifier_count = 1;
+        status.movement_modifiers[0].id = ModifierId(123);
+        status.movement_modifiers[0].percent_delta = -25;
+        status.movement_modifiers[0].expires_tick = 10;
+        status.movement_modifier_count = 1;
+        assert!(status_visual_is_active(
+            &status,
+            10,
+            123,
+            Wc3StatusVisualKind::Movement
+        ));
+        assert!(
+            status_visual_sources(&status, 10)
+                .any(|(ability, kind)| ability == 123 && kind == Wc3StatusVisualKind::Movement)
+        );
+        assert!(!status_visual_is_active(
+            &status,
+            11,
+            123,
+            Wc3StatusVisualKind::Movement
+        ));
+        status.armor_modifiers[0].aura_membership = false;
+        assert!(!status_visual_is_active(
+            &status,
+            10,
+            123,
+            Wc3StatusVisualKind::Movement
+        ));
+    }
+
+    #[test]
     fn passive_structure_visual_lifetime_uses_live_status_not_damage_or_source_presence() {
         let mut simulation =
             castle_fight_sim::Simulation::new(castle_fight_sim::SimulationConfig::default(), 1);
@@ -8814,6 +9014,52 @@ mod tests {
         assert!(falling_next.y < falling.y);
         assert!((projectile_rotation(rising, rising_next, true) * Vec3::Z).y > 0.0);
         assert!((projectile_rotation(falling, falling_next, true) * Vec3::Z).y < 0.0);
+    }
+
+    #[test]
+    fn sphere_flight_retains_air_height_without_source_or_target_entities() {
+        let demo = crate::demo::create_demo_world(1, None);
+        let samples = PresentationSamples::new(PresentationSnapshot::capture(&demo.simulation));
+        let terrain = TerrainSurface::new(demo.terrain);
+        let origin = SimPoint::new(0, 0);
+        let destination = SimPoint::new(100 * SUBUNITS_PER_WORLD_UNIT, 0);
+        for target_movement in [MovementClass::Ground, MovementClass::Air] {
+            let projectile = ProjectileView {
+                ability: None,
+                id: SimId(u64::MAX),
+                source: SimId(u64::MAX - 1),
+                launch_position: origin,
+                launch_tick: 0,
+                impact_tick: 10,
+                kind: ProjectileViewKind::SphereFlight {
+                    destination,
+                    source_movement: MovementClass::Air,
+                    target_movement,
+                },
+            };
+            let pose = |tick| {
+                projectile_pose(
+                    &projectile,
+                    Some(0.0),
+                    &samples,
+                    &demo.metrics,
+                    &terrain,
+                    1.0,
+                    tick,
+                )
+                .0
+            };
+            assert_eq!(
+                pose(0.0),
+                sim_point_to_terrain_world(origin, &terrain)
+                    + Vec3::Y * (AIR_UNIT_ALTITUDE + PROJECTILE_HEIGHT)
+            );
+            assert_eq!(
+                pose(10.0),
+                sim_point_to_terrain_world(destination, &terrain)
+                    + Vec3::Y * (unit_visual_altitude(target_movement) + PROJECTILE_HEIGHT)
+            );
+        }
     }
 
     #[test]

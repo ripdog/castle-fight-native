@@ -1,0 +1,608 @@
+{
+  "schema_version": 1,
+  "map_version": "9.27",
+  "source": {
+    "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+    "path": "resolved/object-fields.tsv",
+    "script": "script/war3map.lua",
+    "vertex_handler": "onUnitEnteredMap",
+    "vertex_predicate_ability": "A0E5"
+  },
+  "units": [
+    {
+      "unit_rawcode": "X006",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "X00C",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "X00E",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "X00O",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "X00P",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "X017",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "X018",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "X019",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "X01A",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "X051",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "X06P",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "X075",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "X078",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "X07P",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "X089",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "X0Z0",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h00C",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h00E",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h00O",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h00P",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h017",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h018",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h019",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h01A",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h025",
+      "spheres": [
+        {
+          "ability_rawcode": "A02A",
+          "attachment_points": [
+            "origin",
+            "first",
+            "second"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h032",
+      "spheres": [
+        {
+          "ability_rawcode": "A02Y",
+          "attachment_points": [
+            "sprite,first",
+            "sprite,second",
+            "sprite,third"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h035",
+      "spheres": [
+        {
+          "ability_rawcode": "A036",
+          "attachment_points": [
+            "sprite,first",
+            "sprite,second"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h036",
+      "spheres": [
+        {
+          "ability_rawcode": "A037",
+          "attachment_points": [
+            "sprite,first",
+            "sprite,second"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h03S",
+      "spheres": [
+        {
+          "ability_rawcode": "A04C",
+          "attachment_points": [
+            "origin"
+          ]
+        },
+        {
+          "ability_rawcode": "A04B",
+          "attachment_points": [
+            "sprite,first",
+            "origin"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h04M",
+      "spheres": [
+        {
+          "ability_rawcode": "A051",
+          "attachment_points": [
+            "sprite,first",
+            "sprite,second",
+            "sprite,third",
+            "sprite,fourth",
+            "hand,left",
+            "hand,right"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h04W",
+      "spheres": [
+        {
+          "ability_rawcode": "A04M",
+          "attachment_points": [
+            "sprite,first",
+            "sprite,second",
+            "sprite,third",
+            "sprite,fourth"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h051",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h05H",
+      "spheres": [
+        {
+          "ability_rawcode": "A06O",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h06P",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h075",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h078",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h089",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h092",
+      "spheres": [
+        {
+          "ability_rawcode": "A08N",
+          "attachment_points": [
+            "sprite,first",
+            "sprite,second"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "h09Y",
+      "spheres": [
+        {
+          "ability_rawcode": "A04M",
+          "attachment_points": [
+            "sprite,first",
+            "sprite,second",
+            "sprite,third",
+            "sprite,fourth"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "n00Z",
+      "spheres": [
+        {
+          "ability_rawcode": "A03V",
+          "attachment_points": [
+            "chest"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "n014",
+      "spheres": [
+        {
+          "ability_rawcode": "A04A",
+          "attachment_points": [
+            "weapon,right"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "n01A",
+      "spheres": [
+        {
+          "ability_rawcode": "A058",
+          "attachment_points": [
+            "hand,left",
+            "hand,right"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "n01B",
+      "spheres": [
+        {
+          "ability_rawcode": "A053",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "o00D",
+      "spheres": [
+        {
+          "ability_rawcode": "A0E5",
+          "attachment_points": [
+            "chest"
+          ]
+        }
+      ],
+      "vertex_rgba": [
+        255,
+        255,
+        255,
+        195
+      ]
+    },
+    {
+      "unit_rawcode": "o00E",
+      "spheres": [
+        {
+          "ability_rawcode": "A0E5",
+          "attachment_points": [
+            "chest"
+          ]
+        },
+        {
+          "ability_rawcode": "A0E6",
+          "attachment_points": [
+            "chest",
+            "left,hand",
+            "right,hand"
+          ]
+        }
+      ],
+      "vertex_rgba": [
+        255,
+        255,
+        255,
+        195
+      ]
+    },
+    {
+      "unit_rawcode": "u006",
+      "spheres": [
+        {
+          "ability_rawcode": "A06E",
+          "attachment_points": [
+            "hand,right",
+            "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "u009",
+      "spheres": [
+        {
+          "ability_rawcode": "A05O",
+          "attachment_points": [
+            "weapon,right"
+          ]
+        }
+      ]
+    }
+  ]
+}

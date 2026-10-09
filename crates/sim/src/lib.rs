@@ -47,9 +47,9 @@ pub use components::{
     PassiveUnitEffects, PendingAttackState, PendingCastState, PendingCastTarget, PlayerId,
     PoisonBuffStatus, PoisonProfile, PoisonStatus, ProductionProfile, PulverizeEffectProfile,
     ResolvedUnitDefinition, SecondaryAttackProfile, SecondaryResurrectionState, SimId,
-    SpellcastingProfile, SplashFalloffProfile, StatusState, Team, TriggeredAttackEffect,
-    TriggeredSpellProcProfile, UnitClassifications, UnitGameplayProperties, UnitSpawn,
-    UnitTemplate,
+    SpeedAuraProfile, SpellcastingProfile, SphereAttachmentState, SphereProfile,
+    SplashFalloffProfile, StatusState, Team, TriggeredAttackEffect, TriggeredSpellProcProfile,
+    UnitClassifications, UnitGameplayProperties, UnitSpawn, UnitTemplate,
 };
 pub use content::{
     CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION, CASTLE_FIGHT_CONTENT_REVISION_927,
@@ -4919,6 +4919,7 @@ mod tests {
             ProjectileViewKind::NativeMover { .. } => panic!("unexpected native mover"),
             ProjectileViewKind::Ballistic { destination, .. } => destination,
             ProjectileViewKind::GuaranteedHit { .. }
+            | ProjectileViewKind::SphereFlight { .. }
             | ProjectileViewKind::NativeCarrierBolt { .. }
             | ProjectileViewKind::Reflected { .. }
             | ProjectileViewKind::Bounce { .. }

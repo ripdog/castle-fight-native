@@ -161,6 +161,7 @@ pub(crate) struct HailstoneState {
 
 #[derive(Component, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum NativeAction {
+    SphereFlight(SphereFlightState),
     AuraCarrier(AuraCarrierState),
     StasisTrap(StasisTrapState),
     AcidBomb(AcidBombMissileState),
@@ -202,4 +203,16 @@ pub(crate) struct AuraCarrierState {
     pub profile: crate::building_mechanics::BuildingAuraProfile,
     pub created_tick: u64,
     pub expires_tick: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct SphereFlightState {
+    pub source: SimId,
+    pub ability: AbilityId,
+    pub source_movement: super::MovementClass,
+    pub target_movement: super::MovementClass,
+    pub origin: SimPoint,
+    pub destination: SimPoint,
+    pub launch_tick: u64,
+    pub impact_tick: u64,
 }

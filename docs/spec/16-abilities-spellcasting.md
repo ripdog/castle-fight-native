@@ -240,6 +240,10 @@ Implementations SHOULD avoid physically adding/removing identical status compone
 
 Aura stacking, refresh, source removal, and multiple-copy behavior MUST be explicitly defined by content/effect rules.
 
+Intrinsic zero-linger speed auras sample live recipient membership before movement and attack cadence. Their versioned profiles explicitly retain hostility, native buff family, movement-class mask, organic and invulnerable permissions, radius and signed speed deltas. Hostile native auras exclude spell-immune recipients; invisible or ability-suppressed sources do not contribute. Within one native buff family, movement and attack speed independently select the strongest eligible magnitude and never add duplicate contributions. Membership ends without an additional lingering tick; distinct buff families retain their independent modifier identities.
+
+Native Sphere is an authoritative presentation primitive: released attacks/spells rotate attachment slots, each with its own restore deadline, and can launch independent visual-only missiles. These flights never resolve damage or trigger combat effects. Their identities MUST use a separate allocation namespace so visual creation cannot change later gameplay entity IDs or deterministic random results. Attachment deadlines, flight destinations/deadlines and the visual allocation counter participate in snapshots/checksums; the client derives visibility and progress without providing gameplay timing.
+
 ## 12. Legendary buildings
 
 Legendary buildings use the same deterministic ability machinery but may have unusual scale or activation semantics.

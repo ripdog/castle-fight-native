@@ -192,6 +192,7 @@ fn incoming_bonus_scales_spells_and_periodic_damage_until_expiry() {
     apply_timed_armor_modifier(
         &mut status,
         TimedArmorModifier {
+            aura_membership: false,
             id: ModifierId(91),
             damage_taken_bonus_per_10k: 5000,
             expires_tick: 2,

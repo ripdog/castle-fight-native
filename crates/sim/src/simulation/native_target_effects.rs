@@ -12,6 +12,8 @@ mod damage_threshold;
 mod ensnare;
 mod kill_berserk;
 mod poison;
+mod speed_aura;
+mod sphere;
 mod stasis;
 mod stat_buffs;
 

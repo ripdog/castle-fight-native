@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r59";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r60";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 37;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 38;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1793,6 +1793,13 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0CQ") => {
+            0x4000_0097
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0E5") => {
+            0x4000_0098
+        }
+
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0DS") => {
             0x4000_0095
         }
@@ -2760,6 +2767,25 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
                 hash.write_i32(profile.radius);
                 hash.write_u16(profile.damage_per_10k);
                 hash.write_u8(profile.targets.bits());
+            }
+            PassiveUnitEffect::Sphere(profile) => {
+                hash.write_u8(17);
+                hash.write_u32(profile.ability.0);
+                hash.write_u8(profile.attachment_count);
+                hash.write_u16(profile.cooldown_ticks);
+                hash.write_i32(profile.speed_per_tick);
+            }
+            PassiveUnitEffect::SpeedAura(profile) => {
+                hash.write_u8(16);
+                hash.write_u32(profile.ability.0);
+                hash.write_u32(profile.buff_rawcode);
+                hash.write_i32(profile.radius);
+                hash.write_u8(profile.targets.bits());
+                hash.write_u8(u8::from(profile.hostile));
+                hash.write_u8(u8::from(profile.organic_only));
+                hash.write_u8(u8::from(profile.affects_invulnerable));
+                hash.write_i32(i32::from(profile.movement_percent_delta));
+                hash.write_i32(i32::from(profile.attack_speed_percent_delta));
             }
             PassiveUnitEffect::Aura(profile) => {
                 hash.write_i32(i32::from(profile.damage_bonus_per_10k));

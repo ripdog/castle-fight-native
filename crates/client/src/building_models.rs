@@ -23,6 +23,8 @@ pub(crate) struct BuildingScriptAttachment {
     pub yaw_degrees: f32,
     pub offset_world: [f32; 3],
     pub scale: f32,
+    #[serde(default)]
+    pub color_rgb: Option<[u8; 3]>,
 }
 
 #[derive(Deserialize)]

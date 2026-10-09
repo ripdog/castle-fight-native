@@ -49,6 +49,7 @@ pub(super) fn apply_ability_effect_to_unit(
             apply_timed_armor_modifier(
                 &mut target.status,
                 TimedArmorModifier {
+                    aura_membership: false,
                     id: modifier,
                     native_buff: Some(buff),
                     armor_bonus_per_100,
@@ -151,6 +152,7 @@ pub(super) fn apply_ability_effect_to_unit(
             apply_timed_armor_modifier(
                 &mut target.status,
                 TimedArmorModifier {
+                    aura_membership: false,
                     id: ModifierId(ability.0),
                     armor_bonus_per_100: armor_delta_per_100,
                     damage_bonus_per_10k: damage_delta_per_10k,
@@ -225,6 +227,7 @@ pub(super) fn apply_ability_effect_to_unit(
             apply_timed_armor_modifier(
                 &mut target.status,
                 TimedArmorModifier {
+                    aura_membership: false,
                     id: modifier,
                     native_buff,
                     armor_bonus_per_100: -armor_reduction_per_100,
@@ -251,6 +254,7 @@ pub(super) fn apply_ability_effect_to_unit(
             apply_timed_armor_modifier(
                 &mut target.status,
                 TimedArmorModifier {
+                    aura_membership: false,
                     id: modifier,
                     native_buff,
                     armor_bonus_per_100,
@@ -304,6 +308,7 @@ pub(super) fn apply_ability_effect_to_unit(
             apply_timed_armor_modifier(
                 &mut target.status,
                 TimedArmorModifier {
+                    aura_membership: false,
                     id: modifier,
                     native_buff,
                     armor_bonus_per_100,
@@ -339,6 +344,7 @@ pub(super) fn apply_ability_effect_to_unit(
             apply_timed_armor_modifier(
                 &mut target.status,
                 TimedArmorModifier {
+                    aura_membership: false,
                     id: modifier,
                     native_buff,
                     armor_bonus_per_100,

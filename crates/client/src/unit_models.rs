@@ -801,3 +801,45 @@ mod tests {
         );
     }
 }
+
+#[derive(Deserialize)]
+pub(crate) struct NativeUnitPresentation {
+    pub unit_rawcode: String,
+    pub vertex_rgba: Option<[u8; 4]>,
+    pub spheres: Vec<NativeSphereAttachment>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct NativeSphereAttachment {
+    pub ability_rawcode: String,
+    pub attachment_points: Vec<String>,
+}
+
+pub(crate) fn native_unit_presentation_for_version(
+    version: castle_fight_sim::MapVersion,
+    rawcode: u32,
+) -> Option<&'static NativeUnitPresentation> {
+    if version != castle_fight_sim::MapVersion::CASTLE_FIGHT_9_27 {
+        return None;
+    }
+    #[derive(Deserialize)]
+    struct Projection {
+        schema_version: u32,
+        map_version: String,
+        units: Vec<NativeUnitPresentation>,
+    }
+    static PROJECTION: std::sync::OnceLock<Projection> = std::sync::OnceLock::new();
+    let projection = PROJECTION.get_or_init(|| {
+        let projection: Projection = serde_json::from_str(include_str!(
+            "../../wc3-assets/data/castle-fight/9.27/native-unit-presentation-r1.json"
+        ))
+        .expect("retained unit presentation projection");
+        assert_eq!(projection.schema_version, 1);
+        assert_eq!(projection.map_version, "9.27");
+        projection
+    });
+    projection
+        .units
+        .iter()
+        .find(|unit| unit.unit_rawcode.as_bytes() == rawcode.to_be_bytes())
+}

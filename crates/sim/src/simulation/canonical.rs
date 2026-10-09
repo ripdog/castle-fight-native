@@ -191,6 +191,7 @@ fn hash_building_footprint(hash: &mut Fnv64, footprint: BuildingFootprint) {
 pub(super) struct CanonicalMatchState<'a> {
     pub(super) next_tick: u64,
     pub(super) next_id: u64,
+    pub(super) next_visual_id: u64,
     pub(super) configuration_identity: u64,
     pub(super) defense_alerts: &'a [DefenseAlert],
     pub(super) players: &'a [PlayerState],
@@ -206,6 +207,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
     let CanonicalMatchState {
         next_tick,
         next_id,
+        next_visual_id,
         configuration_identity,
         defense_alerts,
         players,
@@ -266,6 +268,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
     }
     hash.write_u64(next_tick);
     hash.write_u64(next_id);
+    hash.write_u64(next_visual_id);
     hash.write_u64(shrine_death_generation);
     hash.write_u8(u8::from(debug_buildings_invulnerable));
     match lifecycle {
@@ -322,6 +325,23 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(10);
                 hash.write_u64(id.0);
                 match action {
+                    NativeAction::SphereFlight(state) => {
+                        hash.write_u8(8);
+                        hash.write_u64(state.source.0);
+                        hash.write_u32(state.ability.0);
+                        for movement in [state.source_movement, state.target_movement] {
+                            hash.write_u8(match movement {
+                                MovementClass::Ground => 0,
+                                MovementClass::Air => 1,
+                            });
+                        }
+                        hash.write_i32(state.origin.x);
+                        hash.write_i32(state.origin.y);
+                        hash.write_i32(state.destination.x);
+                        hash.write_i32(state.destination.y);
+                        hash.write_u64(state.launch_tick);
+                        hash.write_u64(state.impact_tick);
+                    }
                     NativeAction::AuraCarrier(state) => {
                         hash.write_u8(7);
                         hash.write_u64(state.source.0);
@@ -1680,6 +1700,16 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         hash.write_u64(poison.expires_tick);
     }
 
+    for sphere in status.spheres {
+        hash.write_u8(u8::from(sphere.is_some()));
+        if let Some(sphere) = sphere {
+            hash.write_u32(sphere.ability.0);
+            for tick in sphere.hidden_until {
+                hash.write_u64(tick);
+            }
+            hash.write_u8(sphere.next_slot);
+        }
+    }
     hash.write_u8(u8::from(status.pending_attack.is_some()));
     if let Some(pending) = status.pending_attack {
         hash.write_u64(pending.target.0);
@@ -1794,6 +1824,7 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     let count = usize::from(status.armor_modifier_count);
     debug_assert!(count <= MAX_TIMED_ARMOR_MODIFIERS);
     for modifier in &status.armor_modifiers[..count] {
+        hash.write_u8(u8::from(modifier.aura_membership));
         hash.write_u64(u64::from(modifier.id.0));
         if let Some(buff) = modifier.native_buff {
             hash.write_u8(1);
@@ -2020,6 +2051,25 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                 hash.write_i32(profile.radius);
                 hash.write_u16(profile.damage_per_10k);
                 hash.write_u8(profile.targets.bits());
+            }
+            PassiveUnitEffect::Sphere(profile) => {
+                hash.write_u8(17);
+                hash.write_u32(profile.ability.0);
+                hash.write_u8(profile.attachment_count);
+                hash.write_u16(profile.cooldown_ticks);
+                hash.write_i32(profile.speed_per_tick);
+            }
+            PassiveUnitEffect::SpeedAura(profile) => {
+                hash.write_u8(16);
+                hash.write_u32(profile.ability.0);
+                hash.write_u32(profile.buff_rawcode);
+                hash.write_i32(profile.radius);
+                hash.write_u8(profile.targets.bits());
+                hash.write_u8(u8::from(profile.hostile));
+                hash.write_u8(u8::from(profile.organic_only));
+                hash.write_u8(u8::from(profile.affects_invulnerable));
+                hash.write_i32(i32::from(profile.movement_percent_delta));
+                hash.write_i32(i32::from(profile.attack_speed_percent_delta));
             }
             PassiveUnitEffect::Aura(profile) => {
                 hash.write_i32(i32::from(profile.damage_bonus_per_10k));

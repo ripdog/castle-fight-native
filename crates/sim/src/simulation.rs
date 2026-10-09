@@ -17,7 +17,9 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 54;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 55;
+
+const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
 const DIRECT_RETALIATION_RANGE_MULTIPLIER: i32 = 3;
 const AVOIDANCE_CLEAR_TICKS: u8 = 8;
@@ -32,6 +34,8 @@ use world_freezer::WorldFreezerState;
 mod building_spells;
 mod frost_launcher;
 mod snowveil;
+mod speed_auras;
+mod spheres;
 use snowveil::SnowveilState;
 #[cfg(test)]
 mod building_spells_source_tests;
@@ -384,6 +388,11 @@ impl ChainLightningEvent {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProjectileViewKind {
+    SphereFlight {
+        destination: SimPoint,
+        source_movement: MovementClass,
+        target_movement: MovementClass,
+    },
     NativeMover {
         rawcode: u32,
         owner: PlayerId,
@@ -669,6 +678,7 @@ pub struct Simulation {
     gjallarhorn_constructed_count: [u32; 2],
     next_tick: u64,
     next_id: u64,
+    next_visual_id: u64,
     configuration_identity: u64,
     debug_buildings_invulnerable: bool,
     fog: Option<crate::FogOfWar>,
@@ -824,6 +834,7 @@ impl Simulation {
             gjallarhorn_constructed_count: [0, 0],
             next_tick: 0,
             next_id: 1,
+            next_visual_id: 1,
             configuration_identity,
             debug_buildings_invulnerable: false,
         }
@@ -1619,6 +1630,7 @@ impl Simulation {
         self.resolve_world_freezer(&mut units, &mut buildings);
         self.resolve_native_actions(&mut units, &mut buildings);
         self.apply_passive_auras(&mut units);
+        self.apply_speed_auras(&mut units);
         let ability_metrics = self.resolve_automatic_abilities(&mut buildings, &mut units, &grid);
         let abilities = phase_start.elapsed();
 
@@ -1854,6 +1866,7 @@ impl Simulation {
             &mut unit_health,
             &mut building_health,
         );
+        self.release_spheres(&mut units);
         let mut deaths = 0;
         let mut corpse_spawns = Vec::new();
         // Team contributions are phase-local derived state, never a stale persistent counter.
@@ -2082,6 +2095,7 @@ impl Simulation {
                 fog: self.fog.as_ref(),
                 next_tick: self.next_tick,
                 next_id: self.next_id,
+                next_visual_id: self.next_visual_id,
                 configuration_identity: self.configuration_identity,
                 defense_alerts: &self.defense_alerts,
                 players: &self.players,
@@ -2196,6 +2210,7 @@ impl Simulation {
                 fog: self.fog.as_ref(),
                 next_tick: self.next_tick,
                 next_id: self.next_id,
+                next_visual_id: self.next_visual_id,
                 configuration_identity: self.configuration_identity,
                 defense_alerts: &self.defense_alerts,
                 players: &self.players,
@@ -2497,7 +2512,11 @@ impl Simulation {
 
     fn allocate_id(&mut self) -> SimId {
         let id = SimId(self.next_id);
-        self.next_id = self.next_id.checked_add(1).expect("SimId space exhausted");
+        self.next_id = self
+            .next_id
+            .checked_add(1)
+            .filter(|next| *next < VISUAL_ID_BIT)
+            .expect("gameplay SimId space exhausted");
         id
     }
 
@@ -2677,6 +2696,7 @@ impl Simulation {
                 apply_timed_armor_modifier(
                     &mut target.status,
                     TimedArmorModifier {
+                        aura_membership: false,
                         id: ModifierId(profile.ability.0),
                         native_buff: None,
                         armor_bonus_per_100: profile.armor_bonus_per_100,
@@ -2772,6 +2792,7 @@ impl Simulation {
                 apply_timed_armor_modifier(
                     &mut status,
                     TimedArmorModifier {
+                        aura_membership: false,
                         id: ModifierId(profile.ability.0),
                         armor_bonus_per_100: profile.armor_bonus_per_100,
                         damage_bonus_per_10k: profile.damage_bonus_per_10k,
@@ -4716,6 +4737,23 @@ fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option
                 source_rawcode: Some(projectile.profile.dummy_rawcode),
                 destination: projectile.destination,
                 impact_radius: projectile.profile.full_radius,
+            },
+        });
+    }
+    if let Some(crate::components::NativeAction::SphereFlight(projectile)) =
+        entity.get::<crate::components::NativeAction>()
+    {
+        return Some(ProjectileView {
+            ability: Some(projectile.ability),
+            id,
+            source: projectile.source,
+            launch_position: projectile.origin,
+            launch_tick: projectile.launch_tick,
+            impact_tick: projectile.impact_tick,
+            kind: ProjectileViewKind::SphereFlight {
+                destination: projectile.destination,
+                source_movement: projectile.source_movement,
+                target_movement: projectile.target_movement,
             },
         });
     }

@@ -13,35 +13,44 @@ import build_runtime_catalog as catalog
 # Source identities only. Model, geometry and scale belong to retained script.
 RECIPES = [
     ("h06I", "UK", "by:create984", "BuildingAttachmentHandler_registerBuildingAttach_RaceOrc_call_registerBuildingAttach_RaceOrc"),
+    ("h04C", "wK", "Fu:create849", "BuildingAttachmentHandler_registerBuildingAttach_RaceElemental_call_registerBuildingAttach_RaceElemental10"),
     ("h04A", "wK", "Eu:create848", "BuildingAttachmentHandler_registerBuildingAttach_RaceElemental_call_registerBuildingAttach_RaceElemental9"),
 ]
 
 
 def project_call(body: str) -> dict:
-    match = re.fullmatch(r'function \w+\(\w+,\w+\)attachBuildingEffect\(\w+,([^,]+),([^,]+),([^,]+),("(?:[^"\\]|\\.)*"),([^,]+),([^,]+)\)end', body)
-    if match is None:
-        raise ValueError("building decoration needs an audited direct attachment call")
-    yaw, x, y, model, scale, z = match.groups()
-    number = lambda value: float(value.strip("()"))
-    return {"model_path": json.loads(model), "yaw_degrees": number(yaw),
-        "offset_world": [number(x), number(y), number(z)], "scale": number(scale)}
+    return project_calls(body)[0]
 
 
 def project_calls(body: str) -> list[dict]:
     match = re.fullmatch(r'function (\w+)\((\w+),(\w+)\)(.*)end', body)
     if match is None:
         raise ValueError("building decoration needs an audited direct callback")
-    callback, first, building, calls = match.groups()
+    _, _, building, calls = match.groups()
     scalar = r'-?\d+(?:\.\d*)?'
     number = rf'(?:{scalar}|\({scalar}\))'
     model = r'"(?:[^"\\]|\\.)*"'
-    pattern = r'attachBuildingEffect\(' + re.escape(building) + ',' + ','.join(
-        [number, number, number, model, number, number]) + r'\)'
-    # Match each literal call, then reject every unconsumed operation/control branch.
-    parts = re.findall(pattern, calls)
-    if not parts or ''.join(parts) != calls:
+    geometry = ','.join([f'({number})'] * 3 + [f'({model})'] + [f'({number})'] * 2)
+    pattern = (r'attachBuildingEffect(?P<color>Color)?\(' + re.escape(building) + ',' + geometry
+        + r'(?P<rgb>,\d+,\d+,\d+)?\)')
+    parts = list(re.finditer(pattern, calls))
+    if not parts or ''.join(part[0] for part in parts) != calls:
         raise ValueError("building decoration needs only audited direct attachment calls")
-    return [project_call(f'function {callback}({first},{building}){call}end') for call in parts]
+    visuals = []
+    for part in parts:
+        if bool(part['color']) != bool(part['rgb']):
+            raise ValueError("colored decoration must retain all RGB channels")
+        yaw, x, y, model_path, scale, z = part.groups()[1:7]
+        value = lambda text: float(text.strip('()'))
+        visual = {"model_path": json.loads(model_path), "yaw_degrees": value(yaw),
+            "offset_world": [value(x), value(y), value(z)], "scale": value(scale)}
+        if part['rgb']:
+            rgb = list(map(int, part['rgb'][1:].split(',')))
+            if any(channel > 255 for channel in rgb):
+                raise ValueError("decoration RGB channels must fit native bytes")
+            visual['color_rgb'] = rgb
+        visuals.append(visual)
+    return visuals
 
 
 def build(release: dict) -> dict:

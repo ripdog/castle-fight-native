@@ -6,7 +6,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 49;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 50;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -16,6 +16,7 @@ pub struct SimulationSnapshot {
     completed_tick: Option<u64>,
     next_tick: u64,
     next_id: u64,
+    next_visual_id: u64,
     players: Vec<PlayerState>,
     lifecycle: MatchLifecycle,
     team_objectives: [Option<SimId>; 2],
@@ -283,6 +284,7 @@ impl Simulation {
             completed_tick: self.next_tick.checked_sub(1),
             next_tick: self.next_tick,
             next_id: self.next_id,
+            next_visual_id: self.next_visual_id,
             players: self.players.clone(),
             lifecycle: self.lifecycle,
             team_objectives: self.team_objectives,
@@ -333,13 +335,22 @@ impl Simulation {
                 return Err(SnapshotRestoreError::DuplicateEntityId(pair[0].id()));
             }
         }
-        if let Some(maximum_live_id) = snapshot.entities.last().map(CanonicalEntity::id)
-            && snapshot.next_id <= maximum_live_id.0
-        {
-            return Err(SnapshotRestoreError::AllocatorBehindEntityIds {
-                next_id: snapshot.next_id,
-                maximum_live_id,
-            });
+        for (next_id, visual) in [(snapshot.next_id, false), (snapshot.next_visual_id, true)] {
+            let maximum_live_id = snapshot
+                .entities
+                .iter()
+                .map(CanonicalEntity::id)
+                .filter(|id| (id.0 & VISUAL_ID_BIT != 0) == visual)
+                .max()
+                .map(|id| SimId(id.0 & !VISUAL_ID_BIT));
+            if let Some(maximum_live_id) = maximum_live_id
+                && next_id <= maximum_live_id.0
+            {
+                return Err(SnapshotRestoreError::AllocatorBehindEntityIds {
+                    next_id,
+                    maximum_live_id,
+                });
+            }
         }
 
         match (&snapshot.fog, &self.fog) {
@@ -354,6 +365,7 @@ impl Simulation {
             CanonicalMatchState {
                 next_tick: snapshot.next_tick,
                 next_id: snapshot.next_id,
+                next_visual_id: snapshot.next_visual_id,
                 configuration_identity: snapshot.configuration_identity,
                 defense_alerts: &snapshot.defense_alerts,
                 players: &snapshot.players,
@@ -387,6 +399,7 @@ impl Simulation {
         self.defense_alerts.clone_from(&snapshot.defense_alerts);
         self.next_tick = snapshot.next_tick;
         self.next_id = snapshot.next_id;
+        self.next_visual_id = snapshot.next_visual_id;
         self.clear_presentation_events();
         self.pursuit_cache.clear();
         self.radius_objective_fields.clear();

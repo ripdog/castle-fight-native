@@ -892,6 +892,8 @@ impl Simulation {
                 | PassiveUnitEffect::Evasion(_)
                 | PassiveUnitEffect::Defend(_)
                 | PassiveUnitEffect::Cleave(_)
+                | PassiveUnitEffect::Sphere(_)
+                | PassiveUnitEffect::SpeedAura(_)
                 | PassiveUnitEffect::Aura(_)
                 | PassiveUnitEffect::SpellResistance(_) => {}
             }

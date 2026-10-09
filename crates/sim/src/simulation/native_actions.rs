@@ -128,6 +128,11 @@ impl Simulation {
                 continue;
             }
             match action {
+                NativeAction::SphereFlight(state) => {
+                    if self.next_tick >= state.impact_tick {
+                        self.world.despawn(entity);
+                    }
+                }
                 NativeAction::AuraCarrier(state) => {
                     if self.next_tick >= state.expires_tick {
                         self.world.despawn(entity);

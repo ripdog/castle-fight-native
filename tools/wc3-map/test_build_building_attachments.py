@@ -21,6 +21,13 @@ class BuildingAttachmentsTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             projection.project_call(body.replace('attachBuildingEffect', 'attachBuildingEffectColor'))
 
+    def test_colored_call_retains_rgb_without_accepting_missing_or_out_of_range_channels(self):
+        body = 'function Handler(a,b)attachBuildingEffectColor(b,90.,0.,0.,"Model.mdl",1.2,100.,90,255,255)end'
+        self.assertEqual(projection.project_call(body)['color_rgb'], [90,255,255])
+        for invalid in (body.replace(',90,255,255)', ')'), body.replace(',90,255,255)', ',90,999,255)')):
+            with self.assertRaises(ValueError):
+                projection.project_call(invalid)
+
     def test_multiple_calls_preserve_order_zero_scale_and_reject_other_operations(self):
         first = 'attachBuildingEffect(b,270.,0.,28.,"One.mdl",0.,0.)'
         second = 'attachBuildingEffect(b,90.,(-12.),(-34.),"Two.mdl",0.2,(-20.))'
