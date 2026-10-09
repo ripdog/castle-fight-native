@@ -86,6 +86,24 @@ pub(super) fn canonical_configuration_identity(
         }
     }
     hash.write_u64(config.match_seed);
+    hash.write_u16(config.match_rules.time_limit_minutes);
+    hash.write_u8(config.match_rules.rounds_to_win);
+    hash.write_u8(u8::from(config.match_rules.rescue_strikes_enabled));
+    hash.write_u8(u8::from(matches!(
+        config.match_rules.time_limit_outcome,
+        crate::TimeLimitOutcome::Draw
+    )));
+    if let Some(strike) = config.rescue_strike_rules {
+        hash.write_u8(1);
+        hash.write_i32(strike.radius_subunits);
+        hash.write_u64(strike.cast_delay_ticks);
+        hash.write_u64(strike.finish_delay_ticks);
+        hash.write_u64(strike.team_cooldown_ticks);
+        hash.write_u64(strike.zero_kill_cooldown_ticks);
+        hash.write_i32(strike.damage_each_packet);
+    } else {
+        hash.write_u8(0);
+    }
     hash.write_i32(config.spatial_cell_size);
     hash.write_i32(config.navigation_cell_size);
     hash.write_i32(config.navigation_min.x);
@@ -198,6 +216,12 @@ pub(super) struct CanonicalMatchState<'a> {
     pub(super) lifecycle: MatchLifecycle,
     pub(super) team_objectives: [Option<SimId>; 2],
     pub(super) gjallarhorn_constructed_count: [u32; 2],
+    pub(super) round_index: u16,
+    pub(super) round_start_tick: u64,
+    pub(super) round_wins: [u8; 2],
+    pub(super) player_strikes: &'a [PlayerStrikeState],
+    pub(super) pending_rescue_strikes: &'a [PendingRescueStrike],
+    pub(super) team_rescue_ready_ticks: [u64; 2],
     pub(super) shrine_death_generation: u64,
     pub(super) debug_buildings_invulnerable: bool,
     pub(super) fog: Option<&'a crate::FogOfWar>,
@@ -214,6 +238,12 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
         lifecycle,
         team_objectives,
         gjallarhorn_constructed_count,
+        round_index,
+        round_start_tick,
+        round_wins,
+        player_strikes,
+        pending_rescue_strikes,
+        team_rescue_ready_ticks,
         shrine_death_generation,
         debug_buildings_invulnerable,
         fog,
@@ -267,6 +297,36 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
         }
     }
     hash.write_u64(next_tick);
+    hash.write_u16(round_index);
+    hash.write_u64(round_start_tick);
+    for wins in round_wins {
+        hash.write_u8(wins);
+    }
+    for ready in team_rescue_ready_ticks {
+        hash.write_u64(ready);
+    }
+    hash.write_u64(player_strikes.len() as u64);
+    for state in player_strikes {
+        hash.write_u8(state.player.0);
+        hash.write_u8(u8::from(state.available));
+        hash.write_u64(state.cooldown_until_tick);
+    }
+    hash.write_u64(pending_rescue_strikes.len() as u64);
+    for strike in pending_rescue_strikes {
+        hash.write_u8(strike.player.0);
+        hash.write_u64(strike.builder.0);
+        hash.write_i32(strike.center.x);
+        hash.write_i32(strike.center.y);
+        hash.write_u64(strike.resolves_at);
+        hash.write_u64(strike.finishes_at);
+        match strike.kills {
+            Some(kills) => {
+                hash.write_u8(1);
+                hash.write_u32(kills);
+            }
+            None => hash.write_u8(0),
+        }
+    }
     hash.write_u64(next_id);
     hash.write_u64(next_visual_id);
     hash.write_u64(shrine_death_generation);

@@ -89,6 +89,10 @@ pub enum PlayerCommand {
         builder: SimId,
         destination: SimPoint,
     },
+    RescueStrike {
+        builder: SimId,
+        position: SimPoint,
+    },
     RepairWithBuilder {
         builder: SimId,
         target: SimId,
@@ -193,6 +197,7 @@ pub fn admit_player_command(
         | PlayerCommand::FollowWithBuilder { builder, .. }
         | PlayerCommand::StopBuilder { builder }
         | PlayerCommand::BlinkBuilder { builder, .. }
+        | PlayerCommand::RescueStrike { builder, .. }
         | PlayerCommand::RepairWithBuilder { builder, .. }
         | PlayerCommand::SetBuilderRepairAutocast { builder, .. } => {
             if simulation.can_player_control_builder(player, builder) {
@@ -302,6 +307,10 @@ pub(crate) fn execute_player_command(
         } => simulation
             .order_builder_blink_as(player, builder, destination)
             .map(CommandExecutionResult::BuilderBlinkedTo)
+            .map_err(CommandRejectReason::Builder),
+        PlayerCommand::RescueStrike { builder, position } => simulation
+            .cast_rescue_strike_for_player(player, builder, position)
+            .map(|()| CommandExecutionResult::Applied)
             .map_err(CommandRejectReason::Builder),
         PlayerCommand::RepairWithBuilder { builder, target } => simulation
             .order_builder_repair_as(player, builder, target)

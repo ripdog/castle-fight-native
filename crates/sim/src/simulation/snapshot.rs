@@ -6,7 +6,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 53;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 54;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -21,6 +21,12 @@ pub struct SimulationSnapshot {
     lifecycle: MatchLifecycle,
     team_objectives: [Option<SimId>; 2],
     gjallarhorn_constructed_count: [u32; 2],
+    round_index: u16,
+    round_start_tick: u64,
+    round_wins: [u8; 2],
+    player_strikes: Vec<PlayerStrikeState>,
+    pending_rescue_strikes: Vec<PendingRescueStrike>,
+    team_rescue_ready_ticks: [u64; 2],
     shrine_death_generation: u64,
     debug_buildings_invulnerable: bool,
     defense_alerts: Vec<DefenseAlert>,
@@ -274,6 +280,40 @@ pub enum SnapshotRestoreError {
 }
 
 impl Simulation {
+    /// Reconstructs the next round from the original tick-zero state. The match tick stays
+    /// monotonic for network input ordering, but the world, resources and strike budgets reset.
+    pub(super) fn reset_for_next_round(&mut self, start_tick: u64) {
+        let template = self
+            .initial_round
+            .as_ref()
+            .expect("prepared round template");
+        let mut world = World::new();
+        restore_entities(&mut world, &template.entities);
+        super::building_spells::refresh_building_spell_controls(&mut world, start_tick);
+        self.world = world;
+        for (player, initial) in self.players.iter_mut().zip(&template.players) {
+            player.resources = initial.resources;
+        }
+        self.fog.clone_from(&template.fog);
+        self.team_objectives = template.team_objectives;
+        self.gjallarhorn_constructed_count = template.gjallarhorn_constructed_count;
+        self.shrine_death_generation = template.shrine_death_generation;
+        self.next_id = template.next_id;
+        self.next_visual_id = template.next_visual_id;
+        self.round_index += 1;
+        self.round_start_tick = start_tick;
+        self.player_strikes.clone_from(&template.player_strikes);
+        self.team_rescue_ready_ticks = [0; 2];
+        self.pending_rescue_strikes.clear();
+        self.defense_alerts.clear();
+        self.clear_presentation_events();
+        self.pursuit_cache.clear();
+        self.radius_objective_fields.clear();
+        self.topology_dirty = true;
+        self.refresh_topology_if_dirty();
+        self.refresh_vision();
+    }
+
     /// Captures a completed-boundary logical snapshot. Presentation events, worker-pool state, and
     /// rebuildable navigation caches are deliberately excluded.
     #[must_use]
@@ -289,6 +329,12 @@ impl Simulation {
             lifecycle: self.lifecycle,
             team_objectives: self.team_objectives,
             gjallarhorn_constructed_count: self.gjallarhorn_constructed_count,
+            round_index: self.round_index,
+            round_start_tick: self.round_start_tick,
+            round_wins: self.round_wins,
+            player_strikes: self.player_strikes.clone(),
+            pending_rescue_strikes: self.pending_rescue_strikes.clone(),
+            team_rescue_ready_ticks: self.team_rescue_ready_ticks,
             shrine_death_generation: self.shrine_death_generation,
             debug_buildings_invulnerable: self.debug_buildings_invulnerable,
             defense_alerts: self.defense_alerts.clone(),
@@ -372,6 +418,12 @@ impl Simulation {
                 lifecycle: snapshot.lifecycle,
                 team_objectives: snapshot.team_objectives,
                 gjallarhorn_constructed_count: snapshot.gjallarhorn_constructed_count,
+                round_index: snapshot.round_index,
+                round_start_tick: snapshot.round_start_tick,
+                round_wins: snapshot.round_wins,
+                player_strikes: &snapshot.player_strikes,
+                pending_rescue_strikes: &snapshot.pending_rescue_strikes,
+                team_rescue_ready_ticks: snapshot.team_rescue_ready_ticks,
                 shrine_death_generation: snapshot.shrine_death_generation,
                 debug_buildings_invulnerable: snapshot.debug_buildings_invulnerable,
                 fog: snapshot.fog.as_ref(),
@@ -394,6 +446,13 @@ impl Simulation {
         self.lifecycle = snapshot.lifecycle;
         self.team_objectives = snapshot.team_objectives;
         self.gjallarhorn_constructed_count = snapshot.gjallarhorn_constructed_count;
+        self.round_index = snapshot.round_index;
+        self.round_start_tick = snapshot.round_start_tick;
+        self.round_wins = snapshot.round_wins;
+        self.player_strikes.clone_from(&snapshot.player_strikes);
+        self.pending_rescue_strikes
+            .clone_from(&snapshot.pending_rescue_strikes);
+        self.team_rescue_ready_ticks = snapshot.team_rescue_ready_ticks;
         self.shrine_death_generation = snapshot.shrine_death_generation;
         self.debug_buildings_invulnerable = snapshot.debug_buildings_invulnerable;
         self.defense_alerts.clone_from(&snapshot.defense_alerts);

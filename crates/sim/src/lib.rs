@@ -6,7 +6,9 @@ mod damage;
 pub mod debug;
 mod economy;
 mod match_driver;
+mod match_rules;
 mod match_setup;
+pub use match_rules::{MatchRules, RescueStrikeRules, TimeLimitOutcome};
 mod math;
 mod native_carriers;
 mod native_effects;
@@ -360,6 +362,8 @@ mod tests {
             targetless_lane: None,
             team_objective: [wc3_point(6_000, 0), wc3_point(-6_000, 0)],
             economy: EconomyRules::default(),
+            match_rules: MatchRules::default(),
+            rescue_strike_rules: None,
         }
     }
 

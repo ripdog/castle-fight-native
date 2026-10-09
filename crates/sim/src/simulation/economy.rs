@@ -58,8 +58,10 @@ impl Simulation {
         let (progress, ticks_until_income) = if interval == 0 {
             (0, 0)
         } else {
-            let phase = u32::try_from(self.next_tick % u64::from(interval))
-                .expect("income phase fits interval width");
+            let phase = u32::try_from(
+                self.next_tick.saturating_sub(self.round_start_tick) % u64::from(interval),
+            )
+            .expect("income phase fits interval width");
             let progress =
                 u16::try_from(u64::from(phase) * RESOURCE_FIXED_SCALE / u64::from(interval))
                     .expect("income progress is at most 10,000");
@@ -178,6 +180,7 @@ impl Simulation {
         }
         let elapsed_after_tick = self
             .next_tick
+            .saturating_sub(self.round_start_tick)
             .checked_add(1)
             .expect("income tick counter overflow");
         if !elapsed_after_tick.is_multiple_of(u64::from(interval)) {

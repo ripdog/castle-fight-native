@@ -617,6 +617,7 @@ pub struct CastleFightCommandCardLayout {
     pub cancel_command: CommandCardPosition,
     pub repair_ability: CommandCardPosition,
     pub blink_ability: CommandCardPosition,
+    pub rescue_strike_ability: CommandCardPosition,
     pub blink_hotkey: char,
     pub map_version: MapVersion,
 }
@@ -643,6 +644,7 @@ pub fn castle_fight_command_card_layout_for_version(
         // Castle Fight's 9.27 Repair and scripted live Blink object data.
         repair_ability: CommandCardPosition::new(1, 1),
         blink_ability: CommandCardPosition::new(1, 2),
+        rescue_strike_ability: CommandCardPosition::new(3, 2),
         blink_hotkey: 'D',
         map_version: version,
     })

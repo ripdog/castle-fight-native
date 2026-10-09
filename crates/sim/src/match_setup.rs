@@ -113,6 +113,7 @@ pub struct CastleFightMatchConfig {
     pub content_identity: CastleFightContentIdentity,
     pub mode: CastleFightMatchMode,
     pub match_seed: u64,
+    pub rules: crate::MatchRules,
     pub participants: Vec<CastleFightParticipantConfig>,
 }
 
@@ -162,6 +163,7 @@ impl CastleFightMatchConfig {
             content_identity: bundle.identity,
             mode: CastleFightMatchMode::DevelopmentSubset,
             match_seed,
+            rules: crate::MatchRules::for_version(version),
             participants,
         })
     }
@@ -206,6 +208,7 @@ pub enum CastleFightMatchSetupError {
         actual: CastleFightContentIdentity,
     },
     UnsupportedParticipants,
+    InvalidMatchRules,
     UnsupportedBuilderRace(CastleFightBuilderRace),
     MapSource(String),
     Terrain(TerrainLoadError),
@@ -245,6 +248,7 @@ impl fmt::Display for CastleFightMatchSetupError {
             Self::UnsupportedParticipants => formatter.write_str(
                 "Castle Fight 9.27 development matches support balanced 1v1, 2v2, or 3v3 rosters using authored slots 0/1/2 versus 6/7/8",
             ),
+            Self::InvalidMatchRules => formatter.write_str("invalid match mode settings"),
             Self::UnsupportedBuilderRace(race) => write!(
                 formatter,
                 "builder race {race:?} has not been promoted for the selected content revision"
@@ -267,6 +271,9 @@ pub fn resolve_castle_fight_match(
     mut config: CastleFightMatchConfig,
 ) -> Result<CastleFightResolvedMatch, CastleFightMatchSetupError> {
     validate_participants(&config.participants)?;
+    if !config.rules.valid() {
+        return Err(CastleFightMatchSetupError::InvalidMatchRules);
+    }
     config
         .participants
         .sort_unstable_by_key(|participant| participant.id);
@@ -290,7 +297,8 @@ pub fn resolve_castle_fight_match(
     }
     validate_map_source_927()?;
     let terrain = TerrainElevationMap::from_wc3_terrain_json(TERRAIN_927)?;
-    let simulation_config = simulation_config_927(&terrain, content, config.match_seed);
+    let mut simulation_config = simulation_config_927(&terrain, content, config.match_seed);
+    simulation_config.match_rules = config.rules;
     let combat_rules = CombatRules {
         terrain_elevation: Some(terrain.clone()),
         uphill_miss_chance_per_10k: DEVELOPMENT_UPHILL_MISS_CHANCE_PER_10K,
@@ -405,6 +413,7 @@ fn create_resolved_castle_fight_match(
             .expect("authored main castle must be a valid team objective");
     }
 
+    simulation.prepare_round_restart();
     Ok(CastleFightMatch {
         simulation,
         terrain_source_json: resolved.terrain_source_json,
@@ -679,6 +688,8 @@ fn simulation_config_927(
         )),
         team_objective: [world_point(4_720, 0), world_point(-4_720, 0)],
         economy: content.economy,
+        match_rules: crate::MatchRules::for_version(content.map_version),
+        rescue_strike_rules: crate::RescueStrikeRules::for_version(content.map_version),
     }
 }
 
