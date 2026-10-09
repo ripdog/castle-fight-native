@@ -12,6 +12,7 @@ mod damage_charge;
 mod damage_threshold;
 mod ensnare;
 mod kill_berserk;
+mod mirror_image;
 mod poison;
 mod speed_aura;
 mod sphere;

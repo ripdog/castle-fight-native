@@ -4,6 +4,51 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0FA",
+      "unit_rawcode": "h02Y",
+      "kind": "evasion",
+      "chance_per_10k": 7000,
+      "provenance": {
+        "ability": "A0FA",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0FJ",
+      "unit_rawcode": "h02Y",
+      "kind": "spell-resistance",
+      "damage_taken_per_10k": 5000,
+      "provenance": {
+        "ability": "A0FJ",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0CU",
+      "unit_rawcode": "h02Y",
+      "kind": "mirror-image",
+      "profile": {
+        "ability": 1093682005,
+        "chance_per_10k": 2000,
+        "cooldown_ticks": 90,
+        "split_ticks": 19,
+        "lifetime_ticks": 1800,
+        "displacement": 131072,
+        "images": 1,
+        "damage_dealt_per_10k": 6000,
+        "damage_taken_per_10k": 20000
+      },
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/production-unit-special-mechanics.tsv",
+        "handler": "handleSourceDamageEffects,randomN02YOrder",
+        "native_base": "AOmi"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A0CT",
       "unit_rawcode": "h02X",
       "kind": "evasion",

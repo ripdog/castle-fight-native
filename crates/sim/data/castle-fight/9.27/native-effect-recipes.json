@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0FA","unit_rawcode":"h02Y","kind":"evasion"},
+    {"source_kind":"unit-ability","source_key":"A0FJ","unit_rawcode":"h02Y","kind":"spell-resistance"},
+    {"source_kind":"unit-ability","source_key":"A0CU","unit_rawcode":"h02Y","kind":"mirror-image"},
     {"source_kind":"unit-ability","source_key":"A0CT","unit_rawcode":"h02X","kind":"evasion"},
     {"source_kind":"unit-ability","source_key":"A0FI","unit_rawcode":"h02X","kind":"spell-resistance"},
     {"source_kind":"unit-ability","source_key":"A0CS","unit_rawcode":"h02W","kind":"evasion"},

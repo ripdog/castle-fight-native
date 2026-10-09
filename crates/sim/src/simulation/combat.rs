@@ -91,6 +91,9 @@ impl Simulation {
         for mut intent in intents {
             if let AttackSourceIndex::Unit(index) = intent.source {
                 let source = &units[index];
+                if source.attacks_disabled || source.orders_suspended {
+                    continue;
+                }
                 if source
                     .status
                     .damage_charge
@@ -115,6 +118,10 @@ impl Simulation {
                             .expect("buffed attack damage exceeds i32"),
                     )
                     .max(0);
+                if let Some(illusion) = source.status.illusion {
+                    intent.attack.damage =
+                        scale_damage_per_10k(intent.attack.damage, illusion.damage_dealt_per_10k);
+                }
             }
             let source_alive = match intent.source {
                 AttackSourceIndex::Unit(index) => unit_health[index] > 0,
@@ -328,6 +335,7 @@ impl Simulation {
                             completed_tick,
                             self.debug_buildings_invulnerable,
                             DamageTargetState {
+                                match_seed: self.config.match_seed,
                                 damage_rules: self.combat_rules.damage_rules,
                                 units,
                                 buildings,
@@ -393,6 +401,7 @@ impl Simulation {
                                         completed_tick,
                                         self.debug_buildings_invulnerable,
                                         DamageTargetState {
+                                            match_seed: self.config.match_seed,
                                             damage_rules: self.combat_rules.damage_rules,
                                             units,
                                             buildings,
@@ -898,7 +907,8 @@ impl Simulation {
                     );
                     on_hit.splash_falloff = Some(profile);
                 }
-                PassiveUnitEffect::DamageThreshold(_)
+                PassiveUnitEffect::MirrorImage(_)
+                | PassiveUnitEffect::DamageThreshold(_)
                 | PassiveUnitEffect::DamageCharge(_)
                 | PassiveUnitEffect::KillBerserk(_)
                 | PassiveUnitEffect::Pulverize(_)

@@ -219,3 +219,5 @@ A native fire buff remains authoritative for its full duration even when its per
 Native Sphere retains each ability’s attachment-slot deadlines and next slot in status state, and independent visual flights in the canonical native-action inventory. Its visual-ID namespace and allocation counter are separate from gameplay IDs, retained across recovery, and never influence damage or proc selection.
 
 Unit status retains damage-charge controller identity, exact fractional mana, permanent armed state and an optional native self-destruct cast deadline. The controller survives presentation/control projections such as Hex; native order eligibility still controls whether its granted ability can cast.
+
+Native Mirror Image stores its profile, damage-event sequence, cooldown, cast-point and split deadlines in unit status. Each illusion stores source/ability identity, lifetime and separate outgoing/incoming damage factors. All fields are hashed and serialized; split invulnerability/order suppression are derived from these deadlines. Native unsummoning consumes no corpse or gameplay identity.

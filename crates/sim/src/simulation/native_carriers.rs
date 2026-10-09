@@ -350,6 +350,7 @@ impl Simulation {
                                 completed_tick,
                                 self.debug_buildings_invulnerable,
                                 DamageTargetState {
+                                    match_seed: self.config.match_seed,
                                     damage_rules: self.combat_rules.damage_rules,
                                     units,
                                     buildings,
@@ -480,6 +481,7 @@ fn cleanse_native_effects(
     status.damage_over_time_count = 0;
     passive_baseline.retain(|effect| {
         let ability = match effect {
+            PassiveUnitEffect::MirrorImage(profile) => Some(profile.ability),
             PassiveUnitEffect::DamageCharge(profile) => Some(profile.marker),
             PassiveUnitEffect::Poison(p) => Some(p.ability),
             PassiveUnitEffect::KillBerserk(p) => Some(p.ability),
@@ -502,6 +504,13 @@ fn cleanse_native_effects(
         };
         ability.is_none_or(|id| !profile.removed_persistent_abilities.contains(&id))
     });
+    if status.mirror_image.is_some_and(|mirror| {
+        profile
+            .removed_persistent_abilities
+            .contains(&mirror.profile.ability)
+    }) {
+        status.mirror_image = None;
+    }
     let revoked_life = status
         .native_grants
         .remove(&profile.removed_persistent_abilities);

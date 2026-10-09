@@ -131,6 +131,7 @@ impl Simulation {
                     completed_tick,
                     self.debug_buildings_invulnerable,
                     DamageTargetState {
+                        match_seed: self.config.match_seed,
                         damage_rules: self.combat_rules.damage_rules,
                         units,
                         buildings,

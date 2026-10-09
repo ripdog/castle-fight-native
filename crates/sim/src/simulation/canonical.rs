@@ -1700,6 +1700,28 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         hash.write_u64(poison.expires_tick);
     }
 
+    hash.write_u8(u8::from(status.mirror_image.is_some()));
+    if let Some(mirror) = status.mirror_image {
+        for word in mirror.profile.canonical_words() {
+            hash.write_u64(word);
+        }
+        hash.write_u64(mirror.event_sequence);
+        hash.write_u64(mirror.ready_tick);
+        for tick in [mirror.cast_tick, mirror.split_tick] {
+            hash.write_u8(u8::from(tick.is_some()));
+            if let Some(tick) = tick {
+                hash.write_u64(tick);
+            }
+        }
+    }
+    hash.write_u8(u8::from(status.illusion.is_some()));
+    if let Some(illusion) = status.illusion {
+        hash.write_u64(illusion.source.0);
+        hash.write_u32(illusion.ability.0);
+        hash.write_u64(illusion.expires_tick);
+        hash.write_u16(illusion.damage_dealt_per_10k);
+        hash.write_u16(illusion.damage_taken_per_10k);
+    }
     hash.write_u8(u8::from(status.damage_charge.is_some()));
     if let Some(charge) = status.damage_charge {
         for word in charge.profile.canonical_words() {
@@ -2063,6 +2085,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                 hash.write_i32(profile.radius);
                 hash.write_u16(profile.damage_per_10k);
                 hash.write_u8(profile.targets.bits());
+            }
+            PassiveUnitEffect::MirrorImage(profile) => {
+                hash.write_u8(19);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
             }
             PassiveUnitEffect::DamageCharge(profile) => {
                 hash.write_u8(18);

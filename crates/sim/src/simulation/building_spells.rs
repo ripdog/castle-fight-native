@@ -664,6 +664,7 @@ impl Simulation {
         unit.attacks_disabled = false;
         unit.abilities_disabled = false;
         unit.orders_suspended = self.next_tick < unit.status.order_recovery_until_tick;
+        mirror_images::project_control(unit);
         let Some(control) = entity.get::<BuildingSpellControl>() else {
             return;
         };

@@ -116,6 +116,27 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
 
     kind = recipe["kind"]
     effect: dict[str, Any] = dict(recipe)
+    if kind == "mirror-image":
+        trace = mechanics["mirror_image"]
+        handler = mechanics["mirror_image_handler"]
+        shape = r'function randomN02YOrder\(upq\)if\(GetRandomInt\(0,99\)<(\d+)\)then jY=true unit_issueImmediateOrderById\(upq,(\d+)\)end end'
+        match = re.fullmatch(shape, handler.strip())
+        if match is None or int(match[1]) != trace["proc_chance_percent"] or int(match[2]) != trace["mirror_image_order_id"]:
+            raise ValueError("Mirror Image requires exact damage-event immediate-order control flow")
+        if mechanics["native_base"] != "AOmi" or scaled(protected.get("mana_cost", fields["cost1"])) != 0:
+            raise ValueError("Mirror Image requires its free protected native ability")
+        from decimal import ROUND_CEILING
+        split = (Decimal(fields["datad1"]) + Decimal(fields["rng1"]) / Decimal(fields["missilespeed"])) * 30
+        effect.update(profile={"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
+            "chance_per_10k": scaled(trace["proc_chance_percent"], 100),
+            "cooldown_ticks": scaled(protected.get("cooldown", fields["cool1"]), 30),
+            "split_ticks": int(split.to_integral_value(rounding=ROUND_CEILING)),
+            "lifetime_ticks": scaled(fields["dur1"], 30), "displacement": scaled(fields["rng1"], 1024),
+            "images": number("DataA1"), "damage_dealt_per_10k": number("DataB1", 10_000),
+            "damage_taken_per_10k": number("DataC1", 10_000)},
+            provenance={"git_tree": mechanics["git_tree"], "source": "resolved/production-unit-special-mechanics.tsv",
+                "handler": "handleSourceDamageEffects,randomN02YOrder", "native_base": "AOmi"})
+        return effect
     if kind == "self-destruct":
         effect.update(profile=self_destruct_profile(recipe["source_key"], fields, mechanics["native_base"]))
         return effect
@@ -579,6 +600,9 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
     damage_thresholds = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "damage-triggered-persistent-low-hp-attack-bonus"}
+    mirror_images = {row["unit_rawcode"]: json.loads(row["parameters_json"])
+        for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
+        if row["mechanic_kind"] == "attack-proc-native-mirror-image"}
     damage_charges = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "damage-to-mana-kaboom-charge"}
@@ -633,6 +657,12 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
                 raise ValueError("damage charge requires its source unit and native damage event guards")
             detail.update(damage_charge=trace, damage_charge_handler=functions["vampireCharge"],
                 charge_child_fields=abilities[child], charge_child_base=ability_bases[child], git_tree=tree)
+        if recipe["kind"] == "mirror-image":
+            trace = mirror_images[recipe["unit_rawcode"]]
+            handler = functions["handleSourceDamageEffects"]
+            if f'elseif(Spq=={int.from_bytes(recipe["unit_rawcode"].encode(), "big")})then randomN02YOrder(Qpq)' not in handler or f'unit_getAbilityLevel(Qpq,{trace["source_damage_marker_ability_id"]})<=0' not in handler:
+                raise ValueError("Mirror Image requires the native damage-event marker/type dispatch")
+            detail.update(mirror_image=trace, mirror_image_handler=functions["randomN02YOrder"], git_tree=tree)
         detail["misc"] = misc
         detail["native_base"] = ability_bases[source]
         if spell is not None:

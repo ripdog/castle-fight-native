@@ -46,7 +46,10 @@ pub(super) fn activate_kill_berserk(source: &mut UnitSnapshot, tick: u64) {
 }
 
 pub(super) fn damage_after_native_incoming(unit: &UnitSnapshot, damage: i32, tick: u64) -> i32 {
-    scale_damage_per_10k(damage, native_incoming_damage_factor(&unit.status, tick))
+    let damage = scale_damage_per_10k(damage, native_incoming_damage_factor(&unit.status, tick));
+    unit.status.illusion.map_or(damage, |illusion| {
+        scale_damage_per_10k(damage, illusion.damage_taken_per_10k)
+    })
 }
 
 pub(super) fn native_incoming_damage_factor(status: &StatusState, tick: u64) -> u16 {

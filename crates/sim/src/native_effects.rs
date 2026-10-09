@@ -54,6 +54,7 @@ pub enum NativeEffectImplementationId {
     WarcraftSphereV1,
     WarcraftScriptDamageControllerV1,
     WarcraftSelfDestructV1,
+    WarcraftMirrorImageV1,
     WarcraftScriptedAutomaticV1,
     WarcraftHumanSupportV1,
     WarcraftHumanPassiveV1,
@@ -99,6 +100,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftSphereV1 => 70,
             Self::WarcraftScriptDamageControllerV1 => 71,
             Self::WarcraftSelfDestructV1 => 72,
+            Self::WarcraftMirrorImageV1 => 73,
             Self::WarcraftScriptedAutomaticV1 => 19,
             Self::WarcraftHumanSupportV1 => 11,
             Self::WarcraftHumanPassiveV1 => 12,
@@ -536,6 +538,12 @@ fn native_buff_from_tuning(tuning: &TuningFile, source: u32) -> Option<crate::Na
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum TuningEffect {
+    MirrorImage {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        profile: crate::components::MirrorImageProfile,
+    },
     DamageCharge {
         source_kind: String,
         source_key: String,
@@ -824,7 +832,8 @@ impl TuningEffect {
 
     fn source_kind(&self) -> &str {
         match self {
-            Self::DamageCharge { source_kind, .. }
+            Self::MirrorImage { source_kind, .. }
+            | Self::DamageCharge { source_kind, .. }
             | Self::SelfDestruct { source_kind, .. }
             | Self::Poison { source_kind, .. }
             | Self::DamageThreshold { source_kind, .. }
@@ -854,7 +863,8 @@ impl TuningEffect {
 
     fn source_key(&self) -> &str {
         match self {
-            Self::DamageCharge { source_key, .. }
+            Self::MirrorImage { source_key, .. }
+            | Self::DamageCharge { source_key, .. }
             | Self::SelfDestruct { source_key, .. }
             | Self::Poison { source_key, .. }
             | Self::DamageThreshold { source_key, .. }
@@ -884,7 +894,8 @@ impl TuningEffect {
 
     fn unit_rawcode(&self) -> Option<&str> {
         match self {
-            Self::DamageCharge { unit_rawcode, .. }
+            Self::MirrorImage { unit_rawcode, .. }
+            | Self::DamageCharge { unit_rawcode, .. }
             | Self::Poison { unit_rawcode, .. }
             | Self::DamageThreshold { unit_rawcode, .. }
             | Self::KillBerserk { unit_rawcode, .. }
@@ -932,6 +943,7 @@ impl TuningEffect {
             Self::NativeAura { .. } => NativeEffectImplementationId::WarcraftNativeAuraV1,
             Self::SpeedAura { .. } => NativeEffectImplementationId::WarcraftSpeedAuraV1,
             Self::Sphere { .. } => NativeEffectImplementationId::WarcraftSphereV1,
+            Self::MirrorImage { .. } => NativeEffectImplementationId::WarcraftMirrorImageV1,
             Self::DamageCharge { .. } => {
                 NativeEffectImplementationId::WarcraftScriptDamageControllerV1
             }
@@ -964,6 +976,7 @@ impl TuningEffect {
             Self::NativeAura { .. } => "native-aura",
             Self::SpeedAura { .. } => "speed-aura",
             Self::Sphere { .. } => "sphere",
+            Self::MirrorImage { .. } => "mirror-image",
             Self::DamageCharge { .. } => "damage-charge",
             Self::SelfDestruct { .. } => "self-destruct",
             Self::Defend { .. } => "defend",
@@ -1127,7 +1140,8 @@ fn native_unit_mechanics_from_tuning(
                         automatic_spell = Some(candidate);
                     }
                 }
-                TuningEffect::DamageCharge { .. }
+                TuningEffect::MirrorImage { .. }
+                | TuningEffect::DamageCharge { .. }
                 | TuningEffect::Poison { .. }
                 | TuningEffect::KillBerserk { .. }
                 | TuningEffect::Sphere { .. }
@@ -1253,6 +1267,7 @@ pub fn native_effect_implementation_for(
 
 fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUnitEffect {
     match effect {
+        TuningEffect::MirrorImage { profile, .. } => PassiveUnitEffect::MirrorImage(*profile),
         TuningEffect::DamageCharge {
             profile,
             effect_ability_rawcode,

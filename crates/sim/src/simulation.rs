@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 56;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 57;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -55,6 +55,7 @@ mod damage_charge;
 mod damage_thresholds;
 mod economy;
 mod line_projectiles;
+mod mirror_images;
 mod movement;
 mod native_actions;
 pub use native_actions::aura_carrier::AuraCarrierView;
@@ -1569,6 +1570,7 @@ impl Simulation {
         self.advance_cooldowns();
         self.resolve_shrine_revivals();
         self.advance_building_spell_controls();
+        let mirror_spawns = self.advance_mirror_images();
         let corpses_expired = self.expire_corpses();
         self.pause_frozen_building_activities();
         self.advance_builders();
@@ -2139,7 +2141,7 @@ impl Simulation {
             deaths,
             corpses_spawned,
             corpses_expired,
-            units_spawned,
+            units_spawned: units_spawned + mirror_spawns,
             spawn_failures,
             topology_rebuilds: usize::from(topology_rebuilt),
             pursuit_steps: movement.pursuit_steps,
@@ -2582,6 +2584,7 @@ impl Simulation {
             RetaliationState::default(),
             StatusState {
                 damage_charge: damage_charge::initial_state(properties.passive_effects),
+                mirror_image: mirror_images::initial_state(properties.passive_effects),
                 ..Default::default()
             },
             NavigationState::default(),
@@ -3928,6 +3931,7 @@ struct BounceSearchContext<'a> {
 }
 
 struct DamageTargetState<'a> {
+    match_seed: u64,
     damage_rules: DamageRules,
     units: &'a mut [UnitSnapshot],
     buildings: &'a [BuildingSnapshot],
@@ -5259,6 +5263,16 @@ fn apply_damage_to_target(
                 state.unit_health[index],
                 event_damage,
             );
+            if state.units[index].classifications.combat_sapper
+                && let Some(source_index) = find_unit_index(state.units, source_id)
+                && state.unit_health[source_index] > 0
+            {
+                mirror_images::observe_source_damage(
+                    &mut state.units[source_index],
+                    completed_tick,
+                    state.match_seed,
+                );
+            }
             state.unit_health[index] = state.unit_health[index]
                 .checked_sub(event_damage)
                 .expect("unit damage arithmetic overflowed validated bounds");

@@ -525,6 +525,54 @@ pub struct AuraEffectProfile {
     pub suspend_during_spell_cooldown: bool,
 }
 
+/// Script-ordered native Mirror Image. Values are version-scoped source projections.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MirrorImageProfile {
+    pub ability: AbilityId,
+    pub chance_per_10k: u16,
+    pub cooldown_ticks: u16,
+    pub split_ticks: u16,
+    pub lifetime_ticks: u16,
+    pub displacement: i32,
+    pub images: u8,
+    pub damage_dealt_per_10k: u16,
+    pub damage_taken_per_10k: u16,
+}
+
+impl MirrorImageProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 9] {
+        [
+            u64::from(self.ability.0),
+            u64::from(self.chance_per_10k),
+            u64::from(self.cooldown_ticks),
+            u64::from(self.split_ticks),
+            u64::from(self.lifetime_ticks),
+            self.displacement as u64,
+            u64::from(self.images),
+            u64::from(self.damage_dealt_per_10k),
+            u64::from(self.damage_taken_per_10k),
+        ]
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MirrorImageState {
+    pub profile: MirrorImageProfile,
+    pub event_sequence: u64,
+    pub ready_tick: u64,
+    pub cast_tick: Option<u64>,
+    pub split_tick: Option<u64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IllusionState {
+    pub source: SimId,
+    pub ability: AbilityId,
+    pub expires_tick: u64,
+    pub damage_dealt_per_10k: u16,
+    pub damage_taken_per_10k: u16,
+}
+
 /// Native Sphere owns visual-only missiles and attachment cooldowns, never damage.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SphereProfile {
@@ -678,6 +726,7 @@ pub(crate) struct ProductionUnitClassifications(pub UnitClassifications);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PassiveUnitEffect {
+    MirrorImage(MirrorImageProfile),
     DamageCharge(DamageChargeProfile),
     Poison(PoisonProfile),
     DamageThreshold(DamageThresholdProfile),
@@ -1620,6 +1669,8 @@ pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
 
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusState {
+    pub mirror_image: Option<MirrorImageState>,
+    pub illusion: Option<IllusionState>,
     pub damage_charge: Option<DamageChargeState>,
     pub spheres: [Option<SphereAttachmentState>; 4],
     pub acid_bomb: Option<AcidBombStatus>,

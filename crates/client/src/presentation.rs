@@ -4538,7 +4538,13 @@ fn sync_render_entities(
         );
     }
 
+    let viewer_team = samples
+        .current
+        .players
+        .get(&selected.local_player)
+        .map(|player| player.team);
     for unit in samples.current.units.values() {
+        let friendly_image = unit.status.illusion.is_some() && viewer_team == Some(unit.team);
         let visual_rawcode = unit
             .hex
             .map(|hex| hex.form.rawcode)
@@ -4550,6 +4556,9 @@ fn sync_render_entities(
                     && let Some([r, g, b, _]) = unit.status.damage_threshold.vertex_rgba
                 {
                     commands.entity(root).insert(Wc3VertexTint([r, g, b]));
+                }
+                if friendly_image && let Some(root) = entry.model_root {
+                    commands.entity(root).insert(Wc3VertexTint([0, 0, 255]));
                 }
                 continue;
             }
@@ -4641,6 +4650,11 @@ fn sync_render_entities(
                         &wc3_visuals,
                     );
                 }
+            }
+            if friendly_image {
+                commands
+                    .entity(model_root)
+                    .insert(Wc3VertexTint([0, 0, 255]));
             }
             (entity, Some(model_root), None, Some(rawcode))
         } else {

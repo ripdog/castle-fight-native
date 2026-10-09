@@ -9,6 +9,20 @@ import build_runtime_catalog as catalog
 
 
 class NativeTuningProjectionTest(unittest.TestCase):
+    def test_mirror_image_reconciles_script_order_with_protected_native_fields(self):
+        recipe = {"kind":"mirror-image", "source_kind":"unit-ability", "source_key":"TEST", "unit_rawcode":"UNIT"}
+        fields = {"cost1":"9999", "cool1":"99", "datad1":"0.2", "rng1":"51", "missilespeed":"300",
+            "dur1":"7", "dataa1":"2", "datab1":"0.4", "datac1":"1.5"}
+        trace = {"proc_chance_percent":17, "mirror_image_order_id":852123}
+        handler = 'function randomN02YOrder(upq)if(GetRandomInt(0,99)<17)then jY=true unit_issueImmediateOrderById(upq,852123)end end'
+        detail = {"mirror_image":trace, "mirror_image_handler":handler, "native_base":"AOmi", "git_tree":"synthetic"}
+        output = native.project_effect(recipe, fields, None, {"mana_cost":"0", "cooldown":"2"}, detail)["profile"]
+        self.assertEqual((output["split_ticks"], output["cooldown_ticks"], output["images"]), (12, 60, 2))
+        for changed in (handler.replace('<17','<=17'), handler.replace('jY=true ',''), handler.replace('852123','852124')):
+            with self.assertRaisesRegex(ValueError, "control flow"):
+                native.project_effect(recipe, fields, None, {"mana_cost":"0"}, {**detail,"mirror_image_handler":changed})
+
+
     def test_sphere_uses_protected_cooldown_and_independent_native_visual_speed(self):
         recipe = {"kind":"sphere", "source_kind":"unit-ability", "source_key":"TEST", "unit_rawcode":"UNIT"}
         fields = {"targetattachcount":"3", "cool1":"99", "missilespeed":"450"}

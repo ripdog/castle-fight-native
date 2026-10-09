@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A0FA","implementation":"warcraft-evasion-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Greater Water evasion; Mirror Image orders come from the source damage dispatcher."},
+    {"source_kind":"unit-ability","source_key":"A0FJ","implementation":"warcraft-spell-resistance-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Greater Water spell-resistance; Mirror Image orders come from the source damage dispatcher."},
+    {"source_kind":"unit-ability","source_key":"A0CU","implementation":"warcraft-mirror-image-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Greater Water mirror-image; Mirror Image orders come from the source damage dispatcher."},
     {"source_kind":"unit-ability","source_key":"A0CT","implementation":"warcraft-evasion-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Water evasion from retained resolved fields."},
     {"source_kind":"unit-ability","source_key":"A0FI","implementation":"warcraft-spell-resistance-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Water spell-resistance from retained resolved fields."},
     {"source_kind":"unit-ability","source_key":"A0CS","implementation":"warcraft-evasion-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Lesser Water evasion from retained resolved fields."},
