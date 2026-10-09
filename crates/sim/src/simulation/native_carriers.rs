@@ -481,6 +481,7 @@ fn cleanse_native_effects(
     status.damage_over_time_count = 0;
     passive_baseline.retain(|effect| {
         let ability = match effect {
+            PassiveUnitEffect::LavaSpawn(_) => None,
             PassiveUnitEffect::MirrorImage(profile) => Some(profile.ability),
             PassiveUnitEffect::DamageCharge(profile) => Some(profile.marker),
             PassiveUnitEffect::Poison(p) => Some(p.ability),

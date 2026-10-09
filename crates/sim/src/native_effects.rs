@@ -55,6 +55,8 @@ pub enum NativeEffectImplementationId {
     WarcraftScriptDamageControllerV1,
     WarcraftSelfDestructV1,
     WarcraftMirrorImageV1,
+    WarcraftLavaSpawnV1,
+    WarcraftConeWaveV1,
     WarcraftScriptedAutomaticV1,
     WarcraftHumanSupportV1,
     WarcraftHumanPassiveV1,
@@ -101,6 +103,8 @@ impl NativeEffectImplementationId {
             Self::WarcraftScriptDamageControllerV1 => 71,
             Self::WarcraftSelfDestructV1 => 72,
             Self::WarcraftMirrorImageV1 => 73,
+            Self::WarcraftLavaSpawnV1 => 74,
+            Self::WarcraftConeWaveV1 => 75,
             Self::WarcraftScriptedAutomaticV1 => 19,
             Self::WarcraftHumanSupportV1 => 11,
             Self::WarcraftHumanPassiveV1 => 12,
@@ -538,6 +542,17 @@ fn native_buff_from_tuning(tuning: &TuningFile, source: u32) -> Option<crate::Na
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum TuningEffect {
+    LavaSpawn {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        profile: crate::components::LavaSpawnProfile,
+    },
+    ConeWave {
+        source_kind: String,
+        source_key: String,
+        profile: crate::components::ConeWaveProfile,
+    },
     MirrorImage {
         source_kind: String,
         source_key: String,
@@ -832,7 +847,9 @@ impl TuningEffect {
 
     fn source_kind(&self) -> &str {
         match self {
-            Self::MirrorImage { source_kind, .. }
+            Self::LavaSpawn { source_kind, .. }
+            | Self::ConeWave { source_kind, .. }
+            | Self::MirrorImage { source_kind, .. }
             | Self::DamageCharge { source_kind, .. }
             | Self::SelfDestruct { source_kind, .. }
             | Self::Poison { source_kind, .. }
@@ -863,7 +880,9 @@ impl TuningEffect {
 
     fn source_key(&self) -> &str {
         match self {
-            Self::MirrorImage { source_key, .. }
+            Self::LavaSpawn { source_key, .. }
+            | Self::ConeWave { source_key, .. }
+            | Self::MirrorImage { source_key, .. }
             | Self::DamageCharge { source_key, .. }
             | Self::SelfDestruct { source_key, .. }
             | Self::Poison { source_key, .. }
@@ -894,7 +913,8 @@ impl TuningEffect {
 
     fn unit_rawcode(&self) -> Option<&str> {
         match self {
-            Self::MirrorImage { unit_rawcode, .. }
+            Self::LavaSpawn { unit_rawcode, .. }
+            | Self::MirrorImage { unit_rawcode, .. }
             | Self::DamageCharge { unit_rawcode, .. }
             | Self::Poison { unit_rawcode, .. }
             | Self::DamageThreshold { unit_rawcode, .. }
@@ -917,7 +937,8 @@ impl TuningEffect {
             | Self::OrbSpellProc { unit_rawcode, .. }
             | Self::BurningOil { unit_rawcode, .. }
             | Self::FrostArmor { unit_rawcode, .. } => Some(unit_rawcode),
-            Self::SelfDestruct { .. }
+            Self::ConeWave { .. }
+            | Self::SelfDestruct { .. }
             | Self::ChainLightning { .. }
             | Self::EntanglingRoots { .. } => None,
         }
@@ -943,6 +964,8 @@ impl TuningEffect {
             Self::NativeAura { .. } => NativeEffectImplementationId::WarcraftNativeAuraV1,
             Self::SpeedAura { .. } => NativeEffectImplementationId::WarcraftSpeedAuraV1,
             Self::Sphere { .. } => NativeEffectImplementationId::WarcraftSphereV1,
+            Self::LavaSpawn { .. } => NativeEffectImplementationId::WarcraftLavaSpawnV1,
+            Self::ConeWave { .. } => NativeEffectImplementationId::WarcraftConeWaveV1,
             Self::MirrorImage { .. } => NativeEffectImplementationId::WarcraftMirrorImageV1,
             Self::DamageCharge { .. } => {
                 NativeEffectImplementationId::WarcraftScriptDamageControllerV1
@@ -976,6 +999,8 @@ impl TuningEffect {
             Self::NativeAura { .. } => "native-aura",
             Self::SpeedAura { .. } => "speed-aura",
             Self::Sphere { .. } => "sphere",
+            Self::LavaSpawn { .. } => "lava-spawn",
+            Self::ConeWave { .. } => "cone-wave",
             Self::MirrorImage { .. } => "mirror-image",
             Self::DamageCharge { .. } => "damage-charge",
             Self::SelfDestruct { .. } => "self-destruct",
@@ -1140,7 +1165,7 @@ fn native_unit_mechanics_from_tuning(
                         automatic_spell = Some(candidate);
                     }
                 }
-                TuningEffect::MirrorImage { .. }
+                TuningEffect::LavaSpawn { .. } | TuningEffect::MirrorImage { .. }
                 | TuningEffect::DamageCharge { .. }
                 | TuningEffect::Poison { .. }
                 | TuningEffect::KillBerserk { .. }
@@ -1173,7 +1198,7 @@ fn native_unit_mechanics_from_tuning(
                 }
                 TuningEffect::SelfDestruct { .. }
                 | TuningEffect::DamageThreshold { .. }
-                | TuningEffect::ChainLightning { .. }
+                | TuningEffect::ConeWave { .. } | TuningEffect::ChainLightning { .. }
                 | TuningEffect::EntanglingRoots { .. } => {
                     unreachable!("ability-effect tuning cannot match a unit-ability source")
                 }
@@ -1267,6 +1292,7 @@ pub fn native_effect_implementation_for(
 
 fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUnitEffect {
     match effect {
+        TuningEffect::LavaSpawn { profile, .. } => PassiveUnitEffect::LavaSpawn(*profile),
         TuningEffect::MirrorImage { profile, .. } => PassiveUnitEffect::MirrorImage(*profile),
         TuningEffect::DamageCharge {
             profile,
@@ -1591,7 +1617,8 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             target_ground_units: *target_ground_units,
             target_buildings: *target_buildings,
         }),
-        TuningEffect::SelfDestruct { .. }
+        TuningEffect::ConeWave { .. }
+        | TuningEffect::SelfDestruct { .. }
         | TuningEffect::ScriptedAutomatic { .. }
         | TuningEffect::ElvenAutomatic { .. }
         | TuningEffect::ChainLightning { .. }
@@ -1605,6 +1632,7 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
 
 fn build_triggered_effect(effect: &TuningEffect) -> TriggeredAttackEffect {
     match effect {
+        TuningEffect::ConeWave { profile, .. } => TriggeredAttackEffect::ConeWave(*profile),
         TuningEffect::ChainLightning {
             source_key,
             initial_damage,
@@ -1830,6 +1858,23 @@ const fn ranges_overlap(left: MapVersionRange, right: MapVersionRange) -> bool {
         || left.contains(right.last)
         || right.contains(left.first)
         || right.contains(left.last)
+}
+
+/// Intrinsic ANlm split state is installed by the native summoner, not an ability in the body's inventory.
+pub(crate) fn lava_spawn_profile_for_version(
+    version: MapVersion,
+    body_rawcode: u32,
+) -> Option<crate::components::LavaSpawnProfile> {
+    catalog()
+        .tuning(version)?
+        .effects
+        .iter()
+        .find_map(|effect| match effect {
+            TuningEffect::LavaSpawn { profile, .. } if profile.body_rawcode == body_rawcode => {
+                Some(*profile)
+            }
+            _ => None,
+        })
 }
 
 #[cfg(test)]

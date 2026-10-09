@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r65";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r66";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 40;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 41;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -788,6 +788,16 @@ impl CastleFightBuilderDefinition {
 }
 
 impl CastleFightUnitKind {
+    pub fn from_rawcode_for_version(
+        rawcode: u32,
+        version: MapVersion,
+    ) -> Result<Option<Self>, UnsupportedCastleFightMapVersion> {
+        if version != MapVersion::CASTLE_FIGHT_9_27 {
+            return Err(UnsupportedCastleFightMapVersion(version));
+        }
+        Ok(Self::from_retained_rawcode_9_27(rawcode))
+    }
+
     #[must_use]
     pub fn definition(self) -> CastleFightUnitDefinition {
         self.definition_for_version(CASTLE_FIGHT_DEFAULT_MAP_VERSION)
@@ -814,6 +824,11 @@ impl CastleFightUnitKind {
         let mechanics = native_unit_mechanics_for(version, definition.rawcode, abilities)
             .expect("supported Castle Fight version must have native-effect tuning");
         let mut passive_effects = mechanics.passive_effects.iter().collect::<Vec<_>>();
+        if let Some(profile) =
+            crate::native_effects::lava_spawn_profile_for_version(version, definition.rawcode)
+        {
+            passive_effects.push(PassiveUnitEffect::LavaSpawn(profile));
+        }
         if let Some(profile) = extracted_content_927()
             .units
             .get(&definition.rawcode)
@@ -1208,7 +1223,13 @@ impl CastleFightProductionKind {
 
     fn definition_9_27(self) -> CastleFightProductionDefinition {
         let rawcode = self.rawcode_9_27();
-        let produced_rawcode = extracted_content_927().production[&rawcode].unit_rawcode;
+        let content = extracted_content_927();
+        let trained_rawcode = content.production[&rawcode].unit_rawcode;
+        let produced_rawcode = content
+            .production_handoffs
+            .get(&trained_rawcode)
+            .copied()
+            .unwrap_or(trained_rawcode);
         let unit = CastleFightUnitKind::from_retained_rawcode_9_27(produced_rawcode)
             .expect("promoted production must reference a promoted unit");
         production_definition(rawcode, unit)
@@ -1696,7 +1717,18 @@ fn build_content_bundle_927() -> Result<CastleFightContentBundle, CastleFightCon
                 .values()
                 .map(|definition| definition.rawcode),
         )
-        .chain(towers.values().map(|definition| definition.rawcode));
+        .chain(towers.values().map(|definition| definition.rawcode))
+        .chain(
+            extracted
+                .production_handoffs
+                .iter()
+                .filter_map(|(proxy, body)| {
+                    units
+                        .values()
+                        .any(|unit| unit.rawcode == *body)
+                        .then_some(*proxy)
+                }),
+        );
     for rawcode in playable_rawcodes {
         root_set.extend(crate::native_effects::script_granted_ability_sources_for(
             version, rawcode,
@@ -1793,6 +1825,22 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0CM") => {
+            0x4000_010c
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A0CN") => {
+            0x4000_010d
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0DY") => {
+            0x4000_010e
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0DZ") => {
+            0x4000_010f
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"Aeth") => {
+            0x4000_0110
+        }
+
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0E0") => {
             0x4000_010b
         }
@@ -2810,6 +2858,12 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
                 hash.write_u16(profile.damage_per_10k);
                 hash.write_u8(profile.targets.bits());
             }
+            PassiveUnitEffect::LavaSpawn(profile) => {
+                hash.write_u8(20);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
             PassiveUnitEffect::MirrorImage(profile) => {
                 hash.write_u8(19);
                 for word in profile.canonical_words() {
@@ -2890,6 +2944,12 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
 
 fn hash_triggered_effect(hash: &mut ContentHash64, effect: TriggeredAttackEffect) {
     match effect {
+        TriggeredAttackEffect::ConeWave(profile) => {
+            hash.write_u8(2);
+            for word in profile.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         TriggeredAttackEffect::ChainLightning(profile) => {
             hash.write_u8(0);
             hash.write_u32(profile.ability.0);
@@ -3513,6 +3573,14 @@ struct CatalogSupplement927 {
     sight_profiles: Vec<CatalogSightProfile927>,
     fog_rules: CatalogFogRules927,
     spell_reveals: Vec<CatalogSpellReveal927>,
+    production_handoffs: Vec<CatalogProductionHandoff927>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CatalogProductionHandoff927 {
+    trained_rawcode: String,
+    body_rawcode: String,
+    body_death_ticks: u32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -3710,6 +3778,7 @@ struct ExtractedContent927 {
     secondary_attacks: BTreeMap<u32, ExtractedAttack927>,
     building_secondary_attacks: BTreeMap<u32, CatalogBuildingSecondaryAttack927>,
     production: BTreeMap<u32, ExtractedProduction927>,
+    production_handoffs: BTreeMap<u32, u32>,
     legendary_points_costs: BTreeMap<u32, u16>,
     corpses: BTreeMap<u32, ExtractedCorpse927>,
     repair_time_ticks: BTreeMap<u32, u32>,
@@ -3777,6 +3846,16 @@ impl ExtractedContent927 {
         }
 
         let supplement = catalog_supplement_927()?;
+        let handoffs = supplement.production_handoffs;
+        let production_handoffs = handoffs
+            .iter()
+            .map(|entry| {
+                (
+                    parse_rawcode(&entry.trained_rawcode),
+                    parse_rawcode(&entry.body_rawcode),
+                )
+            })
+            .collect();
         let building_secondary_attacks = supplement
             .building_secondary_attacks
             .into_iter()
@@ -4167,6 +4246,39 @@ impl ExtractedContent927 {
             );
         }
 
+        // The production report describes trained objects. A native summoner's actual body
+        // consumes its own ordinary unit fields and protected weapon tuning instead.
+        for handoff in handoffs {
+            let rawcode = parse_rawcode(&handoff.body_rawcode);
+            let unit = &units[&rawcode];
+            let protected = &protected_stats[&rawcode];
+            primary_attacks.insert(
+                rawcode,
+                ExtractedAttack927 {
+                    damage_type: unit.attack1_damage_type.expect("handoff weapon type"),
+                    weapon_kind: unit.attack1_weapon_kind.expect("handoff weapon delivery"),
+                    targets: unit.attack1_targets.expect("handoff weapon mask"),
+                    damage: protected.attack1_damage.or(unit.attack1_damage),
+                    range: protected
+                        .attack1_range
+                        .or(unit.attack1_range)
+                        .expect("handoff weapon range"),
+                    cooldown_ticks: protected
+                        .attack1_cooldown_ticks
+                        .or(unit.attack1_cooldown_ticks)
+                        .expect("handoff weapon cadence"),
+                },
+            );
+            corpses.insert(
+                rawcode,
+                ExtractedCorpse927 {
+                    does_decay: false,
+                    decay_start_ticks: handoff.body_death_ticks,
+                    lifetime_ticks: None,
+                },
+            );
+        }
+
         let mut upgrades = BTreeMap::<u32, ExtractedUpgradeLinks927>::new();
         for line in BUILDING_UPGRADES_927_TSV.lines().skip(1) {
             let mut columns = line.split('\t');
@@ -4350,6 +4462,7 @@ impl ExtractedContent927 {
             secondary_attacks,
             building_secondary_attacks,
             production,
+            production_handoffs,
             legendary_points_costs,
             corpses,
             repair_time_ticks,
@@ -4370,7 +4483,7 @@ impl ExtractedContent927 {
 fn catalog_supplement_927() -> Result<CatalogSupplement927, String> {
     let supplement: CatalogSupplement927 = serde_json::from_str(CATALOG_SUPPLEMENT_927_R1_JSON)
         .map_err(|error| format!("invalid 9.27 catalog supplement: {error}"))?;
-    if supplement.schema_version != 6 {
+    if supplement.schema_version != 7 {
         return Err(format!(
             "unsupported 9.27 catalog supplement schema {}",
             supplement.schema_version
@@ -5380,12 +5493,12 @@ fn production_definition(
     // contains no explicit override for those. The WC3 training card starts at (0, 0).
     let train_command_position = content
         .command_card_positions
-        .get(&produced_unit.rawcode)
+        .get(&production.unit_rawcode)
         .copied()
         .unwrap_or(CommandCardPosition::new(0, 0));
     let train_hotkey = *content
         .building_hotkeys
-        .get(&produced_unit.rawcode)
+        .get(&production.unit_rawcode)
         .unwrap_or_else(|| {
             panic!(
                 "produced unit {:#010x} missing train hotkey",
@@ -5394,10 +5507,15 @@ fn production_definition(
         });
     let train_tooltips = content
         .units
-        .get(&produced_unit.rawcode)
+        .get(&production.unit_rawcode)
         .expect("produced unit must exist in retained unit table");
     assert_eq!(
-        production.unit_rawcode, produced_unit.rawcode,
+        content
+            .production_handoffs
+            .get(&production.unit_rawcode)
+            .copied()
+            .unwrap_or(production.unit_rawcode),
+        produced_unit.rawcode,
         "production link changed in retained 9.27 extraction"
     );
     let building_unit = content
@@ -5677,7 +5795,11 @@ mod tests {
             let building = kind.definition();
             let spawn = building.spawn(Team(0), BuildingFootprint::new(0, 0, 4, 4));
             let produced = CastleFightUnitKind::from_retained_rawcode_9_27(
-                content.production[&building.rawcode].unit_rawcode,
+                content
+                    .production_handoffs
+                    .get(&content.production[&building.rawcode].unit_rawcode)
+                    .copied()
+                    .unwrap_or(content.production[&building.rawcode].unit_rawcode),
             )
             .unwrap()
             .definition()
@@ -5813,7 +5935,18 @@ mod tests {
                     .tower(kind)
                     .expect("playable tower definition")
                     .rawcode
-            }));
+            }))
+            .chain(
+                extracted
+                    .production_handoffs
+                    .iter()
+                    .filter_map(|(proxy, body)| {
+                        bundle
+                            .unit_definitions()
+                            .any(|unit| unit.rawcode == *body)
+                            .then_some(*proxy)
+                    }),
+            );
 
         for rawcode in playable_rawcodes {
             for source in crate::native_effects::script_granted_ability_sources_for(

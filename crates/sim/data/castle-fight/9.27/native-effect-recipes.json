@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "effects": [
+    {"kind":"lava-spawn","source_kind":"unit-ability","source_key":"A0DY","unit_rawcode":"u00F"},
+    {"kind":"orb-spell-proc","source_kind":"unit-ability","source_key":"A0CM","unit_rawcode":"h030"},
+    {"kind":"cone-wave","source_kind":"ability-effect","source_key":"A0CN"},
     {"source_kind":"unit-ability","source_key":"A0FA","unit_rawcode":"h02Y","kind":"evasion"},
     {"source_kind":"unit-ability","source_key":"A0FJ","unit_rawcode":"h02Y","kind":"spell-resistance"},
     {"source_kind":"unit-ability","source_key":"A0CU","unit_rawcode":"h02Y","kind":"mirror-image"},

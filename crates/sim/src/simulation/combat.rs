@@ -447,6 +447,11 @@ impl Simulation {
                         if let Some(event) = pending.chain_event {
                             self.last_chain_lightnings.push(event);
                         }
+                        if let Some(state) = pending.cone_wave {
+                            let id = self.allocate_id();
+                            self.world
+                                .spawn((id, crate::components::NativeAction::ConeWave(state)));
+                        }
                         if let Some(state) = pending.chain_state {
                             chain_lightning_launches.push(state);
                         }
@@ -907,7 +912,8 @@ impl Simulation {
                     );
                     on_hit.splash_falloff = Some(profile);
                 }
-                PassiveUnitEffect::MirrorImage(_)
+                PassiveUnitEffect::LavaSpawn(_)
+                | PassiveUnitEffect::MirrorImage(_)
                 | PassiveUnitEffect::DamageThreshold(_)
                 | PassiveUnitEffect::DamageCharge(_)
                 | PassiveUnitEffect::KillBerserk(_)

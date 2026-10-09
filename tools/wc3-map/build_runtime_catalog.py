@@ -270,11 +270,14 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
     sight_fields: dict[str, dict[str, int]] = {}
     bounce_fields: dict[str, dict[str, str]] = {}
     line_fields: dict[str, dict[str, str]] = {}
+    corpse_fields: dict[str, dict[str, str]] = {}
     objects: dict[str, dict[str, Any]] = {}
     far_sight: dict[str, dict[str, int]] = {}
     with io.StringIO(object_fields_bytes.decode("utf-8"), newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
         for row in reader:
+            if row["category"] == "units" and row["field_id"] in {"udea", "udtm"}:
+                corpse_fields.setdefault(row["rawcode"], {})[row["field_id"]] = row["recovered_value_json"].strip('"')
             if row["category"] == "units" and row["field_id"] == "ua2z":
                 secondary_missile_speeds[row["rawcode"]] = row["recovered_value_json"].strip('"')
             if row["category"] == "abilities" and row["base_rawcode"] == "AOfs" and row["level"] == "1" and row["field_id"] in {"aare", "adur", "Ofs1"}:
@@ -386,8 +389,23 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
             raise SystemExit("bounce target count exceeds native capacity")
         bounce_weapons.append({"rawcode": unit["rawcode"], "maximum_targets": targets,
                                "damage_percent_per_bounce": int(retained_percent), "range_world": int(fields["ua1f"])})
+    handoffs = []
+    for row in csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree,
+            "resolved/production-unit-special-mechanics.tsv").decode()), delimiter="\t"):
+        if row["mechanic_kind"] != "native-lava-spawn-split-with-child-conversion":
+            continue
+        trace = json.loads(row["parameters_json"])
+        body = trace["runtime_combat_unit_rawcode"]
+        if trace["trained_proxy_is_gameplay_combat_body"] or trace["native_split_summoned_unit_rawcode"] != body:
+            raise SystemExit("native summon handoff no longer replaces a noncombat training proxy")
+        if int(corpse_fields[body]["udea"]) != 0:
+            raise SystemExit("native summon handoff body requires audited no-corpse metadata")
+        handoffs.append({"trained_rawcode": row["unit_rawcode"], "body_rawcode": body,
+            "body_death_ticks": _action_duration_ticks(corpse_fields[body]["udtm"], "0", simulation_hz),
+            "source": "resolved/production-unit-special-mechanics.tsv"})
     return {
-        "schema_version": 6,
+        "schema_version": 7,
+        "production_handoffs": handoffs,
         "fog_rules": {
             "initially_explored": True,
             "attack_reveal_radius_world": _line_world_integer(misc_values["FoggedAttackRevealRadius"]),

@@ -294,7 +294,9 @@ impl Simulation {
                         });
                     }
                     projectile_impacts += 1;
-                    if defense.damage <= 0 {
+                    // A landed zero-damage hit still enters native damage-event and attack
+                    // counters. A completely deflected missile has no ordinary impact payload.
+                    if defense.damage <= 0 && defense.reflected {
                         continue;
                     }
                     if apply_damage_to_target(
@@ -350,6 +352,11 @@ impl Simulation {
                             }
                             if let Some(event) = pending.chain_event {
                                 self.last_chain_lightnings.push(event);
+                            }
+                            if let Some(state) = pending.cone_wave {
+                                let id = self.allocate_id();
+                                self.world
+                                    .spawn((id, crate::components::NativeAction::ConeWave(state)));
                             }
                             if let Some(state) = pending.chain_state {
                                 chain_lightning_launches.push(state);

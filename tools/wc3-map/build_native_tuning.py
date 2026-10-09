@@ -116,6 +116,37 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
 
     kind = recipe["kind"]
     effect: dict[str, Any] = dict(recipe)
+    if kind == "lava-spawn":
+        trace = mechanics["lava_spawn"]
+        if mechanics["native_base"] != "ANlm" or fields["unitid1"] != trace["runtime_combat_unit_rawcode"]:
+            raise ValueError("lava-spawn requires its native summoned combat body")
+        if (number("DataA1") != 1 or number("Dur1") != 0 or number("DataE1") != 0
+                or scaled(protected["mana_cost"]) != 0 or trace["nested_h030_child_replace_method"] != 2
+                or trace["trained_proxy_is_gameplay_combat_body"] or not trace["remove_summoned_type_from_h030_child"]):
+            raise ValueError("lava-spawn requires the audited permanent one-body summon and default-state child replacement")
+        effect.update(profile={"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
+            "body_rawcode": trace["runtime_combat_unit_id"], "child_rawcode": trace["nested_h030_child_replacement_unit_id"],
+            "attacks_to_split": number("DataC1"), "split_delay_ticks": number("DataB1", 30),
+            "maximum_splits": number("DataF1") - 1, "healing_per_10k": number("DataD1", 10_000),
+            "order_refresh_ticks": scaled(trace["post_child_attack_order_delay_seconds"], 30),
+            "targets": 3}, provenance={"git_tree": mechanics["git_tree"],
+                "source": "resolved/production-unit-special-mechanics.tsv", "native_base": "ANlm"})
+        if set(fields["targs1"].split(",")) != {"enemy", "neutral", "air", "ground", "ward"}:
+            raise ValueError("lava-spawn attack-count target constraints changed")
+        return effect
+    if kind == "cone-wave":
+        if mechanics["native_base"] != "ACbc" or number("DataE1") != 0 or scaled(protected["mana_cost"]) != 0:
+            raise ValueError("cone-wave requires audited free native Breath of Fire with no ignition damage")
+        if int((Decimal(protected["cooldown"]) * 30).to_integral_value(rounding="ROUND_CEILING")) != 1:
+            raise ValueError("orb cone-wave child needs at most one tick of native cooldown")
+        effect.update(profile={"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
+            "damage": number("DataA1"), "maximum_damage": number("DataB1"), "distance": number("DataC1", 1024),
+            "initial_radius": number("Area1", 1024), "final_radius": number("DataD1", 1024),
+            "speed_per_tick": int(Decimal(fields["missilespeed"]) * 1024 / 30),
+            "targets": 3})
+        if set(fields["targs1"].split(",")) != {"air", "enemies", "ground"}:
+            raise ValueError("cone-wave target constraints changed")
+        return effect
     if kind == "mirror-image":
         trace = mechanics["mirror_image"]
         handler = mechanics["mirror_image_handler"]
@@ -606,6 +637,9 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
     damage_charges = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "damage-to-mana-kaboom-charge"}
+    lava_spawns = {row["unit_rawcode"]: json.loads(row["parameters_json"])
+        for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
+        if row["mechanic_kind"] == "native-lava-spawn-split-with-child-conversion"}
     lua = retained("script/war3map.lua")
     functions = {row["name"]: lua[int(row["start_byte_offset"]):int(row["end_byte_offset"])].decode()
         for row in rows(retained("script/function-spans.tsv"))}
@@ -641,6 +675,15 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
                 raise ValueError(f"proxy child {source} needs one semantic parent for its source unit")
             spell = matches[0]
         detail = dict(mechanics.get(recipe.get("unit_rawcode", ""), {}))
+        if recipe["kind"] == "lava-spawn":
+            trace = lava_spawns[recipe["unit_rawcode"]]
+            summon = functions["EventListener_add_FireElemental_onEvent_add_FireElemental"]
+            if (f'unit_getTypeId(kxm)=={trace["runtime_combat_unit_id"]}' not in summon
+                or f'ReplaceUnitBJ(jxm,{trace["nested_h030_child_replacement_unit_id"]},2)' not in summon
+                or '__wurst_safe_UnitRemoveType(jxm,UNIT_TYPE_SUMMONED)' not in summon
+                or f'doAfter({trace["post_child_attack_order_delay_seconds"]},dzq)' not in functions["setupFireSummon"]):
+                raise ValueError("lava-spawn child conversion/order control flow changed")
+            detail.update(lava_spawn=trace, git_tree=tree)
         detail["kill_mechanics"] = kill_mechanics.get(recipe.get("unit_rawcode", ""))
         if recipe["kind"] == "damage-threshold":
             init = functions["IN"]

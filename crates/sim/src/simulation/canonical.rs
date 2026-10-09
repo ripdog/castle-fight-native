@@ -325,6 +325,25 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(10);
                 hash.write_u64(id.0);
                 match action {
+                    NativeAction::ConeWave(state) => {
+                        hash.write_u8(9);
+                        hash.write_u64(state.source.0);
+                        hash.write_u8(state.team.0);
+                        for word in state.profile.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                        hash.write_i32(state.origin.x);
+                        hash.write_i32(state.origin.y);
+                        hash.write_i32(state.destination.x);
+                        hash.write_i32(state.destination.y);
+                        hash.write_u64(state.launch_tick);
+                        hash.write_i32(state.traveled);
+                        hash.write_i32(state.remaining_damage);
+                        hash.write_u64(state.hit_targets.len() as u64);
+                        for id in &state.hit_targets {
+                            hash.write_u64(id.0);
+                        }
+                    }
                     NativeAction::SphereFlight(state) => {
                         hash.write_u8(8);
                         hash.write_u64(state.source.0);
@@ -1700,6 +1719,26 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         hash.write_u64(poison.expires_tick);
     }
 
+    hash.write_u8(u8::from(status.spawn_building.is_some()));
+    if let Some(id) = status.spawn_building {
+        hash.write_u64(id.0);
+    }
+    hash.write_u8(u8::from(status.lava_spawn.is_some()));
+    if let Some(state) = status.lava_spawn {
+        for word in state.profile.canonical_words() {
+            hash.write_u64(word);
+        }
+        hash.write_u16(state.landed_attacks);
+        hash.write_u8(state.splits);
+        hash.write_u8(u8::from(state.split_tick.is_some()));
+        if let Some(tick) = state.split_tick {
+            hash.write_u64(tick);
+        }
+    }
+    hash.write_u8(u8::from(status.summon_order_refresh_tick.is_some()));
+    if let Some(tick) = status.summon_order_refresh_tick {
+        hash.write_u64(tick);
+    }
     hash.write_u8(u8::from(status.mirror_image.is_some()));
     if let Some(mirror) = status.mirror_image {
         for word in mirror.profile.canonical_words() {
@@ -2086,6 +2125,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                 hash.write_u16(profile.damage_per_10k);
                 hash.write_u8(profile.targets.bits());
             }
+            PassiveUnitEffect::LavaSpawn(profile) => {
+                hash.write_u8(20);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
             PassiveUnitEffect::MirrorImage(profile) => {
                 hash.write_u8(19);
                 for word in profile.canonical_words() {
@@ -2162,6 +2207,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
 
 fn hash_triggered_attack_effect(hash: &mut Fnv64, effect: TriggeredAttackEffect) {
     match effect {
+        TriggeredAttackEffect::ConeWave(profile) => {
+            hash.write_u8(2);
+            for word in profile.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         TriggeredAttackEffect::ChainLightning(profile) => {
             hash.write_u8(0);
             hash.write_u64(u64::from(profile.ability.0));

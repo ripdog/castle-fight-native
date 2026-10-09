@@ -177,7 +177,8 @@ impl Simulation {
                 definition.properties.passive_effects.retain(|effect| {
                     !matches!(
                         effect,
-                        PassiveUnitEffect::MirrorImage(_)
+                        PassiveUnitEffect::LavaSpawn(_)
+                            | PassiveUnitEffect::MirrorImage(_)
                             | PassiveUnitEffect::TriggeredSpellProc(_)
                             | PassiveUnitEffect::Feedback(_)
                             | PassiveUnitEffect::Bash(_)

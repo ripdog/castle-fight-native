@@ -12,6 +12,7 @@ import build_runtime_catalog as catalog
 
 # Source identities only. Model, geometry and scale belong to retained script.
 RECIPES = [
+    ("h046", "wK", "Du:create847", "BuildingAttachmentHandler_registerBuildingAttach_RaceElemental_call_registerBuildingAttach_RaceElemental8"),
     ("h045", "wK", "Cu:create846", "BuildingAttachmentHandler_registerBuildingAttach_RaceElemental_call_registerBuildingAttach_RaceElemental7"),
     ("h03Z", "wK", "xu:create841", "BuildingAttachmentHandler_registerBuildingAttach_RaceElemental_call_registerBuildingAttach_RaceElemental2"),
     ("h03Y", "wK", "wu:create840", "BuildingAttachmentHandler_registerBuildingAttach_RaceElemental_call_registerBuildingAttach_RaceElemental1"),

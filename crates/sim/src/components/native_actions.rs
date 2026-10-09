@@ -161,6 +161,7 @@ pub(crate) struct HailstoneState {
 
 #[derive(Component, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum NativeAction {
+    ConeWave(ConeWaveState),
     SphereFlight(SphereFlightState),
     AuraCarrier(AuraCarrierState),
     StasisTrap(StasisTrapState),
@@ -215,4 +216,17 @@ pub(crate) struct SphereFlightState {
     pub destination: SimPoint,
     pub launch_tick: u64,
     pub impact_tick: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct ConeWaveState {
+    pub source: SimId,
+    pub team: Team,
+    pub profile: ConeWaveProfile,
+    pub origin: SimPoint,
+    pub destination: SimPoint,
+    pub launch_tick: u64,
+    pub traveled: i32,
+    pub remaining_damage: i32,
+    pub hit_targets: Vec<SimId>,
 }

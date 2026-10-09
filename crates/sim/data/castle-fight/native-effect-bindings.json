@@ -1,6 +1,11 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A0CM","implementation":"warcraft-orb-spell-proc-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native orb casts the separate Breath of Fire cone; resolved uniform target chances and zero bonus damage."},
+    {"source_kind":"ability-effect","source_key":"A0CN","implementation":"warcraft-cone-wave-v1","valid_from":"9.27","valid_through":"9.27","notes":"Free protected native cone child; traveling expanding area with shared maximum damage and no ignition damage."},
+    {"source_kind":"unit-ability","source_key":"A0DY","implementation":"warcraft-lava-spawn-v1","valid_from":"9.27","valid_through":"9.27","notes":"Hidden trained summoner creates h030; native split children are converted into h02Z by the summon listener."},
+    {"source_kind":"unit-ability","source_key":"A0DZ","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27","notes":"Hidden Channel identifies the trained summon proxy; consumed by the audited ANlm handoff."},
+    {"source_kind":"unit-ability","source_key":"Aeth","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Ghost is confined to the invisible noncombat summoner, which retires after one second; it is not granted to the combat body."},
     {"source_kind":"unit-ability","source_key":"A0E0","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27","notes":"Hidden zero-visibility Channel with only protection registration; no active spell or fire proc."},
     {"source_kind":"unit-ability","source_key":"A0FA","implementation":"warcraft-evasion-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Greater Water evasion; Mirror Image orders come from the source damage dispatcher."},
     {"source_kind":"unit-ability","source_key":"A0FJ","implementation":"warcraft-spell-resistance-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Greater Water spell-resistance; Mirror Image orders come from the source damage dispatcher."},

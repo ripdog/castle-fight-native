@@ -9,6 +9,33 @@ import build_runtime_catalog as catalog
 
 
 class NativeTuningProjectionTest(unittest.TestCase):
+    def test_lava_split_projects_generation_limit_healing_and_converted_child(self):
+        recipe = {"kind":"lava-spawn", "source_kind":"unit-ability", "source_key":"TEST", "unit_rawcode":"UNIT"}
+        fields = {"unitid1":"BODY", "dataa1":"1", "dur1":"0", "datae1":"0", "datac1":"7",
+            "datab1":"1.5", "dataf1":"4", "datad1":"0.3", "targs1":"enemy,neutral,air,ground,ward"}
+        trace = {"runtime_combat_unit_rawcode":"BODY", "runtime_combat_unit_id":1,
+            "nested_h030_child_replacement_unit_id":2, "nested_h030_child_replace_method":2,
+            "trained_proxy_is_gameplay_combat_body":False, "remove_summoned_type_from_h030_child":True,
+            "post_child_attack_order_delay_seconds":0.2}
+        detail = {"native_base":"ANlm", "lava_spawn":trace, "git_tree":"synthetic"}
+        result = native.project_effect(recipe, fields, None, {"mana_cost":"0"}, detail)["profile"]
+        self.assertEqual((result["maximum_splits"], result["healing_per_10k"], result["split_delay_ticks"], result["child_rawcode"]), (3,3000,45,2))
+        for changes in ({"dur1":"1"}, {"datae1":"1"}, {"dataa1":"2"}, {"targs1":"enemy,ground,structure"}):
+            with self.assertRaises(ValueError):
+                native.project_effect(recipe, {**fields, **changes}, None, {"mana_cost":"0"}, detail)
+
+    def test_native_cone_preserves_distinct_geometry_cap_and_speed_and_rejects_ignition(self):
+        recipe = {"kind":"cone-wave", "source_kind":"ability-effect", "source_key":"TEST"}
+        fields = {"dataa1":"19", "datab1":"53", "datac1":"100", "datad1":"12",
+            "area1":"3", "missilespeed":"300", "datae1":"0", "targs1":"air,enemies,ground"}
+        detail = {"native_base":"ACbc"}
+        protected = {"mana_cost":"0", "cooldown":"0.01"}
+        result = native.project_effect(recipe, fields, None, protected, detail)["profile"]
+        self.assertEqual((result["damage"], result["maximum_damage"], result["initial_radius"], result["final_radius"], result["speed_per_tick"]), (19,53,3*1024,12*1024,10*1024))
+        for changes in ({"datae1":"1"}, {"targs1":"enemies,ground,structure"}):
+            with self.assertRaises(ValueError):
+                native.project_effect(recipe, {**fields, **changes}, None, protected, detail)
+
     def test_mirror_image_reconciles_script_order_with_protected_native_fields(self):
         recipe = {"kind":"mirror-image", "source_kind":"unit-ability", "source_key":"TEST", "unit_rawcode":"UNIT"}
         fields = {"cost1":"9999", "cool1":"99", "datad1":"0.2", "rng1":"51", "missilespeed":"300",

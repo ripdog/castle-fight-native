@@ -8,8 +8,9 @@ pub use native_grants::{
 };
 mod native_actions;
 pub(crate) use native_actions::{
-    AcidBombMissileState, AuraCarrierState, EnsnareMissileState, HailstoneState, HealingWaveState,
-    NativeAction, NativeBoltState, PoisonState, SphereFlightState, StasisTrapState,
+    AcidBombMissileState, AuraCarrierState, ConeWaveState, EnsnareMissileState, HailstoneState,
+    HealingWaveState, NativeAction, NativeBoltState, PoisonState, SphereFlightState,
+    StasisTrapState,
 };
 pub use native_actions::{
     AcidBombProfile, AcidBombStatus, EnsnareProfile, EnsnareState, HealingWaveProfile,
@@ -440,8 +441,74 @@ pub struct EntanglingRootsEffectProfile {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TriggeredAttackEffect {
+    ConeWave(ConeWaveProfile),
     ChainLightning(ChainLightningEffectProfile),
     EntanglingRoots(EntanglingRootsEffectProfile),
+}
+
+/// Native traveling cone (Carrion Swarm / Breath of Fire family), independent of its trigger target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ConeWaveProfile {
+    pub ability: AbilityId,
+    pub damage: i32,
+    pub maximum_damage: i32,
+    pub distance: i32,
+    pub initial_radius: i32,
+    pub final_radius: i32,
+    pub speed_per_tick: i32,
+    pub targets: AttackTargetMask,
+}
+
+impl ConeWaveProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 8] {
+        [
+            u64::from(self.ability.0),
+            self.damage as u64,
+            self.maximum_damage as u64,
+            self.distance as u64,
+            self.initial_radius as u64,
+            self.final_radius as u64,
+            self.speed_per_tick as u64,
+            u64::from(self.targets.bits()),
+        ]
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LavaSpawnProfile {
+    pub ability: AbilityId,
+    pub body_rawcode: u32,
+    pub child_rawcode: u32,
+    pub attacks_to_split: u16,
+    pub split_delay_ticks: u16,
+    pub maximum_splits: u8,
+    pub healing_per_10k: u16,
+    pub order_refresh_ticks: u16,
+    pub targets: AttackTargetMask,
+}
+
+impl LavaSpawnProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 9] {
+        [
+            u64::from(self.ability.0),
+            u64::from(self.body_rawcode),
+            u64::from(self.child_rawcode),
+            u64::from(self.attacks_to_split),
+            u64::from(self.split_delay_ticks),
+            u64::from(self.maximum_splits),
+            u64::from(self.healing_per_10k),
+            u64::from(self.order_refresh_ticks),
+            u64::from(self.targets.bits()),
+        ]
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LavaSpawnState {
+    pub profile: LavaSpawnProfile,
+    pub landed_attacks: u16,
+    pub splits: u8,
+    pub split_tick: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -726,6 +793,7 @@ pub(crate) struct ProductionUnitClassifications(pub UnitClassifications);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PassiveUnitEffect {
+    LavaSpawn(LavaSpawnProfile),
     MirrorImage(MirrorImageProfile),
     DamageCharge(DamageChargeProfile),
     Poison(PoisonProfile),
@@ -1669,6 +1737,9 @@ pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
 
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusState {
+    pub spawn_building: Option<SimId>,
+    pub lava_spawn: Option<LavaSpawnState>,
+    pub summon_order_refresh_tick: Option<u64>,
     pub mirror_image: Option<MirrorImageState>,
     pub illusion: Option<IllusionState>,
     pub damage_charge: Option<DamageChargeState>,

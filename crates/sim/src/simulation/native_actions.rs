@@ -6,6 +6,7 @@ use crate::components::{
 
 pub(super) mod acid_bomb;
 pub(super) mod aura_carrier;
+pub(super) mod cone_wave;
 pub(super) mod ensnare;
 pub(super) mod poison;
 pub(super) mod stasis;
@@ -128,6 +129,9 @@ impl Simulation {
                 continue;
             }
             match action {
+                NativeAction::ConeWave(state) => {
+                    self.advance_cone_wave(entity, state, units);
+                }
                 NativeAction::SphereFlight(state) => {
                     if self.next_tick >= state.impact_tick {
                         self.world.despawn(entity);

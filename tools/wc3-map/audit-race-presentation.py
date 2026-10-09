@@ -324,6 +324,9 @@ def audit(evidence, assets, builder, lightning_projection=None, buff_projection=
         bindings = {entry["rawcode"]: entry for entry in manifests[pack][pack]}
         for code in sorted(codes):
             entry = bindings.get(code)
+            if entry and entry.get("intentionally_hidden") and model_identity(entry.get("source_model", "")) in {"no_model", "none"}:
+                entities.append({"rawcode": code, "name": entry["name"], "pack": pack, "intentionally_hidden": True})
+                continue
             if not entry or not entry.get("gltf") or entry.get("fallback_to_base_art"):
                 findings.append(f"unresolved/substituted {pack} object {code}")
                 continue

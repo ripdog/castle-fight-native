@@ -3,6 +3,56 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "lava-spawn",
+      "source_kind": "unit-ability",
+      "source_key": "A0DY",
+      "unit_rawcode": "u00F",
+      "profile": {
+        "ability": 1093682265,
+        "body_rawcode": 1747989296,
+        "child_rawcode": 1747989082,
+        "attacks_to_split": 15,
+        "split_delay_ticks": 60,
+        "maximum_splits": 2,
+        "healing_per_10k": 5000,
+        "order_refresh_ticks": 6,
+        "targets": 3
+      },
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/production-unit-special-mechanics.tsv",
+        "native_base": "ANlm"
+      }
+    },
+    {
+      "kind": "orb-spell-proc",
+      "source_kind": "unit-ability",
+      "source_key": "A0CM",
+      "unit_rawcode": "h030",
+      "chance_per_10k": 2000,
+      "effect_ability_rawcode": "A0CN",
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A0CM",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "kind": "cone-wave",
+      "source_kind": "ability-effect",
+      "source_key": "A0CN",
+      "profile": {
+        "ability": 1093681998,
+        "damage": 95,
+        "maximum_damage": 900,
+        "distance": 819200,
+        "initial_radius": 153600,
+        "final_radius": 409600,
+        "speed_per_tick": 35840,
+        "targets": 3
+      }
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A0FA",
       "unit_rawcode": "h02Y",

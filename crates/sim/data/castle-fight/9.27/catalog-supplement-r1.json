@@ -1,5 +1,13 @@
 {
-  "schema_version": 6,
+  "schema_version": 7,
+  "production_handoffs": [
+    {
+      "trained_rawcode": "u00F",
+      "body_rawcode": "h030",
+      "body_death_ticks": 45,
+      "source": "resolved/production-unit-special-mechanics.tsv"
+    }
+  ],
   "fog_rules": {
     "initially_explored": true,
     "attack_reveal_radius_world": 200,

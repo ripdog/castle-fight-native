@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 57;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 58;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -54,6 +54,7 @@ mod content_lifecycle_tests;
 mod damage_charge;
 mod damage_thresholds;
 mod economy;
+mod lava_spawns;
 mod line_projectiles;
 mod mirror_images;
 mod movement;
@@ -1570,7 +1571,7 @@ impl Simulation {
         self.advance_cooldowns();
         self.resolve_shrine_revivals();
         self.advance_building_spell_controls();
-        let mirror_spawns = self.advance_mirror_images();
+        let mirror_spawns = self.advance_mirror_images() + self.advance_lava_spawns();
         let corpses_expired = self.expire_corpses();
         self.pause_frozen_building_activities();
         self.advance_builders();
@@ -2294,6 +2295,7 @@ impl Simulation {
                     Some(
                         crate::components::NativeAction::AcidBomb(_)
                             | crate::components::NativeAction::Bolt(_)
+                            | crate::components::NativeAction::ConeWave(_)
                             | crate::components::NativeAction::Ensnare(_)
                             | crate::components::NativeAction::Hailstone(_)
                     )
@@ -2553,6 +2555,16 @@ impl Simulation {
         unit: UnitSpawn,
         definition: ResolvedUnitDefinition,
     ) -> SimId {
+        self.spawn_resolved_unit_with_provenance(owner, unit, definition, None)
+    }
+
+    fn spawn_resolved_unit_with_provenance(
+        &mut self,
+        owner: Option<PlayerId>,
+        unit: UnitSpawn,
+        definition: ResolvedUnitDefinition,
+        spawn_building: Option<SimId>,
+    ) -> SimId {
         let properties = definition.properties;
         let spellcasting = definition.spellcasting;
         automatic_abilities::validate_additional_automatic_definitions(
@@ -2583,6 +2595,10 @@ impl Simulation {
             TargetState::default(),
             RetaliationState::default(),
             StatusState {
+                spawn_building,
+                summon_order_refresh_tick: lava_spawns::initial_state(properties.passive_effects)
+                    .map(|state| self.next_tick + u64::from(state.profile.order_refresh_ticks)),
+                lava_spawn: lava_spawns::initial_state(properties.passive_effects),
                 damage_charge: damage_charge::initial_state(properties.passive_effects),
                 mirror_image: mirror_images::initial_state(properties.passive_effects),
                 ..Default::default()
@@ -3189,10 +3205,11 @@ impl Simulation {
                     spellcasting: attempt.spellcasting,
                     additional_abilities: attempt.additional_abilities,
                 };
-                self.spawn_resolved_unit_unchecked(
+                self.spawn_resolved_unit_with_provenance(
                     Some(attempt.owner),
                     UnitSpawn::from_template(attempt.team, position, attempt.profile.unit),
                     definition,
+                    Some(attempt.id),
                 );
                 let legendary = attempt.content.is_some_and(|content| {
                     crate::content::unit_has_ability_927(
@@ -3213,10 +3230,11 @@ impl Simulation {
                         shrine_id.0,
                     ) % 100;
                     if roll < 17 {
-                        self.spawn_resolved_unit_unchecked(
+                        self.spawn_resolved_unit_with_provenance(
                             Some(*shrine_owner),
                             UnitSpawn::from_template(attempt.team, position, attempt.profile.unit),
                             definition,
+                            Some(attempt.id),
                         );
                         spawned += 1;
                     }
@@ -4763,6 +4781,26 @@ fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option
             },
         });
     }
+    if let Some(crate::components::NativeAction::ConeWave(projectile)) =
+        entity.get::<crate::components::NativeAction>()
+    {
+        return Some(ProjectileView {
+            ability: Some(projectile.profile.ability),
+            id,
+            source: projectile.source,
+            launch_position: projectile.origin,
+            launch_tick: projectile.launch_tick,
+            impact_tick: projectile.launch_tick
+                + (projectile.profile.distance as u64)
+                    .div_ceil(projectile.profile.speed_per_tick as u64)
+                    .max(1),
+            kind: ProjectileViewKind::Ballistic {
+                source_rawcode: None,
+                destination: projectile.destination,
+                impact_radius: 0,
+            },
+        });
+    }
     if let Some(crate::components::NativeAction::SphereFlight(projectile)) =
         entity.get::<crate::components::NativeAction>()
     {
@@ -5345,8 +5383,9 @@ struct PendingAttackEffectState<'a> {
     damage_rules: DamageRules,
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Default)]
 struct PendingAttackEffectResult {
+    cone_wave: Option<crate::components::ConeWaveState>,
     poison: Option<crate::PoisonProfile>,
     chain_event: Option<ChainLightningEvent>,
     chain_state: Option<ChainLightningState>,
@@ -5366,6 +5405,7 @@ fn apply_pending_attack_effects(
         building_health,
         damage_rules,
     } = state;
+    lava_spawns::observe_landed_attack(source.id, target, completed_tick, units, buildings);
     let TargetIndex::Unit(index) = target else {
         let TargetIndex::Building(index) = target else {
             unreachable!()
@@ -5388,8 +5428,23 @@ fn apply_pending_attack_effects(
         }
         return PendingAttackEffectResult::default();
     };
+    let mut result = PendingAttackEffectResult::default();
+    if let Some(TriggeredAttackEffect::ConeWave(profile)) = effects.triggered_spell {
+        let origin = units
+            .iter()
+            .find(|unit| unit.id == source.id)
+            .map_or(source.position, |unit| unit.position);
+        result.cone_wave = Some(native_actions::cone_wave::new_state(
+            source.id,
+            source.team,
+            origin,
+            units[index].position,
+            profile,
+            completed_tick,
+        ));
+    }
     if unit_health[index] <= 0 {
-        return PendingAttackEffectResult::default();
+        return result;
     }
     if let Some(profile) = effects.frost
         && !units[index].classifications.spell_immune
@@ -5453,9 +5508,9 @@ fn apply_pending_attack_effects(
             .stunned_until_tick
             .max(stunned_until_tick);
     }
-    let mut result = PendingAttackEffectResult::default();
     if let Some(effect) = effects.triggered_spell {
         match effect {
+            TriggeredAttackEffect::ConeWave(_) => {}
             TriggeredAttackEffect::ChainLightning(profile) => {
                 let max_targets = usize::from(profile.maximum_targets).min(MAX_BOUNCE_HITS);
                 if max_targets > 0 {
