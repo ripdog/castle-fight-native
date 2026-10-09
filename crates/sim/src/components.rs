@@ -1829,8 +1829,20 @@ pub const MAX_TIMED_ATTACK_SPEED_MODIFIERS: usize = 8;
 pub const MAX_TIMED_ARMOR_MODIFIERS: usize = 8;
 pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ManaImprovementLink {
+    pub source: SimId,
+    pub source_position: SimPoint,
+    pub target_position: SimPoint,
+    pub ability: AbilityId,
+}
+
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusState {
+    /// A consumed manual improvement ability; target death restores it.
+    pub mana_improvement_target: Option<SimId>,
+    /// Native lightning and the permanent grant survive generator death.
+    pub mana_improvement_link: Option<ManaImprovementLink>,
     pub retaliation_sequence: u64,
     /// Last authoritative order/movement heading, normalized by consumers.
     pub facing_direction: SimPoint,

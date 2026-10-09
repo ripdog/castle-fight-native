@@ -15,7 +15,7 @@ use castle_fight_sim::{
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-pub const PROTOCOL_SCHEMA_VERSION: u32 = 13;
+pub const PROTOCOL_SCHEMA_VERSION: u32 = 14;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub const MAX_RELEASE_REVISION_BYTES: usize = 64;
 pub const RECONNECT_TOKEN_BYTES: usize = 32;
@@ -816,6 +816,10 @@ pub enum WirePlayerCommand {
         building: u64,
         target: u64,
     },
+    CastBuildingSpellOn {
+        building: u64,
+        target: u64,
+    },
     CastBuildingSpellAt {
         building: u64,
         position: [i32; 2],
@@ -894,6 +898,10 @@ impl From<PlayerCommand> for WirePlayerCommand {
                 target: target.0,
             },
             PlayerCommand::AttackWithBuilding { building, target } => Self::AttackWithBuilding {
+                building: building.0,
+                target: target.0,
+            },
+            PlayerCommand::CastBuildingSpellOn { building, target } => Self::CastBuildingSpellOn {
                 building: building.0,
                 target: target.0,
             },
@@ -986,6 +994,12 @@ impl From<WirePlayerCommand> for PlayerCommand {
             },
             WirePlayerCommand::AttackWithBuilding { building, target } => {
                 Self::AttackWithBuilding {
+                    building: SimId(building),
+                    target: SimId(target),
+                }
+            }
+            WirePlayerCommand::CastBuildingSpellOn { building, target } => {
+                Self::CastBuildingSpellOn {
                     building: SimId(building),
                     target: SimId(target),
                 }
@@ -1727,6 +1741,10 @@ mod tests {
             PlayerCommand::AttackWithBuilding {
                 building: SimId(9),
                 target: SimId(10),
+            },
+            PlayerCommand::CastBuildingSpellOn {
+                building: SimId(22),
+                target: SimId(23),
             },
             PlayerCommand::CastBuildingSpellAt {
                 building: SimId(9),

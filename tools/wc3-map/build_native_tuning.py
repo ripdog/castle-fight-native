@@ -118,6 +118,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
 
     kind = recipe["kind"]
     effect: dict[str, Any] = dict(recipe)
+    if kind in {"building-improvement", "building-mana-regeneration"}:
+        from project_mana_improvement import project
+        return project(recipe, fields, mechanics, scaled)
     if kind == "health-scaled-aftershock":
         from project_aftershock import project
         return project(recipe, mechanics, scaled)
@@ -640,6 +643,10 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         if row["category"] == "units" and row["source_field"]:
             unit_fields.setdefault(row["rawcode"], {})[row["source_field"].lower()] = scalar(row["recovered_value_json"])
     units = {row["rawcode"]: row for row in rows(retained("resolved/units.tsv"))}
+    ability_ui = {}
+    for row in rows(retained("resolved/object-fields.tsv")):
+        if row["category"] == "abilities" and row["field_id"] in {"abpx", "abpy", "ahky"}:
+            ability_ui.setdefault(row["rawcode"], {})[row["field_id"]] = json.loads(row["recovered_value_json"])
     default_autocast = {row["rawcode"]: scalar(row["recovered_value_json"])
         for row in rows(retained("resolved/object-fields.tsv")) if row["category"] == "units" and row["field_id"] == "udaa"}
     protected: dict[str, dict[str, str]] = {}
@@ -755,6 +762,11 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             if f'elseif(Spq=={int.from_bytes(recipe["unit_rawcode"].encode(), "big")})then randomN02YOrder(Qpq)' not in handler or f'unit_getAbilityLevel(Qpq,{trace["source_damage_marker_ability_id"]})<=0' not in handler:
                 raise ValueError("Mirror Image requires the native damage-event marker/type dispatch")
             detail.update(mirror_image=trace, mirror_image_handler=functions["randomN02YOrder"], git_tree=tree)
+        if recipe["kind"] in {"building-improvement", "building-mana-regeneration"}:
+            child = spell_semantics[source]["effect_rawcodes"] if recipe["kind"] == "building-improvement" else source
+            detail["improvement_levels"] = ability_levels[child]
+        if recipe["kind"] == "building-improvement":
+            detail.update(improvement_handler=functions["improveSpecialBuilding"], improvement_cleanup=functions["yK"], improvement_cleanup_registration=re.search(r'_I\[_T\(\d+,"[0-9a-f]+"\)\]=yK',lua.decode()).group(), improvement_death=functions["fJ"], improvement_ui=ability_ui[source], git_tree=tree)
         detail["misc"] = misc
         detail["native_base"] = ability_bases[source]
         if spell is not None and recipe["kind"] != "master-projectiles":

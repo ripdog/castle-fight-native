@@ -12,6 +12,11 @@
     }
   ],
   "objects_sha256": "01040f03e4a625ac1d960a0a2d43d0732d64b797e9357f4f40e8c2c0d6d9710d",
+  "script_source": {
+    "path": "script/war3map.lua",
+    "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+    "sha256": "e478835f6c2bd79320f463472a7f043bf1d40770c74c3647cdfed655ed33874a"
+  },
   "abilities": [
     {
       "rawcode": "A00L",
@@ -127,6 +132,21 @@
       ],
       "target_art": [
         ""
+      ]
+    },
+    {
+      "rawcode": "A0EK",
+      "base_rawcode": "ANcl",
+      "native_section": "script/improveSpecialBuilding",
+      "effects": [
+        "DRAM"
+      ],
+      "target_art": [],
+      "color_override": [
+        255,
+        255,
+        255,
+        255
       ]
     },
     {

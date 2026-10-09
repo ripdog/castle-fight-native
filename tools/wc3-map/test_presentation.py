@@ -40,6 +40,15 @@ class LightningProjectionTests(unittest.TestCase):
         self.assertEqual(effects[0]["width"], 12)
         self.assertEqual(effects[0]["color"], [1, 2, 3, 4])
 
+    def test_manual_improvement_beam_uses_script_identity_and_explicit_color(self):
+        script = 'function improveSpecialBuilding(apr,bpr)unit_removeAbility(apr,1093682507)AddLightning("DRAM",false,0,0,1,1)SetLightningColor(dpr,1.,1.,1.,1.)end function next()end'
+        binding = lightning.improvement_binding(script)
+        self.assertEqual(binding["rawcode"], "A0EK")
+        self.assertEqual(binding["effects"], ["DRAM"])
+        self.assertEqual(binding["color_override"], [255]*4)
+        with self.assertRaises(ValueError):
+            lightning.improvement_binding(script.replace('unit_removeAbility', 'other'))
+
     def test_retained_projection_preserves_source_identity(self):
         import hashlib
         evidence = HERE.parents[1] / "docs/original_map/extracted/resolved"

@@ -593,6 +593,13 @@ struct RenderMap {
     burning_oil: HashMap<(SimId, usize), PresentedStatusEffect>,
     stun_effects: HashMap<SimId, Entity>,
     status_effects: HashMap<StatusEffectKey, PresentedStatusEffect>,
+    mana_links: HashMap<(SimId, u16), PresentedManaLink>,
+}
+
+struct PresentedManaLink {
+    entity: Entity,
+    mesh: Handle<Mesh>,
+    material: Handle<StandardMaterial>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -3784,6 +3791,72 @@ fn sync_render_entities(
         .is_some_and(|experiment| **experiment == RenderExperiment::LegacyEffectPooling);
     if !samples.is_changed() {
         return;
+    }
+
+    let viewer_team = samples
+        .current
+        .players
+        .get(&selected.local_player)
+        .map(|p| p.team);
+    render_map.mana_links.retain(|&(target, round), link| {
+        let keep = round == samples.current.round_index
+            && samples.current.buildings.get(&target).is_some_and(|b| {
+                b.health > 0
+                    && Some(b.team) == viewer_team
+                    && b.status.mana_improvement_link.is_some()
+            });
+        if !keep {
+            commands.entity(link.entity).despawn();
+            meshes.remove(link.mesh.id());
+            materials.remove(link.material.id());
+        }
+        keep
+    });
+    for building in samples.current.buildings.values() {
+        let Some(link) = building.status.mana_improvement_link else {
+            continue;
+        };
+        if building.health <= 0 || Some(building.team) != viewer_team {
+            continue;
+        }
+        let key = (building.id, samples.current.round_index);
+        if render_map.mana_links.contains_key(&key) {
+            continue;
+        }
+        let Some(visual) = wc3_visuals.lightning(link.ability.0, 0) else {
+            continue;
+        };
+        let start = sim_point_to_terrain_world(link.target_position, &terrain) + Vec3::Y * 8.0;
+        let end = sim_point_to_terrain_world(link.source_position, &terrain) + Vec3::Y * 8.0;
+        let mesh = meshes.add(build_wc3_lightning_mesh(
+            start,
+            end,
+            link.source.0 as u32,
+            visual,
+        ));
+        let mut material = materials
+            .get(&assets.lightning_material)
+            .cloned()
+            .expect("lightning material");
+        // The map explicitly overrides DRAM color for allied viewers.
+        material.base_color = Color::WHITE;
+        material.base_color_texture = Some(visual.texture.clone());
+        let material = materials.add(material);
+        let entity = commands
+            .spawn((
+                Mesh3d(mesh.clone()),
+                MeshMaterial3d(material.clone()),
+                Transform::IDENTITY,
+            ))
+            .id();
+        render_map.mana_links.insert(
+            key,
+            PresentedManaLink {
+                entity,
+                mesh,
+                material,
+            },
+        );
     }
 
     let stale_builders: Vec<_> = render_map

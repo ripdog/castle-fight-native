@@ -236,6 +236,38 @@ fn handle_modal_left_click(
         .expect("targeting mode requires an action-panel actor");
 
     match action {
+        TargetingAction::ManaTransfusion => {
+            let Some(world) = world else {
+                return;
+            };
+            let Some(target) =
+                pick_building_at_ground(world, &resources.presentation, &resources.metrics)
+            else {
+                resources.action_panel.status =
+                    "Mana Transfusion requires an allied special building.".into();
+                return;
+            };
+            let controller = resources.debug_menu.controller_for_actor(
+                &resources.authoritative.simulation,
+                resources.selected_match.local_player,
+                actor,
+            );
+            let submission = resources.authoritative.submit_local_command(
+                controller,
+                PlayerCommand::CastBuildingSpellOn {
+                    building: actor,
+                    target,
+                },
+            );
+            match command_submission_status(
+                submission,
+                "Mana Transfusion queued.".into(),
+                "Spell rejected",
+            ) {
+                Ok(status) => finish_modal(resources, status),
+                Err(status) => resources.action_panel.status = status,
+            }
+        }
         TargetingAction::SnowExplosion => {
             let Some(world) = world else {
                 return;

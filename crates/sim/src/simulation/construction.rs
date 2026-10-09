@@ -504,7 +504,16 @@ impl Simulation {
                 },
             ));
         }
-        if building.attack.is_some() || building.spellcasting.is_some() {
+        if building.attack.is_some()
+            || building.spellcasting.is_some()
+            || properties.content.is_some_and(|content| {
+                crate::native_effects::building_improvement_for_version(
+                    content.map_version,
+                    content.rawcode,
+                )
+                .is_some()
+            })
+        {
             entity.insert(StatusState::default());
         }
         entity.insert(properties.passive_effects);
@@ -808,6 +817,12 @@ impl Simulation {
         };
 
         self.deactivate_building_entity(entity);
+        if let Some(status) = runtime
+            .status
+            .filter(|s| s.native_grants.mana_regeneration_per_second_per_10k() > 0)
+        {
+            self.world.entity_mut(entity).insert(status);
+        }
         let target_health = scale_building_health(
             actual_health.current,
             actual_health.max,
@@ -867,6 +882,7 @@ impl Simulation {
         self.release_building_legendary_points(entity);
         self.stop_native_carrier(id);
         self.world.despawn(entity);
+        self.refresh_mana_improvement_links();
         self.topology_dirty = true;
         true
     }
@@ -942,6 +958,11 @@ impl Simulation {
             resources.legendary_points_used =
                 resources.legendary_points_used - economy.legendary_points_cost + source_points;
         }
+        let permanent_mana = self
+            .world
+            .get::<StatusState>(entity)
+            .copied()
+            .filter(|s| s.mana_improvement_link.is_some());
         let active_freeze = self
             .world
             .get::<StatusState>(entity)
@@ -984,6 +1005,23 @@ impl Simulation {
             }
             self.activate_building_entity(entity, source.building, source.properties);
             self.restore_building_runtime_state(entity, source.runtime);
+            if let Some(permanent) = permanent_mana {
+                let mut status = self
+                    .world
+                    .get::<StatusState>(entity)
+                    .copied()
+                    .unwrap_or_default();
+                status.mana_improvement_link = permanent.mana_improvement_link;
+                for grant in permanent.native_grants.iter().filter(|g| {
+                    matches!(
+                        g.effect,
+                        crate::NativeAbilityGrantEffect::ManaRegeneration(_)
+                    )
+                }) {
+                    status.native_grants.insert(grant);
+                }
+                self.world.entity_mut(entity).insert(status);
+            }
             if let Some(frozen) = active_freeze {
                 let mut status = self
                     .world
@@ -1028,7 +1066,29 @@ impl Simulation {
             self.world
                 .entity_mut(entity)
                 .remove::<BuildingConstruction>();
+            let permanent_status = self
+                .world
+                .get::<StatusState>(entity)
+                .copied()
+                .filter(|s| s.native_grants.mana_regeneration_per_second_per_10k() > 0);
             self.activate_building_entity(entity, construction.building, construction.properties);
+            if let Some(permanent) = permanent_status {
+                let mut status = self
+                    .world
+                    .get::<StatusState>(entity)
+                    .copied()
+                    .unwrap_or_default();
+                status.mana_improvement_link = permanent.mana_improvement_link;
+                for grant in permanent.native_grants.iter().filter(|g| {
+                    matches!(
+                        g.effect,
+                        crate::NativeAbilityGrantEffect::ManaRegeneration(_)
+                    )
+                }) {
+                    status.native_grants.insert(grant);
+                }
+                self.world.entity_mut(entity).insert(status);
+            }
             if let Some(economy) = construction.properties.economy {
                 let resources = &mut self
                     .player_state_mut(owner)

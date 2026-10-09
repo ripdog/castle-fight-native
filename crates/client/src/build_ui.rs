@@ -83,6 +83,7 @@ fn command_slot(position: CommandCardPosition) -> usize {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TargetingAction {
+    ManaTransfusion,
     SnowExplosion,
     Move,
     Repair,
@@ -972,6 +973,9 @@ fn populate_action_panel(
 fn action_hotkey(action: PanelAction, content: &CastleFightContentBundle) -> Option<char> {
     match action {
         PanelAction::OpenBuildMenu => Some(content.command_card.build_hotkey),
+        PanelAction::Target(TargetingAction::ManaTransfusion) => {
+            Some(mana_improvement_profile(content).hotkey)
+        }
         PanelAction::Target(TargetingAction::SnowExplosion) => None,
         PanelAction::Target(TargetingAction::Blink) => Some(content.command_card.blink_hotkey),
         PanelAction::Target(TargetingAction::RescueStrike) => Some('V'),
@@ -1146,6 +1150,10 @@ fn action_icon_key(
                 presentation.repair_command
             }
         }
+        PanelAction::Target(TargetingAction::ManaTransfusion) => UiIconKey::ability(
+            mana_improvement_profile(content).ability.0,
+            UiIconRole::Normal,
+        ),
         PanelAction::Target(TargetingAction::SnowExplosion) => UiIconKey::ability(
             castle_fight_sim::building_mechanics::snowveil_manual_ability_for_version(
                 content.map_version,
@@ -1355,6 +1363,16 @@ fn action_layout(
                         );
                     }
 
+                    if building.status.mana_improvement_target.is_none()
+                        && kind
+                            == Some(CastleFightBuildingKind::Tower(
+                                castle_fight_sim::CastleFightTowerKind::ManaGenerator,
+                            ))
+                    {
+                        slots[command_slot(
+                            mana_improvement_profile(selected_match.content).button,
+                        )] = Some(PanelAction::Target(TargetingAction::ManaTransfusion));
+                    }
                     if kind
                         == Some(CastleFightBuildingKind::Tower(
                             castle_fight_sim::CastleFightTowerKind::SnowveilFountain,
@@ -1496,6 +1514,10 @@ fn handle_action_panel_buttons(
             PanelAction::Target(action) => {
                 state.mode = ActionPanelMode::Targeting(action);
                 state.status = match action {
+                    TargetingAction::ManaTransfusion => {
+                        "Mana Transfusion: left-click an allied special building; Esc cancels."
+                            .into()
+                    }
                     TargetingAction::SnowExplosion => {
                         "Winter’s Wrath: left-click snow to detonate; Esc cancels.".into()
                     }
@@ -1750,6 +1772,9 @@ fn style_action_panel_buttons(
                         .simulation
                         .can_cast_rescue_strike(builder.owner, builder.id)
                 }),
+            PanelAction::Target(TargetingAction::ManaTransfusion) => state
+                .actor
+                .is_none_or(|actor| !authoritative.simulation.can_improve_building(actor)),
             PanelAction::Target(TargetingAction::SnowExplosion) => state
                 .actor
                 .and_then(|actor| authoritative.simulation.building(actor))
@@ -2510,6 +2535,7 @@ fn action_label(action: PanelAction, content: &CastleFightContentBundle) -> Stri
         PanelAction::GjallarhornSpell => "Holy Power".into(),
         PanelAction::CancelProduction => "Cancel\nEsc".into(),
         PanelAction::CancelConstruction | PanelAction::Cancel => "Cancel\nEsc".into(),
+        PanelAction::Target(TargetingAction::ManaTransfusion) => "Mana Transfusion".into(),
         PanelAction::Target(TargetingAction::SnowExplosion) => "Winter’s Wrath".into(),
         PanelAction::Target(TargetingAction::Move) => "Move".into(),
         PanelAction::Target(TargetingAction::Repair) => "Repair".into(),
@@ -2609,6 +2635,17 @@ fn building_is_controllable_tower(
                 Some(CastleFightBuildingKind::Tower(_))
             )
         })
+}
+
+fn mana_improvement_profile(
+    content: &CastleFightContentBundle,
+) -> castle_fight_sim::building_mechanics::BuildingImprovementProfile {
+    let rawcode = content
+        .tower(castle_fight_sim::CastleFightTowerKind::ManaGenerator)
+        .expect("promoted mana generator")
+        .rawcode;
+    castle_fight_sim::building_improvement_for_version(content.map_version, rawcode)
+        .expect("retained manual improvement")
 }
 
 #[cfg(test)]

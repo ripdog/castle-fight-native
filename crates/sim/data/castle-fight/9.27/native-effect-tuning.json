@@ -4,6 +4,44 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0EK",
+      "unit_rawcode": "h062",
+      "kind": "building-improvement",
+      "effect_ability_rawcode": "A0EL",
+      "profile": {
+        "source_rawcode": 1747990066,
+        "ability": 1093682507,
+        "improvement": 1093682508,
+        "elemental_marker": 1093682259,
+        "range": 512000,
+        "regeneration_per_second_per_10k": [
+          1500,
+          3000
+        ],
+        "button": {
+          "x": 3,
+          "y": 2
+        },
+        "hotkey": "Q"
+      },
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "semantic": "resolved/unit-spell-semantics.tsv",
+        "handler": "improveSpecialBuilding,yK,fJ",
+        "protected_cleanup_alias": "cleanupElementalImprovement"
+      }
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A0EL",
+      "kind": "building-mana-regeneration",
+      "levels": [
+        1500,
+        3000
+      ]
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A0DW",
       "unit_rawcode": "h03N",
       "kind": "health-scaled-aftershock",

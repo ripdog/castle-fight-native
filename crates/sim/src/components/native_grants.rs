@@ -21,6 +21,7 @@ pub enum NativeAbilityGrantEffect {
         multiplier_per_10k: u16,
         targets: AttackTargetMask,
     },
+    ManaRegeneration(u32),
     AuraMarker,
 }
 
@@ -63,6 +64,7 @@ impl NativeAbilityGrant {
                     u64::from(targets.bits()),
                 ],
             ),
+            ManaRegeneration(amount) => (8, [u64::from(amount), 0, 0]),
             AuraMarker => (7, [0, 0, 0]),
         };
         [
@@ -183,6 +185,15 @@ impl NativeAbilityGrants {
         self.iter()
             .filter_map(|grant| match grant.effect {
                 NativeAbilityGrantEffect::AttackSpeed(amount) => Some(i32::from(amount)),
+                _ => None,
+            })
+            .sum()
+    }
+
+    pub fn mana_regeneration_per_second_per_10k(&self) -> u32 {
+        self.iter()
+            .filter_map(|grant| match grant.effect {
+                NativeAbilityGrantEffect::ManaRegeneration(amount) => Some(amount),
                 _ => None,
             })
             .sum()

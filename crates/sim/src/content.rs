@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r71";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r72";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 44;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 45;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -595,7 +595,7 @@ impl CastleFightBuildingKind {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 pub struct CommandCardPosition {
     pub x: u8,
     pub y: u8,
@@ -1828,6 +1828,12 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0EK") => {
+            0x4000_011f
+        }
+        (NativeEffectSourceKind::AbilityEffect, value) if value == u32::from_be_bytes(*b"A0EL") => {
+            0x4000_0120
+        }
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0CP") => {
             0x4000_011e
         }
@@ -3528,6 +3534,7 @@ struct ExtractedBuilding927 {
 #[derive(Debug, Clone, Copy)]
 struct ExtractedUnit927 {
     action_timing: ActionTimingProfile,
+    mana_maximum: i32,
     name: &'static str,
     basic_tooltip: &'static str,
     extended_tooltip: &'static str,
@@ -4092,6 +4099,7 @@ impl ExtractedContent927 {
                 })
                 .collect::<Result<Vec<_>, String>>()?;
             let row = ExtractedUnit927 {
+                mana_maximum: parse_optional_i32_927(columns[14])?.unwrap_or(0),
                 action_timing: action_timings.get(&rawcode).copied().ok_or_else(|| {
                     format!("unit {rawcode:#010x} is missing native action timing")
                 })?,
@@ -5654,6 +5662,22 @@ const fn projectile_speed(world_units_per_second: i32) -> i32 {
 
 const fn world(world_units: i32) -> i32 {
     world_units * SUBUNITS_PER_WORLD_UNIT
+}
+
+/// Native object mana remains available during construction and upgrades.
+pub(crate) fn building_native_mana_maximum(version: MapVersion, rawcode: u32) -> Option<i32> {
+    if version != MapVersion::CASTLE_FIGHT_9_27 {
+        return None;
+    }
+    extracted_content_927()
+        .units
+        .get(&rawcode)
+        .map(|unit| unit.mana_maximum)
+}
+
+pub(crate) fn building_has_production(version: MapVersion, rawcode: u32) -> bool {
+    version == MapVersion::CASTLE_FIGHT_9_27
+        && extracted_content_927().production.contains_key(&rawcode)
 }
 
 #[cfg(test)]

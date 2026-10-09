@@ -28,6 +28,7 @@ const TUNING_9_27_JSON: &str = include_str!("../data/castle-fight/9.27/native-ef
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum NativeEffectImplementationId {
+    WarcraftBuildingImprovementV1,
     WarcraftHealthScaledAftershockV1,
     WarcraftDamageRetaliationV1,
     WarcraftForkedLightningV1,
@@ -81,6 +82,7 @@ impl NativeEffectImplementationId {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::WarcraftBuildingImprovementV1 => 79,
             Self::WarcraftHealthScaledAftershockV1 => 78,
             Self::WarcraftDamageRetaliationV1 => 76,
             Self::WarcraftForkedLightningV1 => 77,
@@ -548,6 +550,18 @@ fn native_buff_from_tuning(tuning: &TuningFile, source: u32) -> Option<crate::Na
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum TuningEffect {
+    BuildingImprovement {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        effect_ability_rawcode: String,
+        profile: crate::building_mechanics::BuildingImprovementProfile,
+    },
+    BuildingManaRegeneration {
+        source_kind: String,
+        source_key: String,
+        levels: [u32; 2],
+    },
     HealthScaledAftershock {
         source_kind: String,
         source_key: String,
@@ -852,7 +866,11 @@ impl TuningEffect {
 
     fn dependency_source(&self) -> Result<Option<NativeEffectSource>, String> {
         let effect_ability_rawcode = match self {
-            Self::DamageRetaliation {
+            Self::BuildingImprovement {
+                effect_ability_rawcode,
+                ..
+            }
+            | Self::DamageRetaliation {
                 effect_ability_rawcode,
                 ..
             }
@@ -882,7 +900,9 @@ impl TuningEffect {
 
     fn source_kind(&self) -> &str {
         match self {
-            Self::HealthScaledAftershock { source_kind, .. }
+            Self::BuildingImprovement { source_kind, .. }
+            | Self::BuildingManaRegeneration { source_kind, .. }
+            | Self::HealthScaledAftershock { source_kind, .. }
             | Self::DamageRetaliation { source_kind, .. }
             | Self::RetaliationProjectile { source_kind, .. }
             | Self::ForkedLightning { source_kind, .. }
@@ -919,7 +939,9 @@ impl TuningEffect {
 
     fn source_key(&self) -> &str {
         match self {
-            Self::HealthScaledAftershock { source_key, .. }
+            Self::BuildingImprovement { source_key, .. }
+            | Self::BuildingManaRegeneration { source_key, .. }
+            | Self::HealthScaledAftershock { source_key, .. }
             | Self::DamageRetaliation { source_key, .. }
             | Self::RetaliationProjectile { source_key, .. }
             | Self::ForkedLightning { source_key, .. }
@@ -956,7 +978,8 @@ impl TuningEffect {
 
     fn unit_rawcode(&self) -> Option<&str> {
         match self {
-            Self::HealthScaledAftershock { unit_rawcode, .. }
+            Self::BuildingImprovement { unit_rawcode, .. }
+            | Self::HealthScaledAftershock { unit_rawcode, .. }
             | Self::DamageRetaliation { unit_rawcode, .. }
             | Self::LavaSpawn { unit_rawcode, .. }
             | Self::MirrorImage { unit_rawcode, .. }
@@ -982,7 +1005,8 @@ impl TuningEffect {
             | Self::OrbSpellProc { unit_rawcode, .. }
             | Self::BurningOil { unit_rawcode, .. }
             | Self::FrostArmor { unit_rawcode, .. } => Some(unit_rawcode),
-            Self::RetaliationProjectile { .. }
+            Self::BuildingManaRegeneration { .. }
+            | Self::RetaliationProjectile { .. }
             | Self::ForkedLightning { .. }
             | Self::ConeWave { .. }
             | Self::SelfDestruct { .. }
@@ -1011,6 +1035,9 @@ impl TuningEffect {
             Self::NativeAura { .. } => NativeEffectImplementationId::WarcraftNativeAuraV1,
             Self::SpeedAura { .. } => NativeEffectImplementationId::WarcraftSpeedAuraV1,
             Self::Sphere { .. } => NativeEffectImplementationId::WarcraftSphereV1,
+            Self::BuildingImprovement { .. } | Self::BuildingManaRegeneration { .. } => {
+                NativeEffectImplementationId::WarcraftBuildingImprovementV1
+            }
             Self::HealthScaledAftershock { .. } => {
                 NativeEffectImplementationId::WarcraftHealthScaledAftershockV1
             }
@@ -1053,6 +1080,8 @@ impl TuningEffect {
             Self::NativeAura { .. } => "native-aura",
             Self::SpeedAura { .. } => "speed-aura",
             Self::Sphere { .. } => "sphere",
+            Self::BuildingImprovement { .. } => "building-improvement",
+            Self::BuildingManaRegeneration { .. } => "building-mana-regeneration",
             Self::HealthScaledAftershock { .. } => "health-scaled-aftershock",
             Self::DamageRetaliation { .. } => "damage-retaliation",
             Self::RetaliationProjectile { .. } => "retaliation-projectile",
@@ -1206,6 +1235,7 @@ fn native_unit_mechanics_from_tuning(
             .filter(|effect| !matches!(effect, TuningEffect::DamageCharge { unit_rawcode: code, .. } | TuningEffect::DamageRetaliation { unit_rawcode: code, .. } | TuningEffect::HealthScaledAftershock { unit_rawcode: code, .. } if rawcode(code).ok() != Some(unit_rawcode)))
         {
             match effect {
+                TuningEffect::BuildingImprovement { .. } => {},
                 TuningEffect::ScriptedAutomatic { .. }
                 | TuningEffect::ElvenAutomatic { .. }
                 | TuningEffect::FrostArmor { .. }
@@ -1254,7 +1284,7 @@ fn native_unit_mechanics_from_tuning(
                         passive = Some(candidate);
                     }
                 }
-                TuningEffect::RetaliationProjectile { .. } | TuningEffect::ForkedLightning { .. }
+                TuningEffect::BuildingManaRegeneration { .. } | TuningEffect::RetaliationProjectile { .. } | TuningEffect::ForkedLightning { .. }
                 | TuningEffect::SelfDestruct { .. }
                 | TuningEffect::DamageThreshold { .. }
                 | TuningEffect::ConeWave { .. }
@@ -1700,7 +1730,9 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             target_ground_units: *target_ground_units,
             target_buildings: *target_buildings,
         }),
-        TuningEffect::ConeWave { .. }
+        TuningEffect::BuildingImprovement { .. }
+        | TuningEffect::BuildingManaRegeneration { .. }
+        | TuningEffect::ConeWave { .. }
         | TuningEffect::SelfDestruct { .. }
         | TuningEffect::ScriptedAutomatic { .. }
         | TuningEffect::ElvenAutomatic { .. }
@@ -1985,6 +2017,45 @@ pub(crate) fn lava_spawn_profile_for_version(
                 Some(*profile)
             }
             _ => None,
+        })
+}
+
+/// Manual building abilities are separate from automatic combat-unit casting.
+pub fn building_improvement_for_version(
+    version: MapVersion,
+    rawcode: u32,
+) -> Option<crate::building_mechanics::BuildingImprovementProfile> {
+    catalog()
+        .tuning(version)?
+        .effects
+        .iter()
+        .find_map(|effect| {
+            if let TuningEffect::BuildingImprovement { profile, .. } = effect {
+                if profile.source_rawcode != rawcode {
+                    return None;
+                }
+                let levels = catalog()
+                    .tuning(version)?
+                    .effects
+                    .iter()
+                    .find_map(|effect| {
+                        if let TuningEffect::BuildingManaRegeneration {
+                            source_key, levels, ..
+                        } = effect
+                        {
+                            (u32::from_be_bytes(source_key.as_bytes().try_into().ok()?)
+                                == profile.improvement.0)
+                                .then_some(levels)
+                        } else {
+                            None
+                        }
+                    })
+                    .expect("validated mana improvement dependency");
+                assert_eq!(*levels, profile.regeneration_per_second_per_10k);
+                Some(*profile)
+            } else {
+                None
+            }
         })
 }
 

@@ -720,3 +720,16 @@ pub fn permanent_grant_badge_for_version(
         .find(|option| option[0].ability == ability)
         .map(|option| option[1].ability)
 }
+
+/// A manual, one-target permanent native mana-regeneration grant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+pub struct BuildingImprovementProfile {
+    pub source_rawcode: u32,
+    pub ability: AbilityId,
+    pub improvement: AbilityId,
+    pub elemental_marker: AbilityId,
+    pub range: i32,
+    pub regeneration_per_second_per_10k: [u32; 2],
+    pub button: crate::CommandCardPosition,
+    pub hotkey: char,
+}

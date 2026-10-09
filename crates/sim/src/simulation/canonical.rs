@@ -1813,6 +1813,19 @@ fn hash_action_timing(hash: &mut Fnv64, timing: ActionTimingProfile) {
 }
 
 fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
+    hash.write_u8(u8::from(status.mana_improvement_target.is_some()));
+    if let Some(target) = status.mana_improvement_target {
+        hash.write_u64(target.0);
+    }
+    hash.write_u8(u8::from(status.mana_improvement_link.is_some()));
+    if let Some(link) = status.mana_improvement_link {
+        hash.write_u64(link.source.0);
+        hash.write_i32(link.source_position.x);
+        hash.write_i32(link.source_position.y);
+        hash.write_i32(link.target_position.x);
+        hash.write_i32(link.target_position.y);
+        hash.write_u32(link.ability.0);
+    }
     hash.write_u64(status.retaliation_sequence);
     hash.write_u8(u8::from(status.acid_bomb.is_some()));
     if let Some(acid) = status.acid_bomb {

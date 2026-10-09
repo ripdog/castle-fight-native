@@ -2244,6 +2244,7 @@ fn active_effect_badges(
                 "Demolish: {}× structure damage",
                 f32::from(multiplier_per_10k) / 10_000.0
             ),
+            ManaRegeneration(rate) => format!("Mana regeneration +{:.2}/s", rate as f64 / 10_000.0),
             AuraMarker => continue,
         };
         effects.push(ActiveEffectBadgeData {

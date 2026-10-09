@@ -101,8 +101,8 @@ pub use native_carriers::{
 };
 pub use native_effects::{
     NativeEffectImplementationId, NativeEffectResolveError, NativeEffectSource,
-    NativeEffectSourceKind, ResolvedNativeEffectBinding, native_effect_implementation_for,
-    resolve_native_effect_requirements,
+    NativeEffectSourceKind, ResolvedNativeEffectBinding, building_improvement_for_version,
+    native_effect_implementation_for, resolve_native_effect_requirements,
 };
 pub use simulation::{
     AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION, AbilityCastEvent, AbilityCastTarget, AttackEvent,

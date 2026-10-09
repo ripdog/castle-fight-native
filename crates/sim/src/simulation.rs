@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 62;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 63;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -58,6 +58,7 @@ mod economy;
 mod forked_lightning;
 mod lava_spawns;
 mod line_projectiles;
+mod mana_improvement;
 mod master_projectiles;
 mod match_rules;
 #[cfg(test)]
@@ -1646,6 +1647,7 @@ impl Simulation {
         let mut topology = phase_start.elapsed();
 
         let phase_start = Instant::now();
+        self.refresh_mana_improvement_links();
         self.refresh_carrier_auras_for_timers();
         self.refresh_native_mana_auras_for_timers();
         self.advance_cooldowns();
@@ -2165,6 +2167,7 @@ impl Simulation {
             self.topology_dirty = true;
         }
 
+        self.refresh_mana_improvement_links();
         self.evaluate_objective_outcome(completed_tick);
         if self.lifecycle == MatchLifecycle::Running {
             self.advance_economy_income();
@@ -3006,17 +3009,23 @@ impl Simulation {
                 continue;
             }
             let aura_per_tick = status.map_or(0, |status| {
-                status.armor_modifiers[..usize::from(status.armor_modifier_count)]
-                    .iter()
-                    .filter(|modifier| self.next_tick < modifier.expires_tick)
-                    .map(|modifier| {
-                        crate::components::per_second_increment(
-                            modifier.mana_regeneration_per_second_per_10k,
-                            self.next_tick,
-                            CASTLE_FIGHT_SIMULATION_HZ as u32,
-                        )
-                    })
-                    .sum::<u32>()
+                let permanent = crate::components::per_second_increment(
+                    status.native_grants.mana_regeneration_per_second_per_10k(),
+                    self.next_tick,
+                    CASTLE_FIGHT_SIMULATION_HZ as u32,
+                );
+                permanent
+                    + status.armor_modifiers[..usize::from(status.armor_modifier_count)]
+                        .iter()
+                        .filter(|modifier| self.next_tick < modifier.expires_tick)
+                        .map(|modifier| {
+                            crate::components::per_second_increment(
+                                modifier.mana_regeneration_per_second_per_10k,
+                                self.next_tick,
+                                CASTLE_FIGHT_SIMULATION_HZ as u32,
+                            )
+                        })
+                        .sum::<u32>()
             });
             let accumulated = u64::from(mana.regen_remainder_per_10k)
                 + u64::from(
