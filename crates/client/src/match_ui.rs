@@ -29,12 +29,6 @@ struct MatchHud;
 #[derive(Component)]
 struct MatchHudText;
 
-#[derive(Component)]
-struct MatchResultRoot;
-
-#[derive(Component)]
-struct MatchResultText;
-
 #[derive(Resource, Default)]
 struct RescueImpactDisplay {
     last_tick: Option<u64>,
@@ -101,34 +95,6 @@ fn spawn_match_hud(mut commands: Commands) {
                 TextLayout::justify(Justify::Center),
             ));
         });
-    commands
-        .spawn((
-            MatchResultRoot,
-            Node {
-                position_type: PositionType::Absolute,
-                top: Val::Percent(36.0),
-                left: Val::Percent(24.0),
-                width: Val::Percent(52.0),
-                justify_content: JustifyContent::Center,
-                padding: UiRect::axes(px(24.0), px(18.0)),
-                border: UiRect::all(px(2.0)),
-                ..default()
-            },
-            BackgroundColor(Color::srgba(0.025, 0.020, 0.012, 0.94)),
-            BorderColor::all(Color::srgb(0.78, 0.64, 0.35)),
-            Visibility::Hidden,
-            ZIndex(20),
-            Pickable::IGNORE,
-        ))
-        .with_children(|parent| {
-            parent.spawn((
-                MatchResultText,
-                Text::new(""),
-                TextFont::from_font_size(38.0),
-                TextColor(Color::srgb(0.96, 0.85, 0.54)),
-                TextLayout::justify(Justify::Center),
-            ));
-        });
 }
 
 fn update_match_hud(
@@ -136,17 +102,12 @@ fn update_match_hud(
     lobby: Option<Res<LobbyState>>,
     mut container: Query<&mut Visibility, With<MatchHud>>,
     mut text: Query<&mut Text, With<MatchHudText>>,
-    mut result_root: Query<&mut Visibility, (With<MatchResultRoot>, Without<MatchHud>)>,
-    mut result_text: Query<&mut Text, (With<MatchResultText>, Without<MatchHudText>)>,
 ) {
     let Ok(mut visibility) = container.single_mut() else {
         return;
     };
     if lobby.as_ref().is_some_and(|lobby| lobby.active()) {
         *visibility = Visibility::Hidden;
-        if let Ok(mut result) = result_root.single_mut() {
-            *result = Visibility::Hidden;
-        }
         return;
     }
     *visibility = Visibility::Visible;
@@ -156,14 +117,18 @@ fn update_match_hud(
         sim.rescue_strikes_left(Team(0)),
         sim.rescue_strikes_left(Team(1)),
     ];
-    let timer = sim
-        .match_rules()
-        .duration_ticks()
-        .map_or("No time limit".to_owned(), |limit| {
-            let remaining = limit.saturating_sub(sim.round_elapsed_ticks());
-            let seconds = remaining.div_ceil(castle_fight_sim::CASTLE_FIGHT_SIMULATION_HZ as u64);
-            format!("{:02}:{:02} remaining", seconds / 60, seconds % 60)
-        });
+    let timer = if let Some(seconds) = sim.review_seconds_remaining() {
+        format!("Next round in {seconds}s")
+    } else {
+        sim.match_rules()
+            .duration_ticks()
+            .map_or("No time limit".to_owned(), |limit| {
+                let remaining = limit.saturating_sub(sim.round_elapsed_ticks());
+                let seconds =
+                    remaining.div_ceil(castle_fight_sim::CASTLE_FIGHT_SIMULATION_HZ as u64);
+                format!("{:02}:{:02} remaining", seconds / 60, seconds % 60)
+            })
+    };
     let result = match sim.lifecycle() {
         MatchLifecycle::Finished {
             outcome: MatchOutcome::Victory(Team(0)),
@@ -182,40 +147,12 @@ fn update_match_hud(
             ..
         } => " · DRAW",
         MatchLifecycle::PausedForDisconnect { .. } => " · PAUSED FOR DISCONNECT",
+        MatchLifecycle::RoundReview { .. } => " · ROUND COMPLETE",
         MatchLifecycle::Running => "",
     };
-    if let Ok(mut result_visibility) = result_root.single_mut() {
-        *result_visibility = if matches!(sim.lifecycle(), MatchLifecycle::Finished { .. }) {
-            Visibility::Visible
-        } else {
-            Visibility::Hidden
-        };
-    }
-    if let Ok(mut message) = result_text.single_mut() {
-        let headline = match sim.lifecycle() {
-            MatchLifecycle::Finished {
-                outcome: MatchOutcome::Victory(Team(0)),
-                ..
-            } => "WEST VICTORY",
-            MatchLifecycle::Finished {
-                outcome: MatchOutcome::Victory(Team(1)),
-                ..
-            } => "EAST VICTORY",
-            MatchLifecycle::Finished {
-                outcome: MatchOutcome::Victory(_),
-                ..
-            } => "VICTORY",
-            MatchLifecycle::Finished {
-                outcome: MatchOutcome::Draw,
-                ..
-            } => "MATCH DRAWN",
-            _ => "",
-        };
-        message.0 = format!("{headline}\\nWest {} – {} East", wins[0], wins[1]);
-    }
     if let Ok(mut text) = text.single_mut() {
         text.0 = format!(
-            "Round {} · West {}–{} East · {timer} · Rescue {}/{} {result}",
+            "Round {} · West {}–{} East · {timer} · Rescue {}/{} · F9: Scores {result}",
             sim.round_index(),
             wins[0],
             wins[1],

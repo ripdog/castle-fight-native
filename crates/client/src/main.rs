@@ -20,6 +20,7 @@ mod presentation;
 mod render_audit;
 mod render_tuning;
 mod resource_ui;
+mod scoreboard_ui;
 mod skin_influences;
 mod terrain;
 mod ui_icons;
@@ -608,6 +609,7 @@ fn main() {
             CursorPresentationPlugin,
             ResourceUiPlugin,
             match_ui::MatchUiPlugin,
+            scoreboard_ui::ScoreboardPlugin,
             PerformanceUiPlugin,
             InspectionPlugin,
             BuilderControlPlugin,
