@@ -13,7 +13,7 @@ from build_runtime_catalog import _load_release, _retained_file_bytes
 
 ROOT = Path(__file__).resolve().parents[2]
 OUTPUT = ROOT / "crates/sim/data/castle-fight/9.27/native-carriers.json"
-OBJECTS = {"A015", "A03N", "A000", "B01M", "h014", "h005", "A03D", "A0FL"}
+OBJECTS = {"A000", "B01M", "h014", "h005", "A03D"}
 FIELDS = {
     "Efk1", "Efk2", "Efk3", "aare", "atar", "amsp", "amat", "amac",
     "acat", "aeat", "atat", "abuf", "adur", "ahdu", "acdn", "pxf1",
@@ -37,6 +37,17 @@ def validate_hostile_target_mask(mask):
         raise ValueError("hostile native targeting requires enemy relation and a physical class")
 
 
+def barrage_sources(units, abilities):
+    sources = {}
+    for row in units:
+        selected = set(row["abilities"].split(",")) & abilities
+        if len(selected) > 1:
+            raise ValueError("multiple audited Barrage abilities on one source")
+        if selected:
+            sources[row["rawcode"]] = selected.pop()
+    return sources
+
+
 def build(map_version="9.27", revision="r1", repo_root=ROOT, releases=None):
     releases = releases or repo_root / "docs/original_map/releases.json"
     release = _load_release(releases, map_version, revision)
@@ -50,13 +61,24 @@ def build(map_version="9.27", revision="r1", repo_root=ROOT, releases=None):
         path: _retained_file_bytes(repo_root, tree, f"resolved/{path}")
         for path in paths
     }
+    registry_path = repo_root / "crates/sim/data/castle-fight/native-effect-bindings.json"
+    registry = registry_path.read_bytes()
+    version = lambda value: tuple(map(int, value.split(".")))
+    barrage = {row["source_key"] for row in json.loads(registry)["bindings"]
+               if row["source_kind"] == "unit-ability"
+               and row["implementation"] == "warcraft-barrage-v1"
+               and version(row["valid_from"]) <= version(map_version) <= version(row["valid_through"])}
+    objects = {row["rawcode"]: row for row in csv.DictReader(
+        io.StringIO(sources["objects.tsv"].decode()), delimiter="\t") if row["category"] == "abilities"}
+    if any(objects.get(code, {}).get("base_rawcode") != "Aroc" for code in barrage):
+        raise ValueError("audited Barrage binding does not derive from native Aroc")
     fields = {}
     for row in csv.DictReader(io.StringIO(sources[paths[0]].decode()), delimiter="\t"):
-        if row["rawcode"] in OBJECTS and row["field_id"] in FIELDS:
+        if row["rawcode"] in OBJECTS | barrage and row["field_id"] in FIELDS:
             fields.setdefault(row["rawcode"], {})[row["field_id"]] = json.loads(
                 row["recovered_value_json"]
             )
-    for object_id in ("A015", "A000", "A0FL"):
+    for object_id in barrage | {"A000"}:
         validate_hostile_target_mask(fields[object_id]["atar"])
     runtime = next(
         row for row in csv.DictReader(io.StringIO(sources[paths[1]].decode()), delimiter="\t")
@@ -71,13 +93,11 @@ def build(map_version="9.27", revision="r1", repo_root=ROOT, releases=None):
         "map_version": map_version,
         "source_revision": revision,
         "extraction_git_tree": tree,
-        "sources": {path: hashlib.sha256(data).hexdigest() for path, data in sources.items()},
+        "sources": {**{path: hashlib.sha256(data).hexdigest() for path, data in sources.items()},
+                    "native-effect-bindings.json": hashlib.sha256(registry).hexdigest()},
         "fields": fields,
-        "barrage_sources": {
-            row["rawcode"]: ability
-            for row in csv.DictReader(io.StringIO(sources[paths[3]].decode()), delimiter="\t")
-            for ability in row["abilities"].split(",") if ability in {"A015", "A0FL"}
-        },
+        "barrage_sources": barrage_sources(
+            csv.DictReader(io.StringIO(sources["units.tsv"].decode()), delimiter="\t"), barrage),
         "cleanse": json.loads(runtime["parameters_json"]),
         "native_buff_ids": native_buffs,
     }

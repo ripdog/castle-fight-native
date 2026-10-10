@@ -9,6 +9,14 @@ SPEC.loader.exec_module(MODULE)
 
 
 class NativeCarrierProjectionTests(unittest.TestCase):
+    def test_barrage_source_discovery_uses_audited_inventory_and_rejects_ambiguous_sources(self):
+        units = [{"rawcode": "UNIT", "abilities": "MARK,FIRE"},
+                 {"rawcode": "BLDG", "abilities": "OTHER"}]
+        self.assertEqual(MODULE.barrage_sources(units, {"FIRE"}), {"UNIT": "FIRE"})
+        self.assertEqual(MODULE.barrage_sources(units, {"UNKN"}), {})
+        with self.assertRaises(ValueError):
+            MODULE.barrage_sources(units, {"MARK", "FIRE"})
+
     def test_projection_is_reproducible_including_source_identity_and_all_removal_ids(self):
         self.assertEqual(json.loads(MODULE.OUTPUT.read_text()), MODULE.build())
 

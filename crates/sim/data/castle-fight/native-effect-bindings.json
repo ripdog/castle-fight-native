@@ -158,10 +158,10 @@
     {
       "source_kind": "unit-ability",
       "source_key": "A03N",
-      "implementation": "warcraft-zero-damage-barrage-v1",
+      "implementation": "warcraft-barrage-v1",
       "valid_from": "9.27",
       "valid_through": "9.27",
-      "notes": "Ranger Barrage is configured with Damage Per Target=0 and is gameplay-neutral in the 9.27 object data."
+      "notes": "Native Ranger Barrage releases ordinary weapon missiles; the zero Damage Per Target field is not a damage budget."
     },
     {
       "source_kind": "unit-ability",
