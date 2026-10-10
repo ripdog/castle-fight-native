@@ -3,6 +3,20 @@
   "map_version": "9.27",
   "effects": [
     {
+      "source_kind": "unit-ability",
+      "source_key": "A07Z",
+      "unit_rawcode": "h073",
+      "kind": "feedback",
+      "maximum_mana_drained": 35,
+      "damage_per_mana_per_10k": 17500,
+      "summoned_damage": 10,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A07Z",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
       "source_key": "A0CG",
