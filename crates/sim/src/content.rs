@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r85";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r86";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 50;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 51;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1829,6 +1829,18 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A077") => {
+            0x4000_013a
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A076") => {
+            0x4000_013b
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A03U") => {
+            0x4000_013c
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A07M") => {
+            0x4000_013d
+        }
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A07R") => {
             0x4000_0138
         }
@@ -3198,6 +3210,7 @@ fn hash_automatic_ability_profile(hash: &mut ContentHash64, ability: AutomaticAb
         hash.write_u8(0);
     }
     match ability.effect {
+        AbilityEffect::WindWalk(p) => p.visit_canonical_words(|word| hash.write_u64(word)),
         AbilityEffect::ScriptedRoots(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);
@@ -5781,6 +5794,10 @@ const fn world(world_units: i32) -> i32 {
 
 /// Native object mana remains available during construction and upgrades.
 pub(crate) fn building_native_mana_maximum(version: MapVersion, rawcode: u32) -> Option<i32> {
+    native_mana_maximum_for_version(version, rawcode)
+}
+
+pub(crate) fn native_mana_maximum_for_version(version: MapVersion, rawcode: u32) -> Option<i32> {
     if version != MapVersion::CASTLE_FIGHT_9_27 {
         return None;
     }

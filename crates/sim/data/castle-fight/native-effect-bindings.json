@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A077","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A076","implementation":"warcraft-feedback-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A03U","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A07M","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A07R","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"ability-effect","source_key":"A07Q","implementation":"warcraft-entangling-roots-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind": "unit-ability", "source_key": "A07P", "implementation": "warcraft-scripted-automatic-v1", "valid_from": "9.27", "valid_through": "9.27"},

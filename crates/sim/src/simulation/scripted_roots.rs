@@ -92,7 +92,7 @@ impl Simulation {
             if u.health <= 0
                 || u.classifications.invulnerable
                 || u.classifications.spell_immune
-                || (u.classifications.invisible && !u.visible_to(source.team, self.next_tick))
+                || (u.is_invisible(self.next_tick) && !u.visible_to(source.team, self.next_tick))
                 || !p.roots.targets.can_target_unit(u.target_movement_class())
                 || (p.roots.nonhero_only && u.classifications.hero)
                 || origin.distance_sq(u.position) > square_i32(p.child_range)

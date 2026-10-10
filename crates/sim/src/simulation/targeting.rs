@@ -41,6 +41,17 @@ impl Simulation {
                     if unit.health <= 0 || unit.attacks_disabled || unit.orders_suspended {
                         return TargetDecision::without_defense(None, false, false);
                     }
+                    if let Some(order) = unit.status.support_order
+                        && (order.order_target.is_some() || order.move_point.is_some())
+                    {
+                        let target = order.order_target.filter(|id| {
+                            find_unit_index(units, *id).is_some_and(|i| {
+                                units[i].health > 0
+                                    && units[i].visible_to(unit.team, self.next_tick)
+                            })
+                        });
+                        return TargetDecision::without_defense(target, false, false);
+                    }
                     let current = unit.target.filter(|target| {
                         self.current_target_retainable_for(unit, *target, units, buildings)
                     });

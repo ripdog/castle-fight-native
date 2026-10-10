@@ -1449,6 +1449,7 @@ impl Simulation {
 
         let mut candidate_checks = 0usize;
         let target = match spellcasting.ability.target_policy {
+            AbilityTargetPolicy::ScriptedController => None,
             AbilityTargetPolicy::NativeBuildingSpellTrigger => self.native_building_trigger_target(
                 source,
                 spellcasting.ability,
@@ -1842,7 +1843,7 @@ impl Simulation {
         target: &UnitSnapshot,
     ) -> bool {
         target.visible_to(source.team, self.next_tick)
-            || ((!target.classifications.invisible
+            || ((!target.is_invisible(self.next_tick)
                 || target.status.is_revealed_to(source.team, self.next_tick))
                 && source
                     .map_version
@@ -2212,7 +2213,8 @@ impl Simulation {
                                     target.classifications,
                                 )
                         }
-                        AbilityTargetPolicy::AllEnemyUnits => false,
+                        AbilityTargetPolicy::ScriptedController
+                        | AbilityTargetPolicy::AllEnemyUnits => false,
                         AbilityTargetPolicy::AllFriendlyUnits
                         | AbilityTargetPolicy::RandomCorpse
                         | AbilityTargetPolicy::RandomEnemyBasePoint => false,

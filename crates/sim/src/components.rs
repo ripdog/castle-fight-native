@@ -1,6 +1,9 @@
 use bevy_ecs::prelude::Component;
 use std::collections::VecDeque;
 
+mod support_orders;
+pub(crate) use support_orders::{SupportOrderQueue, SupportTargetCache};
+pub use support_orders::{SupportOrderRules, SupportOrderState, WindWalkProfile, WindWalkState};
 mod native_grants;
 pub use native_grants::{
     MAX_PERMANENT_NATIVE_ABILITIES, NativeAbilityGrant, NativeAbilityGrantEffect,
@@ -1478,6 +1481,8 @@ pub struct ModifierId(pub u32);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AbilityTargetPolicy {
+    /// Issued exclusively by a source-owned script controller.
+    ScriptedController,
     RandomEnemyUnit,
     AllEnemyUnits,
     RandomEnemyUnitGlobal,
@@ -1503,6 +1508,7 @@ impl AbilityTargetPolicy {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::ScriptedController => 23,
             Self::RandomEnemyUnit => 0,
             Self::AllEnemyUnits => 1,
             Self::RandomEnemyUnitGlobal => 2,
@@ -1531,6 +1537,7 @@ pub enum AreaDamageOrigin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AbilityEffect {
+    WindWalk(WindWalkProfile),
     ScriptedRoots(ScriptedRootsProfile),
     /// Released native weather art has its own lifetime, independent of logical caster life.
     NativeWeatherVisual {
@@ -1694,6 +1701,7 @@ impl AbilityEffect {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::WindWalk(_) => 40,
             Self::ScriptedRoots(_) => 39,
             Self::NativeWeatherVisual { .. } => 38,
             Self::BuildingWeather(_) => 37,
@@ -1890,6 +1898,8 @@ pub struct ManaImprovementLink {
 
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StatusState {
+    pub support_order: Option<SupportOrderState>,
+    pub wind_walk: Option<WindWalkState>,
     /// A consumed manual improvement ability; target death restores it.
     pub mana_improvement_target: Option<SimId>,
     /// Native lightning and the permanent grant survive generator death.
@@ -1937,6 +1947,13 @@ pub struct StatusState {
 }
 
 impl StatusState {
+    pub fn wind_walk_active(&self, tick: u64) -> bool {
+        self.wind_walk.is_some_and(|w| tick < w.expires_tick)
+    }
+    pub fn wind_walk_invisible(&self, tick: u64) -> bool {
+        self.wind_walk
+            .is_some_and(|w| tick >= w.cloaked_tick && tick < w.expires_tick)
+    }
     #[must_use]
     pub fn is_performing_action(&self, tick: u64) -> bool {
         self.action_animation

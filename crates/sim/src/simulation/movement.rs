@@ -217,7 +217,7 @@ impl Simulation {
         let mut pursuit_target = None;
         let mut attack_goal = None;
 
-        let target_cell = unit.target.and_then(|target_id| {
+        let mut target_cell = unit.target.and_then(|target_id| {
             if let Some(target_index) = find_unit_index(units, target_id) {
                 if unit_health[target_index] <= 0 {
                     return None;
@@ -346,6 +346,14 @@ impl Simulation {
 
         let mut pursuit_step = false;
         let mut targetless_lane_goal = None;
+        if let Some(point) = unit.status.support_order.and_then(|s| s.move_point) {
+            let cell = self.topology.cell_of_point(point);
+            target_cell = Some(cell);
+            attack_goal = Some(point);
+            pursuit_target = None;
+            targetless_lane_goal = Some((cell, point));
+        }
+
         let route = match target_cell {
             Some(cell) => {
                 pursuit_step = pursuit_target.is_some();
@@ -879,7 +887,9 @@ impl Simulation {
         let max_radius = units
             .iter()
             .enumerate()
-            .filter(|(index, _)| unit_health[*index] > 0)
+            .filter(|(index, _)| {
+                unit_health[*index] > 0 && !units[*index].status.wind_walk_active(self.next_tick)
+            })
             .map(|(_, unit)| unit.collision_radius)
             .max()
             .unwrap_or(0);
@@ -894,7 +904,10 @@ impl Simulation {
             desired_positions
                 .iter()
                 .enumerate()
-                .filter(|(index, _)| unit_health[*index] > 0)
+                .filter(|(index, _)| {
+                    unit_health[*index] > 0
+                        && !units[*index].status.wind_walk_active(self.next_tick)
+                })
                 .map(|(index, position)| {
                     (
                         movement_collision_partition(units[index].movement_class),
@@ -909,6 +922,7 @@ impl Simulation {
                 .enumerate()
                 .map(|(index, unit)| {
                     if unit_health[index] <= 0
+                        || unit.status.wind_walk_active(self.next_tick)
                         || unit.status.ensnare.is_some()
                         || unit.status.is_performing_action(self.next_tick)
                     {
@@ -1039,7 +1053,9 @@ impl Simulation {
         let max_radius = units
             .iter()
             .enumerate()
-            .filter(|(index, _)| unit_health[*index] > 0)
+            .filter(|(index, _)| {
+                unit_health[*index] > 0 && !units[*index].status.wind_walk_active(self.next_tick)
+            })
             .map(|(_, unit)| unit.collision_radius)
             .max()
             .unwrap_or(0);
@@ -1056,21 +1072,24 @@ impl Simulation {
             bounds_max,
             units.len(),
             units.iter().enumerate().filter_map(|(index, unit)| {
-                (unit_health[index] > 0 && unit.movement_class == MovementClass::Ground)
+                (unit_health[index] > 0
+                    && !unit.status.wind_walk_active(self.next_tick)
+                    && unit.movement_class == MovementClass::Ground)
                     .then_some((index, separated_positions[index], unit.collision_radius))
             }),
         );
-        let mut air_reservations =
-            SpatialReservationGrid::build_with_radii(
-                reservation_cell_size,
-                bounds_min,
-                bounds_max,
-                units.len(),
-                units.iter().enumerate().filter_map(|(index, unit)| {
-                    (unit_health[index] > 0 && unit.movement_class == MovementClass::Air)
-                        .then_some((index, separated_positions[index], unit.collision_radius))
-                }),
-            );
+        let mut air_reservations = SpatialReservationGrid::build_with_radii(
+            reservation_cell_size,
+            bounds_min,
+            bounds_max,
+            units.len(),
+            units.iter().enumerate().filter_map(|(index, unit)| {
+                (unit_health[index] > 0
+                    && !unit.status.wind_walk_active(self.next_tick)
+                    && unit.movement_class == MovementClass::Air)
+                    .then_some((index, separated_positions[index], unit.collision_radius))
+            }),
+        );
         let mut result: Vec<_> = units.iter().map(|unit| unit.position).collect();
         let mut fallback_search = Duration::ZERO;
         let mut fallback_searches = 0usize;
@@ -1083,6 +1102,10 @@ impl Simulation {
         for index in (0..units.len()).rev() {
             let unit = &units[index];
             if unit_health[index] <= 0 || unit.status.is_performing_action(self.next_tick) {
+                continue;
+            }
+            if unit.status.wind_walk_active(self.next_tick) {
+                result[index] = desired_positions[index];
                 continue;
             }
             let original_cell = self.topology.cell_of_point(unit.position);
@@ -1645,6 +1668,10 @@ pub(super) fn effective_movement_speed(unit: &UnitSnapshot) -> i32 {
         .iter()
         .fold(
             100_i32
+                + unit
+                    .status
+                    .wind_walk
+                    .map_or(0, |w| i32::from(w.movement_percent_delta))
                 + unit
                     .status
                     .acid_bomb

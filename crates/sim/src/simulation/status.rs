@@ -400,7 +400,8 @@ pub(super) fn apply_ability_effect_to_unit(
                 },
             );
         }
-        AbilityEffect::MasterProjectiles(_)
+        AbilityEffect::WindWalk(_)
+        | AbilityEffect::MasterProjectiles(_)
         | AbilityEffect::ScriptedRoots(_)
         | AbilityEffect::Ensnare { .. }
         | AbilityEffect::SpellSteal { .. }

@@ -232,3 +232,6 @@ Health-scaled source damage profiles retain marker and dispatcher identities plu
 
 
 Scripted Roots profiles retain parent/child target separation, version, range, cap, exclusions, priority buff identities and temporary vision parameters in canonical spellcasting definitions. Released Roots use the existing timed movement/DOT state. Bundle/checksum/snapshot schemas advance to 50/69/62.
+
+
+Support queues, FIFO actor membership, per-owner cached target groups/deadlines, retained/issued targets, order retry counters, keyed selection sequences, Wind Walk fade/expiry and committed first-attack bonus are canonical and serialized. Definitions include versioned service/target/filter/geometry and native resource profiles. Bundle/checksum/snapshot schemas advance to 51/70/63.

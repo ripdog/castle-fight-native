@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 69;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 70;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -30,6 +30,7 @@ mod builder;
 mod building_bolts;
 mod death_healing;
 mod scripted_roots;
+mod support_orders;
 pub use death_healing::DeathHealVisualEvent;
 mod building_damage_procs;
 mod enchantments;
@@ -1742,6 +1743,7 @@ impl Simulation {
         let mut snapshot_and_spatial = phase_start.elapsed();
 
         let phase_start = Instant::now();
+        self.resolve_support_orders(&mut units);
         self.resolve_world_freezer(&mut units, &mut buildings);
         self.resolve_native_actions(&mut units, &mut buildings);
         self.apply_passive_auras(&mut units);
@@ -3781,11 +3783,15 @@ impl UnitSnapshot {
         }
     }
 
+    fn is_invisible(&self, tick: u64) -> bool {
+        self.classifications.invisible || self.status.wind_walk_invisible(tick)
+    }
+
     fn visible_to(&self, team: Team, tick: u64) -> bool {
         self.team == team
             || self.status.is_revealed_to(team, tick)
             || self.detection_teams & (1 << team.0) != 0
-            || (!self.classifications.invisible && self.visible_teams & (1 << team.0) != 0)
+            || (!self.is_invisible(tick) && self.visible_teams & (1 << team.0) != 0)
     }
 
     fn attack_for_unit(
@@ -4472,7 +4478,8 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
     assert!(spellcasting.ability.mana_cost <= spellcasting.mana.maximum);
     assert!(spellcasting.ability.range >= 0);
     match spellcasting.ability.target_policy {
-        AbilityTargetPolicy::RandomEnemyUnit
+        AbilityTargetPolicy::ScriptedController
+        | AbilityTargetPolicy::RandomEnemyUnit
         | AbilityTargetPolicy::NearestEnemyInCombat
         | AbilityTargetPolicy::FlyingEnemyUnit
         | AbilityTargetPolicy::NativeBuildingSpellTrigger
@@ -4492,6 +4499,18 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
     }
     match spellcasting.ability.effect {
+        AbilityEffect::WindWalk(p) => {
+            assert!(
+                p.duration_ticks > p.fade_ticks
+                    && p.rules.budget > 0
+                    && p.rules.interval_ticks > 1
+                    && p.rules.cache_ticks > 0
+            );
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::ScriptedController
+            );
+        }
         AbilityEffect::ScriptedRoots(p) => {
             assert!(p.search_radius >= 0 && p.child_range >= 0 && p.maximum_targets > 0);
             assert!(p.roots.duration_ticks > 0 && p.roots.hero_duration_ticks > 0);
@@ -5276,10 +5295,14 @@ fn unit_view_from_entity(
         ),
         movement_class: *entity.get::<MovementClass>()?,
         mechanical: entity.get::<MechanicalUnit>().is_some(),
-        classifications: entity
-            .get::<UnitClassifications>()
-            .copied()
-            .unwrap_or_default(),
+        classifications: {
+            let mut flags = entity
+                .get::<UnitClassifications>()
+                .copied()
+                .unwrap_or_default();
+            flags.invisible |= status.wind_walk_invisible(current_tick);
+            flags
+        },
         health: entity.get::<Health>()?.current,
         health_max: entity.get::<Health>()?.max,
         attack,

@@ -3451,6 +3451,7 @@ fn prewarm_timed_wc3_effects(
                 }
                 let automatic = definition.automatic_abilities().map(|ability| {
                     let status = match ability.effect {
+                        AbilityEffect::WindWalk(p) => Some((p.ability.0, p.duration_ticks)),
                         AbilityEffect::ScriptedRoots(p) => {
                             Some((p.roots.ability.0, p.roots.duration_ticks))
                         }
@@ -5851,81 +5852,113 @@ fn status_visual_sources(
     tick: u64,
 ) -> impl Iterator<Item = (u32, Wc3StatusVisualKind)> + '_ {
     status
-        .poison
+        .wind_walk
         .iter()
-        .flat_map(|poison| poison.buffs.iter().flatten())
-        .filter(move |buff| tick < buff.expires_tick)
-        .map(|buff| (buff.ability.0, Wc3StatusVisualKind::DamageOverTime))
+        .filter(move |w| tick < w.expires_tick)
+        .map(|w| (w.ability.0, Wc3StatusVisualKind::Movement))
         .chain(
             status
-                .acid_bomb
-                .filter(move |acid| tick < acid.expires_tick)
-                .map(|acid| (acid.profile.ability.0, Wc3StatusVisualKind::DamageOverTime)),
-        )
-        .chain(
-            status
-                .native_grants
+                .poison
                 .iter()
-                .filter_map(permanent_grant_status_visual),
-        )
-        .chain(
-            status
-                .ensnare
-                .filter(move |net| tick < net.expires_tick)
-                .map(|net| (net.profile.ability.0, Wc3StatusVisualKind::Movement)),
-        )
-        .chain(
-            status.movement_modifiers[..usize::from(status.movement_modifier_count)]
-                .iter()
-                .filter(move |modifier| {
-                    status_modifier_visible(status, modifier.id, modifier.expires_tick, tick)
-                })
-                .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::Movement)),
-        )
-        .chain(
-            status.armor_modifiers[..usize::from(status.armor_modifier_count)]
-                .iter()
-                .filter(move |modifier| {
-                    status_modifier_visible(status, modifier.id, modifier.expires_tick, tick)
-                })
-                .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::Armor)),
-        )
-        .chain(
-            status.armor_modifiers[..usize::from(status.armor_modifier_count)]
-                .iter()
-                .filter(move |modifier| {
-                    status_modifier_visible(status, modifier.id, modifier.expires_tick, tick)
-                        && modifier.regeneration_per_second_per_10k > 0
-                })
-                .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::Regeneration)),
-        )
-        .chain(
-            status.attack_speed_modifiers[..usize::from(status.attack_speed_modifier_count)]
-                .iter()
-                .filter(move |modifier| {
-                    status_modifier_visible(status, modifier.id, modifier.expires_tick, tick)
-                })
-                .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::AttackSpeed)),
-        )
-        .chain(
-            status
-                .native_stun_ability
-                .filter(move |_| tick < status.native_stun_until_tick)
-                .map(|a| (a.0, Wc3StatusVisualKind::Stun)),
-        )
-        .chain(
-            status
-                .frozen_ability
-                .filter(move |_| tick < status.frozen_until_tick)
-                .map(|a| (a.0, Wc3StatusVisualKind::Freeze)),
-        )
-        .chain(
-            status.damage_over_time[..usize::from(status.damage_over_time_count)]
-                .iter()
-                .filter(move |modifier| {
-                    status_modifier_visible(status, modifier.id, modifier.expires_tick, tick)
-                })
-                .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::DamageOverTime)),
+                .flat_map(|poison| poison.buffs.iter().flatten())
+                .filter(move |buff| tick < buff.expires_tick)
+                .map(|buff| (buff.ability.0, Wc3StatusVisualKind::DamageOverTime))
+                .chain(
+                    status
+                        .acid_bomb
+                        .filter(move |acid| tick < acid.expires_tick)
+                        .map(|acid| (acid.profile.ability.0, Wc3StatusVisualKind::DamageOverTime)),
+                )
+                .chain(
+                    status
+                        .native_grants
+                        .iter()
+                        .filter_map(permanent_grant_status_visual),
+                )
+                .chain(
+                    status
+                        .ensnare
+                        .filter(move |net| tick < net.expires_tick)
+                        .map(|net| (net.profile.ability.0, Wc3StatusVisualKind::Movement)),
+                )
+                .chain(
+                    status.movement_modifiers[..usize::from(status.movement_modifier_count)]
+                        .iter()
+                        .filter(move |modifier| {
+                            status_modifier_visible(
+                                status,
+                                modifier.id,
+                                modifier.expires_tick,
+                                tick,
+                            )
+                        })
+                        .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::Movement)),
+                )
+                .chain(
+                    status.armor_modifiers[..usize::from(status.armor_modifier_count)]
+                        .iter()
+                        .filter(move |modifier| {
+                            status_modifier_visible(
+                                status,
+                                modifier.id,
+                                modifier.expires_tick,
+                                tick,
+                            )
+                        })
+                        .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::Armor)),
+                )
+                .chain(
+                    status.armor_modifiers[..usize::from(status.armor_modifier_count)]
+                        .iter()
+                        .filter(move |modifier| {
+                            status_modifier_visible(
+                                status,
+                                modifier.id,
+                                modifier.expires_tick,
+                                tick,
+                            ) && modifier.regeneration_per_second_per_10k > 0
+                        })
+                        .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::Regeneration)),
+                )
+                .chain(
+                    status.attack_speed_modifiers
+                        [..usize::from(status.attack_speed_modifier_count)]
+                        .iter()
+                        .filter(move |modifier| {
+                            status_modifier_visible(
+                                status,
+                                modifier.id,
+                                modifier.expires_tick,
+                                tick,
+                            )
+                        })
+                        .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::AttackSpeed)),
+                )
+                .chain(
+                    status
+                        .native_stun_ability
+                        .filter(move |_| tick < status.native_stun_until_tick)
+                        .map(|a| (a.0, Wc3StatusVisualKind::Stun)),
+                )
+                .chain(
+                    status
+                        .frozen_ability
+                        .filter(move |_| tick < status.frozen_until_tick)
+                        .map(|a| (a.0, Wc3StatusVisualKind::Freeze)),
+                )
+                .chain(
+                    status.damage_over_time[..usize::from(status.damage_over_time_count)]
+                        .iter()
+                        .filter(move |modifier| {
+                            status_modifier_visible(
+                                status,
+                                modifier.id,
+                                modifier.expires_tick,
+                                tick,
+                            )
+                        })
+                        .map(|modifier| (modifier.id.0, Wc3StatusVisualKind::DamageOverTime)),
+                ),
         )
 }
 
@@ -5958,6 +5991,12 @@ fn status_visual_is_active(
                     .is_some_and(|a| a.0 == ability_rawcode)
         }
         Wc3StatusVisualKind::Movement => {
+            if status
+                .wind_walk
+                .is_some_and(|w| w.ability.0 == ability_rawcode && tick < w.expires_tick)
+            {
+                return true;
+            }
             if status.ensnare.is_some_and(|net| {
                 net.profile.ability.0 == ability_rawcode && tick < net.expires_tick
             }) {

@@ -187,6 +187,11 @@ impl Simulation {
                     )
                 }
             };
+            if !intent.completing_windup
+                && let Some(order) = &mut status.support_order
+            {
+                order.backstab_pending = status.wind_walk.take().map_or(0, |w| w.backstab_damage);
+            }
             if intent.completing_windup {
                 status.pending_attack = None;
             } else {
@@ -233,6 +238,11 @@ impl Simulation {
                     });
                     continue;
                 }
+            }
+
+            if let Some(order) = &mut status.support_order {
+                intent.attack.damage = intent.attack.damage.saturating_add(order.backstab_pending);
+                order.backstab_pending = 0;
             }
 
             for effect in intent.passive_effects.iter() {

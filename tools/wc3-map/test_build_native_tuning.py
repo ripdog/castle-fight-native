@@ -47,6 +47,30 @@ class NativeTuningProjectionTest(unittest.TestCase):
             with self.subTest(token=token),self.assertRaises(ValueError):
                 native.project_effect(recipe,fields,unit,{}, {**detail,'functions':{**functions,key:functions[key].replace(token,'changed')}})
 
+    def test_wind_walk_preserves_source_queue_geometry_resources_and_native_fade(self):
+        from project_wind_walk import project
+        raw=lambda v:int.from_bytes(v.encode(),'big')
+        f={'orderAssassinW':'isCloaked(m8o)or issueAssassinImmediateOrder(m8o,852129) OX[n8o])+1 OX[n8o])>7) OX[n8o]=0 group_getRandom(VAb[p8o]) group_getRandom(SAb[p8o])',
+           'isValidAssassinTarget':'isAliveCombatSapper( unit_isEnemyOf( isVulnerable( isNotTentacle( isNotBanished( not unit_isType(o7o,UNIT_TYPE_FLYING) unit_getAbilityLevel(o7o,101)<=0 unit_getAbilityLevel(o7o,102)<=0',
+           'lE':f'YAb={raw("UNIT")} XAb={raw("ROY1")} WAb=0.15 KAb=_b[(_d)]((-100.),(-40.),30.,40.)JAb=_b[(_d)]((-30.),(-40.),100.,40.)',
+           'nH':'Gcb=0.3 Fcb=3', 'mE':'UNIT_STATE_MAX_MANA)>5.', 'nE':'life<17.)', 'oE':'life<29.)',
+           'SupportOrderTask_SupportOrderTask_run':'TaskQueue_TaskQueue_add(Tym,Uym)',
+           'TaskQueue_TaskQueue_executeTasks':'TaskQueue_tasksPerTick*4 TaskQueue_maximumInterval/2.',
+           'main':'uIb=_b[(_d)]((-100.),(-40.),100.,40.)','isNotTentacle':'GetUnitAbilityLevel(Udo,103)'}
+        fields={'datad1':'1','datae1':'0','order':'windwalk','dur1':'10','herodur1':'10','dataa1':'0.15','datab1':'0.2','datac1':'7','cost1':'999','cool1':'999'}
+        recipe={'source_kind':'unit-ability','source_key':'WALK','unit_rawcode':'UNIT'}
+        unit={'mana_max':'19','mana_start':'11','mana_regen':'0.2'}
+        detail={'native_base':'AOwk','functions':f,'map_version':{'major':1,'minor':2},'git_tree':'synthetic'}
+        ability=project(recipe,fields,unit,{'mana_cost':'5','cooldown':'0.7'},detail)['spellcasting']['ability']
+        self.assertEqual((ability['mana_cost'],ability['cooldown_ticks']),(5,21))
+        profile=ability['effect']['WindWalk']
+        self.assertEqual((profile['fade_ticks'],profile['duration_ticks']),(5,300))
+        self.assertEqual(profile['rules']['fallback_health_below'],[17,29])
+        self.assertEqual(profile['rules']['local_rectangles'][0][1],{'x':30*1024,'y':40*1024})
+        for key,token in [('orderAssassinW','isCloaked(m8o)or '),('isValidAssassinTarget','isNotTentacle('),('TaskQueue_TaskQueue_executeTasks','TaskQueue_tasksPerTick*4')]:
+            with self.subTest(token=token),self.assertRaises(ValueError):project(recipe,fields,unit,{}, {**detail,'functions':{**f,key:f[key].replace(token,'changed')}})
+        with self.assertRaises(ValueError):project(recipe,{**fields,'datae1':'1'},unit,{},detail)
+
     def test_aftershock_requires_health_formula_and_disabled_nested_dispatch(self):
         recipe = {"kind":"health-scaled-aftershock", "source_kind":"unit-ability", "source_key":"TEST", "unit_rawcode":"UNIT"}
         trace = {"aftershock_marker_ability_id":1,"source_damage_marker_ability_id":2,

@@ -291,7 +291,7 @@ impl Simulation {
         // There is deliberately no checkForShield invocation in this source callback.
         if target.classifications.spell_immune
             || target.classifications.invulnerable
-            || (target.classifications.invisible && !target.visible_to(orb.team, self.next_tick))
+            || (target.is_invisible(self.next_tick) && !target.visible_to(orb.team, self.next_tick))
         {
             return;
         }

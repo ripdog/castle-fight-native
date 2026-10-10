@@ -171,6 +171,7 @@ impl Simulation {
                 continue;
             }
             match action {
+                NativeAction::SupportOrders(_) => {}
                 NativeAction::BuildingDamageProc(state) => {
                     self.advance_building_damage_proc(entity, state)
                 }

@@ -8,6 +8,7 @@ mod economy;
 mod match_driver;
 mod match_rules;
 mod match_setup;
+pub use components::{SupportOrderRules, SupportOrderState, WindWalkProfile, WindWalkState};
 pub use match_rules::{MatchRules, RescueStrikeRules, TimeLimitOutcome};
 mod math;
 mod native_carriers;

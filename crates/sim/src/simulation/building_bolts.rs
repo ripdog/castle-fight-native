@@ -63,7 +63,7 @@ impl Simulation {
                 footprint_center_point(f, self.config.navigation_cell_size)
             }
         };
-        if (target.classifications.invisible && !target.visible_to(source.team, self.next_tick))
+        if (target.is_invisible(self.next_tick) && !target.visible_to(source.team, self.next_tick))
             || target.classifications.spell_immune
             || target.classifications.invulnerable
             || !profile

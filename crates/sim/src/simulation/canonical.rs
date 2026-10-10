@@ -459,6 +459,10 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(10);
                 hash.write_u64(id.0);
                 match action {
+                    NativeAction::SupportOrders(state) => {
+                        hash.write_u8(13);
+                        state.visit_canonical_words(|word| hash.write_u64(word));
+                    }
                     NativeAction::BuildingDamageProc(state) => {
                         hash.write_u8(12);
                         for word in state.canonical_words() {
@@ -1848,6 +1852,32 @@ fn hash_action_timing(hash: &mut Fnv64, timing: ActionTimingProfile) {
 }
 
 fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
+    hash.write_u8(u8::from(status.support_order.is_some()));
+    if let Some(order) = status.support_order {
+        for id in [order.selected_target, order.order_target] {
+            hash.write_u8(u8::from(id.is_some()));
+            if let Some(id) = id {
+                hash.write_u64(id.0);
+            }
+        }
+        hash.write_u8(u8::from(order.move_point.is_some()));
+        if let Some(p) = order.move_point {
+            hash.write_i32(p.x);
+            hash.write_i32(p.y);
+        }
+        hash.write_u8(order.iterations);
+        hash.write_u64(order.sequence);
+        hash.write_i32(order.backstab_pending);
+    }
+    hash.write_u8(u8::from(status.wind_walk.is_some()));
+    if let Some(w) = status.wind_walk {
+        hash.write_u32(w.ability.0);
+        hash.write_u64(w.cloaked_tick);
+        hash.write_u64(w.expires_tick);
+        hash.write_i32(i32::from(w.movement_percent_delta));
+        hash.write_i32(w.backstab_damage);
+    }
+
     hash.write_u8(u8::from(status.mana_improvement_target.is_some()));
     if let Some(target) = status.mana_improvement_target {
         hash.write_u64(target.0);
@@ -2639,6 +2669,7 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
                 hash.write_u64(word);
             }
         }
+        AbilityEffect::WindWalk(p) => p.visit_canonical_words(|word| hash.write_u64(word)),
         AbilityEffect::ScriptedRoots(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);
