@@ -117,6 +117,14 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         return scaled(fields[field.lower()], scale)
 
     kind = recipe["kind"]
+    if kind == "death-spawn":
+        if mechanics["native_base"] != "Aspy" or any(number(key) != 0 for key in ("Cost1", "Cool1", "Dur1", "HeroDur1")):
+            raise ValueError("death spawn requires the passive permanent native Aspy inventory")
+        child = fields["datab1"]
+        if len(child) != 4 or not 0 < number("DataA1") <= 255:
+            raise ValueError("death spawn requires a child identity and positive count")
+        return {**recipe, "child_rawcode": int.from_bytes(child.encode("ascii"), "big"), "count": number("DataA1"),
+            "provenance": {"source": "resolved/object-fields.tsv", "native_base": "Aspy"}}
     if kind == "native-heal":
         from project_native_heal import project
         return project(recipe, fields, unit, protected, mechanics)

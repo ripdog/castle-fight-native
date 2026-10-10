@@ -150,6 +150,8 @@ Entity creation/destruction and component-shape changes are structural mutations
 
 Structural mutations SHOULD be deferred until designated commit points rather than performed opportunistically inside parallel scans.
 
+Native death-spawn abilities create their children once at the structural death commit, in parent `SimId` order and then source ability/copy order. Each child receives its own complete versioned definition, fresh resources and status, the deceased handle's current owner, and native summoned classification. Death spawning does not invoke train-finish replication or inherit factory provenance. New children become combat candidates in the following tick. Removing a handle without a death, or destroying an illusion, does not invoke this passive. The developer mass-damage command follows the same split contract and does not recursively damage children created during that command.
+
 Examples:
 
 - spawn unit;

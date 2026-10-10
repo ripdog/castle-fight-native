@@ -15,6 +15,7 @@ mod damage_charge;
 mod damage_threshold;
 mod ensnare;
 mod heal;
+mod homing_splash;
 mod kill_berserk;
 mod lava_spawn;
 mod lightning;

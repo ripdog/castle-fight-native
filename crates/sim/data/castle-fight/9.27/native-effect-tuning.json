@@ -4,6 +4,53 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A09W",
+      "unit_rawcode": "n01P",
+      "kind": "poison",
+      "profile": {
+        "ability": 1093679447,
+        "buff_rawcode": 1114862436,
+        "damage_per_second": 20,
+        "movement_percent_delta": -70,
+        "attack_speed_percent_delta": -70,
+        "duration_ticks": 240,
+        "hero_duration_ticks": 240,
+        "targets": 3,
+        "stack_damage": true,
+        "can_kill": false
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "Aspo",
+        "stacking_flags": 1
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A06J",
+      "unit_rawcode": "n01P",
+      "kind": "death-spawn",
+      "child_rawcode": 1848652113,
+      "count": 2,
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "Aspy"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A06K",
+      "unit_rawcode": "n01Q",
+      "kind": "death-spawn",
+      "child_rawcode": 1848652114,
+      "count": 2,
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "Aspy"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A00C",
       "unit_rawcode": "n004",
       "kind": "poison",

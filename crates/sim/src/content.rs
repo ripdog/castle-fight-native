@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r99";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r100";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 56;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 57;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1845,6 +1845,19 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A09W") => {
+            0x4000_015f
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A06J") => {
+            0x4000_0160
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A06K") => {
+            0x4000_0161
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A07G") => {
+            0x4000_0162
+        }
+
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A00C") => {
             0x4000_015e
         }
@@ -2657,6 +2670,14 @@ fn canonical_content_bundle_hash(bundle: &CastleFightContentBundle) -> u64 {
         hash.write_u32(rule.rawcode);
         hash.write_u16(rule.heal_percent);
         hash.write_i32(rule.retaliation_damage);
+    }
+    let mut death_spawns: Vec<_> =
+        crate::native_effects::death_spawns_for_version(bundle.map_version).collect();
+    death_spawns.sort_unstable_by_key(|spawn| spawn.ability);
+    for spawn in death_spawns {
+        hash.write_u32(spawn.ability.0);
+        hash.write_u32(spawn.child_rawcode);
+        hash.write_u8(spawn.count);
     }
     hash_command_card(&mut hash, bundle.command_card);
     hash_economy_rules(&mut hash, bundle.economy);
@@ -3909,6 +3930,16 @@ struct CatalogSupplement927 {
     fog_rules: CatalogFogRules927,
     spell_reveals: Vec<CatalogSpellReveal927>,
     production_handoffs: Vec<CatalogProductionHandoff927>,
+    death_spawn_bodies: Vec<CatalogSummonBodyCorpse927>,
+    homing_splash_rawcodes: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CatalogSummonBodyCorpse927 {
+    rawcode: String,
+    does_decay: bool,
+    decay_start_ticks: u32,
+    lifetime_ticks: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -4110,6 +4141,7 @@ struct ExtractedContent927 {
     unit_abilities: BTreeMap<u32, Vec<u32>>,
     protected_stats: BTreeMap<u32, ExtractedProtectedStats927>,
     primary_attacks: BTreeMap<u32, ExtractedAttack927>,
+    homing_splash_rawcodes: BTreeSet<u32>,
     secondary_attacks: BTreeMap<u32, ExtractedAttack927>,
     building_secondary_attacks: BTreeMap<u32, CatalogBuildingSecondaryAttack927>,
     production: BTreeMap<u32, ExtractedProduction927>,
@@ -4210,6 +4242,12 @@ impl ExtractedContent927 {
             .bounce_weapons
             .into_iter()
             .map(|weapon| (parse_rawcode(&weapon.rawcode), weapon))
+            .collect();
+        let death_spawn_bodies = supplement.death_spawn_bodies;
+        let homing_splash_rawcodes = supplement
+            .homing_splash_rawcodes
+            .into_iter()
+            .map(|rawcode| parse_rawcode(&rawcode))
             .collect();
         let mut repair_time_ticks = BTreeMap::<u32, u32>::new();
         let mut command_card_positions = BTreeMap::new();
@@ -4642,6 +4680,36 @@ impl ExtractedContent927 {
             );
         }
 
+        // Native death-spawn children are outside the trained-unit report. Their own
+        // retained unit fields/protected values supply weapons; the generated native
+        // closure supplies corpse flags and versioned global decay defaults.
+        for body in death_spawn_bodies {
+            let rawcode = parse_rawcode(&body.rawcode);
+            let unit = &units[&rawcode];
+            let protected = &protected_stats[&rawcode];
+            primary_attacks
+                .entry(rawcode)
+                .or_insert_with(|| ExtractedAttack927 {
+                    damage_type: unit.attack1_damage_type.expect("summon weapon type"),
+                    weapon_kind: unit.attack1_weapon_kind.expect("summon weapon delivery"),
+                    targets: unit.attack1_targets.expect("summon weapon mask"),
+                    damage: protected.attack1_damage.or(unit.attack1_damage),
+                    range: protected
+                        .attack1_range
+                        .or(unit.attack1_range)
+                        .expect("summon weapon range"),
+                    cooldown_ticks: protected
+                        .attack1_cooldown_ticks
+                        .or(unit.attack1_cooldown_ticks)
+                        .expect("summon weapon cadence"),
+                });
+            corpses.entry(rawcode).or_insert(ExtractedCorpse927 {
+                does_decay: body.does_decay,
+                decay_start_ticks: body.decay_start_ticks,
+                lifetime_ticks: body.lifetime_ticks,
+            });
+        }
+
         let mut upgrades = BTreeMap::<u32, ExtractedUpgradeLinks927>::new();
         for line in BUILDING_UPGRADES_927_TSV.lines().skip(1) {
             let mut columns = line.split('\t');
@@ -4822,6 +4890,7 @@ impl ExtractedContent927 {
             unit_abilities,
             protected_stats,
             primary_attacks,
+            homing_splash_rawcodes,
             secondary_attacks,
             building_secondary_attacks,
             production,
@@ -4846,7 +4915,7 @@ impl ExtractedContent927 {
 fn catalog_supplement_927() -> Result<CatalogSupplement927, String> {
     let supplement: CatalogSupplement927 = serde_json::from_str(CATALOG_SUPPLEMENT_927_R1_JSON)
         .map_err(|error| format!("invalid 9.27 catalog supplement: {error}"))?;
-    if supplement.schema_version != 7 {
+    if supplement.schema_version != 8 {
         return Err(format!(
             "unsupported 9.27 catalog supplement schema {}",
             supplement.schema_version
@@ -5535,6 +5604,11 @@ fn extracted_tower_definition_927(
                 .projectile_speed_per_tick
                 .unwrap_or_else(|| panic!("tower {rawcode:#010x} is missing projectile speed")),
         },
+        ExtractedWeaponKind927::Splash if content.homing_splash_rawcodes.contains(&rawcode) => {
+            AttackDelivery::RangedGuaranteedHit {
+                speed_per_tick: unit.projectile_speed_per_tick.expect("native homing splash speed"),
+            }
+        }
         ExtractedWeaponKind927::Artillery | ExtractedWeaponKind927::Splash => {
             AttackDelivery::RangedBallistic {
                 speed_per_tick: unit
@@ -5696,6 +5770,13 @@ fn extracted_unit_definition_927(
                 panic!("missile unit {rawcode:#010x} is missing projectile speed")
             }),
         },
+        ExtractedWeaponKind927::Splash if content.homing_splash_rawcodes.contains(&rawcode) => {
+            AttackDelivery::RangedGuaranteedHit {
+                speed_per_tick: unit
+                    .projectile_speed_per_tick
+                    .expect("native homing splash speed"),
+            }
+        }
         ExtractedWeaponKind927::Artillery | ExtractedWeaponKind927::Splash => {
             AttackDelivery::RangedBallistic {
                 speed_per_tick: unit.projectile_speed_per_tick.unwrap_or_else(|| {
@@ -6157,6 +6238,39 @@ mod tests {
         let mut crlf = ContentHash64::new();
         write_canonical_catalog_text(&mut crlf, "a\r\nb\r\n");
         assert_eq!(lf.finish(), crlf.finish());
+    }
+
+    #[test]
+    fn promoted_native_splash_weapons_keep_their_authored_homing_delivery() {
+        let content = extracted_content_927();
+        let mut homing = 0;
+        for kind in CastleFightUnitKind::ALL {
+            let definition = kind.definition();
+            if content.primary_attacks[&definition.rawcode].weapon_kind
+                != ExtractedWeaponKind927::Splash
+            {
+                continue;
+            }
+            if content.homing_splash_rawcodes.contains(&definition.rawcode) {
+                assert!(matches!(
+                    definition.attack.delivery,
+                    AttackDelivery::RangedGuaranteedHit { .. }
+                ));
+                homing += 1;
+            } else {
+                assert!(matches!(
+                    definition.attack.delivery,
+                    AttackDelivery::RangedBallistic { .. }
+                ));
+            }
+            assert!(
+                definition
+                    .passive_effects
+                    .iter()
+                    .any(|p| matches!(p, PassiveUnitEffect::SplashFalloff(_)))
+            );
+        }
+        assert!(homing > 0);
     }
 
     #[test]

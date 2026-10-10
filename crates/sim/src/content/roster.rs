@@ -33,6 +33,9 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    AncientHydra = 0x1000_004b => b"n01P",
+    Hydra = 0x1000_004c => b"n01Q",
+    LesserHydra = 0x1000_004d => b"n01R",
     Suumpmolk = 0x1000_004a => b"n004",
     MurlocAssassin = 0x1000_0049 => b"n00K",
     MurlocChampion = 0x1000_0048 => b"n00J",
@@ -110,6 +113,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    LernaeanFountain = 0x2000_004b => b"h05F",
     SwampWell = 0x2000_004a => b"h00J",
     MurlocFortress = 0x2000_0049 => b"h022",
     MurlocVillage = 0x2000_0048 => b"h021",

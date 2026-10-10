@@ -81,7 +81,7 @@ Depending on attack/content rules, eligibility may consider:
 
 Navigation reachability and targetability remain separate concepts, but an attacker MUST discard a candidate it cannot actually reach an attack position for with any attack that can affect that candidate.
 
-The current authoritative ordinary-attack filter is an explicit target mask with independent ground-unit, air-unit, and building bits. Movement class does not imply attack capability: a ground melee unit may be authored to hit air, an air unit may be ground-only, and an attack building uses the same mask. Target-class filtering applies to fresh acquisition, sticky retention, retaliation/ally-defense validation, the final attack-intent gate, ballistic splash victims, and bounce-chain candidates; a secondary projectile effect MUST NOT bypass the originating attack's target mask.
+The current authoritative ordinary-attack filter is an explicit target mask with independent ground-unit, air-unit, and building bits. Movement class does not imply attack capability: a ground melee unit may be authored to hit air, an air unit may be ground-only, and an attack building uses the same mask. Target-class filtering applies to fresh acquisition, sticky retention, retaliation/ally-defense validation, the final attack-intent gate, and bounce-chain candidates. Native splash has a separately authored collateral mask; it MUST consume that mask independently of the primary weapon's target permission.
 
 Examples:
 
@@ -200,6 +200,8 @@ The verification travel-time rule is deterministic and integer-only. At launch, 
 The projectile retains the target `SimId`, source `SimId`, damage, launch position, launch tick, and impact tick as authoritative state. Target movement after launch does not make the projectile miss or change its due tick. Presentation may visually follow/interpolate toward the target's current render position during that interval.
 
 A successfully launched projectile is independent of its source. Source death after launch MUST NOT cancel the projectile. Because impact time can affect damage/death ordering, live guaranteed-hit projectiles participate in canonical state/checksums until they impact or invalidate.
+
+Native `msplash` weapons with an authored homing flag consume the guaranteed-hit flight path. Their primary target receives ordinary full weapon damage and eligible directed attack modifiers. Collateral resolves around the primary's live impact position in target `SimId` order, with its own source-owned mask and full/medium/outer falloff. The primary is excluded from collateral so it cannot receive the weapon twice; collateral does not copy poison, Bash, Feedback or triggered attack spells. A protected live primary can still center collateral damage, while a dead or removed primary invalidates the missile. Artillery and nonhoming splash retain the fixed-destination ballistic path below.
 
 ### 9.3 Ranged ballistic projectile
 

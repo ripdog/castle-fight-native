@@ -361,7 +361,7 @@ impl Simulation {
                             buildings,
                             unit_health,
                             building_health,
-                        ) =>
+                        ) && !matches!(intent.target, TargetIndex::Unit(index) if units[index].classifications.invulnerable) =>
                     {
                         if apply_corruption(intent.target, on_hit.corruption, completed_tick, units)
                         {
@@ -523,8 +523,8 @@ impl Simulation {
                             );
                         }
                     }
-                    // A release proc can kill the primary victim before the weapon hit.
-                    // Preserve the completed attack cycle without postmortem hit effects.
+                    // Release effects can kill or protect the victim before the hit.
+                    // Preserve the completed attack cycle without applying hit effects.
                     AttackDelivery::Melee | AttackDelivery::RangedInstant => {}
                     AttackDelivery::RangedGuaranteedHit { speed_per_tick } => {
                         let travel_ticks =

@@ -63,8 +63,10 @@ mod content_lifecycle_tests;
 mod damage_charge;
 mod damage_retaliation;
 mod damage_thresholds;
+mod death_spawns;
 mod economy;
 mod forked_lightning;
+mod homing_splash;
 mod lava_spawns;
 mod line_projectiles;
 mod mana_improvement;
@@ -1111,6 +1113,7 @@ impl Simulation {
             if let Some(source) = retained_sources.get(&source_unit) {
                 self.retired_damage_sources.insert(source_unit, *source);
             }
+            self.spawn_death_children(entity, position);
             self.world.despawn(entity);
             let Some(profile) = corpse else {
                 continue;
@@ -1994,6 +1997,7 @@ impl Simulation {
         self.emit_death_heal_visuals(&units, &positions);
         let mut deaths = 0;
         let mut corpse_spawns = Vec::new();
+        let mut death_spawns = 0;
         // Team contributions are phase-local derived state, never a stale persistent counter.
         // Scan buildings twice per resolution phase rather than once per individual fatality.
         let shrine_support = [
@@ -2042,6 +2046,7 @@ impl Simulation {
                 if let Some(source) = source_damage_runtime::RetiredDamageSource::capture(unit) {
                     self.retired_damage_sources.insert(unit.id, source);
                 }
+                death_spawns += self.spawn_death_children(unit.entity, positions[index]);
                 self.world.despawn(unit.entity);
                 deaths += 1;
                 continue;
@@ -2271,7 +2276,8 @@ impl Simulation {
 
         TickResult {
             completed_tick,
-            units_alive: units.len() - unit_health.iter().filter(|health| **health <= 0).count(),
+            units_alive: units.len() - unit_health.iter().filter(|health| **health <= 0).count()
+                + death_spawns,
             buildings_alive: buildings.len()
                 - building_health
                     .iter()
@@ -2282,7 +2288,7 @@ impl Simulation {
             deaths,
             corpses_spawned,
             corpses_expired,
-            units_spawned: units_spawned + mirror_spawns,
+            units_spawned: units_spawned + mirror_spawns + death_spawns,
             spawn_failures,
             topology_rebuilds: usize::from(topology_rebuilt),
             pursuit_steps: movement.pursuit_steps,
@@ -5656,7 +5662,8 @@ impl Simulation {
         } = event;
         match target {
             TargetIndex::Unit(index) => {
-                if state.unit_health[index] <= 0 {
+                if state.unit_health[index] <= 0 || state.units[index].classifications.invulnerable
+                {
                     return None;
                 }
                 let adjusted_damage = state.damage_rules.apply_attack_with_armor_per_100(

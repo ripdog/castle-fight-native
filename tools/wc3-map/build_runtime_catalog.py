@@ -183,6 +183,17 @@ def _action_timing_entry(rawcode: str, fields: dict[str, str], hz: int) -> dict[
     return result
 
 
+def _summon_body_corpse(rawcode: str, fields: dict[str, str], misc: dict[str, str], hz: int) -> dict[str, Any]:
+    death_type = _integer_recovered_value(fields["udea"], rawcode=rawcode, field_id="udea")
+    if death_type not in range(4):
+        raise SystemExit("native summon body has unsupported death type")
+    death = Decimal(fields["udtm"])
+    decay = death + Decimal(misc["DecayTime"]) + Decimal(misc["BoneDecayTime"])
+    return {"rawcode": rawcode, "does_decay": bool(death_type & 2),
+        "decay_start_ticks": _action_duration_ticks(str(death), "0", hz),
+        "lifetime_ticks": _action_duration_ticks(str(decay), "0", hz) if death_type & 2 else None}
+
+
 def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]:
     extraction = release["extraction"]
     if extraction.get("status") != "retained":
@@ -271,11 +282,20 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
     bounce_fields: dict[str, dict[str, str]] = {}
     line_fields: dict[str, dict[str, str]] = {}
     corpse_fields: dict[str, dict[str, str]] = {}
+    death_spawn_bodies: set[str] = set()
+    splash_homing_fields: dict[str, dict[str, str]] = {}
     objects: dict[str, dict[str, Any]] = {}
     far_sight: dict[str, dict[str, int]] = {}
     with io.StringIO(object_fields_bytes.decode("utf-8"), newline="") as handle:
         reader = csv.DictReader(handle, delimiter="\t")
         for row in reader:
+            if row["category"] == "abilities" and row["base_rawcode"] == "Aspy" and row["source_field"].lower() == "datab1":
+                body = json.loads(row["recovered_value_json"])
+                if not isinstance(body, str) or len(body) != 4:
+                    raise SystemExit("native death spawn requires one resolved child identity")
+                death_spawn_bodies.add(body)
+            if row["category"] == "units" and row["field_id"] in {"ua1w", "umh1"}:
+                splash_homing_fields.setdefault(row["rawcode"], {})[row["field_id"]] = row["recovered_value_json"].strip('"')
             if row["category"] == "units" and row["field_id"] in {"udea", "udtm"}:
                 corpse_fields.setdefault(row["rawcode"], {})[row["field_id"]] = row["recovered_value_json"].strip('"')
             if row["category"] == "units" and row["field_id"] == "ua2z":
@@ -404,7 +424,13 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
             "body_death_ticks": _action_duration_ticks(corpse_fields[body]["udtm"], "0", simulation_hz),
             "source": "resolved/production-unit-special-mechanics.tsv"})
     return {
-        "schema_version": 7,
+        "schema_version": 8,
+        "homing_splash_rawcodes": [rawcode for rawcode, fields in sorted(splash_homing_fields.items())
+            if fields.get("ua1w") == "msplash" and fields.get("umh1") == "1"],
+        "death_spawn_bodies": [
+            _summon_body_corpse(rawcode, corpse_fields[rawcode], misc_values, simulation_hz)
+            for rawcode in sorted(death_spawn_bodies)
+        ],
         "production_handoffs": handoffs,
         "fog_rules": {
             "initially_explored": True,

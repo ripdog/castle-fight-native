@@ -9,6 +9,18 @@ import build_runtime_catalog as catalog
 
 
 class NativeTuningProjectionTest(unittest.TestCase):
+    def test_death_spawn_projects_native_child_and_count_without_inventing_timed_life(self):
+        recipe = {"kind": "death-spawn", "source_kind": "unit-ability", "source_key": "SPLT", "unit_rawcode": "BODY"}
+        fields = {"cost1": "0", "cool1": "0", "dur1": "0", "herodur1": "0", "dataa1": "3", "datab1": "NEXT"}
+        result = native.project_effect(recipe, fields, None, {}, {"native_base": "Aspy"})
+        self.assertEqual((result["count"], result["child_rawcode"]), (3, int.from_bytes(b"NEXT", "big")))
+        self.assertNotIn("lifetime_ticks", result)
+        for change in ({"cost1": "1"}, {"dur1": "1"}, {"dataa1": "0"}, {"datab1": "bad"}):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                native.project_effect(recipe, {**fields, **change}, None, {}, {"native_base": "Aspy"})
+        with self.assertRaises(ValueError):
+            native.project_effect(recipe, fields, None, {}, {"native_base": "AOsf"})
+
     def test_native_heal_reconciles_native_effect_and_delayed_caster_order(self):
         recipe={'kind':'native-heal','source_kind':'unit-ability','source_key':'HEAL','unit_rawcode':'UNIT'}
         fields={'targs1':'air,friend,ground,invulnerable,neutral,nonancient,organic,self,vulnerable','cost1':'999','cool1':'999','rng1':'19','dataa1':'17'}

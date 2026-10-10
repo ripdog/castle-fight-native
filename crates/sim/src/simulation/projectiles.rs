@@ -406,6 +406,29 @@ impl Simulation {
                     } else {
                         projectile_invalidations += 1;
                     }
+                    if !defense.reflected {
+                        projectile_effects += self.resolve_homing_splash(
+                            super::homing_splash::HomingSplashImpact {
+                                projectile: snapshot.projectile,
+                                primary: target,
+                                center: impact_position,
+                                tick: completed_tick,
+                            },
+                            grid,
+                            DamageTargetState {
+                                match_seed: self.config.match_seed,
+                                damage_rules: self.combat_rules.damage_rules,
+                                units,
+                                buildings,
+                                unit_positions: positions,
+                                unit_health,
+                                building_health,
+                                attackers_this_tick,
+                                next_defense_alerts,
+                                navigation_cell_size: self.config.navigation_cell_size,
+                            },
+                        );
+                    }
                 }
                 DueTargetProjectileSnapshot::Reflected(snapshot) => {
                     projectile_entities_to_remove.push(snapshot.entity);

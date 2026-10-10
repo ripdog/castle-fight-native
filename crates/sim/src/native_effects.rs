@@ -28,6 +28,7 @@ const TUNING_9_27_JSON: &str = include_str!("../data/castle-fight/9.27/native-ef
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum NativeEffectImplementationId {
+    WarcraftDeathSpawnV1,
     WarcraftCompanionProductionV1,
     WarcraftSilverGladeV1,
     WarcraftStarfallV1,
@@ -91,6 +92,7 @@ impl NativeEffectImplementationId {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::WarcraftDeathSpawnV1 => 89,
             Self::WarcraftCompanionProductionV1 => 88,
             Self::WarcraftStarfallV1 => 87,
             Self::WarcraftWildernessV1 => 86,
@@ -652,6 +654,13 @@ enum TuningEffect {
         source_key: String,
         profile: crate::components::SelfDestructProfile,
     },
+    DeathSpawn {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        child_rawcode: u32,
+        count: u8,
+    },
     Poison {
         source_kind: String,
         source_key: String,
@@ -980,6 +989,7 @@ impl TuningEffect {
             | Self::MirrorImage { source_kind, .. }
             | Self::DamageCharge { source_kind, .. }
             | Self::SelfDestruct { source_kind, .. }
+            | Self::DeathSpawn { source_kind, .. }
             | Self::Poison { source_kind, .. }
             | Self::DamageThreshold { source_kind, .. }
             | Self::KillBerserk { source_kind, .. }
@@ -1023,6 +1033,7 @@ impl TuningEffect {
             | Self::MirrorImage { source_key, .. }
             | Self::DamageCharge { source_key, .. }
             | Self::SelfDestruct { source_key, .. }
+            | Self::DeathSpawn { source_key, .. }
             | Self::Poison { source_key, .. }
             | Self::DamageThreshold { source_key, .. }
             | Self::KillBerserk { source_key, .. }
@@ -1059,6 +1070,7 @@ impl TuningEffect {
             | Self::LavaSpawn { unit_rawcode, .. }
             | Self::MirrorImage { unit_rawcode, .. }
             | Self::DamageCharge { unit_rawcode, .. }
+            | Self::DeathSpawn { unit_rawcode, .. }
             | Self::Poison { unit_rawcode, .. }
             | Self::DamageThreshold { unit_rawcode, .. }
             | Self::KillBerserk { unit_rawcode, .. }
@@ -1114,6 +1126,7 @@ impl TuningEffect {
             Self::Cleave { .. } => NativeEffectImplementationId::WarcraftCleaveV1,
             Self::FrostAttack { .. } => NativeEffectImplementationId::WarcraftFrostAttackV1,
             Self::Pulverize { .. } => NativeEffectImplementationId::WarcraftPulverizeV1,
+            Self::DeathSpawn { .. } => NativeEffectImplementationId::WarcraftDeathSpawnV1,
             Self::Poison { .. } => NativeEffectImplementationId::WarcraftPoisonV1,
             Self::DamageThreshold { .. } => NativeEffectImplementationId::WarcraftDamageThresholdV1,
             Self::KillBerserk { .. } => NativeEffectImplementationId::WarcraftKillBerserkV1,
@@ -1163,6 +1176,7 @@ impl TuningEffect {
             Self::Cleave { .. } => "cleave",
             Self::FrostAttack { .. } => "frost-attack",
             Self::Pulverize { .. } => "pulverize",
+            Self::DeathSpawn { .. } => "death-spawn",
             Self::Poison { .. } => "poison",
             Self::DamageThreshold { .. } => "damage-threshold",
             Self::KillBerserk { .. } => "kill-berserk",
@@ -1355,7 +1369,7 @@ fn native_unit_mechanics_from_tuning(
             .filter(|effect| !matches!(effect, TuningEffect::DamageCharge { unit_rawcode: code, .. } | TuningEffect::DamageRetaliation { unit_rawcode: code, .. } | TuningEffect::HealthScaledAftershock { unit_rawcode: code, .. } if rawcode(code).ok() != Some(unit_rawcode)))
         {
             match effect {
-                TuningEffect::BuildingImprovement { .. } => {},
+                TuningEffect::BuildingImprovement { .. } | TuningEffect::DeathSpawn { .. } => {},
                 TuningEffect::ScriptedAutomatic { .. }
                 | TuningEffect::ElvenAutomatic { .. }
                 | TuningEffect::FrostArmor { .. }
@@ -1515,6 +1529,9 @@ pub fn native_effect_implementation_for(
 
 fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUnitEffect {
     match effect {
+        TuningEffect::DeathSpawn { .. } => {
+            unreachable!("death spawn is consumed at structural commit")
+        }
         TuningEffect::SourceDamageDispatcher { ability, .. } => {
             PassiveUnitEffect::SourceDamageDispatcher(*ability)
         }
@@ -2636,4 +2653,44 @@ pub(crate) fn unit_death_rules_for_version(
         .tuning(version)
         .into_iter()
         .flat_map(|t| t.unit_death_rules.iter().copied())
+}
+
+/// Aspy is consumed at the authoritative death boundary; it has no active resource
+/// clock or per-handle counter. The inventory and versioned tuning remain canonical.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct NativeDeathSpawn {
+    pub ability: AbilityId,
+    pub child_rawcode: u32,
+    pub count: u8,
+}
+
+pub(crate) fn death_spawns_for_version(
+    version: MapVersion,
+) -> impl Iterator<Item = NativeDeathSpawn> {
+    catalog()
+        .tuning(version)
+        .into_iter()
+        .flat_map(move |tuning| {
+            tuning
+                .effects
+                .iter()
+                .filter_map(move |effect| match effect {
+                    TuningEffect::DeathSpawn {
+                        source_key,
+                        child_rawcode,
+                        count,
+                        ..
+                    } => {
+                        assert!(*count > 0, "native death spawn needs a positive count");
+                        Some(NativeDeathSpawn {
+                            ability: AbilityId(
+                                rawcode(source_key).expect("validated death-spawn source"),
+                            ),
+                            child_rawcode: *child_rawcode,
+                            count: *count,
+                        })
+                    }
+                    _ => None,
+                })
+        })
 }

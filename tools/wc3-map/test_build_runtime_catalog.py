@@ -14,6 +14,19 @@ SPEC.loader.exec_module(MODULE)
 
 
 class RuntimeCatalogTest(unittest.TestCase):
+    def test_native_summon_corpse_uses_body_flags_and_versioned_decay_defaults(self):
+        fields = {"udea": "3", "udtm": "0.15"}
+        misc = {"DecayTime": "0.25", "BoneDecayTime": "0.4"}
+        corpse = MODULE._summon_body_corpse("BODY", fields, misc, 30)
+        self.assertEqual((corpse["decay_start_ticks"], corpse["lifetime_ticks"]), (5, 24))
+        self.assertTrue(corpse["does_decay"])
+        for flag in ("0", "1"):
+            corpse = MODULE._summon_body_corpse("BODY", {**fields, "udea": flag}, misc, 30)
+            self.assertFalse(corpse["does_decay"])
+            self.assertIsNone(corpse["lifetime_ticks"])
+        with self.assertRaises(SystemExit):
+            MODULE._summon_body_corpse("BODY", {**fields, "udea": "4"}, misc, 30)
+
     def test_action_timing_rounds_total_duration_once_and_preserves_zero(self) -> None:
         self.assertEqual(MODULE._action_duration_ticks("0.014", "0.014", 30), 1)
         self.assertEqual(MODULE._action_duration_ticks("0.016", "0.018", 30), 2)

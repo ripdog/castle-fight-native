@@ -1,5 +1,42 @@
 {
-  "schema_version": 7,
+  "schema_version": 8,
+  "homing_splash_rawcodes": [
+    "h04G",
+    "h04H",
+    "h0A2",
+    "n01B",
+    "n01D",
+    "n01P",
+    "n01Q",
+    "n01R",
+    "u000"
+  ],
+  "death_spawn_bodies": [
+    {
+      "rawcode": "n00T",
+      "does_decay": true,
+      "decay_start_ticks": 90,
+      "lifetime_ticks": 900
+    },
+    {
+      "rawcode": "n01N",
+      "does_decay": true,
+      "decay_start_ticks": 90,
+      "lifetime_ticks": 900
+    },
+    {
+      "rawcode": "n01Q",
+      "does_decay": true,
+      "decay_start_ticks": 70,
+      "lifetime_ticks": 880
+    },
+    {
+      "rawcode": "n01R",
+      "does_decay": true,
+      "decay_start_ticks": 70,
+      "lifetime_ticks": 880
+    }
+  ],
   "production_handoffs": [
     {
       "trained_rawcode": "u00F",
