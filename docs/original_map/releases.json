@@ -29,7 +29,7 @@
       },
       "runtime_content": {
         "status": "supported-development-subset",
-        "content_revision": "cf-native-dev-slice-r77",
+        "content_revision": "cf-native-dev-slice-r78",
         "source_revision": "3c7221d369201f43ba54bd2c01d390795371db6f",
         "path": "crates/sim/data/castle-fight/9.27",
         "native_effect_tuning_sha256": "d072654e6b5da70fbd104395e00d1368e8529d11e1f1c349a294e7f2ec79d63c",

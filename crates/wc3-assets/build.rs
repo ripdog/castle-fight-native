@@ -1214,6 +1214,31 @@ fn append_building_script_visuals(
     projection: &std::path::Path,
 ) -> Result<(), Box<dyn Error>> {
     let data: serde_json::Value = serde_json::from_str(&fs::read_to_string(projection)?)?;
+    let source = (data["guard_damage_proc"]["source_rawcode"]
+        .as_u64()
+        .ok_or("guard source identity")? as u32)
+        .to_be_bytes();
+    let child = (data["guard_damage_proc"]["bolt"]["ability"]
+        .as_u64()
+        .ok_or("guard child identity")? as u32)
+        .to_be_bytes();
+    let source = std::str::from_utf8(&source)?;
+    let child = std::str::from_utf8(&child)?;
+    let aliases: Vec<_> = visuals
+        .assets
+        .iter()
+        .filter(|a| {
+            a.owner_rawcode == child
+                && a.owner_kind == "abilities"
+                && matches!(a.role.as_str(), "missile" | "target")
+        })
+        .cloned()
+        .map(|mut a| {
+            a.source_unit_rawcode = Some(source.to_owned());
+            a
+        })
+        .collect();
+    visuals.assets.extend(aliases);
     // A09L's Mana Shield art belongs to its persistent B01H status, not interception.
     // Keep that status recipe, but let a consume event show only the source's Vd art.
     visuals

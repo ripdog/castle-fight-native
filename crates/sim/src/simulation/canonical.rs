@@ -459,6 +459,12 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(10);
                 hash.write_u64(id.0);
                 match action {
+                    NativeAction::BuildingDamageProc(state) => {
+                        hash.write_u8(12);
+                        for word in state.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                    }
                     NativeAction::Weather(state) => {
                         hash.write_u8(11);
                         for word in state.canonical_words() {

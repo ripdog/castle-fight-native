@@ -171,6 +171,9 @@ impl Simulation {
                 continue;
             }
             match action {
+                NativeAction::BuildingDamageProc(state) => {
+                    self.advance_building_damage_proc(entity, state)
+                }
                 NativeAction::Weather(state) => {
                     self.advance_weather(entity, state, units, buildings, &weather)
                 }

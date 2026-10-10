@@ -142,6 +142,14 @@ class BuildingMechanicsProjectionTests(unittest.TestCase):
                 MODULE.build()
             read_source.assert_not_called()
 
+    def test_guard_callback_rejects_random_threshold_or_construction_grant_drift(self):
+        original=MODULE._retained_file_bytes
+        for before,after in [(b'GetRandomInt(0,99)<40',b'GetRandomInt(0,99)<41'),(b'safeUnitAddAbility(jho,1093682518)',b'safeUnitAddAbility(jho,1093682519)')]:
+            def changed(repo,tree,path):
+                data=original(repo,tree,path)
+                return data.replace(before,after) if path=='script/war3map.lua' else data
+            with mock.patch.object(MODULE,'_retained_file_bytes',changed),self.assertRaises(ValueError):MODULE.build()
+
 
 if __name__ == "__main__":
     unittest.main()

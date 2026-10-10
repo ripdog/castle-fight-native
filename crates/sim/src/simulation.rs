@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 66;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 67;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -28,6 +28,7 @@ mod abilities;
 mod automatic_abilities;
 mod builder;
 mod building_bolts;
+mod building_damage_procs;
 mod enchantments;
 mod permanent_grants;
 mod weather;
@@ -5524,6 +5525,12 @@ impl Simulation {
                         completed_tick,
                     ),
                     state.units[index].snow_damage_taken_per_10k,
+                );
+                self.observe_building_damage_proc(
+                    source_id,
+                    &state.units[index],
+                    state.unit_positions[index],
+                    completed_tick,
                 );
                 let dummy_killed = source_damage_runtime::dispatch(
                     source_id,

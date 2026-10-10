@@ -750,6 +750,24 @@
       ]
     },
     {
+      "building_rawcode": "h061",
+      "source_registration": "wK",
+      "source_factory": "Lu:create855",
+      "source_callback": "BuildingAttachmentHandler_registerBuildingAttach_RaceElemental_call_registerBuildingAttach_RaceElemental16",
+      "visuals": [
+        {
+          "model_path": "Doodads\\BlackCitadel\\Props\\RuneArt\\RuneArt1.mdl",
+          "yaw_degrees": 270.0,
+          "offset_world": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": 1.1
+        }
+      ]
+    },
+    {
       "building_rawcode": "h06E",
       "source_registration": "wK",
       "source_factory": "Iu:create852",

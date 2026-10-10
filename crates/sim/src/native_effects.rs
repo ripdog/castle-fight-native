@@ -29,6 +29,7 @@ const TUNING_9_27_JSON: &str = include_str!("../data/castle-fight/9.27/native-ef
 #[serde(rename_all = "kebab-case")]
 pub enum NativeEffectImplementationId {
     WarcraftBuildingImprovementV1,
+    WarcraftBuildingDamageProcV1,
     WarcraftWeatherWaveV1,
     WarcraftSourceDamageDispatcherV1,
     WarcraftHealthScaledAftershockV1,
@@ -85,6 +86,7 @@ impl NativeEffectImplementationId {
     pub const fn stable_tag(self) -> u8 {
         match self {
             Self::WarcraftBuildingImprovementV1 => 79,
+            Self::WarcraftBuildingDamageProcV1 => 82,
             Self::WarcraftWeatherWaveV1 => 81,
             Self::WarcraftSourceDamageDispatcherV1 => 80,
             Self::WarcraftHealthScaledAftershockV1 => 78,
@@ -1173,6 +1175,10 @@ pub fn resolve_native_effect_requirements(
     version: MapVersion,
     roots: &[NativeEffectSource],
 ) -> Result<Vec<ResolvedNativeEffectBinding>, NativeEffectResolveError> {
+    let (proc_roots, roots): (Vec<_>, Vec<_>) = roots
+        .iter()
+        .copied()
+        .partition(|source| crate::building_mechanics::damage_proc_source(version, *source));
     let (stasis_roots, roots): (Vec<_>, Vec<_>) = roots
         .iter()
         .copied()
@@ -1203,6 +1209,9 @@ pub fn resolve_native_effect_requirements(
         .copied()
         .partition(|source| crate::building_mechanics::hex_source_for_version(*source, version));
     let mut resolved = catalog().resolve_requirements(version, &ordinary_roots)?;
+    if !proc_roots.is_empty() {
+        resolved.extend(crate::building_mechanics::damage_proc_bindings(version));
+    }
     if !aura_roots.is_empty() {
         resolved.extend(
             crate::building_mechanics::aura_carrier_bindings_for_version(version, &aura_roots),
@@ -1263,6 +1272,10 @@ pub(crate) fn script_granted_ability_sources_for(
                 })
                 .map(|effect| effect.source().expect("validated script-granted source"))
         })
+        .chain(crate::building_mechanics::damage_proc_granted_sources(
+            version,
+            unit_rawcode,
+        ))
 }
 
 pub fn native_unit_mechanics_for(
@@ -1394,6 +1407,9 @@ pub fn native_effect_implementation_for(
     let source = NativeEffectSourceKind::parse(source_kind)
         .zip(rawcode(source_key).ok())
         .map(|(kind, key)| NativeEffectSource::new(kind, key));
+    if source.is_some_and(|source| crate::building_mechanics::damage_proc_source(version, source)) {
+        return Some(NativeEffectImplementationId::WarcraftBuildingDamageProcV1);
+    }
     if source
         .is_some_and(|source| crate::building_mechanics::hex_source_for_version(source, version))
     {

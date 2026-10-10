@@ -533,6 +533,7 @@ impl Simulation {
         });
         let entity_id = entity.id();
         self.start_native_carrier(entity_id);
+        self.start_building_damage_proc(entity_id);
     }
 
     pub(super) fn deactivate_building_entity(&mut self, entity: Entity) {

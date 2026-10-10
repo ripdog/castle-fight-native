@@ -13,6 +13,12 @@ pub(crate) use aura_carrier::{
     aura_carrier_bindings_for_version, aura_carrier_source_for_version,
     endurance_aura_spellcasting_for_version, healing_aura_spellcasting_for_version,
 };
+mod damage_proc;
+pub use damage_proc::BuildingDamageProcProfile;
+pub(crate) use damage_proc::{
+    BuildingDamageProcState, damage_proc_bindings, damage_proc_for_version,
+    damage_proc_granted_sources, damage_proc_source,
+};
 mod weather;
 pub(crate) use weather::WeatherState;
 pub use weather::{BuildingWeatherProfile, WeatherWaveProfile};
