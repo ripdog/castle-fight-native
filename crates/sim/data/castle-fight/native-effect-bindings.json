@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind": "unit-ability", "source_key": "A03O", "implementation": "warcraft-barrage-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "unit-ability", "source_key": "A00T", "implementation": "warcraft-evasion-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "unit-ability", "source_key": "A0ET", "implementation": "warcraft-critical-strike-v1", "valid_from": "9.27", "valid_through": "9.27"},
     {"source_kind": "unit-ability", "source_key": "A0D9", "implementation": "warcraft-elven-automatic-v1", "valid_from": "9.27", "valid_through": "9.27"},
