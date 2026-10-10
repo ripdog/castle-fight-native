@@ -224,3 +224,10 @@ Validation: all 600 simulation regressions excluding the final long imported-bat
 
 
 Validation for Linker: 619 simulation tests (the final long imported-battle fixture run separately), 275 client tests (four ignored), 75 asset tests (one ignored), nine protocol tests, nine building-mechanics projections, four attachment projections, 29 tuning projections and nine catalog projections passed. Strict workspace/all-target Clippy, formatting, reproducible native projections and whitespace checks passed. Full effects export resolves 957 references/266 unique models, including source-owned Heal recipient art and callback 17; the previously documented unrelated missing import remains. The Linker building model and lifecycle binding are present in the full native building pack. Logs: `.local-tools/orc-validation/linker-*.log`.
+
+
+## Final race closure
+
+All 21 retained Elemental building registrations and all 13 produced combat bodies are promoted, including each upgrade chain. The ordinary builder menu follows the authored `X051` build list; Discharge Tower remains the source-owned ultimate-only alternative. The final imported typed-battle determinism test passed across worker counts (81 seconds), in addition to the complete Linker suites above.
+
+The presentation audit now checks 71 distinct native model/dependency bindings. Unit mover art stays owned by its mover, while child ability effects still require the correct parent/source alias. Native lightning binding serialization and client loading retain scripted color overrides from the versioned projection. All 20 presentation audit fixtures pass. The remaining native presentation finding is Water Spring `h03X`'s previously documented strict SD/HD material namespace import failure; source identity is preserved. No Warcraft runtime oracle was used for the documented deterministic native interpretations. Ultimate pool match modes remain outside race implementation.

@@ -137,6 +137,8 @@ pub struct NativeLightningAbility {
     pub base_rawcode: String,
     pub native_section: String,
     pub effects: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color_override: Option<[u8; 4]>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -354,6 +356,25 @@ fn parse_json_f32(value: &str) -> Option<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_lightning_binding_roundtrip_preserves_source_color_overrides() {
+        let source: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/original_map/extracted/resolved/native-lightning-visuals.json"
+        ))
+        .unwrap();
+        let catalog = load_embedded_lightnings().unwrap();
+        let serialized = serde_json::to_value(catalog).unwrap();
+        for row in source["abilities"].as_array().unwrap() {
+            let binding = serialized["abilities"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|binding| binding["rawcode"] == row["rawcode"])
+                .unwrap();
+            assert_eq!(binding["color_override"], row["color_override"]);
+        }
+    }
 
     #[test]
     fn shrine_system_visual_uses_retained_callback_art_projection() {

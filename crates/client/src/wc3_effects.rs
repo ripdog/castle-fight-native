@@ -400,6 +400,8 @@ struct NativeLightningManifest {
 struct NativeLightningAbility {
     rawcode: String,
     effects: Vec<String>,
+    #[serde(default)]
+    color_override: Option<[u8; 4]>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -6151,7 +6153,13 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
                         .map(|id| {
                             effects
                                 .get(id)
-                                .cloned()
+                                .map(|visual| {
+                                    let mut visual = visual.clone();
+                                    if let Some(color) = binding.color_override {
+                                        visual.color = splat_color(color);
+                                    }
+                                    visual
+                                })
                                 .ok_or_else(|| format!("missing native lightning definition {id}"))
                         })
                         .collect::<Result<Vec<_>, _>>()?;
@@ -7058,6 +7066,12 @@ mod tests {
             let ability = parse_rawcode(&binding.rawcode).unwrap();
             assert!(visuals.lightning(ability, 0).is_some());
             assert!(visuals.lightning(ability, u8::MAX).is_some());
+            if let Some(color) = binding.color_override {
+                assert_eq!(
+                    visuals.lightning(ability, 0).unwrap().color,
+                    splat_color(color)
+                );
+            }
         }
     }
 

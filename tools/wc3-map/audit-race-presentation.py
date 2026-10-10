@@ -153,10 +153,13 @@ def audit_native_lightnings(projection, manifest, abilities, root):
     return findings
 
 
-def audit_proxy_ownership(proxy_links, relevant, native_abilities):
+def audit_proxy_ownership(proxy_links, relevant, native_abilities, unit_children=()):
     findings = []
     for link in proxy_links:
         for child in link["children"]:
+            # Script movers own their unit model/impact art directly. They are not child spells.
+            if child in unit_children:
+                continue
             for entry in relevant:
                 role = entry["role"]
                 if (entry["owner_kind"] != "abilities" or entry["owner_rawcode"] != child
@@ -374,7 +377,8 @@ def audit(evidence, assets, builder, lightning_projection=None, buff_projection=
     findings.extend(audit_native_lightnings(lightning_projection, manifests["effects"], abilities,
                                            assets / "effects"))
     native_abilities = {row["rawcode"] for row in lightning_projection["abilities"]}
-    findings.extend(audit_proxy_ownership(proxy_links, relevant, native_abilities))
+    findings.extend(audit_proxy_ownership(proxy_links, relevant, native_abilities,
+                                        {code for category, code in objects if category == "units"}))
     inventories = {owner: ability_dependency_closure(fields, {
         code for code in str(objects.get(("units", owner), {}).get("uabi", "")).split(",")
         if code}) for owner in owners}

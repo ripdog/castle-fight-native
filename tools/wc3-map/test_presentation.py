@@ -236,6 +236,15 @@ class NativeDeliveryAuditTests(unittest.TestCase):
         aliases[0]["source_unit_rawcode"] = "ALLY"
         self.assertEqual(len(audit.audit_proxy_ownership(links, rows + aliases, {"CHLD"})), 1)
 
+    def test_proxy_unit_mover_keeps_its_own_art_without_a_parent_ability_alias(self):
+        links = [{"unit": "UNIT", "parent": "PARN", "children": ["MOVE", "CHLD"]}]
+        rows = [{"owner_kind": "abilities", "owner_rawcode": child,
+                 "source_unit_rawcode": None, "role": "target",
+                 "source_model": child + ".mdl", "gltf": child + ".gltf"}
+                for child in ("MOVE", "CHLD")]
+        self.assertEqual(len(audit.audit_proxy_ownership(links, rows, set())), 2)
+        self.assertEqual(len(audit.audit_proxy_ownership(links, rows, set(), {"MOVE"})), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

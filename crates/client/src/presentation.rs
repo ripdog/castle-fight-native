@@ -3841,8 +3841,7 @@ fn sync_render_entities(
             .get(&assets.lightning_material)
             .cloned()
             .expect("lightning material");
-        // The map explicitly overrides DRAM color for allied viewers.
-        material.base_color = Color::WHITE;
+        material.base_color = visual.color;
         material.base_color_texture = Some(visual.texture.clone());
         let material = materials.add(material);
         let entity = commands
