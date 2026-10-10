@@ -775,9 +775,6 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                     hash.write_i32(spellcasting.mana.starting);
                     hash.write_u64(u64::from(spellcasting.mana.regen_per_tick_per_10k));
                     hash_automatic_ability(&mut hash, spellcasting.ability);
-                    let mana = unit.mana.expect("spellcasting unit missing mana state");
-                    hash.write_i32(mana.current);
-                    hash.write_u16(mana.regen_remainder_per_10k);
                     let state = unit
                         .ability_state
                         .expect("spellcasting unit missing ability state");
@@ -785,6 +782,13 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                     hash.write_u64(state.cast_sequence);
                     hash.write_u8(u8::from(state.autocast_enabled));
                     hash.write_u8(u8::from(state.manual_cast_requested));
+                } else {
+                    hash.write_u8(0);
+                }
+                if let Some(mana) = unit.mana {
+                    hash.write_u8(1);
+                    hash.write_i32(mana.current);
+                    hash.write_u16(mana.regen_remainder_per_10k);
                 } else {
                     hash.write_u8(0);
                 }

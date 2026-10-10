@@ -2174,6 +2174,10 @@ pub(crate) fn master_projectile_profile_for_version(
         .expect("registered Master source tuning")
 }
 
+pub(crate) fn uses_damage_charge_mana_for_version(version: MapVersion, body_rawcode: u32) -> bool {
+    catalog().tuning(version).is_some_and(|tuning| tuning.effects.iter().any(|effect| matches!(effect, TuningEffect::DamageCharge { unit_rawcode, .. } if rawcode(unit_rawcode).ok() == Some(body_rawcode))))
+}
+
 pub(crate) fn lava_spawn_profile_for_version(
     version: MapVersion,
     body_rawcode: u32,

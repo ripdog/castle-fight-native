@@ -171,23 +171,28 @@ impl Simulation {
 }
 
 fn line_endpoint(source: SimPoint, origin: SimPoint, distance: i32) -> SimPoint {
-    let dx = i64::from(origin.x) - i64::from(source.x);
-    let dy = i64::from(origin.y) - i64::from(source.y);
+    offset_along_direction(origin, source, origin, distance)
+}
+
+pub(super) fn offset_along_direction(
+    point: SimPoint,
+    source: SimPoint,
+    target: SimPoint,
+    distance: i32,
+) -> SimPoint {
+    let dx = i64::from(target.x) - i64::from(source.x);
+    let dy = i64::from(target.y) - i64::from(source.y);
     let length_sq = dx as i128 * dx as i128 + dy as i128 * dy as i128;
     // Subunit-truncated sqrt can stretch a short diagonal by sqrt(2). Normalize the
-    // presentation endpoint with 24 fractional bits; i32-coordinate differences fit
+    // offset with 24 fractional bits; i32-coordinate differences fit
     // comfortably in u128 after this shift. Gameplay intersections remain exact below.
     const SCALE: i128 = 1 << 24;
     let length = ((length_sq as u128) << 48).isqrt().max(1) as i128;
     SimPoint::new(
-        i32::try_from(
-            i128::from(origin.x) + i128::from(dx) * i128::from(distance) * SCALE / length,
-        )
-        .expect("line endpoint x"),
-        i32::try_from(
-            i128::from(origin.y) + i128::from(dy) * i128::from(distance) * SCALE / length,
-        )
-        .expect("line endpoint y"),
+        i32::try_from(i128::from(point.x) + i128::from(dx) * i128::from(distance) * SCALE / length)
+            .expect("line endpoint x"),
+        i32::try_from(i128::from(point.y) + i128::from(dy) * i128::from(distance) * SCALE / length)
+            .expect("line endpoint y"),
     )
 }
 

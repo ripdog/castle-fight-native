@@ -688,7 +688,7 @@ fn faerie_fire_does_not_consume_resources_for_no_combat_or_out_of_range_targets(
 }
 
 #[test]
-fn cleave_uses_primary_center_mask_and_critical_damage_only_on_landed_melee_hits() {
+fn cleave_uses_forward_circle_and_ignores_secondary_armor_only_on_landed_melee_hits() {
     for targets in [
         AttackTargetMask::GROUND_UNITS,
         AttackTargetMask::GROUND_AND_BUILDINGS,
@@ -696,7 +696,7 @@ fn cleave_uses_primary_center_mask_and_critical_damage_only_on_landed_melee_hits
         for delivery in [AttackDelivery::Melee, AttackDelivery::RangedInstant] {
             for evade in [0, 10_000] {
                 let mut sim = simulation(1);
-                sim.spawn_unit_with_properties(
+                let source = sim.spawn_unit_with_properties(
                     unit(0, 20, 40, delivery),
                     UnitGameplayProperties {
                         passive_effects: PassiveUnitEffects::from_slice(&[
@@ -719,6 +719,7 @@ fn cleave_uses_primary_center_mask_and_critical_damage_only_on_landed_melee_hits
                 let primary = sim.spawn_unit_with_properties(
                     unit(1, 60, 0, AttackDelivery::Melee),
                     UnitGameplayProperties {
+                        armor: ArmorProfile::new(ArmorType::Unarmored, 11),
                         passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Evasion(
                             EvasionEffectProfile {
                                 ability: AbilityId(103),
@@ -728,8 +729,20 @@ fn cleave_uses_primary_center_mask_and_critical_damage_only_on_landed_melee_hits
                         ..UnitGameplayProperties::default()
                     },
                 );
-                let secondary = sim.spawn_unit(unit(1, 115, 0, AttackDelivery::Melee));
-                let outside = sim.spawn_unit(unit(1, 125, 0, AttackDelivery::Melee));
+                let secondary = sim.spawn_unit_with_properties(
+                    unit(1, 130, 0, AttackDelivery::Melee),
+                    UnitGameplayProperties {
+                        armor: ArmorProfile::new(ArmorType::Unarmored, 11),
+                        ..UnitGameplayProperties::default()
+                    },
+                );
+                let rear = sim.spawn_unit(unit(1, 10, 0, AttackDelivery::Melee));
+                sim.world
+                    .entity_mut(entity(&sim, source))
+                    .get_mut::<TargetState>()
+                    .unwrap()
+                    .current = Some(primary);
+                let outside = sim.spawn_unit(unit(1, 150, 0, AttackDelivery::Melee));
                 let ally = sim.spawn_unit(unit(0, 105, 0, AttackDelivery::Melee));
                 let air = sim.spawn_unit_with_properties(
                     unit(1, 105, 0, AttackDelivery::Melee),
@@ -740,7 +753,7 @@ fn cleave_uses_primary_center_mask_and_critical_damage_only_on_landed_melee_hits
                 );
                 let structure = sim.spawn_building(BuildingSpawn {
                     team: Team(1),
-                    footprint: BuildingFootprint::new(3, 0, 1, 1),
+                    footprint: BuildingFootprint::new(132, 35, 4, 4),
                     health: 1000,
                     production: None,
                     attack: None,
@@ -755,13 +768,21 @@ fn cleave_uses_primary_center_mask_and_critical_damage_only_on_landed_melee_hits
                 let cleaved = landed && delivery == AttackDelivery::Melee;
                 assert_eq!(
                     sim.unit(primary).unwrap().health,
-                    1000 - if landed { 80 } else { 0 }
+                    1000 - if landed {
+                        DamageRules::default().apply_attack(
+                            80,
+                            DamageType::Normal,
+                            ArmorProfile::new(ArmorType::Unarmored, 11),
+                        )
+                    } else {
+                        0
+                    }
                 );
                 assert_eq!(
                     sim.unit(secondary).unwrap().health,
                     1000 - if cleaved { 40 } else { 0 }
                 );
-                for id in [outside, ally, air] {
+                for id in [outside, rear, ally, air] {
                     assert_eq!(sim.unit(id).unwrap().health, 1000);
                 }
                 assert_eq!(
@@ -1793,4 +1814,87 @@ fn native_aura_keeps_its_authored_linger_after_source_removal_across_recovery() 
     restored.step();
     assert_eq!(sim.unit(target).unwrap().status.armor_modifier_count, 0);
     assert_eq!(sim.checksum(), restored.checksum());
+}
+
+#[test]
+fn promoted_passive_units_keep_native_mana_without_an_automatic_spell() {
+    let version = crate::MapVersion::CASTLE_FIGHT_9_27;
+    let mut matched = 0;
+    for kind in crate::CastleFightUnitKind::ALL {
+        let d = kind.definition_for_version(version).unwrap();
+        if d.spellcasting.is_some() {
+            continue;
+        }
+        let Some(profile) = crate::content::native_mana_profile_for_version(version, d.rawcode)
+        else {
+            continue;
+        };
+        matched += 1;
+        let mut sim = simulation(1);
+        let source = sim.spawn_unit_with_properties(
+            unit(0, 20, 0, AttackDelivery::Melee),
+            UnitGameplayProperties {
+                content: d.resolved().properties.content,
+                ..Default::default()
+            },
+        );
+        assert_eq!(
+            sim.unit(source).unwrap().mana_current,
+            Some(profile.starting)
+        );
+        assert_eq!(
+            sim.unit(source).unwrap().mana_maximum,
+            Some(profile.maximum)
+        );
+        assert_eq!(sim.unit(source).unwrap().ability_ready_tick, None);
+        let initial_checksum = sim.checksum();
+        sim.world
+            .get_mut::<ManaState>(entity(&sim, source))
+            .unwrap()
+            .current = if profile.starting == profile.maximum {
+            0
+        } else {
+            profile.maximum
+        };
+        assert_ne!(
+            initial_checksum,
+            sim.checksum(),
+            "independent native mana must be hashed"
+        );
+        sim.world
+            .get_mut::<ManaState>(entity(&sim, source))
+            .unwrap()
+            .current = 0;
+        sim.step();
+        let mut copy = wire_restored(&sim, 4);
+        for _ in 0..30 {
+            assert_eq!(sim.step().checksum, copy.step().checksum);
+        }
+        if (0..31)
+            .map(|tick| profile.regeneration_at_tick(tick, 30))
+            .sum::<u32>()
+            >= 10_000
+        {
+            assert!(sim.unit(source).unwrap().mana_current.unwrap() > 0);
+        }
+        // A native attack modifier must commit a resource change even without a caster component.
+        sim.world
+            .get_mut::<ManaState>(entity(&sim, source))
+            .unwrap()
+            .current = profile.maximum;
+        let attacker_properties = UnitGameplayProperties {
+            passive_effects: PassiveUnitEffects::single(feedback()),
+            ..Default::default()
+        };
+        sim.spawn_unit_with_properties(unit(1, 60, 1, AttackDelivery::Melee), attacker_properties);
+        sim.step();
+        sim.step();
+        assert_eq!(
+            sim.unit(source).unwrap().mana_current,
+            Some(profile.maximum.saturating_sub(6).max(0))
+        );
+        let mut copy = wire_restored(&sim, 4);
+        assert_eq!(sim.step().checksum, copy.step().checksum);
+    }
+    assert!(matched > 0);
 }

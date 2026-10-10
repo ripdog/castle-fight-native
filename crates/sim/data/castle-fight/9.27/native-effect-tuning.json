@@ -4,6 +4,19 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A009",
+      "unit_rawcode": "n002",
+      "kind": "cleave",
+      "radius_world": 230,
+      "damage_per_10k": 3500,
+      "targets": 1,
+      "provenance": {
+        "ability": "A009",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A09W",
       "unit_rawcode": "n01P",
       "kind": "poison",

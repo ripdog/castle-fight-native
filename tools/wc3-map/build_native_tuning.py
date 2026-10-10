@@ -335,6 +335,8 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     elif kind == "spell-resistance":
         effect["damage_taken_per_10k"] = 10_000 - number("DataB1", 10_000)
     elif kind == "cleave":
+        if mechanics.get("native_base") not in {"ACce", "ANca"}:
+            raise ValueError("cleave requires the native Cleaving Attack base")
         tokens = set(fields["targs1"].split(","))
         if tokens - {"ground", "enemy", "enemies", "neutral", "structure"} or "ground" not in tokens:
             raise ValueError("cleave requires an explicitly supported ground target mask")

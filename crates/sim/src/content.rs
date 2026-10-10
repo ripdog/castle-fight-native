@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r102";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r103";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 58;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 59;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1845,6 +1845,9 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A009") => {
+            0x4000_0163
+        }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A09W") => {
             0x4000_015f
         }
@@ -2790,6 +2793,13 @@ fn hash_unit_definition(hash: &mut ContentHash64, definition: CastleFightUnitDef
     hash.write_u16(definition.map_version.major);
     hash.write_u16(definition.map_version.minor);
     hash.write_u32(definition.rawcode);
+    let mana = native_mana_profile_for_version(definition.map_version, definition.rawcode);
+    hash.write_u8(u8::from(mana.is_some()));
+    if let Some(mana) = mana {
+        hash.write_i32(mana.maximum);
+        hash.write_i32(mana.starting);
+        hash.write_u32(mana.regen_per_tick_per_10k);
+    }
     hash.write_i32(definition.health);
     hash.write_u32(definition.health_regen_per_second_per_10k);
     hash.write_u16(definition.action_timing.primary_attack_ticks);
@@ -4421,22 +4431,24 @@ impl ExtractedContent927 {
                     Ok(u32::from_be_bytes(bytes))
                 })
                 .collect::<Result<Vec<_>, String>>()?;
+            let mana_regen =
+                parse_optional_decimal_scaled_i32_927(columns[16], 10_000)?.unwrap_or(0);
+            // Damage Charge owns a separate signed native mana controller, including drain.
+            // It must not also acquire a second ordinary ManaState pool.
+            let charge_controls_mana = crate::native_effects::uses_damage_charge_mana_for_version(
+                MapVersion::CASTLE_FIGHT_9_27,
+                rawcode,
+            );
             let row = ExtractedUnit927 {
                 mana_maximum: parse_optional_i32_927(columns[14])?.unwrap_or(0),
-                native_mana: if columns[7] == "1"
+                native_mana: if !charge_controls_mana
                     && parse_optional_i32_927(columns[14])?.unwrap_or(0) > 0
                 {
                     Some(ManaProfile::per_second(
                         parse_optional_i32_927(columns[14])?.unwrap_or(0),
                         parse_optional_i32_927(columns[15])?.unwrap_or(0),
-                        u32::try_from(
-                            parse_optional_decimal_scaled_i32_927(columns[16], 10_000)?
-                                .unwrap_or(0),
-                        )
-                        .map_err(|_| {
-                            format!(
-                                "building {rawcode:#010x} has negative native mana regeneration"
-                            )
+                        u32::try_from(mana_regen).map_err(|_| {
+                            format!("object {rawcode:#010x} has negative native mana regeneration")
                         })?,
                     ))
                 } else {
@@ -6073,6 +6085,13 @@ pub(crate) fn native_mana_maximum_for_version(version: MapVersion, rawcode: u32)
 }
 
 pub(crate) fn building_native_mana_profile(
+    version: MapVersion,
+    rawcode: u32,
+) -> Option<ManaProfile> {
+    native_mana_profile_for_version(version, rawcode)
+}
+
+pub(crate) fn native_mana_profile_for_version(
     version: MapVersion,
     rawcode: u32,
 ) -> Option<ManaProfile> {

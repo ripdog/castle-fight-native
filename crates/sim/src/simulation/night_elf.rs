@@ -90,9 +90,12 @@ impl Simulation {
             }
             u.health = health[i].saturating_add(profile.health).min(u.health_max);
             health[i] = u.health;
-            if let (Some(current), Some(maximum)) =
-                (&mut u.mana_current, u.spellcasting.map(|s| s.mana.maximum))
-            {
+            let maximum = u.spellcasting.map(|s| s.mana.maximum).or_else(|| {
+                u.map_version.and_then(|v| {
+                    crate::content::native_mana_profile_for_version(v, u.rawcode).map(|p| p.maximum)
+                })
+            });
+            if let (Some(current), Some(maximum)) = (&mut u.mana_current, maximum) {
                 *current = current.saturating_add(profile.mana).min(maximum);
             }
             apply_ability_effect_to_unit(u, effect, team, tick, self.combat_rules.damage_rules);

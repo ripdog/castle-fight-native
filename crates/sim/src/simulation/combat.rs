@@ -401,6 +401,12 @@ impl Simulation {
                                 let PassiveUnitEffect::Cleave(profile) = effect else {
                                     continue;
                                 };
+                                let cleave_center = line_projectiles::offset_along_direction(
+                                    intent.source_position,
+                                    intent.source_position,
+                                    target_position,
+                                    profile.radius,
+                                );
                                 let splash_damage = i32::try_from(
                                     i64::from(damage) * i64::from(profile.damage_per_10k) / 10_000,
                                 )
@@ -418,7 +424,7 @@ impl Simulation {
                                                 units[index].target_movement_class(),
                                             )
                                             || unit_health[index] <= 0
-                                            || target_position.distance_sq(positions[index])
+                                            || cleave_center.distance_sq(positions[index])
                                                 > square_i32(profile.radius)
                                         {
                                             continue;
@@ -429,7 +435,7 @@ impl Simulation {
                                         if buildings[index].team == intent.source_team
                                             || building_health[index] <= 0
                                             || point_to_footprint_distance_sq(
-                                                target_position,
+                                                cleave_center,
                                                 buildings[index].footprint,
                                                 self.config.navigation_cell_size,
                                             ) > square_i32(profile.radius)
@@ -441,7 +447,7 @@ impl Simulation {
                                     if target == intent.target {
                                         continue;
                                     }
-                                    self.apply_damage_to_target(
+                                    self.apply_damage_to_target_with_armor_rule(
                                         target,
                                         WeaponDamageEvent {
                                             source_id: intent.source_id,
@@ -462,6 +468,7 @@ impl Simulation {
                                             next_defense_alerts,
                                             navigation_cell_size: self.config.navigation_cell_size,
                                         },
+                                        DamageArmorRule::IgnorePoints,
                                     );
                                 }
                             }

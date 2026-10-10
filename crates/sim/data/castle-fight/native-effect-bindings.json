@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A009","implementation":"warcraft-cleave-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A09W","implementation":"warcraft-poison-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A06J","implementation":"warcraft-death-spawn-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A06K","implementation":"warcraft-death-spawn-v1","valid_from":"9.27","valid_through":"9.27"},

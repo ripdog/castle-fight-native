@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 76;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 77;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -2104,13 +2104,12 @@ impl Simulation {
             *entity
                 .get_mut::<StatusState>()
                 .expect("unit status state missing") = status;
-            if unit.spellcasting.is_some() {
-                entity
-                    .get_mut::<ManaState>()
-                    .expect("spellcasting unit mana missing")
-                    .current = unit
+            if let Some(mut mana) = entity.get_mut::<ManaState>() {
+                mana.current = unit
                     .mana_current
-                    .expect("spellcasting unit snapshot mana missing");
+                    .expect("mana-bearing unit snapshot mana missing");
+            }
+            if unit.spellcasting.is_some() {
                 *entity
                     .get_mut::<AutomaticAbilityState>()
                     .expect("spellcasting unit ability state missing") = unit
@@ -2830,6 +2829,14 @@ impl Simulation {
                     manual_cast_requested: false,
                 },
             ));
+        } else if let Some(mana) = properties
+            .content
+            .and_then(|c| crate::content::native_mana_profile_for_version(c.map_version, c.rawcode))
+        {
+            entity.insert(ManaState {
+                current: mana.starting,
+                regen_remainder_per_10k: 0,
+            });
         }
         id
     }
@@ -3054,14 +3061,11 @@ impl Simulation {
             &mut ManaState,
             Option<&StatusState>,
             Option<&ContentIdentity>,
-            Option<&BuildingFootprint>,
         )>();
-        for (casting, mut mana, status, content, building) in mana_query.iter_mut(&mut self.world) {
+        for (casting, mut mana, status, content) in mana_query.iter_mut(&mut self.world) {
             let profile = casting.map(|p| p.mana).or_else(|| {
-                building.and_then(|_| {
-                    content.and_then(|c| {
-                        crate::content::building_native_mana_profile(c.map_version, c.rawcode)
-                    })
+                content.and_then(|c| {
+                    crate::content::native_mana_profile_for_version(c.map_version, c.rawcode)
                 })
             });
             let Some(profile) = profile else {
@@ -3551,7 +3555,17 @@ impl Simulation {
                     let spellcasting = entity_ref.get::<SpellcastingProfile>().copied();
                     let mana_current = entity_ref.get::<ManaState>().map(|mana| mana.current);
                     let ability_state = entity_ref.get::<AutomaticAbilityState>().copied();
-                    debug_assert_eq!(spellcasting.is_some(), mana_current.is_some());
+                    debug_assert_eq!(
+                        spellcasting.is_some()
+                            || entity_ref.get::<ContentIdentity>().is_some_and(|c| {
+                                crate::content::native_mana_profile_for_version(
+                                    c.map_version,
+                                    c.rawcode,
+                                )
+                                .is_some()
+                            }),
+                        mana_current.is_some()
+                    );
                     debug_assert_eq!(spellcasting.is_some(), ability_state.is_some());
                     let content = entity_ref.get::<ContentIdentity>();
                     let death_heal = content.and_then(|c| {
@@ -5435,7 +5449,13 @@ fn unit_view_from_entity(
         mana_maximum: status
             .damage_charge
             .map(|charge| charge.profile.mana_maximum)
-            .or_else(|| spellcasting.map(|profile| profile.mana.maximum)),
+            .or_else(|| spellcasting.map(|profile| profile.mana.maximum))
+            .or_else(|| {
+                entity.get::<ContentIdentity>().and_then(|c| {
+                    crate::content::native_mana_profile_for_version(c.map_version, c.rawcode)
+                        .map(|p| p.maximum)
+                })
+            }),
         ability_ready_tick: ability_state.map(|state| state.ready_tick),
         ability_cast_sequence: ability_state.map(|state| state.cast_sequence),
         active_defend_ability,
@@ -5650,6 +5670,12 @@ fn spell_damage_after_defend(unit: UnitSnapshot, damage: i32, completed_tick: u6
 }
 
 #[derive(Debug, Clone, Copy)]
+enum DamageArmorRule {
+    Standard,
+    IgnorePoints,
+}
+
+#[derive(Debug, Clone, Copy)]
 struct WeaponDamageEvent {
     source_id: SimId,
     damage: i32,
@@ -5664,6 +5690,23 @@ impl Simulation {
         event: WeaponDamageEvent,
         buildings_invulnerable: bool,
         state: DamageTargetState<'_>,
+    ) -> Option<SimPoint> {
+        self.apply_damage_to_target_with_armor_rule(
+            target,
+            event,
+            buildings_invulnerable,
+            state,
+            DamageArmorRule::Standard,
+        )
+    }
+
+    fn apply_damage_to_target_with_armor_rule(
+        &mut self,
+        target: TargetIndex,
+        event: WeaponDamageEvent,
+        buildings_invulnerable: bool,
+        state: DamageTargetState<'_>,
+        armor_rule: DamageArmorRule,
     ) -> Option<SimPoint> {
         let WeaponDamageEvent {
             source_id,
@@ -5681,7 +5724,12 @@ impl Simulation {
                     damage,
                     damage_type,
                     state.units[index].armor.armor_type,
-                    effective_armor_points_per_100(&state.units[index]),
+                    match armor_rule {
+                        DamageArmorRule::Standard => {
+                            effective_armor_points_per_100(&state.units[index])
+                        }
+                        DamageArmorRule::IgnorePoints => 0,
+                    },
                 );
                 let adjusted_damage = night_elf::hardened_skin_after_armor(
                     &mut state.units[index],
@@ -5798,7 +5846,12 @@ impl Simulation {
                     let adjusted_damage = state.damage_rules.apply_attack(
                         damage,
                         damage_type,
-                        state.buildings[index].armor,
+                        match armor_rule {
+                            DamageArmorRule::Standard => state.buildings[index].armor,
+                            DamageArmorRule::IgnorePoints => {
+                                ArmorProfile::new(state.buildings[index].armor.armor_type, 0)
+                            }
+                        },
                     );
                     state.building_health[index] = state.building_health[index]
                         .checked_sub(scale_damage_per_10k(
