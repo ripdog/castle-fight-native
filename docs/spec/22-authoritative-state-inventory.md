@@ -241,3 +241,5 @@ Native attack orb profiles are retained in pending ordinary attacks and released
 Native Heal definitions hash the separate effect classification mask and attack-resume delay. Pending resume actions retain source identity and deadline across snapshot/wire restoration; ancient classification is intrinsic and canonical. Bundle/checksum/snapshot schemas advance to 53/72/65.
 
 Stored team blessing counters and their versioned native area profile are retained in one canonical action, independent of the granting buildings. Counter increments, consumption and round-end reset are authoritative; area payloads use existing mana, life and timed armor state. Bundle/checksum/snapshot schemas advance to 54/73/66.
+
+Permanent native flat attack reduction retains its chance, ignored damage and minimum through identity-scoped ability grants. Each recipient retains an independent landed-attack event sequence for deterministic chance rolls, including multiple events in one tick. Both grants and sequence are canonical and serialized; transient damage seeds derive from match configuration.

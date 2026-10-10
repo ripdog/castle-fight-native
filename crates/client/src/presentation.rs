@@ -3451,7 +3451,9 @@ fn prewarm_timed_wc3_effects(
                 }
                 let automatic = definition.automatic_abilities().map(|ability| {
                     let status = match ability.effect {
-                        AbilityEffect::Heal(_) | AbilityEffect::SilverGlade(_) => None,
+                        AbilityEffect::Heal(_)
+                        | AbilityEffect::SilverGlade(_)
+                        | AbilityEffect::Wilderness(_) => None,
                         AbilityEffect::WindWalk(p) => Some((p.ability.0, p.duration_ticks)),
                         AbilityEffect::ScriptedRoots(p) => {
                             Some((p.roots.ability.0, p.roots.duration_ticks))
@@ -4495,6 +4497,7 @@ fn sync_render_entities(
             let target_attachment = match cast.effect {
                 AbilityEffect::BuildingPermanentGrant(profile) => Some(castle_fight_sim::building_mechanics::permanent_grant_target_attachment_for_version(profile.map_version)),
                 AbilityEffect::BuildingEnchantment(profile) => Some(castle_fight_sim::building_mechanics::enchantment_target_attachment_for_version(profile.map_version)),
+                AbilityEffect::Wilderness(profile) => Some(castle_fight_sim::building_mechanics::wilderness_target_attachment_for_version(profile.map_version)),
                 _ => None,
             };
             let attachment = if let Some(point) = target_attachment

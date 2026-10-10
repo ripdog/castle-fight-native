@@ -115,3 +115,123 @@ impl Simulation {
                 })
     }
 }
+
+impl Simulation {
+    pub(super) fn cast_wilderness(
+        &mut self,
+        source: AbilitySourceSnapshot,
+        ability: AbilityId,
+        p: crate::building_mechanics::WildernessProfile,
+        sequence: u64,
+        units: &mut [UnitSnapshot],
+    ) -> bool {
+        let bounds =
+            crate::building_mechanics::snowveil_for_version(p.map_version).battlefield_bounds;
+        let index = units
+            .iter()
+            .enumerate()
+            .filter(|(_, u)| {
+                u.health > 0
+                    && u.team == source.team
+                    && u.classifications.combat_sapper
+                    && !self.native_ability_installed(u, p.locust)
+                    && !self.native_ability_installed(u, p.grants[0].ability)
+                    && !self.native_ability_installed(u, p.grants[1].ability)
+                    && u.position.x >= bounds[0]
+                    && u.position.x <= bounds[2]
+                    && u.position.y >= bounds[1]
+                    && u.position.y <= bounds[3]
+            })
+            .min_by_key(|(_, u)| {
+                (
+                    deterministic_ability_target_rank(
+                        self.config.match_seed,
+                        source.id,
+                        ability,
+                        sequence,
+                        u.id,
+                    ),
+                    u.id,
+                )
+            })
+            .map(|(i, _)| i);
+        let Some(index) = index else {
+            // Caster art precedes the source's empty-group return.
+            self.last_ability_casts.push(AbilityCastEvent {
+                source: source.id,
+                ability,
+                target: AbilityCastTarget::AllEnemyUnits,
+                target_position: None,
+                effect: AbilityEffect::Wilderness(p),
+            });
+            return false;
+        };
+        let u = &mut units[index];
+        if !p
+            .exclusions
+            .into_iter()
+            .any(|a| self.native_ability_installed(u, a))
+        {
+            u.status.native_grants.insert(p.grants[0]);
+        }
+        for grant in p.grants.into_iter().skip(1) {
+            u.status.native_grants.insert(grant);
+        }
+        self.last_ability_casts.push(AbilityCastEvent {
+            source: source.id,
+            ability,
+            target: AbilityCastTarget::Unit(u.id),
+            target_position: Some(u.position),
+            effect: AbilityEffect::Wilderness(p),
+        });
+        true
+    }
+}
+
+/// Native flat attack reduction follows armor, before scripted incoming listeners.
+/// Every landed attack event has a persistent independent target sequence, even within one tick.
+pub(super) fn hardened_skin_after_armor(
+    unit: &mut UnitSnapshot,
+    damage: i32,
+    source: SimId,
+    tick: u64,
+) -> i32 {
+    if unit.abilities_disabled || damage <= 0 {
+        return damage;
+    }
+    let Some(grant) = unit.status.native_grants.iter().find(|g| {
+        matches!(
+            g.effect,
+            crate::NativeAbilityGrantEffect::HardenedSkin { .. }
+        )
+    }) else {
+        return damage;
+    };
+    let crate::NativeAbilityGrantEffect::HardenedSkin {
+        chance_per_10k,
+        ignored_damage,
+        minimum_damage,
+    } = grant.effect
+    else {
+        unreachable!()
+    };
+    let sequence = unit.status.hardened_skin_sequence;
+    unit.status.hardened_skin_sequence = sequence
+        .checked_add(1)
+        .expect("native incoming attack sequence overflow");
+    let rolled = deterministic_random(
+        unit.damage_seed,
+        tick,
+        unit.id,
+        0x4841_5244_534b_494e ^ u64::from(grant.ability.0) ^ source.0,
+        sequence,
+    ) % 10000;
+    if rolled < u64::from(chance_per_10k) {
+        damage
+            .saturating_sub(ignored_damage)
+            .max(minimum_damage)
+            .min(damage)
+    } else {
+        damage
+    }
+}

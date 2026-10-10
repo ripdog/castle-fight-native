@@ -168,6 +168,12 @@ fn on_death(
                     target.armor.armor_type,
                     effective_armor_points_per_100(&target),
                 );
+                let damage = super::night_elf::hardened_skin_after_armor(
+                    &mut units[killer],
+                    damage,
+                    dead.id,
+                    dead.death_tick,
+                );
                 let damage = scale_damage_per_10k(
                     native_kill_effects::damage_after_native_incoming(
                         &target,

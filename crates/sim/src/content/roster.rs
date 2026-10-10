@@ -179,6 +179,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    ObeliskOfWilderness = 0x2100_0020 => b"h07H",
     SilverGlade = 0x2100_001f => b"h08P",
     Linker = 0x2100_001e => b"h063",
     DischargeTower = 0x2100_001d => b"h076",

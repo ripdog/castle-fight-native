@@ -39,6 +39,8 @@ def build(map_version='9.27', revision='r1'):
     healing = next(r for r in building_rows if r['building_rawcode'] == 'h07Y')
     endurance = next(r for r in building_rows if r['building_rawcode'] == 'h07Z')
     enchantment = next(r for r in building_rows if r['building_rawcode'] == 'h060')
+    wilderness = next(r for r in building_rows if r['building_rawcode'] == 'h07H')
+    launcher_codes += ['h07H','A08E','A08C','A08D','A08F']
     silver = next(r for r in building_rows if r['building_rawcode'] == 'h08P')
     launcher_codes += ['h08P','A08B','A08A','A08H']
     grant_params = json.loads(ceremonial['parameters_json'])
@@ -85,7 +87,7 @@ def build(map_version='9.27', revision='r1'):
                      'EventListener_add_BuildingLifecycle_onEvent_add_BuildingLifecycle',
                      'EventListener_add_BuildingLifecycle_onEvent_add_BuildingLifecycle1',
                      *guard['source_functions'].split(','), *snow['source_functions'].split(','), *serpent['source_functions'].split(','), *ceremonial['source_functions'].split(','),
-                     *silver['source_functions'].split(','), *stasis['source_functions'].split(','), *enchantment['source_functions'].split(','), 'dummyCastPointFrom',
+                     'ForGroupCallback_forUnitsInRect_RaceNelfAbilities_callback_forUnitsInRect_RaceNelfAbilities', *wilderness['source_functions'].split(','), *silver['source_functions'].split(','), *stasis['source_functions'].split(','), *enchantment['source_functions'].split(','), 'dummyCastPointFrom',
                      *healing['source_functions'].split(','), *endurance['source_functions'].split(','), 'dummyCarrierWithAbility', 'createSpellCarrier', 'QL', 'iD', 'hD',
                      'CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities1',
                      'CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities2',
@@ -184,12 +186,16 @@ def build(map_version='9.27', revision='r1'):
     guard_profile = project_guard(guard, selected, protected, traces)
     from project_silver import project as project_silver
     unit_rows = {r['rawcode']:r for r in rows('units.tsv')}
+    from project_wilderness import project as project_wilderness
+    wilderness_profile=project_wilderness(wilderness,selected,unit_rows,rows('abilities.tsv'),protected,traces,dict(zip(['major','minor'],map(int,map_version.split('.')))))
+    wilderness_body=traces['wildernessObeliskSpell']['source']
+    wilderness_visuals=[{'role':'caster','path':json.loads('"'+re.search(r'addEffect\("(.*?)",unit_getPos',wilderness_body)[1]+'"')},{'role':'target','path':json.loads('"'+re.search(r'addEffect1\("(.*?)",',wilderness_body)[1]+'"'),'attachment':re.search(r'addEffect1\(".*?",\w+,"(.*?)"',wilderness_body)[1]}]
     silver_visuals = [{'role':'caster','path':json.loads('"'+path+'"')} for path in re.findall(r'addEffect\("(.*?)",unit_getPos',traces[silver['source_functions'].split(',')[0]]['source'])]
     if not silver_visuals: raise ValueError('Silver Glade charge requires its literal caster art')
     silver_profile = project_silver(silver, selected, unit_rows, rows('abilities.tsv'), protected, traces, dict(zip(['major','minor'],map(int,map_version.split('.')))))
     return {'map_version': map_version, 'schema_version': 2, 'source_revision': revision,
             'extraction_git_tree': tree, 'source_sha256': sources,
-            'silver_cast_visuals':silver_visuals, 'silver': silver, 'silver_spellcasting': silver_profile, 'linker': linker, 'linker_death_heal': project_death_heal(linker, buckets, traces),
+            'wilderness':wilderness,'wilderness_spellcasting':wilderness_profile,'wilderness_cast_visuals':wilderness_visuals, 'silver_cast_visuals':silver_visuals, 'silver': silver, 'silver_spellcasting': silver_profile, 'linker': linker, 'linker_death_heal': project_death_heal(linker, buckets, traces),
             'guard': guard, 'guard_damage_proc': guard_profile,
             'city': mechanics, 'launchers': launchers, 'mushroom': mushroom, 'freezer': freezer,
             'freezer_animation_seconds': re.search(r'doAfter\(([\d.]+),', traces['CallbackSingle_doAfter_RaceNorthernAbilities_call_doAfter_RaceNorthernAbilities1']['source']).group(1),

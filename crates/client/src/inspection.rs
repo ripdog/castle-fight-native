@@ -2222,6 +2222,19 @@ fn active_effect_badges(
     for grant in unit.status.native_grants.iter() {
         use castle_fight_sim::NativeAbilityGrantEffect::*;
         let description = match grant.effect {
+            HardenedSkin {
+                chance_per_10k,
+                ignored_damage,
+                minimum_damage,
+            } => format!(
+                "Hardened Skin: {}% chance to reduce attack damage by {}, minimum {}",
+                f32::from(chance_per_10k) / 100.0,
+                ignored_damage,
+                minimum_damage
+            ),
+            SpellResistance(factor) => {
+                format!("Spell resistance: {}%", 100.0 - f32::from(factor) / 100.0)
+            }
             AttackDamage(amount) => format!("Permanent attack damage {amount:+}"),
             AttackSpeed(amount) => format!("Permanent attack speed {amount:+}%"),
             MaximumLife(amount) => format!("Permanent maximum health {amount:+}"),
@@ -2264,7 +2277,9 @@ fn active_effect_badges(
         effects.push(ActiveEffectBadgeData {
             icon: match grant.effect {
                 SpellBookArmor { badge, .. } => Some(badge),
-                SourceDamageSplash { .. } => Some(grant.ability),
+                SourceDamageSplash { .. } | HardenedSkin { .. } | SpellResistance(_) => {
+                    Some(grant.ability)
+                }
                 _ => castle_fight_sim::building_mechanics::permanent_grant_badge_for_version(
                     catalog.map_version,
                     grant.ability,

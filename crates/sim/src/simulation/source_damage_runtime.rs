@@ -161,6 +161,12 @@ fn dispatch_inner(
                     target.armor.armor_type,
                     effective_armor_points_per_100(&target),
                 );
+                let amount = super::night_elf::hardened_skin_after_armor(
+                    &mut state.units[index],
+                    amount,
+                    source,
+                    state.tick,
+                );
                 let amount = scale_damage_per_10k(
                     native_kill_effects::damage_after_native_incoming(&target, amount, state.tick),
                     target.snow_damage_taken_per_10k,
@@ -231,6 +237,12 @@ fn aftershock_inner(source: SimId, victim: usize, state: &mut DamageStorage<'_>)
         DamageType::Siege,
         target.armor.armor_type,
         0,
+    );
+    let amount = super::night_elf::hardened_skin_after_armor(
+        &mut state.units[victim],
+        amount,
+        source,
+        state.tick,
     );
     let amount = scale_damage_per_10k(
         native_kill_effects::damage_after_native_incoming(&target, amount, state.tick),

@@ -75,6 +75,11 @@ pub(super) fn native_building_trigger(
     ability: AutomaticAbilityProfile,
 ) -> Option<(AttackTargetMask, bool, bool)> {
     match ability.effect {
+        AbilityEffect::Wilderness(p) => Some((
+            p.trigger_targets,
+            p.trigger_invulnerable,
+            p.trigger_spell_immune,
+        )),
         AbilityEffect::SilverGlade(p) => Some((
             p.trigger_targets,
             p.trigger_invulnerable,
@@ -133,7 +138,11 @@ pub(super) fn native_building_trigger_unit_type(
     ability: AutomaticAbilityProfile,
     mechanical: bool,
 ) -> bool {
-    !matches!(ability.effect,AbilityEffect::SilverGlade(p) if p.trigger_mechanical_only && !mechanical)
+    match ability.effect {
+        AbilityEffect::SilverGlade(p) => !p.trigger_mechanical_only || mechanical,
+        AbilityEffect::Wilderness(p) => !p.trigger_mechanical_only || mechanical,
+        _ => true,
+    }
 }
 impl Simulation {
     pub(super) fn native_building_trigger_allowed(

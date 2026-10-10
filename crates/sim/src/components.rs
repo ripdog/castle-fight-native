@@ -1597,6 +1597,7 @@ pub enum AreaDamageOrigin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AbilityEffect {
+    Wilderness(crate::building_mechanics::WildernessProfile),
     SilverGlade(crate::building_mechanics::SilverGladeProfile),
     Heal(NativeHealProfile),
     WindWalk(WindWalkProfile),
@@ -1765,6 +1766,7 @@ impl AbilityEffect {
         match self {
             Self::Heal(_) => 41,
             Self::SilverGlade(_) => 42,
+            Self::Wilderness(_) => 43,
             Self::WindWalk(_) => 40,
             Self::ScriptedRoots(_) => 39,
             Self::NativeWeatherVisual { .. } => 38,
@@ -1969,6 +1971,7 @@ pub struct StatusState {
     /// Native lightning and the permanent grant survive generator death.
     pub mana_improvement_link: Option<ManaImprovementLink>,
     pub retaliation_sequence: u64,
+    pub hardened_skin_sequence: u64,
     /// Last authoritative order/movement heading, normalized by consumers.
     pub facing_direction: SimPoint,
     pub spawn_building: Option<SimId>,

@@ -60,7 +60,7 @@ pub(super) fn apply_ability_effect_to_unit(
         return false;
     }
     match effect {
-        AbilityEffect::SilverGlade(_) => return false,
+        AbilityEffect::SilverGlade(_) | AbilityEffect::Wilderness(_) => return false,
         AbilityEffect::Heal(p) => {
             if (p.organic_only && target.mechanical)
                 || (p.nonancient_only && target.classifications.ancient)
@@ -717,8 +717,7 @@ pub(super) fn resolve_periodic_unit_statuses(
         let count = usize::from(unit.status.damage_over_time_count);
         debug_assert!(count <= MAX_TIMED_DAMAGE_OVER_TIME);
         let resistance = unit
-            .passive_effects
-            .iter()
+            .effective_passive_effects()
             .filter_map(|effect| match effect {
                 PassiveUnitEffect::SpellResistance(profile) => Some(profile.damage_taken_per_10k),
                 _ => None,

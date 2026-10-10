@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 73;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 74;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -3535,6 +3535,7 @@ impl Simulation {
                         })
                     });
                     UnitSnapshot {
+                        damage_seed: self.config.match_seed,
                         death_rule: content.and_then(|c| {
                             crate::native_effects::unit_death_rule_for_version(
                                 c.map_version,
@@ -3728,6 +3729,7 @@ impl Simulation {
 #[derive(Debug, Clone, Copy)]
 struct UnitSnapshot {
     death_rule: Option<crate::native_effects::NativeUnitDeathRule>,
+    damage_seed: u64,
     death_rules: DamageRules,
     death_tick: u64,
     rawcode: u32,
@@ -4511,6 +4513,13 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
     }
     match spellcasting.ability.effect {
+        AbilityEffect::Wilderness(p) => {
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::NativeBuildingSpellTrigger
+            );
+            assert!(p.grants.iter().all(|g| g.ability.0 != 0));
+        }
         AbilityEffect::SilverGlade(p) => {
             assert_eq!(
                 spellcasting.ability.target_policy,
@@ -5572,13 +5581,14 @@ fn spell_damage_after_defend(unit: UnitSnapshot, damage: i32, completed_tick: u6
         });
     let damage = native_kill_effects::damage_after_native_incoming(&unit, damage, completed_tick);
     let damage = scale_damage_per_10k(damage, unit.snow_damage_taken_per_10k);
-    unit.passive_effects.iter().fold(damage, |damage, effect| {
-        if let PassiveUnitEffect::SpellResistance(profile) = effect {
-            scale_damage_per_10k(damage, profile.damage_taken_per_10k)
-        } else {
-            damage
-        }
-    })
+    unit.effective_passive_effects()
+        .fold(damage, |damage, effect| {
+            if let PassiveUnitEffect::SpellResistance(profile) = effect {
+                scale_damage_per_10k(damage, profile.damage_taken_per_10k)
+            } else {
+                damage
+            }
+        })
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -5613,6 +5623,12 @@ impl Simulation {
                     damage_type,
                     state.units[index].armor.armor_type,
                     effective_armor_points_per_100(&state.units[index]),
+                );
+                let adjusted_damage = night_elf::hardened_skin_after_armor(
+                    &mut state.units[index],
+                    adjusted_damage,
+                    source_id,
+                    completed_tick,
                 );
                 let event_damage = scale_damage_per_10k(
                     native_kill_effects::damage_after_native_incoming(

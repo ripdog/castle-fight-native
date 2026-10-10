@@ -601,6 +601,15 @@ impl Simulation {
                             index,
                             units,
                         ));
+                    } else if let AbilityEffect::Wilderness(p) = intent.ability.effect {
+                        metrics.effects += usize::from(self.cast_wilderness(
+                            source,
+                            intent.ability.id,
+                            p,
+                            intent.cast_sequence,
+                            units,
+                        ));
+                        emit_cast_visual = false;
                     } else if let AbilityEffect::SilverGlade(p) = intent.ability.effect {
                         self.add_silver_charge(source.team, p);
                         metrics.effects += 1;
@@ -902,7 +911,16 @@ impl Simulation {
                     }
                 }
                 AbilityIntentTarget::Building { id, position } => {
-                    if let AbilityEffect::SilverGlade(p) = intent.ability.effect {
+                    if let AbilityEffect::Wilderness(p) = intent.ability.effect {
+                        metrics.effects += usize::from(self.cast_wilderness(
+                            source,
+                            intent.ability.id,
+                            p,
+                            intent.cast_sequence,
+                            units,
+                        ));
+                        emit_cast_visual = false;
+                    } else if let AbilityEffect::SilverGlade(p) = intent.ability.effect {
                         self.add_silver_charge(source.team, p);
                         metrics.effects += 1;
                     } else if let AbilityEffect::BuildingAura(profile) = intent.ability.effect {

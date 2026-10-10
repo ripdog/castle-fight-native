@@ -23,9 +23,12 @@ pub(crate) use damage_proc::{
     damage_proc_granted_sources, damage_proc_source,
 };
 mod night_elf;
-pub use night_elf::SilverGladeProfile;
+pub use night_elf::{SilverGladeProfile, WildernessProfile};
 pub(crate) use night_elf::{
     SilverGladeState, silver_bindings, silver_source, silver_spellcasting_for_version,
+};
+pub(crate) use night_elf::{
+    wilderness_bindings, wilderness_source, wilderness_spellcasting_for_version,
 };
 mod weather;
 pub(crate) use weather::WeatherState;
@@ -726,6 +729,13 @@ pub fn permanent_grant_target_attachment_for_version(version: MapVersion) -> &'s
 /// Literal recipient attachment from the Elemental enchantment callback.
 pub fn enchantment_target_attachment_for_version(version: MapVersion) -> &'static str {
     evidence(version)["enchantment_cast_visuals"][0]["attachment"]
+        .as_str()
+        .unwrap()
+}
+
+/// Literal attachment from the retained Wilderness recipient callback.
+pub fn wilderness_target_attachment_for_version(version: MapVersion) -> &'static str {
+    evidence(version)["wilderness_cast_visuals"][1]["attachment"]
         .as_str()
         .unwrap()
 }

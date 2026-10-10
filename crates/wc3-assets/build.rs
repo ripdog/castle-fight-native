@@ -1279,6 +1279,7 @@ fn append_building_script_visuals(
     for (row, visual_key) in [
         ("ceremonial", "ceremonial_cast_visuals"),
         ("silver", "silver_cast_visuals"),
+        ("wilderness", "wilderness_cast_visuals"),
         ("enchantment", "enchantment_cast_visuals"),
     ] {
         let ceremonial = &data[row];

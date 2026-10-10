@@ -883,6 +883,24 @@
       ]
     },
     {
+      "building_rawcode": "h07H",
+      "source_registration": "KK",
+      "source_factory": "Ew:create946",
+      "source_callback": "BuildingAttachmentHandler_registerBuildingAttach_RaceNelf_call_registerBuildingAttach_RaceNelf",
+      "visuals": [
+        {
+          "model_path": "Abilities\\Spells\\NightElf\\EntangleMine\\Roots.mdl",
+          "yaw_degrees": 32.0,
+          "offset_world": [
+            12.0,
+            -11.5,
+            0.0
+          ],
+          "scale": 0.55
+        }
+      ]
+    },
+    {
       "building_rawcode": "h07L",
       "source_registration": "KK",
       "source_factory": "Kw:create952",

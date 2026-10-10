@@ -4,6 +4,12 @@ pub const MAX_PERMANENT_NATIVE_ABILITIES: usize = 16;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum NativeAbilityGrantEffect {
+    HardenedSkin {
+        chance_per_10k: u16,
+        ignored_damage: i32,
+        minimum_damage: i32,
+    },
+    SpellResistance(u16),
     AttackDamage(i32),
     AttackSpeed(i16),
     MaximumLife(i32),
@@ -53,6 +59,19 @@ impl NativeAbilityGrant {
     pub(crate) fn canonical_words(self) -> [u64; 5] {
         use NativeAbilityGrantEffect::*;
         let (tag, values) = match self.effect {
+            HardenedSkin {
+                chance_per_10k,
+                ignored_damage,
+                minimum_damage,
+            } => (
+                13,
+                [
+                    u64::from(chance_per_10k),
+                    ignored_damage as u64,
+                    minimum_damage as u64,
+                ],
+            ),
+            SpellResistance(factor) => (14, [u64::from(factor), 0, 0]),
             AttackDamage(amount) => (0, [amount as u64, 0, 0]),
             AttackSpeed(amount) => (1, [amount as u64, 0, 0]),
             MaximumLife(amount) => (2, [amount as u64, 0, 0]),
@@ -125,6 +144,12 @@ impl NativeAbilityGrant {
 
     fn passive(self) -> Option<PassiveUnitEffect> {
         match self.effect {
+            NativeAbilityGrantEffect::SpellResistance(damage_taken_per_10k) => Some(
+                PassiveUnitEffect::SpellResistance(SpellResistanceEffectProfile {
+                    ability: self.ability,
+                    damage_taken_per_10k,
+                }),
+            ),
             NativeAbilityGrantEffect::CriticalStrike {
                 chance_per_10k,
                 multiplier_per_10k,
@@ -274,6 +299,16 @@ impl TryFrom<Vec<NativeAbilityGrant>> for NativeAbilityGrants {
         let mut result = Self::default();
         for grant in value {
             match grant.effect {
+                NativeAbilityGrantEffect::HardenedSkin {
+                    chance_per_10k,
+                    ignored_damage,
+                    minimum_damage,
+                } if chance_per_10k > 10000 || ignored_damage < 0 || minimum_damage < 0 => {
+                    return Err("invalid native Hardened Skin");
+                }
+                NativeAbilityGrantEffect::SpellResistance(factor) if factor > 10000 => {
+                    return Err("invalid native resistance");
+                }
                 NativeAbilityGrantEffect::CriticalStrike {
                     chance_per_10k,
                     multiplier_per_10k,

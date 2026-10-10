@@ -27,6 +27,7 @@ mod speed_aura;
 mod sphere;
 mod stasis;
 mod stat_buffs;
+mod wilderness;
 
 fn unit(team: u8, x: i32, damage: i32, delivery: AttackDelivery) -> UnitSpawn {
     UnitSpawn {

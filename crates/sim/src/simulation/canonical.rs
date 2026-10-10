@@ -1903,6 +1903,7 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         hash.write_u32(link.ability.0);
     }
     hash.write_u64(status.retaliation_sequence);
+    hash.write_u64(status.hardened_skin_sequence);
     hash.write_u8(u8::from(status.acid_bomb.is_some()));
     if let Some(acid) = status.acid_bomb {
         hash.write_u8(u8::from(acid.source.is_some()));
@@ -2690,6 +2691,11 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             }
         }
         AbilityEffect::BuildingStasis(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
+        AbilityEffect::Wilderness(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);
             }

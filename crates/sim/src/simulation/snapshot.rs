@@ -6,7 +6,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 66;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 67;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -101,6 +101,17 @@ impl SimulationSnapshot {
                     if let Some(crate::SpellcastingProfile {
                         ability:
                             crate::AutomaticAbilityProfile {
+                                effect: crate::AbilityEffect::Wilderness(p),
+                                ..
+                            },
+                        ..
+                    }) = unit.spellcasting
+                    {
+                        validate_content_version(p.map_version, content)?;
+                    }
+                    if let Some(crate::SpellcastingProfile {
+                        ability:
+                            crate::AutomaticAbilityProfile {
                                 effect: crate::AbilityEffect::SilverGlade(p),
                                 ..
                             },
@@ -148,6 +159,17 @@ impl SimulationSnapshot {
                 }
                 CanonicalEntity::Building(building) => {
                     rehydrate_optional_content(&mut building.content, content)?;
+                    if let Some(crate::SpellcastingProfile {
+                        ability:
+                            crate::AutomaticAbilityProfile {
+                                effect: crate::AbilityEffect::Wilderness(p),
+                                ..
+                            },
+                        ..
+                    }) = building.spellcasting
+                    {
+                        validate_content_version(p.map_version, content)?;
+                    }
                     if let Some(crate::SpellcastingProfile {
                         ability:
                             crate::AutomaticAbilityProfile {
