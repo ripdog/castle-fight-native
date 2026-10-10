@@ -6,7 +6,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 61;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 62;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -98,6 +98,17 @@ impl SimulationSnapshot {
             match entity {
                 CanonicalEntity::Unit(unit) => {
                     rehydrate_optional_content(&mut unit.content, content)?;
+                    if let Some(crate::SpellcastingProfile {
+                        ability:
+                            crate::AutomaticAbilityProfile {
+                                effect: crate::AbilityEffect::ScriptedRoots(profile),
+                                ..
+                            },
+                        ..
+                    }) = unit.spellcasting
+                    {
+                        validate_content_version(profile.map_version, content)?;
+                    }
                     if let Some(super::canonical::ResurrectionDefinitionSource::Original(
                         definition,
                     )) = &mut unit.resurrection

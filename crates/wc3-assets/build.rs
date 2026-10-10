@@ -1019,7 +1019,7 @@ fn load_visual_assets(
         };
         let status_kinds: &[&str] = match base_rawcode {
             // Entangling Roots-family effects hold the target in place for the buff lifetime.
-            "Aenr" => &["movement"],
+            "Aenr" | "AEer" => &["movement"],
             "Afrz" => &["freeze"],
             "Aoar" => &["regeneration"],
             "AOae" | "SCae" => &["movement"],

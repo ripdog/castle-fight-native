@@ -9,6 +9,24 @@ import build_runtime_catalog as catalog
 
 
 class NativeTuningProjectionTest(unittest.TestCase):
+    def test_scripted_roots_reconciles_parent_child_resources_and_origin(self):
+        recipe = {"kind":"scripted-roots", "source_kind":"unit-ability", "source_key":"ORDR", "unit_rawcode":"UNIT"}
+        fields = {"targs1":"enemies,ground,neutral,nonhero,vulnerable", "cost1":"999", "cool1":"999", "rng1":"71"}
+        child = {"targs1":"enemies,ground,neutral", "cost1":"999", "cool1":"999", "dur1":"3", "herodur1":"0.15", "dataa1":"7", "rng1":"91"}
+        unit = {"mana_max":"19", "mana_start":"11", "mana_regen":"0.2"}
+        site = {"effect_rawcodes":["ROOT"], "callee":"dummyCastTargetFrom1", "arguments":["unit_getOwner(caster)","ROOT","order","target","unit_getPos(target)","4."]}
+        detail = {"native_base":"ACpa", "all_bases":{"ROOT":"AEer"}, "effect_key":"ROOT", "effect_fields":child, "effect_protected":{"mana_cost":"0","cooldown":"0"}, "map_version":{"major":9,"minor":27}, "git_tree":"synthetic", "mechanics_row":{"mechanic_kind":"dummy-target-ability-from-owner","handler_function":"roots"}, "semantics_row":{"parameters_json":json.dumps({"delivery_sites":[site]})}}
+        ability = native.project_effect(recipe, fields, unit, {"mana_cost":"5","cooldown":"2"}, detail)["spellcasting"]["ability"]
+        self.assertEqual((ability["mana_cost"], ability["cooldown_ticks"]), (5,60))
+        roots = ability["effect"]["ScriptedRoots"]
+        self.assertEqual(roots["roots"]["hero_duration_ticks"], 5)
+        self.assertTrue(roots["primary_nonhero_only"])
+        self.assertFalse(roots["roots"]["nonhero_only"])
+        self.assertLess(ability["range"], roots["child_range"])
+        for changes in ({"effect_protected":{"mana_cost":"1","cooldown":"0"}}, {"native_base":"AEer"}, {"effect_fields":{**child,"targs1":"enemies,air,ground"}}, {"semantics_row":{"parameters_json":json.dumps({"delivery_sites":[{**site,"callee":"dummyCastTargetFrom"}]})}}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                native.project_effect(recipe, fields, unit, {}, {**detail,**changes})
+
     def test_aftershock_requires_health_formula_and_disabled_nested_dispatch(self):
         recipe = {"kind":"health-scaled-aftershock", "source_kind":"unit-ability", "source_key":"TEST", "unit_rawcode":"UNIT"}
         trace = {"aftershock_marker_ability_id":1,"source_damage_marker_ability_id":2,

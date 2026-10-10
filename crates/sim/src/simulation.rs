@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 68;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 69;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -29,6 +29,7 @@ mod automatic_abilities;
 mod builder;
 mod building_bolts;
 mod death_healing;
+mod scripted_roots;
 pub use death_healing::DeathHealVisualEvent;
 mod building_damage_procs;
 mod enchantments;
@@ -4491,6 +4492,11 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
     }
     match spellcasting.ability.effect {
+        AbilityEffect::ScriptedRoots(p) => {
+            assert!(p.search_radius >= 0 && p.child_range >= 0 && p.maximum_targets > 0);
+            assert!(p.roots.duration_ticks > 0 && p.roots.hero_duration_ticks > 0);
+            assert!(p.roots.damage_per_second >= 0 && p.vision_radius >= 0);
+        }
         AbilityEffect::Ensnare {
             profile,
             search_radius,

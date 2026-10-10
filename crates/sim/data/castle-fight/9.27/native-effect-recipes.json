@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind": "unit-ability", "source_key": "A07P", "unit_rawcode": "e007", "kind": "scripted-roots"},
+    {"source_kind": "ability-effect", "source_key": "A07A", "kind": "entangling-roots"},
     {"source_kind": "unit-ability", "source_key": "A00T", "unit_rawcode": "e001", "kind": "evasion"},
     {"source_kind": "unit-ability", "source_key": "A0ET", "unit_rawcode": "h063", "kind": "critical-strike"},
     {"source_kind": "unit-ability", "source_key": "A0D9", "unit_rawcode": "h076", "kind": "phoenix-fire"},

@@ -51,8 +51,8 @@ pub use components::{
     NativeBuffIdentity, NativeNovaProfile, Owner, PassiveUnitEffect, PassiveUnitEffects,
     PendingAttackState, PendingCastState, PendingCastTarget, PlayerId, PoisonBuffStatus,
     PoisonProfile, PoisonStatus, ProductionProfile, PulverizeEffectProfile, ResolvedUnitDefinition,
-    SecondaryAttackProfile, SecondaryResurrectionState, SelfDestructProfile, SimId,
-    SpeedAuraProfile, SpellcastingProfile, SphereAttachmentState, SphereProfile,
+    ScriptedRootsProfile, SecondaryAttackProfile, SecondaryResurrectionState, SelfDestructProfile,
+    SimId, SpeedAuraProfile, SpellcastingProfile, SphereAttachmentState, SphereProfile,
     SplashFalloffProfile, StatusState, Team, TriggeredAttackEffect, TriggeredSpellProcProfile,
     UnitClassifications, UnitGameplayProperties, UnitSpawn, UnitTemplate,
 };

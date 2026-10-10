@@ -346,6 +346,7 @@ impl Simulation {
                         AbilityEffect::StatBuff { .. }
                             | AbilityEffect::SpellSteal { .. }
                             | AbilityEffect::Ensnare { .. }
+                            | AbilityEffect::ScriptedRoots(_)
                     ))
                     && !self.ability_target_is_valid(
                         source,
@@ -567,7 +568,9 @@ impl Simulation {
             let mut emit_cast_visual = true;
             match intent.target {
                 AbilityIntentTarget::Unit { index, .. } => {
-                    if let AbilityEffect::Ensnare {
+                    if let AbilityEffect::ScriptedRoots(p) = intent.ability.effect {
+                        metrics.effects += self.cast_scripted_roots(source, index, p, units);
+                    } else if let AbilityEffect::Ensnare {
                         profile,
                         search_radius,
                         maximum_targets,
@@ -1688,6 +1691,7 @@ impl Simulation {
                 *candidate_checks += 1;
                 let candidate = &units[unit_index];
                 if candidate.health <= 0
+                    || (matches!(ability.effect, AbilityEffect::ScriptedRoots(p) if !super::scripted_roots::primary_eligible(candidate, source.team, p, self.next_tick)))
                     || (matches!(
                         ability.effect,
                         AbilityEffect::AreaStun { .. }
@@ -2110,6 +2114,7 @@ impl Simulation {
                 let target = &units[index];
                 target.id == id
                     && target.health > 0
+                    && !matches!(ability.effect, AbilityEffect::ScriptedRoots(p) if !super::scripted_roots::primary_eligible(target, source.team, p, self.next_tick))
                     && match ability.target_policy {
                         AbilityTargetPolicy::FlyingEnemyUnit
                         | AbilityTargetPolicy::RandomEnemyUnitOrBuilding => {

@@ -3451,6 +3451,9 @@ fn prewarm_timed_wc3_effects(
                 }
                 let automatic = definition.automatic_abilities().map(|ability| {
                     let status = match ability.effect {
+                        AbilityEffect::ScriptedRoots(p) => {
+                            Some((p.roots.ability.0, p.roots.duration_ticks))
+                        }
                         AbilityEffect::StatBuff {
                             modifier,
                             duration_ticks,

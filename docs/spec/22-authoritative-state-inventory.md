@@ -229,3 +229,6 @@ Scripted projectile-array state stores ordered movers, fractional positions/head
 Native melee-attacker classification and per-handle damage-response RNG sequence are authoritative unit state. Responses emitted before a fatal health commit retain their independent native projectile state and source identity through snapshots.
 
 Health-scaled source damage profiles retain marker and dispatcher identities plus versioned full-health damage in canonical content and live/passive-baseline state. The sapper-only source dispatcher executes before the target dispatcher and the original health commit. Its nested Siege/Demolition hit bypasses numeric armor but retains the attack/defense table and native incoming factors; integer life/damage use the existing quantized boundary. The nested hit disables this shared dispatcher, including charge/retaliation, while independent low-health listeners remain active. Cleanse revokes the source controller through its dispatcher identity. No extra timer or pending action is introduced.
+
+
+Scripted Roots profiles retain parent/child target separation, version, range, cap, exclusions, priority buff identities and temporary vision parameters in canonical spellcasting definitions. Released Roots use the existing timed movement/DOT state. Bundle/checksum/snapshot schemas advance to 50/69/62.

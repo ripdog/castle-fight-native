@@ -2639,6 +2639,11 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
                 hash.write_u64(word);
             }
         }
+        AbilityEffect::ScriptedRoots(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         AbilityEffect::NativeWeatherVisual { duration_ticks } => hash.write_u16(duration_ticks),
         AbilityEffect::BuildingWeather(p) => {
             for word in p.canonical_words() {

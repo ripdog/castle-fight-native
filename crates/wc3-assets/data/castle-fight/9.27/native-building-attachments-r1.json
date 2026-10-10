@@ -855,6 +855,24 @@
       ]
     },
     {
+      "building_rawcode": "h088",
+      "source_registration": "KK",
+      "source_factory": "Hw:create949",
+      "source_callback": "BuildingAttachmentHandler_registerBuildingAttach_RaceNelf_call_registerBuildingAttach_RaceNelf3",
+      "visuals": [
+        {
+          "model_path": "Abilities\\Spells\\NightElf\\TargetArtLumber\\TargetArtLumber.mdl",
+          "yaw_degrees": 0.0,
+          "offset_world": [
+            0.0,
+            0.0,
+            10.0
+          ],
+          "scale": 0.6
+        }
+      ]
+    },
+    {
       "building_rawcode": "h092",
       "visuals": [],
       "native_abilities": [

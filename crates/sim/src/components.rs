@@ -452,6 +452,44 @@ pub struct EntanglingRootsEffectProfile {
     pub targets: AttackTargetMask,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ScriptedRootsProfile {
+    pub map_version: crate::MapVersion,
+    pub roots: EntanglingRootsEffectProfile,
+    pub primary_nonhero_only: bool,
+    pub search_radius: i32,
+    pub maximum_targets: u8,
+    pub child_range: i32,
+    pub excluded_abilities: [u32; 2],
+    pub priority_buffs: [u32; 2],
+    pub vision_radius: i32,
+    pub vision_ticks: u16,
+}
+
+impl ScriptedRootsProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 17] {
+        [
+            u64::from(self.map_version.major),
+            u64::from(self.map_version.minor),
+            u64::from(self.roots.ability.0),
+            self.roots.damage_per_second as u64,
+            u64::from(self.roots.duration_ticks),
+            u64::from(self.roots.hero_duration_ticks),
+            u64::from(self.roots.nonhero_only),
+            u64::from(self.roots.targets.bits()),
+            u64::from(self.primary_nonhero_only),
+            self.search_radius as u64,
+            u64::from(self.maximum_targets),
+            self.child_range as u64,
+            u64::from(self.excluded_abilities[0]),
+            u64::from(self.excluded_abilities[1]),
+            u64::from(self.priority_buffs[0]) | (u64::from(self.priority_buffs[1]) << 32),
+            self.vision_radius as u64,
+            u64::from(self.vision_ticks),
+        ]
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TriggeredAttackEffect {
     ForkedLightning(ForkedLightningProfile),
@@ -1493,6 +1531,7 @@ pub enum AreaDamageOrigin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AbilityEffect {
+    ScriptedRoots(ScriptedRootsProfile),
     /// Released native weather art has its own lifetime, independent of logical caster life.
     NativeWeatherVisual {
         duration_ticks: u16,
@@ -1655,6 +1694,7 @@ impl AbilityEffect {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::ScriptedRoots(_) => 39,
             Self::NativeWeatherVisual { .. } => 38,
             Self::BuildingWeather(_) => 37,
             Self::BuildingEnchantment(_) => 36,
