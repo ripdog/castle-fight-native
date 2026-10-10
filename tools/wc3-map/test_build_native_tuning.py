@@ -27,6 +27,26 @@ class NativeTuningProjectionTest(unittest.TestCase):
             with self.subTest(changes=changes), self.assertRaises(ValueError):
                 native.project_effect(recipe, fields, unit, {}, {**detail,**changes})
 
+    def test_bounded_roots_projects_selection_before_order_and_conditional_vision(self):
+        recipe = {"kind":"scripted-roots","source_kind":"unit-ability","source_key":"ORDR","unit_rawcode":"UNIT"}
+        fields = {"targs1":"enemies,ground,neutral,nonhero,vulnerable","cost1":"0","cool1":"1","rng1":"17"}
+        child = {"targs1":"enemies,ground,neutral","cost1":"0","cool1":"0","dur1":"2","herodur1":"0.1","dataa1":"7","rng1":"23"}
+        helper = 'Dwr=unit_getOwner(caster)Ewr=tupleCopy1(unit_getPos(primary))forUnitsInRange(Nwr,19.,false,Owr)LinkedList_LinkedList_add(Fwr,__wurst_objectToIndex(Jwr))Kwr=2 Lwr=LinkedList Kwr=(Kwr-1)dummyCastTargetWithVision('
+        candidates = 'isAliveCombatSapper(hwn)unit_isEnemyOf(hwn,gwn.p)UNIT_TYPE_GROUND unit_getAbilityLevel(hwn,101)<=0 unit_getAbilityLevel(hwn,102)<=0 unit_getAbilityLevel(hwn,103)<=0 unit_getAbilityLevel(hwn,104)<=0 LinkedList_LinkedList_add(gwn.priority LinkedList_LinkedList_add(gwn.fallback'
+        vision = 'if player_hasVisibility(kTr,oTr)then return dummyCastTargetFrom2(FOG_OF_WAR_VISIBLE rTr[2],13.,true,false doAfter(0.15,uTr)'
+        functions = {'assassinSpell':helper,'ForGroupCallback_forUnitsInRange_RaceNelfAbilities_callback_forUnitsInRange_RaceNelfAbilities':candidates,'dummyCastTargetWithVision1':vision}
+        trace = {"max_targets":2,"search_radius":19,"delivery_sites":[{"effect_rawcodes":["ROOT"],"callee":"dummyCastTargetWithVision","arguments":["Dwr","ROOT","order","target","Ewr","3."]}]}
+        detail = {"native_base":"ACpa","all_bases":{"ROOT":"AEer"},"effect_key":"ROOT","effect_fields":child,"effect_protected":{},"map_version":{"major":1,"minor":2},"git_tree":"synthetic","mechanics_row":{"mechanic_kind":"delegated-helper","handler_function":"cast"},"semantics_row":{"parameters_json":json.dumps(trace)},"functions":functions}
+        unit = {"mana_max":"-","mana_start":"-","mana_regen":"-"}
+        profile = native.project_effect(recipe,fields,unit,{},detail)['spellcasting']['ability']['effect']['ScriptedRoots']
+        self.assertEqual(profile['maximum_targets'],2)
+        self.assertEqual(profile['excluded_abilities'],[101,102])
+        self.assertEqual(profile['priority_buffs'],[103,104])
+        self.assertEqual((profile['vision_radius'],profile['vision_ticks']),(13*1024,5))
+        for key, token in [('assassinSpell','Kwr=(Kwr-1)'),('assassinSpell','unit_getOwner('),('dummyCastTargetWithVision1','if player_hasVisibility(kTr,oTr)'),('ForGroupCallback_forUnitsInRange_RaceNelfAbilities_callback_forUnitsInRange_RaceNelfAbilities','UNIT_TYPE_GROUND')]:
+            with self.subTest(token=token),self.assertRaises(ValueError):
+                native.project_effect(recipe,fields,unit,{}, {**detail,'functions':{**functions,key:functions[key].replace(token,'changed')}})
+
     def test_aftershock_requires_health_formula_and_disabled_nested_dispatch(self):
         recipe = {"kind":"health-scaled-aftershock", "source_kind":"unit-ability", "source_key":"TEST", "unit_rawcode":"UNIT"}
         trace = {"aftershock_marker_ability_id":1,"source_damage_marker_ability_id":2,

@@ -212,3 +212,58 @@ fn roots_commit_parent_resources_once_and_periodic_damage_survives_source_death_
     assert!(s.unit(target).unwrap().status.rooted_until_tick <= s.tick());
     assert_eq!(s.unit(target).unwrap().status.damage_over_time_count, 0);
 }
+
+#[test]
+fn temporary_child_vision_reveals_fog_without_detecting_invisible_recipients() {
+    let mut s = Simulation::new(
+        SimulationConfig {
+            navigation_min: NavCell::new(-5, -5),
+            navigation_max: NavCell::new(5, 5),
+            fog: Some(crate::FogRules {
+                cell_size: SUBUNITS_PER_WORLD_UNIT,
+                fallback_sight: crate::SightProfile::default(),
+                initially_explored: false,
+                night: false,
+                clock: None,
+                attack_reveal: None,
+                permanent_rectangles: [Vec::new(), Vec::new()],
+                sight_blockers: Vec::new(),
+            }),
+            ..SimulationConfig::default()
+        },
+        1,
+    );
+    spawn(&mut s, 0, 0, sapper());
+    spawn(&mut s, 1, 1, sapper());
+    spawn(&mut s, 1, 2, sapper());
+    spawn(
+        &mut s,
+        1,
+        3,
+        UnitClassifications {
+            invisible: true,
+            ..sapper()
+        },
+    );
+    let mut units = s.snapshot_units();
+    units[1].visible_teams = 3;
+    units[2].visible_teams = 0;
+    units[3].visible_teams = 0;
+    let p = crate::ScriptedRootsProfile {
+        maximum_targets: 3,
+        search_radius: 5 * SUBUNITS_PER_WORLD_UNIT,
+        vision_radius: SUBUNITS_PER_WORLD_UNIT,
+        vision_ticks: 4,
+        ..profile()
+    };
+    assert_eq!(s.cast_scripted_roots(source(&units), 1, p, &mut units), 2);
+    assert!(units[2].status.rooted_until_tick > 0);
+    assert_eq!(units[3].status.rooted_until_tick, 0);
+    let reveals = &s.fog.as_ref().unwrap().reveals;
+    assert_eq!(reveals.len(), 2);
+    assert!(
+        reveals
+            .iter()
+            .all(|r| !r.detects_invisible && r.expires_tick == s.next_tick + 4)
+    );
+}

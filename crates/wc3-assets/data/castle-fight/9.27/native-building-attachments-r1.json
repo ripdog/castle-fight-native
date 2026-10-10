@@ -855,6 +855,34 @@
       ]
     },
     {
+      "building_rawcode": "h07D",
+      "source_registration": "KK",
+      "source_factory": "Iw:create950",
+      "source_callback": "BuildingAttachmentHandler_registerBuildingAttach_RaceNelf_call_registerBuildingAttach_RaceNelf4",
+      "visuals": [
+        {
+          "model_path": "Abilities\\Spells\\NightElf\\TargetArtLumber\\TargetArtLumber.mdl",
+          "yaw_degrees": 0.0,
+          "offset_world": [
+            0.0,
+            0.0,
+            10.0
+          ],
+          "scale": 0.6
+        },
+        {
+          "model_path": "Abilities\\Spells\\NightElf\\Tranquility\\TranquilityTarget.mdl",
+          "yaw_degrees": 0.0,
+          "offset_world": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": 0.7
+        }
+      ]
+    },
+    {
       "building_rawcode": "h088",
       "source_registration": "KK",
       "source_factory": "Hw:create949",

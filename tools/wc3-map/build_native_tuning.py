@@ -791,7 +791,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
                 effect_protected=protected.get(effect_key, {}), mechanics_row=spell, semantics_row=semantics)
         effects.append(project_effect(recipe, abilities[source], unit, protected.get(source, {}), detail))
     families = [{"source_key": key, "buff": buff_identity(abilities[key], positive=base != "ACff")}
-        for key, base in sorted(ability_bases.items()) if base in {"Ainf", "ACf2", "ACff", "AIrr"}]
+        for key, base in sorted(ability_bases.items()) if base in {"Ainf", "ACf2", "ACff", "AIrr", "AEer", "Aenr"}]
     return {"schema_version": 3, "map_version": release["map_version"], "effects": effects,
         "buff_families": families, "buff_family_source": {"git_tree": tree, "path": "resolved/object-fields.tsv"}}
 

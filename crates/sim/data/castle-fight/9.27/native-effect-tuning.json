@@ -5,6 +5,78 @@
     {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
+      "source_key": "A07R",
+      "unit_rawcode": "e00J",
+      "spellcasting": {
+        "mana": {
+          "maximum": 300,
+          "starting": 175,
+          "regen_per_tick_per_10k": 2147495648
+        },
+        "ability": {
+          "id": 1093678930,
+          "mana_cost": 35,
+          "cooldown_ticks": 420,
+          "range": 716800,
+          "target_policy": "RandomGroundEnemyUnit",
+          "effect": {
+            "ScriptedRoots": {
+              "map_version": {
+                "major": 9,
+                "minor": 27
+              },
+              "roots": {
+                "ability": 1093678929,
+                "damage_per_second": 35,
+                "duration_ticks": 180,
+                "hero_duration_ticks": 60,
+                "nonhero_only": false,
+                "targets": 1
+              },
+              "primary_nonhero_only": true,
+              "search_radius": 307200,
+              "maximum_targets": 3,
+              "child_range": 1024000,
+              "excluded_abilities": [
+                1098282348,
+                1093679176
+              ],
+              "priority_buffs": [
+                1111844210,
+                1110454349
+              ],
+              "vision_radius": 131072,
+              "vision_ticks": 3
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 12000,
+      "effect_ability_rawcode": "A07Q",
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "script": "UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceNelfAbilities_cast_registerUnitSpellWithTargetOrder_RaceNelfAbilities1",
+        "semantics": "{\"delivery_sites\":[{\"arguments\":[\"Dwr\",\"1093678929\",\"852171\",\"Mwr\",\"Ewr\",\"11.\"],\"callee\":\"dummyCastTargetWithVision\",\"effect_rawcodes\":[\"A07Q\"],\"function\":\"assassinSpell\"}],\"dummy_lifetime_seconds\":11,\"effect_ability_rawcode\":\"A07Q\",\"max_targets\":3,\"search_radius\":300,\"selection_policy\":\"script-priority-list-then-fallback\"}",
+        "native_child": "A07Q"
+      }
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A07Q",
+      "kind": "entangling-roots",
+      "damage_per_second": 35,
+      "duration_millis": 6000,
+      "hero_duration_millis": 2000,
+      "nonhero_only": false,
+      "targets": "ground-units",
+      "provenance": {
+        "ability": "A07Q",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
       "source_key": "A07P",
       "unit_rawcode": "e007",
       "spellcasting": {
@@ -3099,6 +3171,15 @@
       }
     },
     {
+      "source_key": "A03W",
+      "buff": {
+        "rawcode": 1110454349,
+        "positive": true,
+        "stealable": true,
+        "organic_only": false
+      }
+    },
+    {
       "source_key": "A03Z",
       "buff": {
         "rawcode": 1112893025,
@@ -3111,6 +3192,60 @@
       "source_key": "A040",
       "buff": {
         "rawcode": 1112893025,
+        "positive": true,
+        "stealable": true,
+        "organic_only": false
+      }
+    },
+    {
+      "source_key": "A045",
+      "buff": {
+        "rawcode": 1110454349,
+        "positive": true,
+        "stealable": true,
+        "organic_only": false
+      }
+    },
+    {
+      "source_key": "A047",
+      "buff": {
+        "rawcode": 1110454349,
+        "positive": true,
+        "stealable": true,
+        "organic_only": false
+      }
+    },
+    {
+      "source_key": "A04H",
+      "buff": {
+        "rawcode": 1110454349,
+        "positive": true,
+        "stealable": true,
+        "organic_only": false
+      }
+    },
+    {
+      "source_key": "A07A",
+      "buff": {
+        "rawcode": 1111844210,
+        "positive": true,
+        "stealable": true,
+        "organic_only": false
+      }
+    },
+    {
+      "source_key": "A07Q",
+      "buff": {
+        "rawcode": 1111844210,
+        "positive": true,
+        "stealable": true,
+        "organic_only": false
+      }
+    },
+    {
+      "source_key": "A08S",
+      "buff": {
+        "rawcode": 1110454349,
         "positive": true,
         "stealable": true,
         "organic_only": false
