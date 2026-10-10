@@ -459,6 +459,12 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(10);
                 hash.write_u64(id.0);
                 match action {
+                    NativeAction::Starfall(state) => {
+                        hash.write_u8(16);
+                        for word in state.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                    }
                     NativeAction::SilverGlade(state) => {
                         hash.write_u8(15);
                         for word in state.canonical_words() {
@@ -2691,6 +2697,11 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             }
         }
         AbilityEffect::BuildingStasis(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
+        AbilityEffect::Starfall(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);
             }

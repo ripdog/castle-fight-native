@@ -601,6 +601,15 @@ impl Simulation {
                             index,
                             units,
                         ));
+                    } else if let AbilityEffect::Starfall(p) = intent.ability.effect {
+                        metrics.effects += usize::from(self.cast_starfall(
+                            source,
+                            intent.ability.id,
+                            p,
+                            intent.cast_sequence,
+                            units,
+                        ));
+                        emit_cast_visual = false;
                     } else if let AbilityEffect::Wilderness(p) = intent.ability.effect {
                         metrics.effects += usize::from(self.cast_wilderness(
                             source,
@@ -911,7 +920,16 @@ impl Simulation {
                     }
                 }
                 AbilityIntentTarget::Building { id, position } => {
-                    if let AbilityEffect::Wilderness(p) = intent.ability.effect {
+                    if let AbilityEffect::Starfall(p) = intent.ability.effect {
+                        metrics.effects += usize::from(self.cast_starfall(
+                            source,
+                            intent.ability.id,
+                            p,
+                            intent.cast_sequence,
+                            units,
+                        ));
+                        emit_cast_visual = false;
+                    } else if let AbilityEffect::Wilderness(p) = intent.ability.effect {
                         metrics.effects += usize::from(self.cast_wilderness(
                             source,
                             intent.ability.id,

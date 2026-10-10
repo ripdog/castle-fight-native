@@ -3453,7 +3453,8 @@ fn prewarm_timed_wc3_effects(
                     let status = match ability.effect {
                         AbilityEffect::Heal(_)
                         | AbilityEffect::SilverGlade(_)
-                        | AbilityEffect::Wilderness(_) => None,
+                        | AbilityEffect::Wilderness(_)
+                        | AbilityEffect::Starfall(_) => None,
                         AbilityEffect::WindWalk(p) => Some((p.ability.0, p.duration_ticks)),
                         AbilityEffect::ScriptedRoots(p) => {
                             Some((p.roots.ability.0, p.roots.duration_ticks))
@@ -4529,6 +4530,9 @@ fn sync_render_entities(
                 });
             }
             let lifetime = match cast.effect {
+                AbilityEffect::Starfall(p) => {
+                    f32::from(p.visual_duration_ticks) / CASTLE_FIGHT_SIMULATION_HZ as f32
+                }
                 AbilityEffect::NativeWeatherVisual { duration_ticks } => {
                     f32::from(duration_ticks) / CASTLE_FIGHT_SIMULATION_HZ as f32
                 }

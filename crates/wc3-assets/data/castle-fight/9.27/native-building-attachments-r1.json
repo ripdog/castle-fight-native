@@ -901,6 +901,29 @@
       ]
     },
     {
+      "building_rawcode": "h07I",
+      "source_registration": "KK",
+      "source_factory": "Gw:create948",
+      "source_callback": "BuildingAttachmentHandler_registerBuildingAttach_RaceNelf_call_registerBuildingAttach_RaceNelf2",
+      "visuals": [
+        {
+          "model_path": "Abilities\\Spells\\Human\\MassTeleport\\MassTeleportTo.mdl",
+          "yaw_degrees": 0.0,
+          "offset_world": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": 0.7,
+          "color_rgb": [
+            0,
+            0,
+            0
+          ]
+        }
+      ]
+    },
+    {
       "building_rawcode": "h07L",
       "source_registration": "KK",
       "source_factory": "Kw:create952",

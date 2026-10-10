@@ -60,7 +60,9 @@ pub(super) fn apply_ability_effect_to_unit(
         return false;
     }
     match effect {
-        AbilityEffect::SilverGlade(_) | AbilityEffect::Wilderness(_) => return false,
+        AbilityEffect::SilverGlade(_)
+        | AbilityEffect::Wilderness(_)
+        | AbilityEffect::Starfall(_) => return false,
         AbilityEffect::Heal(p) => {
             if (p.organic_only && target.mechanical)
                 || (p.nonancient_only && target.classifications.ancient)

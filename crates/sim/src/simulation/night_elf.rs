@@ -105,7 +105,7 @@ impl Simulation {
             effect,
         });
     }
-    fn native_ability_installed(&self, u: &UnitSnapshot, ability: AbilityId) -> bool {
+    pub(super) fn native_ability_installed(&self, u: &UnitSnapshot, ability: AbilityId) -> bool {
         u.status.native_grants.contains(ability)
             || self
                 .world

@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r94";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r95";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 55;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 56;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1372,6 +1372,11 @@ impl CastleFightTowerKind {
         let expected_name = extracted_content_927().buildings[&rawcode].name;
         let mut definition = extracted_tower_definition_927(rawcode, expected_name);
         definition.spellcasting = match self {
+            Self::StarfallObelisk => Some(
+                crate::building_mechanics::starfall_spellcasting_for_version(
+                    MapVersion::CASTLE_FIGHT_9_27,
+                ),
+            ),
             Self::ObeliskOfWilderness => Some(
                 crate::building_mechanics::wilderness_spellcasting_for_version(
                     MapVersion::CASTLE_FIGHT_9_27,
@@ -1839,6 +1844,15 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A07U") => {
+            0x4000_0150
+        }
+        (NativeEffectSourceKind::AbilityEffect, v) if v == u32::from_be_bytes(*b"A07T") => {
+            0x4000_0151
+        }
+        (NativeEffectSourceKind::AbilityEffect, v) if v == u32::from_be_bytes(*b"A08T") => {
+            0x4000_0152
+        }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A07Z") => {
             0x4000_014f
         }
@@ -3287,6 +3301,11 @@ fn hash_automatic_ability_profile(hash: &mut ContentHash64, ability: AutomaticAb
         hash.write_u8(0);
     }
     match ability.effect {
+        AbilityEffect::Starfall(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         AbilityEffect::Wilderness(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);
@@ -6713,6 +6732,36 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn completed_races_resolve_every_source_building_and_upgrade() {
+        let version = MapVersion::CASTLE_FIGHT_9_27;
+        let bundle = castle_fight_content_bundle(version).unwrap();
+        let source = extracted_content_927();
+        for race in [
+            CastleFightBuilderRace::Orc,
+            CastleFightBuilderRace::Elemental,
+            CastleFightBuilderRace::NightElf,
+        ] {
+            let builder = bundle.builder(race).unwrap();
+            let registered =
+                &source.builder_catalogs[&(race as u8, builder.rawcode)].direct_buildings;
+            assert!(!registered.is_empty());
+            for rawcode in registered {
+                assert!(
+                    bundle.building_kind_for_rawcode(*rawcode).is_some(),
+                    "completed {race:?} omits source building {rawcode:#010x}"
+                );
+                let (_, upgrades) = extracted_building_upgrade_links_927(*rawcode);
+                for upgrade in upgrades {
+                    assert!(
+                        bundle.building_kind_for_rawcode(upgrade).is_some(),
+                        "completed {race:?} omits upgrade {upgrade:#010x}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

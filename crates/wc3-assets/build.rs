@@ -267,6 +267,33 @@ fn build_catalog() -> Result<(), Box<dyn Error>> {
         }
     }
     append_building_script_visuals(&mut visuals, &building_mechanics_path)?;
+    let mechanics: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&building_mechanics_path)?)?;
+    let starfall = &mechanics["starfall_spellcasting"]["ability"]["effect"]["Starfall"];
+    let mut children = BTreeSet::new();
+    for option in starfall["options"].as_array().ok_or("Starfall variants")? {
+        for field in ["ability", "buff"] {
+            let bytes =
+                (option[field].as_u64().ok_or("Starfall visual identity")? as u32).to_be_bytes();
+            children.insert(std::str::from_utf8(&bytes)?.to_owned());
+        }
+    }
+    let aliases: Vec<_> = visuals
+        .assets
+        .iter()
+        .filter(|a| a.owner_kind == "abilities" && children.contains(&a.owner_rawcode))
+        .cloned()
+        .map(|mut a| {
+            a.source_unit_rawcode = Some(
+                mechanics["starfall"]["building_rawcode"]
+                    .as_str()
+                    .expect("Starfall building identity")
+                    .to_owned(),
+            );
+            a
+        })
+        .collect();
+    visuals.assets.extend(aliases);
     let attachment_path = manifest_dir.join(format!(
         "data/castle-fight/{catalog_version}/native-building-attachments-r1.json"
     ));
@@ -762,7 +789,7 @@ fn load_visual_assets(
         }
 
         if kind == "abilities"
-            && base_rawcode == "ACmo"
+            && matches!(base_rawcode, "ACmo" | "AEsf")
             && field == "abuf"
             && row.get(level).unwrap_or_default() == "1"
         {
@@ -1279,6 +1306,7 @@ fn append_building_script_visuals(
     for (row, visual_key) in [
         ("ceremonial", "ceremonial_cast_visuals"),
         ("silver", "silver_cast_visuals"),
+        ("starfall", "starfall_cast_visuals"),
         ("wilderness", "wilderness_cast_visuals"),
         ("enchantment", "enchantment_cast_visuals"),
     ] {

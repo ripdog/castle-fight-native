@@ -189,6 +189,9 @@ impl Simulation {
                         self.world.despawn(entity);
                     }
                 }
+                NativeAction::Starfall(state) => {
+                    self.advance_starfall(entity, state, units, buildings)
+                }
                 NativeAction::SupportOrders(_) | NativeAction::SilverGlade(_) => {}
                 NativeAction::BuildingDamageProc(state) => {
                     self.advance_building_damage_proc(entity, state)

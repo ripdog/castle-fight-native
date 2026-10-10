@@ -39,6 +39,8 @@ def build(map_version='9.27', revision='r1'):
     healing = next(r for r in building_rows if r['building_rawcode'] == 'h07Y')
     endurance = next(r for r in building_rows if r['building_rawcode'] == 'h07Z')
     enchantment = next(r for r in building_rows if r['building_rawcode'] == 'h060')
+    starfall = next(r for r in building_rows if r['building_rawcode'] == 'h07I')
+    launcher_codes += ['h07I','A07U','A07T','A08T','x001','AM02','AM03','Amrf']
     wilderness = next(r for r in building_rows if r['building_rawcode'] == 'h07H')
     launcher_codes += ['h07H','A08E','A08C','A08D','A08F']
     silver = next(r for r in building_rows if r['building_rawcode'] == 'h08P')
@@ -87,7 +89,7 @@ def build(map_version='9.27', revision='r1'):
                      'EventListener_add_BuildingLifecycle_onEvent_add_BuildingLifecycle',
                      'EventListener_add_BuildingLifecycle_onEvent_add_BuildingLifecycle1',
                      *guard['source_functions'].split(','), *snow['source_functions'].split(','), *serpent['source_functions'].split(','), *ceremonial['source_functions'].split(','),
-                     'ForGroupCallback_forUnitsInRect_RaceNelfAbilities_callback_forUnitsInRect_RaceNelfAbilities', *wilderness['source_functions'].split(','), *silver['source_functions'].split(','), *stasis['source_functions'].split(','), *enchantment['source_functions'].split(','), 'dummyCastPointFrom',
+                     *starfall['source_functions'].split(','), 'QG', 'DummyRecycler_get', 'createDummy', 'dummyCastImmediateFrom1', 'CallbackSingle_doAfter_SpellHelpers_call_doAfter_SpellHelpers2', 'ForGroupCallback_forUnitsInRect_RaceNelfAbilities_callback_forUnitsInRect_RaceNelfAbilities', *wilderness['source_functions'].split(','), *silver['source_functions'].split(','), *stasis['source_functions'].split(','), *enchantment['source_functions'].split(','), 'dummyCastPointFrom',
                      *healing['source_functions'].split(','), *endurance['source_functions'].split(','), 'dummyCarrierWithAbility', 'createSpellCarrier', 'QL', 'iD', 'hD',
                      'CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities1',
                      'CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities2',
@@ -186,6 +188,9 @@ def build(map_version='9.27', revision='r1'):
     guard_profile = project_guard(guard, selected, protected, traces)
     from project_silver import project as project_silver
     unit_rows = {r['rawcode']:r for r in rows('units.tsv')}
+    from project_starfall import project as project_starfall
+    starfall_profile=project_starfall(starfall,selected,unit_rows,rows('abilities.tsv'),protected,traces,dict(zip(['major','minor'],map(int,map_version.split('.')))))
+    starfall_path=json.loads('"'+re.search(r'addEffect\("(.*?)",unit_getPos',traces['starfallSpell']['source'])[1]+'"')
     from project_wilderness import project as project_wilderness
     wilderness_profile=project_wilderness(wilderness,selected,unit_rows,rows('abilities.tsv'),protected,traces,dict(zip(['major','minor'],map(int,map_version.split('.')))))
     wilderness_body=traces['wildernessObeliskSpell']['source']
@@ -195,7 +200,7 @@ def build(map_version='9.27', revision='r1'):
     silver_profile = project_silver(silver, selected, unit_rows, rows('abilities.tsv'), protected, traces, dict(zip(['major','minor'],map(int,map_version.split('.')))))
     return {'map_version': map_version, 'schema_version': 2, 'source_revision': revision,
             'extraction_git_tree': tree, 'source_sha256': sources,
-            'wilderness':wilderness,'wilderness_spellcasting':wilderness_profile,'wilderness_cast_visuals':wilderness_visuals, 'silver_cast_visuals':silver_visuals, 'silver': silver, 'silver_spellcasting': silver_profile, 'linker': linker, 'linker_death_heal': project_death_heal(linker, buckets, traces),
+            'starfall':starfall, 'starfall_spellcasting':starfall_profile, 'starfall_cast_visuals':[{'role':'caster','path':starfall_path}], 'wilderness':wilderness,'wilderness_spellcasting':wilderness_profile,'wilderness_cast_visuals':wilderness_visuals, 'silver_cast_visuals':silver_visuals, 'silver': silver, 'silver_spellcasting': silver_profile, 'linker': linker, 'linker_death_heal': project_death_heal(linker, buckets, traces),
             'guard': guard, 'guard_damage_proc': guard_profile,
             'city': mechanics, 'launchers': launchers, 'mushroom': mushroom, 'freezer': freezer,
             'freezer_animation_seconds': re.search(r'doAfter\(([\d.]+),', traces['CallbackSingle_doAfter_RaceNorthernAbilities_call_doAfter_RaceNorthernAbilities1']['source']).group(1),

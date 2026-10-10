@@ -179,6 +179,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    StarfallObelisk = 0x2100_0022 => b"h07I",
     ElunesLantern = 0x2100_0021 => b"h073",
     ObeliskOfWilderness = 0x2100_0020 => b"h07H",
     SilverGlade = 0x2100_001f => b"h08P",

@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 74;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 75;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -36,6 +36,7 @@ mod building_damage_procs;
 mod enchantments;
 mod night_elf;
 mod permanent_grants;
+mod starfall;
 mod weather;
 mod world_freezer;
 use world_freezer::WorldFreezerState;
@@ -4513,6 +4514,20 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
     }
     match spellcasting.ability.effect {
+        AbilityEffect::Starfall(p) => {
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::NativeBuildingSpellTrigger
+            );
+            assert!(p.dummy_lifetime_ticks > 0);
+            assert!(p.options.iter().all(|w| w.ability.0 != 0
+                && w.radius > 0
+                && w.damage >= 0
+                && w.interval_ticks > 0
+                && w.duration_ticks > 0
+                && w.mana_cost >= 0
+                && w.building_damage_per_10k <= 10000));
+        }
         AbilityEffect::Wilderness(p) => {
             assert_eq!(
                 spellcasting.ability.target_policy,

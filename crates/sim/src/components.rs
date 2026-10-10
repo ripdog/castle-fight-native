@@ -1606,6 +1606,7 @@ pub enum AbilityEffect {
     NativeWeatherVisual {
         duration_ticks: u16,
     },
+    Starfall(crate::building_mechanics::StarfallProfile),
     BuildingWeather(crate::building_mechanics::BuildingWeatherProfile),
     BuildingEnchantment(crate::building_mechanics::BuildingEnchantmentProfile),
     MasterProjectiles(crate::MapVersion),
@@ -1769,6 +1770,7 @@ impl AbilityEffect {
             Self::Wilderness(_) => 43,
             Self::WindWalk(_) => 40,
             Self::ScriptedRoots(_) => 39,
+            Self::Starfall(_) => 44,
             Self::NativeWeatherVisual { .. } => 38,
             Self::BuildingWeather(_) => 37,
             Self::BuildingEnchantment(_) => 36,

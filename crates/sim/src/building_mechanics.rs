@@ -23,9 +23,12 @@ pub(crate) use damage_proc::{
     damage_proc_granted_sources, damage_proc_source,
 };
 mod night_elf;
-pub use night_elf::{SilverGladeProfile, WildernessProfile};
+pub use night_elf::{SilverGladeProfile, StarfallProfile, StarfallWaveProfile, WildernessProfile};
 pub(crate) use night_elf::{
     SilverGladeState, silver_bindings, silver_source, silver_spellcasting_for_version,
+};
+pub(crate) use night_elf::{
+    StarfallState, starfall_bindings, starfall_source, starfall_spellcasting_for_version,
 };
 pub(crate) use night_elf::{
     wilderness_bindings, wilderness_source, wilderness_spellcasting_for_version,
