@@ -423,8 +423,16 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
         handoffs.append({"trained_rawcode": row["unit_rawcode"], "body_rawcode": body,
             "body_death_ticks": _action_duration_ticks(corpse_fields[body]["udtm"], "0", simulation_hz),
             "source": "resolved/production-unit-special-mechanics.tsv"})
+    from project_air_attack_bonus import project as project_air_bonus
+    functions = {row["name"]: script_bytes[int(row["start_byte_offset"]):int(row["end_byte_offset"])].decode()
+        for row in csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree, "script/function-spans.tsv").decode()), delimiter="\t")}
+    air_bonuses = project_air_bonus(list(csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree,
+        "resolved/production-unit-special-mechanics.tsv").decode()), delimiter="\t")), functions)
     return {
-        "schema_version": 8,
+        "schema_version": 9,
+        "air_attack_bonuses": air_bonuses,
+        "air_attack_bonuses_source": {"git_tree": git_tree, "path": "resolved/production-unit-special-mechanics.tsv",
+            "functions": ["hL", "shouldApplyRiptideAirBonus", "addRiptideAirDamageBonus", "DamageListener_addListener_RiptideAttack_onEvent_addListener_RiptideAttack"]},
         "homing_splash_rawcodes": [rawcode for rawcode, fields in sorted(splash_homing_fields.items())
             if fields.get("ua1w") == "msplash" and fields.get("umh1") == "1"],
         "death_spawn_bodies": [

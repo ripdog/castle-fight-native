@@ -652,6 +652,13 @@ impl Simulation {
                             .expect("projectile impact tick overflow");
                         bounce_projectile_launches.push(BounceProjectileLaunch {
                             source: intent.source_id,
+                            source_rawcode: self
+                                .world
+                                .get::<ContentIdentity>(match intent.source {
+                                    AttackSourceIndex::Unit(index) => units[index].entity,
+                                    AttackSourceIndex::Building(index) => buildings[index].entity,
+                                })
+                                .map(|content| content.rawcode),
                             source_team: intent.source_team,
                             source_is_building: matches!(
                                 intent.source,

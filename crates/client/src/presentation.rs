@@ -6255,6 +6255,10 @@ fn projectile_source_rawcode(
     | ProjectileViewKind::Ballistic {
         source_rawcode: Some(rawcode),
         ..
+    }
+    | ProjectileViewKind::Bounce {
+        source_rawcode: Some(rawcode),
+        ..
     } = projectile.kind
     {
         return Some(rawcode);
@@ -9369,6 +9373,13 @@ mod tests {
             Vec3::new(50.0, PROJECTILE_HEIGHT, 0.0),
             "line fallback must not inherit a ballistic arc"
         );
+        projectile.kind = ProjectileViewKind::Bounce {
+            source_rawcode: Some(42),
+            target: SimId(3),
+            bounce_index: 1,
+            remaining_bounces: 2,
+        };
+        assert_eq!(projectile_source_rawcode(&projectile, &samples), Some(42));
     }
 
     #[test]

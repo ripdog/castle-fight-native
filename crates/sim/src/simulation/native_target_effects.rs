@@ -6,6 +6,7 @@ use crate::components::{
 
 mod acid_bomb;
 mod aftershock;
+mod air_attack_bonus;
 mod aura_carrier;
 mod buff_transfer;
 mod burning_oil;

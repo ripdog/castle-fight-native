@@ -381,6 +381,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
         hash.write_u8(source.team.0);
         hash.write_u8(u8::from(source.hits_ground));
         hash.write_u8(u8::from(source.hits_air));
+        hash.write_u16(source.air_attack_bonus_per_10k);
         hash.write_u64(source.grants.iter().count() as u64);
         for grant in source.grants.iter() {
             for word in grant.canonical_words() {
@@ -1147,6 +1148,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u64(projectile.projectile.source.0);
                 hash.write_u8(projectile.projectile.source_team.0);
                 hash.write_u8(u8::from(projectile.projectile.source_is_building));
+                hash_optional_u32(&mut hash, projectile.projectile.source_rawcode);
                 hash.write_u8(projectile.projectile.target_mask.bits());
                 hash.write_u64(projectile.projectile.target.0);
                 hash.write_i32(projectile.projectile.damage);

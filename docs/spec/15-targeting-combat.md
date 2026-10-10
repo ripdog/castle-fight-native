@@ -225,6 +225,10 @@ The exact Castle Fight-compatible zone shape, friendly-fire policy, building int
 
 ### 9.4 Bounce
 
+A source-owned reduced damage listener may rewrite each positive ordinary attack-event amount for a flying recipient. This runs after native armor/incoming reductions and before subsequent damage observers and the health commit. It is independent of the weapon's delivery and bounce index; every qualifying recipient, including later hops, receives its own rewrite. Spell-event, zero/negative amount, ground-recipient and unrelated-source packets retain their amounts. The rewrite does not alter the projectile's raw damage or compound into the next hop. Its fixed-point bonus and any dead-source continuation are version-scoped authoritative state.
+
+Bounce flight retains its source object identity for missile art after source death and wire restore. Dead source handles with only a static flying-recipient listener persist until their last released weapon projectile resolves, then are pruned at structural commit.
+
 A bounce attack is guaranteed to hit its initial selected target, then may perform a bounded number of subsequent guaranteed-hit jumps. The current verification delivery authors positive integer `speed_per_tick`, non-negative `bounce_range`, `max_bounces`, integer `damage_percent_per_bounce` in `1..=100`, and `allow_repeat_targets`. `max_bounces` counts **additional** jumps after the initial selected target; the verifier currently caps it at eight so authoritative hit history fits fixed-size projectile state.
 
 Launch creates one authoritative persistent bounce projectile with a monotonic `SimId`. That same projectile entity/identity survives across every hop; it stores source identity/team, current target, current damage, launch position/tick, due impact tick, travel speed, range/rules, remaining/indexed bounce count, and bounded hit history. Source death after launch does not cancel the chain. If the current retained hop target has died/disappeared before its due impact, that hop invalidates and the chain ends without retargeting.

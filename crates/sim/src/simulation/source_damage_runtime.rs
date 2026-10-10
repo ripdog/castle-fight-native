@@ -1,7 +1,7 @@
 use super::*;
 
 /// Native dead-unit handles retain installed abilities for already released damage.
-/// Only active Forge grants are needed once current life is zero.
+/// Reduced-event source hooks and active Forge grants survive released flight.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct RetiredDamageSource {
@@ -9,6 +9,7 @@ pub(super) struct RetiredDamageSource {
     pub hits_ground: bool,
     pub hits_air: bool,
     pub grants: crate::NativeAbilityGrants,
+    pub air_attack_bonus_per_10k: u16,
 }
 
 impl RetiredDamageSource {
@@ -21,7 +22,10 @@ impl RetiredDamageSource {
                 grants.insert(grant);
             }
         }
-        grants.iter().next()?;
+        let air_attack_bonus_per_10k = unit.air_attack_bonus_per_10k;
+        if grants.iter().next().is_none() && air_attack_bonus_per_10k == 0 {
+            return None;
+        }
         Some(Self {
             team: unit.team,
             hits_ground: unit.attack_targets.can_target_unit(MovementClass::Ground)
@@ -33,7 +37,80 @@ impl RetiredDamageSource {
                     .secondary_attack
                     .is_some_and(|p| p.targets.can_target_unit(MovementClass::Air)),
             grants,
+            air_attack_bonus_per_10k,
         })
+    }
+}
+
+pub(super) fn attack_damage_for_recipient(
+    source: SimId,
+    victim: &UnitSnapshot,
+    damage: i32,
+    damage_type: DamageType,
+    units: &[UnitSnapshot],
+    retired: &BTreeMap<SimId, RetiredDamageSource>,
+) -> i32 {
+    if damage <= 0
+        || damage_type == DamageType::Spells
+        || victim.movement_class != MovementClass::Air
+    {
+        return damage;
+    }
+    let bonus = find_unit_index(units, source).map_or_else(
+        || {
+            retired
+                .get(&source)
+                .map_or(0, |source| source.air_attack_bonus_per_10k)
+        },
+        |index| units[index].air_attack_bonus_per_10k,
+    );
+    rewrite_air_attack_damage(damage, bonus)
+}
+
+fn rewrite_air_attack_damage(damage: i32, bonus_per_10k: u16) -> i32 {
+    i32::try_from(i64::from(damage) * (10_000 + i64::from(bonus_per_10k)) / 10_000)
+        .expect("reduced native air bonus damage overflow")
+}
+
+impl Simulation {
+    pub(super) fn prune_retired_air_bonus_sources(&mut self) {
+        if !self.retired_damage_sources.values().any(|source| {
+            source.air_attack_bonus_per_10k > 0 && source.grants.iter().next().is_none()
+        }) {
+            return;
+        }
+        use bevy_ecs::query::{Or, With};
+        let mut query = self.world.query_filtered::<(
+            Option<&GuaranteedHitProjectile>,
+            Option<&BounceProjectile>,
+            Option<&BallisticProjectile>,
+            Option<&LineProjectile>,
+            Option<&ReflectedProjectile>,
+        ), Or<(
+            With<GuaranteedHitProjectile>,
+            With<BounceProjectile>,
+            With<BallisticProjectile>,
+            With<LineProjectile>,
+            With<ReflectedProjectile>,
+        )>>();
+        let mut sources = std::collections::BTreeSet::new();
+        for (directed, bounce, ballistic, line, reflected) in query.iter(&self.world) {
+            sources.extend(
+                [
+                    directed.map(|p| p.source),
+                    bounce.map(|p| p.source),
+                    ballistic.map(|p| p.source),
+                    line.map(|p| p.source),
+                    reflected.map(|p| p.reflector),
+                ]
+                .into_iter()
+                .flatten(),
+            );
+        }
+        // These no-corpse handles only retain the static listener for released flight.
+        // Existing Forge lifetime/cleanup remains tied to its corpse contract.
+        self.retired_damage_sources
+            .retain(|id, source| source.grants.iter().next().is_some() || sources.contains(id));
     }
 }
 

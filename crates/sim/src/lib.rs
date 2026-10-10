@@ -5007,6 +5007,7 @@ mod tests {
                 target,
                 bounce_index: 0,
                 remaining_bounces: 2,
+                ..
             } if target == first
         ));
 
@@ -5023,6 +5024,7 @@ mod tests {
                 target,
                 bounce_index: 1,
                 remaining_bounces: 1,
+                ..
             } => target,
             _ => panic!("expected first bounce hop"),
         };
@@ -5040,6 +5042,7 @@ mod tests {
                 target,
                 bounce_index: 2,
                 remaining_bounces: 0,
+                ..
             } => target,
             _ => panic!("expected second bounce hop"),
         };

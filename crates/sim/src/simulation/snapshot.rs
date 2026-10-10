@@ -6,7 +6,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 68;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 69;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -1458,6 +1458,7 @@ mod tests {
             bounce_id,
             BounceProjectile {
                 source,
+                source_rawcode: None,
                 source_team: Team(0),
                 source_is_building: false,
                 target_mask: AttackTargetMask::ALL,

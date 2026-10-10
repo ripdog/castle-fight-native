@@ -939,6 +939,7 @@ impl Simulation {
                 id,
                 BounceProjectile {
                     source: launch.source,
+                    source_rawcode: launch.source_rawcode,
                     source_team: launch.source_team,
                     source_is_building: launch.source_is_building,
                     target_mask: launch.target_mask,

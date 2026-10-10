@@ -284,6 +284,7 @@ pub(crate) struct LineProjectile {
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct BounceProjectile {
     pub source: SimId,
+    pub source_rawcode: Option<u32>,
     pub source_team: Team,
     pub source_is_building: bool,
     pub target_mask: AttackTargetMask,

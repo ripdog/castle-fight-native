@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r101";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r102";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 57;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 58;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -2679,6 +2679,13 @@ fn canonical_content_bundle_hash(bundle: &CastleFightContentBundle) -> u64 {
         hash.write_u32(spawn.child_rawcode);
         hash.write_u8(spawn.count);
     }
+    let air_bonuses = (bundle.map_version == MapVersion::CASTLE_FIGHT_9_27)
+        .then(|| &extracted_content_927().air_attack_bonuses);
+    hash.write_u64(air_bonuses.map_or(0, |profiles| profiles.len()) as u64);
+    for (rawcode, bonus) in air_bonuses.into_iter().flat_map(|profiles| profiles.iter()) {
+        hash.write_u32(*rawcode);
+        hash.write_u16(*bonus);
+    }
     hash_command_card(&mut hash, bundle.command_card);
     hash_economy_rules(&mut hash, bundle.economy);
     hash_damage_rules(&mut hash, bundle.damage_rules);
@@ -3932,6 +3939,24 @@ struct CatalogSupplement927 {
     production_handoffs: Vec<CatalogProductionHandoff927>,
     death_spawn_bodies: Vec<CatalogSummonBodyCorpse927>,
     homing_splash_rawcodes: Vec<String>,
+    air_attack_bonuses: Vec<CatalogAirAttackBonus927>,
+}
+
+#[derive(Debug, Deserialize)]
+struct CatalogAirAttackBonus927 {
+    rawcode: String,
+    bonus_per_10k: u16,
+}
+
+pub(crate) fn native_air_attack_bonus_for_version(version: MapVersion, rawcode: u32) -> u16 {
+    if version != MapVersion::CASTLE_FIGHT_9_27 {
+        return 0;
+    }
+    extracted_content_927()
+        .air_attack_bonuses
+        .get(&rawcode)
+        .copied()
+        .unwrap_or(0)
 }
 
 #[derive(Debug, Deserialize)]
@@ -4142,6 +4167,7 @@ struct ExtractedContent927 {
     protected_stats: BTreeMap<u32, ExtractedProtectedStats927>,
     primary_attacks: BTreeMap<u32, ExtractedAttack927>,
     homing_splash_rawcodes: BTreeSet<u32>,
+    air_attack_bonuses: BTreeMap<u32, u16>,
     secondary_attacks: BTreeMap<u32, ExtractedAttack927>,
     building_secondary_attacks: BTreeMap<u32, CatalogBuildingSecondaryAttack927>,
     production: BTreeMap<u32, ExtractedProduction927>,
@@ -4244,6 +4270,11 @@ impl ExtractedContent927 {
             .map(|weapon| (parse_rawcode(&weapon.rawcode), weapon))
             .collect();
         let death_spawn_bodies = supplement.death_spawn_bodies;
+        let air_attack_bonuses = supplement
+            .air_attack_bonuses
+            .into_iter()
+            .map(|bonus| (parse_rawcode(&bonus.rawcode), bonus.bonus_per_10k))
+            .collect();
         let homing_splash_rawcodes = supplement
             .homing_splash_rawcodes
             .into_iter()
@@ -4891,6 +4922,7 @@ impl ExtractedContent927 {
             protected_stats,
             primary_attacks,
             homing_splash_rawcodes,
+            air_attack_bonuses,
             secondary_attacks,
             building_secondary_attacks,
             production,
@@ -4915,7 +4947,7 @@ impl ExtractedContent927 {
 fn catalog_supplement_927() -> Result<CatalogSupplement927, String> {
     let supplement: CatalogSupplement927 = serde_json::from_str(CATALOG_SUPPLEMENT_927_R1_JSON)
         .map_err(|error| format!("invalid 9.27 catalog supplement: {error}"))?;
-    if supplement.schema_version != 8 {
+    if supplement.schema_version != 9 {
         return Err(format!(
             "unsupported 9.27 catalog supplement schema {}",
             supplement.schema_version

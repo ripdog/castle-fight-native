@@ -1,5 +1,21 @@
 {
-  "schema_version": 8,
+  "schema_version": 9,
+  "air_attack_bonuses": [
+    {
+      "rawcode": "n03U",
+      "bonus_per_10k": 4500
+    }
+  ],
+  "air_attack_bonuses_source": {
+    "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+    "path": "resolved/production-unit-special-mechanics.tsv",
+    "functions": [
+      "hL",
+      "shouldApplyRiptideAirBonus",
+      "addRiptideAirDamageBonus",
+      "DamageListener_addListener_RiptideAttack_onEvent_addListener_RiptideAttack"
+    ]
+  },
   "homing_splash_rawcodes": [
     "h04G",
     "h04H",

@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 75;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 76;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -452,6 +452,7 @@ pub enum ProjectileViewKind {
         impact_radius: i32,
     },
     Bounce {
+        source_rawcode: Option<u32>,
         target: SimId,
         bounce_index: u8,
         remaining_bounces: u8,
@@ -2211,6 +2212,7 @@ impl Simulation {
             self.topology_dirty = true;
         }
 
+        self.prune_retired_air_bonus_sources();
         self.refresh_mana_improvement_links();
         self.evaluate_objective_outcome(completed_tick);
         if self.lifecycle == MatchLifecycle::Running {
@@ -3568,6 +3570,12 @@ impl Simulation {
                         })
                     });
                     UnitSnapshot {
+                        air_attack_bonus_per_10k: content.map_or(0, |c| {
+                            crate::content::native_air_attack_bonus_for_version(
+                                c.map_version,
+                                c.rawcode,
+                            )
+                        }),
                         damage_seed: self.config.match_seed,
                         death_rule: content.and_then(|c| {
                             crate::native_effects::unit_death_rule_for_version(
@@ -3761,6 +3769,7 @@ impl Simulation {
 
 #[derive(Debug, Clone, Copy)]
 struct UnitSnapshot {
+    air_attack_bonus_per_10k: u16,
     death_rule: Option<crate::native_effects::NativeUnitDeathRule>,
     damage_seed: u64,
     death_rules: DamageRules,
@@ -4198,6 +4207,7 @@ struct BallisticProjectileLaunch {
 #[derive(Debug, Clone, Copy)]
 struct BounceProjectileLaunch {
     source: SimId,
+    source_rawcode: Option<u32>,
     source_team: Team,
     source_is_building: bool,
     target_mask: AttackTargetMask,
@@ -5274,6 +5284,7 @@ fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option
         launch_tick: projectile.launch_tick,
         impact_tick: projectile.impact_tick,
         kind: ProjectileViewKind::Bounce {
+            source_rawcode: projectile.source_rawcode,
             target: projectile.target,
             bounce_index: projectile.bounce_index,
             remaining_bounces: projectile.remaining_bounces,
@@ -5685,6 +5696,14 @@ impl Simulation {
                         completed_tick,
                     ),
                     state.units[index].snow_damage_taken_per_10k,
+                );
+                let event_damage = source_damage_runtime::attack_damage_for_recipient(
+                    source_id,
+                    &state.units[index],
+                    event_damage,
+                    damage_type,
+                    state.units,
+                    &self.retired_damage_sources,
                 );
                 self.observe_building_damage_proc(
                     source_id,
