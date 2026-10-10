@@ -883,6 +883,34 @@
       ]
     },
     {
+      "building_rawcode": "h07L",
+      "source_registration": "KK",
+      "source_factory": "Kw:create952",
+      "source_callback": "BuildingAttachmentHandler_registerBuildingAttach_RaceNelf_call_registerBuildingAttach_RaceNelf6",
+      "visuals": [
+        {
+          "model_path": "Doodads\\Ruins\\Plants\\Ruins_Shrub\\Ruins_Shrub2.mdl",
+          "yaw_degrees": 318.0,
+          "offset_world": [
+            43.5,
+            -41.75,
+            0.0
+          ],
+          "scale": 1.0
+        },
+        {
+          "model_path": "Doodads\\Ruins\\Plants\\Ruins_Shrub\\Ruins_Shrub0.mdl",
+          "yaw_degrees": 226.0,
+          "offset_world": [
+            -38.25,
+            40.25,
+            0.0
+          ],
+          "scale": 1.0
+        }
+      ]
+    },
+    {
       "building_rawcode": "h07M",
       "source_registration": "KK",
       "source_factory": "Jw:create951",

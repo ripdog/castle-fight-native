@@ -235,3 +235,49 @@ fn wind_walk_phases_through_units_without_changing_terrain_clearance() {
     );
     assert_eq!(units[i].collision_radius, SUBUNITS_PER_WORLD_UNIT);
 }
+
+#[test]
+fn one_owner_cache_keeps_distinct_ordinary_and_royal_fallback_groups() {
+    let mut s = simulation();
+    let ordinary = spawn(&mut s, 0, 0, 100, true, false);
+    let royal = spawn(&mut s, 0, 0, 100, true, false);
+    let local = spawn(&mut s, 1, 1, 60, false, false);
+    let global = spawn(&mut s, 1, 80, 100, false, true);
+    let mut units = s.snapshot_units();
+    let royal_index = find_unit_index(&units, royal).unwrap();
+    units[royal_index]
+        .spellcasting
+        .as_mut()
+        .unwrap()
+        .ability
+        .effect = AbilityEffect::WindWalk(WindWalkProfile {
+        fallback_health_below: p().rules.fallback_health_below[1],
+        ..p()
+    });
+    s.resolve_support_orders(&mut units);
+    assert_eq!(
+        units[find_unit_index(&units, ordinary).unwrap()]
+            .status
+            .support_order
+            .unwrap()
+            .selected_target,
+        Some(global)
+    );
+    assert_eq!(
+        units[royal_index]
+            .status
+            .support_order
+            .unwrap()
+            .selected_target,
+        Some(local)
+    );
+    let cache = s
+        .world
+        .iter_entities()
+        .find_map(|e| match e.get::<NativeAction>()? {
+            NativeAction::SupportOrders(q) => Some(q.caches.clone()),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(cache.len(), 1);
+}

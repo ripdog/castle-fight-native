@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A078","unit_rawcode":"n020","kind":"wind-walk"},
+    {"source_kind":"unit-ability","source_key":"A075","unit_rawcode":"n020","kind":"feedback"},
     {"source_kind":"unit-ability","source_key":"A077","unit_rawcode":"n01Z","kind":"wind-walk"},
     {"source_kind":"unit-ability","source_key":"A076","unit_rawcode":"n01Z","kind":"feedback"},
     {"source_kind":"unit-ability","source_key":"A07R","unit_rawcode":"e00J","kind":"scripted-roots"},

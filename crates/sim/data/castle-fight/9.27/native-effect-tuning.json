@@ -5,6 +5,114 @@
     {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
+      "source_key": "A078",
+      "unit_rawcode": "n020",
+      "spellcasting": {
+        "mana": {
+          "maximum": 150,
+          "starting": 135,
+          "regen_per_tick_per_10k": 2147490648
+        },
+        "ability": {
+          "id": 1093678904,
+          "mana_cost": 50,
+          "cooldown_ticks": 0,
+          "range": 0,
+          "target_policy": "ScriptedController",
+          "effect": {
+            "WindWalk": {
+              "ability": 1093678904,
+              "rules": {
+                "map_version": {
+                  "major": 9,
+                  "minor": 27
+                },
+                "interval_ticks": 6,
+                "budget": 12,
+                "cache_ticks": 3,
+                "retention_limit": 15,
+                "preferred_mana_above": 10,
+                "fallback_health_below": [
+                  150,
+                  300
+                ],
+                "local_rectangles": [
+                  [
+                    {
+                      "x": -6160384,
+                      "y": -4194304
+                    },
+                    {
+                      "x": 1966080,
+                      "y": 4194304
+                    }
+                  ],
+                  [
+                    {
+                      "x": -1933312,
+                      "y": -4194304
+                    },
+                    {
+                      "x": 6193152,
+                      "y": 4194304
+                    }
+                  ]
+                ],
+                "battlefield": [
+                  {
+                    "x": -6324224,
+                    "y": -3670016
+                  },
+                  {
+                    "x": 6324224,
+                    "y": 3670016
+                  }
+                ],
+                "excluded_ability": 1093679176,
+                "excluded_buffs": [
+                  1110454578,
+                  1112040046
+                ]
+              },
+              "fade_ticks": 39,
+              "duration_ticks": 6000,
+              "movement_percent_delta": 45,
+              "backstab_damage": 300,
+              "fallback_health_below": 300
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 7000,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "script": [
+          "orderAssassinW",
+          "prepareAssassinTargets",
+          "isValidAssassinTarget",
+          "SupportOrderTask_SupportOrderTask_run",
+          "TaskQueue_TaskQueue_executeTasks"
+        ],
+        "fields": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A075",
+      "unit_rawcode": "n020",
+      "kind": "feedback",
+      "maximum_mana_drained": 60,
+      "damage_per_mana_per_10k": 22000,
+      "summoned_damage": 10,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A075",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
       "source_key": "A077",
       "unit_rawcode": "n01Z",
       "spellcasting": {

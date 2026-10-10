@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    RoyalAssassin = 0x1000_0042 => b"n020",
     Assassin = 0x1000_0041 => b"n01Z",
     SageDruid = 0x1000_0040 => b"e00J",
     Druid = 0x1000_003f => b"e007",
@@ -101,6 +102,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    GuildOfShadows = 0x2000_0042 => b"h07L",
     HouseOfShadows = 0x2000_0041 => b"h07M",
     MoonAltar = 0x2000_0040 => b"h07D",
     MoonShrine = 0x2000_003f => b"h088",
