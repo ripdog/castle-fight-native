@@ -4,6 +4,35 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A02Y",
+      "unit_rawcode": "h032",
+      "kind": "sphere",
+      "profile": {
+        "ability": 1093677657,
+        "attachment_count": 3,
+        "cooldown_ticks": 30,
+        "speed_per_tick": 47786
+      },
+      "provenance": {
+        "ability": "A02Y",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A02X",
+      "unit_rawcode": "n00X",
+      "kind": "cleave",
+      "radius_world": 260,
+      "damage_per_10k": 3500,
+      "targets": 1,
+      "provenance": {
+        "ability": "A02X",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A009",
       "unit_rawcode": "n002",
       "kind": "cleave",

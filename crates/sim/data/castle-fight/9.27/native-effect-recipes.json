@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A02Y","unit_rawcode":"h032","kind":"sphere"},
+    {"source_kind":"unit-ability","source_key":"A02X","unit_rawcode":"n00X","kind":"cleave"},
     {"source_kind":"unit-ability","source_key":"A009","unit_rawcode":"n002","kind":"cleave"},
     {"source_kind":"unit-ability","source_key":"A09W","unit_rawcode":"n01P","kind":"poison"},
     {"source_kind":"unit-ability","source_key":"A06J","unit_rawcode":"n01P","kind":"death-spawn"},
