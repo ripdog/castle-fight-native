@@ -159,6 +159,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    DischargeTower = 0x2100_001d => b"h076",
     ElementalGuardTower = 0x2100_001c => b"h061",
     MeteorShower = 0x2100_001b => b"h06E",
     ElementalRain = 0x2100_001a => b"h06F",

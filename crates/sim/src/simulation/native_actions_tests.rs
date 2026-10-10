@@ -541,3 +541,79 @@ fn native_healing_trigger_never_spends_mana_for_air_only_full_health_mechanical_
     assert!(s.ability_casts_last_tick().is_empty());
     assert!(s.chain_lightnings_last_tick().is_empty());
 }
+
+#[test]
+fn native_fire_building_has_no_mana_dependency_and_keeps_independent_released_bolts() {
+    let mut s = sim(1);
+    let mut profile = fire();
+    profile.mana = ManaProfile {
+        maximum: 0,
+        starting: 0,
+        regen_per_tick_per_10k: 0,
+    };
+    profile.ability.cooldown_ticks = 2;
+    if let AbilityEffect::PhoenixFire(bolt) = &mut profile.ability.effect {
+        bolt.targets = AttackTargetMask::AIR_AND_GROUND;
+        bolt.damage_per_second = 0;
+        bolt.duration_ticks = 1;
+        bolt.speed_per_tick = SUBUNITS_PER_WORLD_UNIT;
+    }
+    let source = s.spawn_building(BuildingSpawn {
+        team: Team(0),
+        footprint: BuildingFootprint::new(0, 0, 1, 1),
+        health: 100,
+        production: None,
+        attack: None,
+        spellcasting: Some(profile),
+    });
+    let origin = footprint_center_point(
+        BuildingFootprint::new(0, 0, 1, 1),
+        s.config.navigation_cell_size,
+    );
+    let target = unit(&mut s, 1, 60, MovementClass::Air, false);
+    s.world
+        .entity_mut(entity(&s, target))
+        .get_mut::<Position>()
+        .unwrap()
+        .0
+        .y = origin.y;
+    let ally = unit(&mut s, 0, 60, MovementClass::Ground, false);
+    let immune = unit(&mut s, 1, 60, MovementClass::Ground, false);
+    s.world
+        .entity_mut(entity(&s, immune))
+        .get_mut::<UnitClassifications>()
+        .unwrap()
+        .spell_immune = true;
+    let structure = s.spawn_building(BuildingSpawn {
+        team: Team(1),
+        footprint: BuildingFootprint::new(2, 0, 1, 1),
+        health: 100,
+        production: None,
+        attack: None,
+        spellcasting: None,
+    });
+    s.step();
+    s.step();
+    s.step();
+    assert_eq!(
+        s.projectiles().len(),
+        2,
+        "cooldown permits another launch while first travels"
+    );
+    s.world.despawn(entity(&s, source));
+    let snapshot = s.capture_snapshot();
+    let mut restored = sim(4);
+    restored.restore_snapshot(&snapshot).unwrap();
+    for _ in 0..80 {
+        assert_eq!(s.step().checksum, restored.step().checksum);
+    }
+    assert_eq!(s.unit(target).unwrap().health, 86);
+    assert_eq!(
+        s.unit(target).unwrap().status.damage_over_time_count,
+        0,
+        "zero-DPS short buff expires without damage"
+    );
+    assert_eq!(s.unit(ally).unwrap().health, 100);
+    assert_eq!(s.unit(immune).unwrap().health, 100);
+    assert_eq!(s.building(structure).unwrap().health, 100);
+}
