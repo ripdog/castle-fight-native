@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A025","unit_rawcode":"n00K","kind":"critical-strike"},
+    {"source_kind":"unit-ability","source_key":"A061","unit_rawcode":"n00K","kind":"feedback"},
+    {"source_kind":"unit-ability","source_key":"A02N","unit_rawcode":"n00K","kind":"cleave"},
+    {"source_kind":"unit-ability","source_key":"A0H0","unit_rawcode":"n00K","kind":"spell-resistance"},
     {"source_kind":"unit-ability","source_key":"A060","unit_rawcode":"n00J","kind":"cleave"},
     {"source_kind":"unit-ability","source_key":"A026","unit_rawcode":"n00J","kind":"bash"},
     {"source_kind":"unit-ability","source_key":"A07Z","unit_rawcode":"h073","kind":"feedback"},

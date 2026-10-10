@@ -1,6 +1,12 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A025","implementation":"warcraft-critical-strike-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A061","implementation":"warcraft-feedback-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A02N","implementation":"warcraft-cleave-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0H0","implementation":"warcraft-spell-resistance-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A024","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A021","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A060","implementation":"warcraft-cleave-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A026","implementation":"warcraft-bash-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A09H","implementation":"warcraft-companion-production-v1","valid_from":"9.27","valid_through":"9.27","notes":"Retained TypeMurloc local training copy and extra copy per successful team Heroic Shrine roll."},

@@ -4,6 +4,57 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A025",
+      "unit_rawcode": "n00K",
+      "kind": "critical-strike",
+      "chance_per_10k": 2000,
+      "damage_multiplier_per_10k": 20000,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A025",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A061",
+      "unit_rawcode": "n00K",
+      "kind": "feedback",
+      "maximum_mana_drained": 25,
+      "damage_per_mana_per_10k": 10000,
+      "summoned_damage": 10,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A061",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A02N",
+      "unit_rawcode": "n00K",
+      "kind": "cleave",
+      "radius_world": 200,
+      "damage_per_10k": 3000,
+      "targets": 1,
+      "provenance": {
+        "ability": "A02N",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0H0",
+      "unit_rawcode": "n00K",
+      "kind": "spell-resistance",
+      "damage_taken_per_10k": 8000,
+      "provenance": {
+        "ability": "A0H0",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A060",
       "unit_rawcode": "n00J",
       "kind": "cleave",
