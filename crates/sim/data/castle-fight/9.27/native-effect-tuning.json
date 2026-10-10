@@ -4,6 +4,17 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A00T",
+      "unit_rawcode": "e001",
+      "kind": "evasion",
+      "chance_per_10k": 800,
+      "provenance": {
+        "ability": "A00T",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A0ET",
       "unit_rawcode": "h063",
       "kind": "critical-strike",

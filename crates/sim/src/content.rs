@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r80";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r81";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -349,6 +349,7 @@ impl CastleFightContentBundle {
                         CastleFightBuilderRace::Northern,
                         CastleFightBuilderRace::Orc,
                         CastleFightBuilderRace::Elemental,
+                        CastleFightBuilderRace::NightElf,
                     ]
                 } else {
                     &[CastleFightBuilderRace::Human]
@@ -1828,6 +1829,9 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A00T") => {
+            0x4000_0134
+        }
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0ET") => {
             0x4000_0133
         }
@@ -6180,18 +6184,19 @@ mod tests {
     #[test]
     fn retained_extraction_indexes_content_beyond_the_playable_subset() {
         let extracted = extracted_content_927();
-        let hunter_hall = u32::from_be_bytes(*b"h00S");
-        assert!(extracted.buildings.contains_key(&hunter_hall));
-        assert!(extracted.production.contains_key(&hunter_hall));
-        assert!(
-            CastleFightProductionKind::from_rawcode_for_version(
-                hunter_hall,
-                MapVersion::CASTLE_FIGHT_9_27
-            )
-            .unwrap()
-            .is_none(),
-            "extraction evidence must not imply executable support"
-        );
+        let unpromoted = extracted
+            .production
+            .keys()
+            .find(|&&rawcode| {
+                CastleFightProductionKind::from_rawcode_for_version(
+                    rawcode,
+                    MapVersion::CASTLE_FIGHT_9_27,
+                )
+                .unwrap()
+                .is_none()
+            })
+            .expect("retained production evidence extends beyond promoted races");
+        assert!(extracted.buildings.contains_key(unpromoted));
         assert!(extracted.buildings.len() > CastleFightProductionKind::ALL.len());
     }
 
@@ -6539,20 +6544,22 @@ mod tests {
                 .is_empty()
         );
 
-        // Ranger's Hall is itself an upgrade in 9.27, but its Hunter's Hall precursor is not
-        // implemented in the current native slice yet. The raw extracted relation remains
-        // authoritative even though the typed lookup cannot expose an unimplemented kind.
-        let ranger = CastleFightProductionKind::RangersHall.definition();
-        let (ranger_precursor, ranger_targets) =
-            extracted_building_upgrade_links_927(ranger.rawcode);
-        assert_eq!(ranger_precursor, Some(u32::from_be_bytes(*b"h00S")));
-        assert_eq!(ranger_targets, vec![u32::from_be_bytes(*b"h03E")]);
-        assert_eq!(CastleFightProductionKind::RangersHall.upgrade_from(), None);
-        assert!(
-            CastleFightProductionKind::RangersHall
-                .upgrade_targets()
-                .is_empty()
-        );
+        for kind in CastleFightProductionKind::ALL {
+            let (precursor, targets) =
+                extracted_building_upgrade_links_927(kind.definition().rawcode);
+            let promoted = |rawcode| {
+                CastleFightProductionKind::from_rawcode_for_version(
+                    rawcode,
+                    MapVersion::CASTLE_FIGHT_9_27,
+                )
+                .unwrap()
+            };
+            assert_eq!(kind.upgrade_from(), precursor.and_then(promoted));
+            assert_eq!(
+                kind.upgrade_targets(),
+                targets.into_iter().filter_map(promoted).collect::<Vec<_>>()
+            );
+        }
 
         let human = CastleFightBuilderRace::Human.definition();
         assert!(human.build_catalog.contains(&u32::from_be_bytes(*b"h000")));

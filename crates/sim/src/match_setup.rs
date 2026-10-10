@@ -1154,6 +1154,7 @@ mod tests {
             CastleFightBuilderRace::Northern,
             CastleFightBuilderRace::Orc,
             CastleFightBuilderRace::Elemental,
+            CastleFightBuilderRace::NightElf,
         ] {
             let mut config =
                 CastleFightMatchConfig::development_subset(MapVersion::CASTLE_FIGHT_9_27, "r1", 1)

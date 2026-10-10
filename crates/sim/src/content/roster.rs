@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    Huntress = 0x1000_003d => b"e001",
     GreaterElementalOfEarth = 0x1000_003c => b"h03N",
     ElementalOfEarth = 0x1000_003b => b"h034",
     GreaterElementalOfLightning = 0x1000_003a => b"h03R",
@@ -96,6 +97,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    HuntersHall = 0x2000_003d => b"h00S",
     GreaterFissure = 0x2000_003c => b"h041",
     RockPile = 0x2000_003b => b"h040",
     PillarOfStElmosFire = 0x2000_003a => b"h044",
