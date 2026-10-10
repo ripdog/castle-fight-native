@@ -854,16 +854,16 @@ pub(super) fn apply_corruption(
     profile: Option<crate::components::CorruptionProfile>,
     tick: u64,
     units: &mut [UnitSnapshot],
-) {
+) -> bool {
     let (TargetIndex::Unit(i), Some(p)) = (target, profile) else {
-        return;
+        return false;
     };
     let u = &mut units[i];
     if u.health <= 0
         || u.classifications.invulnerable
         || !p.targets.can_target_unit(u.target_movement_class())
     {
-        return;
+        return false;
     }
     let duration = if u.classifications.uses_hero_spell_rules() {
         p.hero_duration_ticks
@@ -880,4 +880,30 @@ pub(super) fn apply_corruption(
             ..TimedArmorModifier::default()
         },
     );
+    true
+}
+
+/// Presentation uses the existing negative armor effect shape; this event is not a native cast.
+pub(super) fn corruption_hit_event(
+    source: SimId,
+    target: TargetIndex,
+    p: Option<crate::components::CorruptionProfile>,
+    units: &[UnitSnapshot],
+) -> AbilityCastEvent {
+    let (TargetIndex::Unit(i), Some(p)) = (target, p) else {
+        unreachable!("successful native unit orb");
+    };
+    AbilityCastEvent {
+        source,
+        ability: p.ability,
+        target: AbilityCastTarget::Unit(units[i].id),
+        target_position: Some(units[i].position),
+        effect: AbilityEffect::FaerieFire {
+            native_buff: Some(p.buff),
+            modifier: ModifierId(p.ability.0),
+            armor_reduction_per_100: p.armor_reduction_per_100,
+            duration_ticks: p.duration_ticks,
+            hero_duration_ticks: p.hero_duration_ticks,
+        },
+    }
 }

@@ -319,12 +319,20 @@ impl Simulation {
                     if defense.damage <= 0 && defense.reflected {
                         continue;
                     }
-                    apply_corruption(
+                    if apply_corruption(
                         target,
                         snapshot.projectile.on_hit.corruption,
                         completed_tick,
                         units,
-                    );
+                    ) {
+                        self.last_ability_casts
+                            .push(super::status::corruption_hit_event(
+                                snapshot.projectile.source,
+                                target,
+                                snapshot.projectile.on_hit.corruption,
+                                units,
+                            ));
+                    }
                     if self
                         .apply_damage_to_target(
                             target,

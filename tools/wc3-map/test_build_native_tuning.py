@@ -143,6 +143,8 @@ class NativeTuningProjectionTest(unittest.TestCase):
         fields = {"targetattachcount":"3", "cool1":"99", "missilespeed":"450"}
         profile = native.project_effect(recipe, fields, None, {"cooldown":"0.11"}, {"native_base":"Asph"})["profile"]
         self.assertEqual((profile["attachment_count"], profile["cooldown_ticks"], profile["speed_per_tick"]), (3,4,15*1024))
+        for base in ("Asph", "Asp1", "Asp2", "Asp3"):
+            self.assertEqual(native.project_effect(recipe, fields, None, {"cooldown":"0.11"}, {"native_base":base})["profile"], profile)
         for count in ('0', '4'):
             with self.assertRaises(ValueError):
                 native.project_effect(recipe, {**fields, "targetattachcount":count}, None, {}, {"native_base":"Asph"})

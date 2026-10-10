@@ -32,7 +32,7 @@ def build(release):
         spheres = []
         for source in inventory:
             native = abilities.get(source, {})
-            if native.get('base') != 'Asph' or not native.get('atat'):
+            if native.get('base') not in {'Asph', 'Asp1', 'Asp2', 'Asp3'} or not native.get('atat'):
                 continue
             count = int(native['atac'])
             points = [native.get(f'ata{index}', '') for index in range(count)]

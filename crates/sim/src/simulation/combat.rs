@@ -358,7 +358,16 @@ impl Simulation {
                             building_health,
                         ) =>
                     {
-                        apply_corruption(intent.target, on_hit.corruption, completed_tick, units);
+                        if apply_corruption(intent.target, on_hit.corruption, completed_tick, units)
+                        {
+                            self.last_ability_casts
+                                .push(super::status::corruption_hit_event(
+                                    intent.source_id,
+                                    intent.target,
+                                    on_hit.corruption,
+                                    units,
+                                ));
+                        }
                         let applied = self.apply_damage_to_target(
                             intent.target,
                             WeaponDamageEvent {

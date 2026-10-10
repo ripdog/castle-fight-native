@@ -202,6 +202,17 @@
       ]
     },
     {
+      "unit_rawcode": "e00A",
+      "spheres": [
+        {
+          "ability_rawcode": "A07Y",
+          "attachment_points": [
+            "sprite,first"
+          ]
+        }
+      ]
+    },
+    {
       "unit_rawcode": "h00C",
       "spheres": [
         {
@@ -535,6 +546,17 @@
           "attachment_points": [
             "hand,right",
             "hand,left"
+          ]
+        }
+      ]
+    },
+    {
+      "unit_rawcode": "n034",
+      "spheres": [
+        {
+          "ability_rawcode": "A0H3",
+          "attachment_points": [
+            "overhead"
           ]
         }
       ]

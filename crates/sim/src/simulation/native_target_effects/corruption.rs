@@ -84,3 +84,38 @@ fn released_orb_missile_keeps_payload_after_source_death_and_wire_restore() {
         "orb lands before ordinary armor calculation"
     );
 }
+
+#[test]
+fn passive_orb_hit_art_does_not_launch_an_extra_native_sphere() {
+    let mut sim = simulation(1);
+    let p = profile(2, 400);
+    let source = sim.spawn_unit_with_properties(
+        unit(0, 20, 10, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            passive_effects: PassiveUnitEffects::from_slice(&[
+                PassiveUnitEffect::Corruption(p),
+                PassiveUnitEffect::Sphere(crate::components::SphereProfile {
+                    ability: AbilityId(3),
+                    attachment_count: 3,
+                    cooldown_ticks: 4,
+                    speed_per_tick: SUBUNITS_PER_WORLD_UNIT,
+                }),
+            ]),
+            ..Default::default()
+        },
+    );
+    sim.spawn_unit(unit(1, 40, 0, AttackDelivery::Melee));
+    sim.step();
+    sim.step();
+    assert!(
+        sim.ability_casts_last_tick()
+            .iter()
+            .any(|cast| cast.ability == p.ability)
+    );
+    assert_eq!(
+        sim.unit(source).unwrap().status.spheres[0]
+            .unwrap()
+            .next_slot,
+        1
+    );
+}

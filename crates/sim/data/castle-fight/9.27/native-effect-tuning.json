@@ -4,6 +4,56 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A074",
+      "unit_rawcode": "e00A",
+      "kind": "evasion",
+      "chance_per_10k": 4000,
+      "provenance": {
+        "ability": "A074",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A07D",
+      "unit_rawcode": "e00A",
+      "kind": "corruption",
+      "profile": {
+        "ability": 1093678916,
+        "buff": {
+          "rawcode": 1110454609,
+          "positive": false,
+          "stealable": false,
+          "organic_only": false
+        },
+        "armor_reduction_per_100": 700,
+        "duration_ticks": 45,
+        "hero_duration_ticks": 45,
+        "targets": 3
+      },
+      "provenance": {
+        "ability": "A07D",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A07Y",
+      "unit_rawcode": "e00A",
+      "kind": "sphere",
+      "profile": {
+        "ability": 1093678937,
+        "attachment_count": 1,
+        "cooldown_ticks": 30,
+        "speed_per_tick": 47786
+      },
+      "provenance": {
+        "ability": "A07Y",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A073",
       "unit_rawcode": "e00B",
       "kind": "evasion",

@@ -343,7 +343,7 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
             "armor_reduction_per_100": number("DataB1", 100), "duration_ticks": ticks("dur1"),
             "hero_duration_ticks": ticks("herodur1"), "targets": 3})
     elif kind == "sphere":
-        if mechanics["native_base"] != "Asph" or not 1 <= number("Targetattachcount") <= 3:
+        if mechanics["native_base"] not in {"Asph", "Asp1", "Asp2", "Asp3"} or not 1 <= number("Targetattachcount") <= 3:
             raise ValueError("Sphere must retain an audited native attachment count")
         # Native Sphere launches independent visual-only missiles to the attack/cast point.
         effect.update(profile={"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
