@@ -2,6 +2,8 @@
 
 Retained Castle Fight 9.27/r1 extraction tree: `8ea806dca331ff254995e94e6f0baf225a14bf10`. Work follows authored command-card positions from top left, completing each root and upgrade chain before advancing right. Registration function `KK` and builder `X089` define source ownership; runtime data consumes reproducible versioned catalogs. The first chain is Hunter's Hall → Ranger's Hall → Amazon's Hall. Only completed promotions become buildable.
 
+Status: complete and selectable at runtime r95. All ten race-owned panel roots, five upgrades and eleven produced combat bodies are implemented. The shared shop is common content. The retained registration and upgrade closure are enforced by the catalog-wide `completed_races_resolve_every_source_building_and_upgrade` check for Orc, Elemental and Night Elf.
+
 ## Hunter's Hall / Huntress
 
 - Identity: runtime r81; `h00S` inherits `hbla`, producing `e001` inherited from `earc`. Protected and ordinary life/regeneration, mana, armor, ground movement, collision, acquisition, piercing homing missile weapon, cadence, native delivery art, production/construction/repair/economy and upgrade edge consume the retained projections. Both weapon slots were reconciled; the second is unavailable. All source targets and organic combat-sapper/ward classifications remain distinct from corpse raise/decay eligibility.
@@ -152,3 +154,10 @@ Validation: shared Feedback, catalog and tuning projection checks, strict worksp
 - Verification: synthetic fixtures distinguish parent and effect selectors, failed secondary resources, empty selection, fixed point, live area/masks, native defenses, exact pulse/dummy cleanup, earlier vision cleanup, no invisible detection, artillery mode and in-progress mixed-worker wire recovery. Projection mutations reject changed owner/origin/helper, mode orientation, source exclusions, resources, durations or either cleanup path. Catalog-wide inventory/weapon/economy and source attachment closure supply numerical evidence.
 
 Validation: focused channel, complete catalog, source projections, strict workspace/all-target Clippy, formatting, reproduction and full effects export are recorded in `.local-tools/orc-validation/starfall-*.log`.
+
+## Race completion verification
+
+- Complete workspace tests passed: 1,034 tests, with five existing ignored tests. Final Starfall source-dummy reconciliation was followed by all four channel fixtures, 32 catalog checks and strict workspace/all-target Clippy. Formatting and whitespace checks passed.
+- All 187 map-tool tests passed after the final source reconciliation. Native tuning, carrier, building-mechanic, unit-presentation, building-attachment and catalog-source projections reproduce from the retained release evidence. The runtime release manifest pins the completed r95 implementation commit and validates both retained runtime artifact hashes.
+- The Night Elf presentation delivery audit checked 28 source-owned entities and 71 model/dependency bindings with no findings. Those totals include the builder and shared shop. The full effects pack exported 276 unique models; its one unresolved import is outside Night Elf ownership. The audit and logs are retained under `.local-tools/orc-validation/nightelf-*` and `starfall-*`.
+- Completion covers native content, mechanics, source-owned presentation bindings, selection/build menus and deterministic state restoration. Native timing/defense interpretations and model-conversion limits described above remain explicit fidelity boundaries; delivery checks do not constitute a renderer or Warcraft runtime comparison.
