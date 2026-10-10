@@ -9,6 +9,24 @@ import build_runtime_catalog as catalog
 
 
 class NativeTuningProjectionTest(unittest.TestCase):
+    def test_native_heal_reconciles_native_effect_and_delayed_caster_order(self):
+        recipe={'kind':'native-heal','source_kind':'unit-ability','source_key':'HEAL','unit_rawcode':'UNIT'}
+        fields={'targs1':'air,friend,ground,invulnerable,neutral,nonancient,organic,self,vulnerable','cost1':'999','cool1':'999','rng1':'19','dataa1':'17'}
+        unit={'mana_max':'13','mana_start':'11','mana_regen':'0.2'}
+        callback='CallbackSingle_doAfter_RaceNelfAbilities_call_doAfter_RaceNelfAbilities1'
+        functions={'cast':'Qwn.u=Pwn doAfter(0.15,Qwn)',callback:'orderCodeAttack(jwn.u)'}
+        row={'target_mode_label':'ally-ground','base_order':'heal','mechanic_kind':'scheduled-callback','scheduled_delays_json':'["0.15"]','handler_function':'cast'}
+        semantics={'semantic_kind':'registered-object-effect-plus-resume','parameters_json':json.dumps({'primary_effect_ability_rawcode':'HEAL','resume_attack_delay_seconds':0.15})}
+        detail={'native_base':'Ahea','mechanics_row':row,'semantics_row':semantics,'functions':functions,'git_tree':'synthetic'}
+        ability=native.project_effect(recipe,fields,unit,{'mana_cost':'3','cooldown':'0.4'},detail)['spellcasting']['ability']
+        self.assertEqual((ability['mana_cost'],ability['cooldown_ticks'],ability['effect']['Heal']['resume_attack_ticks']),(3,12,5))
+        self.assertTrue(ability['effect']['Heal']['affects_invulnerable'])
+        for key,token in [('cast','Qwn.u=Pwn'),('cast','doAfter(0.15,Qwn)'),(callback,'orderCodeAttack(jwn.u)')]:
+            with self.subTest(token=token),self.assertRaises(ValueError):
+                native.project_effect(recipe,fields,unit,{}, {**detail,'functions':{**functions,key:functions[key].replace(token,'changed')}})
+        with self.assertRaises(ValueError):
+            native.project_effect(recipe,{**fields,'targs1':fields['targs1'].replace('organic,','')},unit,{},detail)
+
     def test_corruption_projects_native_family_without_spell_immunity_or_organic_gate(self):
         recipe = {"kind":"corruption", "source_kind":"unit-ability", "source_key":"TEST", "unit_rawcode":"UNIT"}
         fields = {"dataa1":"0", "datae1":"1", "datab1":"3", "targs1":"air,ground,ward", "buffid1":"BUFF", "dur1":"0.3", "herodur1":"0.1"}

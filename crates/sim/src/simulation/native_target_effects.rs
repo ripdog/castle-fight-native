@@ -14,6 +14,7 @@ mod corruption;
 mod damage_charge;
 mod damage_threshold;
 mod ensnare;
+mod heal;
 mod kill_berserk;
 mod lava_spawn;
 mod lightning;

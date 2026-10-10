@@ -712,10 +712,12 @@ mod tests {
                         && art.source_unit_rawcode.is_none()
                         && (art.role == "missile"
                             || (art.role == "target"
-                                && native
-                                    .abilities
-                                    .iter()
-                                    .any(|binding| binding.rawcode == child)))
+                                && (row.get(header_index(&headers, "ability_rawcode").unwrap())
+                                    == Some(child)
+                                    || native
+                                        .abilities
+                                        .iter()
+                                        .any(|binding| binding.rawcode == child))))
                 }) {
                     assert!(
                         catalog.assets.iter().any(|inventory| {

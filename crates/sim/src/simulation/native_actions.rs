@@ -171,6 +171,24 @@ impl Simulation {
                 continue;
             }
             match action {
+                NativeAction::ResumeAttack { source, due_tick } => {
+                    if self.next_tick >= due_tick {
+                        if let Some(i) = find_unit_index(units, source)
+                            && units[i].health > 0
+                            && !units[i].orders_suspended
+                            && !units[i].status.is_stunned(self.next_tick)
+                        {
+                            let u = &mut units[i];
+                            u.target = None;
+                            u.direct_retaliation_lock = false;
+                            u.ally_defense_lock = false;
+                            u.status.pending_attack = None;
+                            u.status.pending_cast = None;
+                            u.status.action_animation = None;
+                        }
+                        self.world.despawn(entity);
+                    }
+                }
                 NativeAction::SupportOrders(_) => {}
                 NativeAction::BuildingDamageProc(state) => {
                     self.advance_building_damage_proc(entity, state)

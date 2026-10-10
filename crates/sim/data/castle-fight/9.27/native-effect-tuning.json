@@ -3,6 +3,57 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0CG",
+      "unit_rawcode": "e000",
+      "spellcasting": {
+        "mana": {
+          "maximum": 200,
+          "starting": 150,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093681991,
+          "mana_cost": 20,
+          "cooldown_ticks": 180,
+          "range": 409600,
+          "target_policy": "WoundedFriendlyUnit",
+          "effect": {
+            "Heal": {
+              "amount": 175,
+              "targets": 3,
+              "organic_only": true,
+              "nonancient_only": true,
+              "affects_invulnerable": true,
+              "resume_attack_ticks": 36
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "native": "resolved/object-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "semantics": "resolved/unit-spell-semantics.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A003",
+      "unit_rawcode": "e000",
+      "kind": "feedback",
+      "maximum_mana_drained": 25,
+      "damage_per_mana_per_10k": 10000,
+      "summoned_damage": 10,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A003",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A074",
       "unit_rawcode": "e00A",

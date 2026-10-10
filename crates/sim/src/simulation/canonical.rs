@@ -459,6 +459,11 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(10);
                 hash.write_u64(id.0);
                 match action {
+                    NativeAction::ResumeAttack { source, due_tick } => {
+                        hash.write_u8(14);
+                        hash.write_u64(source.0);
+                        hash.write_u64(due_tick);
+                    }
                     NativeAction::SupportOrders(state) => {
                         hash.write_u8(13);
                         state.visit_canonical_words(|word| hash.write_u64(word));
@@ -2499,6 +2504,7 @@ fn hash_splash_falloff_profile(hash: &mut Fnv64, profile: crate::components::Spl
 fn hash_unit_classifications(hash: &mut Fnv64, flags: UnitClassifications) {
     hash.write_u8(u8::from(flags.hero));
     hash.write_u8(u8::from(flags.resistant_skin));
+    hash.write_u8(u8::from(flags.ancient));
     hash.write_u8(u8::from(flags.summoned));
     hash.write_u8(u8::from(flags.spell_immune));
     hash.write_u8(u8::from(flags.invisible));
@@ -2678,6 +2684,11 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             }
         }
         AbilityEffect::BuildingStasis(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
+        AbilityEffect::Heal(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);
             }

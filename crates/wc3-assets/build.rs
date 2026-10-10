@@ -891,7 +891,7 @@ fn load_visual_assets(
             .then(|| parameters["resurrection_ability_rawcode"].as_str())
             .flatten();
         for child in row.get(effects_column).unwrap_or_default().split(',') {
-            if child == parent || Some(child) == delayed_resurrection {
+            if Some(child) == delayed_resurrection {
                 // Delayed resurrection is conditionally issued after its corpse precheck.
                 // Keep its art on the child ability so presentation can follow the
                 // authoritative secondary cast instead of every visible parent cast.

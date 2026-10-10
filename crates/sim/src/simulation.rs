@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 71;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 72;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -4510,6 +4510,9 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
     }
     match spellcasting.ability.effect {
+        AbilityEffect::Heal(p) => {
+            assert!(p.amount >= 0 && p.resume_attack_ticks > 0);
+        }
         AbilityEffect::WindWalk(p) => {
             assert!(
                 p.duration_ticks > p.fade_ticks

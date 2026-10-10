@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0CG","unit_rawcode":"e000","kind":"native-heal"},
+    {"source_kind":"unit-ability","source_key":"A003","unit_rawcode":"e000","kind":"feedback"},
     {"source_kind":"unit-ability","source_key":"A074","unit_rawcode":"e00A","kind":"evasion"},
     {"source_kind":"unit-ability","source_key":"A07D","unit_rawcode":"e00A","kind":"corruption"},
     {"source_kind":"unit-ability","source_key":"A07Y","unit_rawcode":"e00A","kind":"sphere"},

@@ -60,6 +60,21 @@ pub(super) fn apply_ability_effect_to_unit(
         return false;
     }
     match effect {
+        AbilityEffect::Heal(p) => {
+            if (p.organic_only && target.mechanical)
+                || (p.nonancient_only && target.classifications.ancient)
+                || (!p.affects_invulnerable && target.classifications.invulnerable)
+                || target.team != source_team
+                || !p.targets.can_target_unit(target.target_movement_class())
+                || target.health >= target.health_max
+            {
+                return false;
+            }
+            target.health = target
+                .health
+                .saturating_add(p.amount)
+                .min(target.health_max);
+        }
         AbilityEffect::StatBuff {
             modifier,
             buff,

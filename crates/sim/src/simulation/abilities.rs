@@ -449,6 +449,16 @@ impl Simulation {
                                 .due_tick = due_tick;
                         }
                     }
+                    if let AbilityEffect::Heal(p) = intent.ability.effect {
+                        let id = self.allocate_id();
+                        self.world.spawn((
+                            id,
+                            crate::components::NativeAction::ResumeAttack {
+                                source: source.id,
+                                due_tick: self.next_tick + u64::from(p.resume_attack_ticks),
+                            },
+                        ));
+                    }
                     if let AbilityEffect::HealingWave(profile) = intent.ability.effect {
                         let recovery_end = self
                             .next_tick
@@ -2035,6 +2045,7 @@ impl Simulation {
                     && candidate.health < candidate.health_max
                     && candidate.team == source.team
                     && !candidate.mechanical
+                    && (!matches!(ability.effect, AbilityEffect::Heal(p) if p.nonancient_only && candidate.classifications.ancient))
                     && candidate.target_movement_class() == MovementClass::Ground
                     && self.ability_source_distance_sq(source.origin, candidate.position)
                         <= range_sq)
@@ -2242,6 +2253,7 @@ impl Simulation {
                             target.team == source.team
                                 && target.health < target.health_max
                                 && !target.mechanical
+                                && !matches!(ability.effect, AbilityEffect::Heal(p) if p.nonancient_only && target.classifications.ancient)
                                 && target.target_movement_class() == MovementClass::Ground
                                 && self.ability_source_distance_sq(source.origin, target.position)
                                     <= square_i32(ability.range)

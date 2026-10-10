@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "bindings": [
+    { "source_kind": "unit-ability", "source_key": "A0CG", "implementation": "warcraft-scripted-automatic-v1", "valid_from": "9.27", "valid_through": "9.27" },
+    { "source_kind": "unit-ability", "source_key": "A003", "implementation": "warcraft-feedback-v1", "valid_from": "9.27", "valid_through": "9.27" },
     { "source_kind": "unit-ability", "source_key": "A074", "implementation": "warcraft-evasion-v1", "valid_from": "9.27", "valid_through": "9.27" },
     { "source_kind": "unit-ability", "source_key": "A07D", "implementation": "warcraft-corruption-v1", "valid_from": "9.27", "valid_through": "9.27" },
     { "source_kind": "unit-ability", "source_key": "A07O", "implementation": "warcraft-marker-only-v1", "valid_from": "9.27", "valid_through": "9.27" },

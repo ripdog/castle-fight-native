@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r89";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r90";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 52;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 53;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1613,6 +1613,7 @@ impl CastleFightTowerDefinition {
                     hero: false,
                     summoned: false,
                     resistant_skin: false,
+                    ancient: false,
                     spell_immune: false,
                     combat_sapper: false,
                     invulnerable: false,
@@ -1830,6 +1831,12 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A0CG") => {
+            0x4000_0147
+        }
+        (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A003") => {
+            0x4000_0148
+        }
         (NativeEffectSourceKind::UnitAbility, value) if value == u32::from_be_bytes(*b"A074") => {
             0x4000_0143
         }
@@ -2733,6 +2740,7 @@ fn hash_unit_definition(hash: &mut ContentHash64, definition: CastleFightUnitDef
 fn hash_classifications(hash: &mut ContentHash64, flags: UnitClassifications) {
     hash.write_u8(u8::from(flags.hero));
     hash.write_u8(u8::from(flags.resistant_skin));
+    hash.write_u8(u8::from(flags.ancient));
     hash.write_u8(u8::from(flags.summoned));
     hash.write_u8(u8::from(flags.spell_immune));
     hash.write_u8(u8::from(flags.combat_sapper));
@@ -3250,6 +3258,11 @@ fn hash_automatic_ability_profile(hash: &mut ContentHash64, ability: AutomaticAb
         hash.write_u8(0);
     }
     match ability.effect {
+        AbilityEffect::Heal(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         AbilityEffect::WindWalk(p) => p.visit_canonical_words(|word| hash.write_u64(word)),
         AbilityEffect::ScriptedRoots(p) => {
             for word in p.canonical_words() {
@@ -4284,6 +4297,9 @@ impl ExtractedContent927 {
                 move_speed_per_tick,
                 mechanical,
                 target_classifications: UnitClassifications {
+                    ancient: classifications
+                        .iter()
+                        .any(|value| value.eq_ignore_ascii_case("ancient")),
                     resistant_skin: crate::native_effects::resistant_skin_for_version(
                         MapVersion::CASTLE_FIGHT_9_27,
                         &abilities,

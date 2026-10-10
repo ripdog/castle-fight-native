@@ -3451,6 +3451,7 @@ fn prewarm_timed_wc3_effects(
                 }
                 let automatic = definition.automatic_abilities().map(|ability| {
                     let status = match ability.effect {
+                        AbilityEffect::Heal(_) => None,
                         AbilityEffect::WindWalk(p) => Some((p.ability.0, p.duration_ticks)),
                         AbilityEffect::ScriptedRoots(p) => {
                             Some((p.roots.ability.0, p.roots.duration_ticks))

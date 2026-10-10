@@ -902,6 +902,28 @@ impl CorruptionProfile {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct NativeHealProfile {
+    pub amount: i32,
+    pub targets: AttackTargetMask,
+    pub organic_only: bool,
+    pub nonancient_only: bool,
+    pub affects_invulnerable: bool,
+    pub resume_attack_ticks: u16,
+}
+impl NativeHealProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 6] {
+        [
+            self.amount as u64,
+            u64::from(self.targets.bits()),
+            self.organic_only as u64,
+            self.nonancient_only as u64,
+            self.affects_invulnerable as u64,
+            u64::from(self.resume_attack_ticks),
+        ]
+    }
+}
+
 /// Intrinsic target classifications, independent of armor type or presentation.
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnitClassifications {
@@ -911,6 +933,7 @@ pub struct UnitClassifications {
     pub hero: bool,
     /// Native Arsk: hero targeting/duration rules for negative spells only.
     pub resistant_skin: bool,
+    pub ancient: bool,
     pub summoned: bool,
     pub spell_immune: bool,
     /// Native invisibility; revelation is tracked independently by status buff identity.
@@ -1574,6 +1597,7 @@ pub enum AreaDamageOrigin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AbilityEffect {
+    Heal(NativeHealProfile),
     WindWalk(WindWalkProfile),
     ScriptedRoots(ScriptedRootsProfile),
     /// Released native weather art has its own lifetime, independent of logical caster life.
@@ -1738,6 +1762,7 @@ impl AbilityEffect {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::Heal(_) => 41,
             Self::WindWalk(_) => 40,
             Self::ScriptedRoots(_) => 39,
             Self::NativeWeatherVisual { .. } => 38,
