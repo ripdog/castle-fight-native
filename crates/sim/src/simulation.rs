@@ -3251,14 +3251,15 @@ impl Simulation {
             return (0, 0);
         }
 
-        let shrine_rawcode = crate::content::CastleFightTowerKind::HeroicShrine
-            .definition()
-            .rawcode;
         let mut shrines = self
             .world
             .iter_entities()
             .filter_map(|entity| {
-                (entity.get::<ContentIdentity>()?.rawcode == shrine_rawcode
+                let content = *entity.get::<ContentIdentity>()?;
+                let replication = crate::building_mechanics::production_replication_for_version(
+                    content.map_version,
+                );
+                (content.rawcode == replication.shrine_rawcode
                     && entity.get::<BuildingEconomyProfile>().is_some()
                     && entity.get::<BuildingConstruction>().is_none()
                     && entity
@@ -3390,22 +3391,42 @@ impl Simulation {
                     spellcasting: attempt.spellcasting,
                     additional_abilities: attempt.additional_abilities,
                 };
-                self.spawn_resolved_unit_with_provenance(
-                    Some(attempt.owner),
-                    UnitSpawn::from_template(attempt.team, position, attempt.profile.unit),
-                    definition,
-                    Some(attempt.id),
+                let replication = crate::building_mechanics::production_replication_for_version(
+                    attempt
+                        .content
+                        .map_or(crate::CASTLE_FIGHT_DEFAULT_MAP_VERSION, |c| c.map_version),
                 );
-                let legendary = attempt.content.is_some_and(|content| {
-                    crate::content::unit_has_ability_927(
+                let marked = attempt.content.is_some_and(|content| {
+                    crate::content::unit_has_ability_for_version(
                         content.rawcode,
-                        AbilityId(u32::from_be_bytes(*b"A06V")),
+                        AbilityId(replication.marker),
+                        content.map_version,
+                    )
+                });
+                for _ in 0..replication.local_copies(marked) {
+                    self.spawn_resolved_unit_with_provenance(
+                        Some(attempt.owner),
+                        UnitSpawn::from_template(attempt.team, position, attempt.profile.unit),
+                        definition,
+                        Some(attempt.id),
+                    );
+                    spawned += 1;
+                }
+                let legendary = attempt.content.is_some_and(|content| {
+                    crate::content::unit_has_ability_for_version(
+                        content.rawcode,
+                        AbilityId(replication.legendary_exclusion),
+                        content.map_version,
                     )
                 });
                 for (shrine_id, shrine_owner, _) in shrines
                     .iter()
                     .filter(|(_, _, team)| *team == attempt.team)
-                    .take(if legendary { 0 } else { 2 })
+                    .take(if legendary {
+                        0
+                    } else {
+                        replication.maximum_shrines
+                    })
                 {
                     let roll = deterministic_random(
                         self.config.match_seed,
@@ -3414,19 +3435,24 @@ impl Simulation {
                         RANDOM_PURPOSE_HEROIC_SHRINE,
                         shrine_id.0,
                     ) % 100;
-                    if roll < 17 {
-                        self.spawn_resolved_unit_with_provenance(
-                            Some(*shrine_owner),
-                            UnitSpawn::from_template(attempt.team, position, attempt.profile.unit),
-                            definition,
-                            Some(attempt.id),
-                        );
-                        spawned += 1;
+                    if roll < replication.chance_per_100 {
+                        for _ in 0..replication.shrine_copies(marked) {
+                            self.spawn_resolved_unit_with_provenance(
+                                Some(*shrine_owner),
+                                UnitSpawn::from_template(
+                                    attempt.team,
+                                    position,
+                                    attempt.profile.unit,
+                                ),
+                                definition,
+                                Some(attempt.id),
+                            );
+                            spawned += 1;
+                        }
                     }
                 }
                 reservations.insert_with_radius(next_reservation_index, position, collision_radius);
                 next_reservation_index += 1;
-                spawned += 1;
             } else {
                 failed += 1;
             }

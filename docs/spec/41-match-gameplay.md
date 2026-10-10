@@ -184,6 +184,8 @@ On each production attempt, the simulation searches for empty placement using a 
 
 The spiral has a deterministic finite search limit. If no valid position is found before that limit, the unit is not created. The failed attempt does not create a production backlog; the building proceeds to its next ordinary production cycle.
 
+Source-owned train-finish replication creates independent copies from the complete producer definition, without advancing the producer clock or recursively firing training callbacks. Local copies retain producer ownership; shrine copies retain the granting shrine owner's identity. A source marker may independently increase local and successful shrine copy counts. Copy rules, shrine limits, probability and legendary exclusions are versioned content. A failed base placement produces no copies.
+
 The spawn search has no special knowledge of caging or connected navigation components. It neither tries to keep a spawn inside a cage nor tries to escape one. A valid position encountered by the bounded spiral is accepted regardless of which connected component it belongs to.
 
 ## 13. Production selection randomness

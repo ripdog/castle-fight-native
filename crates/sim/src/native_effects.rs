@@ -28,6 +28,7 @@ const TUNING_9_27_JSON: &str = include_str!("../data/castle-fight/9.27/native-ef
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum NativeEffectImplementationId {
+    WarcraftCompanionProductionV1,
     WarcraftSilverGladeV1,
     WarcraftStarfallV1,
     WarcraftWildernessV1,
@@ -90,6 +91,7 @@ impl NativeEffectImplementationId {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::WarcraftCompanionProductionV1 => 88,
             Self::WarcraftStarfallV1 => 87,
             Self::WarcraftWildernessV1 => 86,
             Self::WarcraftSilverGladeV1 => 85,
@@ -153,6 +155,7 @@ impl NativeEffectImplementationId {
         !matches!(
             self,
             Self::WarcraftResistantSkinV1
+                | Self::WarcraftCompanionProductionV1
                 | Self::WarcraftMarkerOnlyV1
                 | Self::WarcraftZeroDamageBarrageV1
                 | Self::WarcraftHumanSupportV1

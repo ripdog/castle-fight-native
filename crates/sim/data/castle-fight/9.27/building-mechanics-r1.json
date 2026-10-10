@@ -8632,6 +8632,15 @@
       "ubertip": ""
     }
   ],
+  "production_replication": {
+    "chance_per_100": 17,
+    "extra_copies_per_shrine": 1,
+    "legendary_exclusion": 1093678896,
+    "local_extra_copies": 1,
+    "marker": 1093679432,
+    "maximum_shrines": 2,
+    "shrine_rawcode": 1747989831
+  },
   "protected": [
     {
       "byte_offset": "2015343",
@@ -9294,6 +9303,16 @@
       "static_selection": "map"
     }
   ],
+  "replication_source": {
+    "byte_offset": "995779",
+    "evidence_kind": "exact-team-registration-roll-loop-and-train-event-transformations",
+    "mechanic_kind": "team-shrine-independent-clone-rolls-and-train-transformations",
+    "parameters_json": "{\"heroic_shrine_name\":\"Heroic Shrine\",\"heroic_shrine_tooltip\":\"|cffffac00Utility|r / |cffffac00Legendary|r|n|n|cff80ff00Call to Arms|r \u2022 All allied structures gain a |cffffff0016|r-|cffffff0032|r% |cff959697(+16% per building)|r chance to instantly spawn another copy of their respective unit.|nTo maximize the effect you need two Shrines.\",\"heroic_shrine_unit_id\":1747989831,\"maximum_shrines_checked\":2,\"per_shrine_actual_probability_percent\":17,\"per_shrine_roll_max\":99,\"per_shrine_roll_min\":0,\"per_shrine_success_threshold_exclusive\":17,\"successful_clone_owner\":\"heroic-shrine-owner\",\"successful_clone_runs_setup_unit\":true,\"successful_clone_spawn_position\":\"original-trained-unit-position\",\"successful_clone_unit_type\":\"same-as-original-trained-unit\",\"tooltip_disagrees_with_runtime\":true,\"tooltip_probability_percent_per_shrine\":16,\"twins_carrier_name\":\"Twins\",\"twins_carrier_unit_id\":1697656901,\"twins_marker_ability_id\":1093682767,\"twins_replacement_unit_ids\":[1848652363,1848652364],\"twins_replacement_units\":[{\"name\":\"Twin Weeper\",\"rawcode\":\"n02K\"},{\"name\":\"Twin Smiley\",\"rawcode\":\"n02L\"}],\"twins_replacements_run_setup_unit\":true,\"type_murloc_extra_clone_per_successful_shrine_roll\":1,\"type_murloc_marker_ability_id\":1093679432,\"type_murloc_unconditional_local_extra_copy\":1}",
+    "related_objects_json": "[{\"categories\":\"units\",\"names\":\"Heroic Shrine\",\"rawcode\":\"h05G\",\"rawcode_integer\":1747989831},{\"categories\":\"abilities\",\"names\":\"TypeMurloc\",\"rawcode\":\"A09H\",\"rawcode_integer\":1093679432},{\"categories\":\"abilities\",\"names\":\"TypeTwins\",\"rawcode\":\"A0FO\",\"rawcode_integer\":1093682767},{\"categories\":\"units\",\"names\":\"Twins\",\"rawcode\":\"e00E\",\"rawcode_integer\":1697656901},{\"categories\":\"units\",\"names\":\"Twin Weeper\",\"rawcode\":\"n02K\",\"rawcode_integer\":1848652363},{\"categories\":\"units\",\"names\":\"Twin Smiley\",\"rawcode\":\"n02L\",\"rawcode_integer\":1848652364}]",
+    "source_functions": "kP,acquireHeroicShrine,spawnSyncedCompanions,EventListener_add_CompanionSpawning_onEvent_add_CompanionSpawning,setupUnit",
+    "system_id": "heroic-shrine-companion-spawning",
+    "trigger": "unit-train-finish"
+  },
   "schema_version": 2,
   "script_art": {
     "Ed": [
@@ -9478,6 +9497,10 @@
       "byte_offset": 612432,
       "source": "function EventListener_add_BuildingSpells_onEvent_add_BuildingSpells(FSk)local GSk=nil local HSk=nil local ISk=nil local JSk=nil GSk=GetTriggerUnit()if(((GetSpellAbilityId()==FSk.abilId)and(not(GSk==nil)))and(unit_getTypeId(GSk)==FSk.unitTypeId))then Esb[FSk.slot]=(__wurst_ensureInt(Esb[FSk.slot])+1)HSk=GetSpellTargetUnit()if(HSk==nil)then ISk=0 else ISk=unit_getTypeId(HSk)end Asb[FSk.slot]=ISk if(HSk==nil)then JSk=(-1)else JSk=player_getId(unit_getOwner(HSk))end zsb[FSk.slot]=JSk ysb[FSk.slot]=((not(HSk==nil))and unit_isType(HSk,UNIT_TYPE_GROUND))xsb[FSk.slot]=((not(HSk==nil))and unit_isType(HSk,UNIT_TYPE_SAPPER))logSpellDebug(GSk,__wurst_stringConcat(__wurst_stringConcat(__wurst_stringConcat(\"building effect \",int_toRawCode(FSk.unitTypeId)),\" abil=\"),int_toRawCode(FSk.abilId)))wsb=FSk.slot FSk.cb:cast(GSk)wsb=(-1)Dsb[FSk.slot]=(__wurst_ensureInt(Dsb[FSk.slot])+1)end end u2b={__index=re}"
     },
+    "EventListener_add_CompanionSpawning_onEvent_add_CompanionSpawning": {
+      "byte_offset": 995779,
+      "source": "function EventListener_add_CompanionSpawning_onEvent_add_CompanionSpawning(dYl)local eYl=nil local fYl=nil local gYl=nil local hYl=nil local iYl=nil local jYl=nil eYl=GetTrainedUnit()fYl=GetTriggerUnit()gYl=unit_getOwner(fYl)if(unit_getAbilityLevel(eYl,1093679432)>0)then pFb=eYl hYl=__wurst_safe_CreateUnit(gYl,unit_getTypeId(eYl),unit_getX(eYl),unit_getY(eYl),0.)setupUnit(hYl,fYl)elseif(unit_getAbilityLevel(eYl,1093682767)>0)then pFb=eYl iYl=__wurst_safe_CreateUnit(gYl,1848652363,unit_getX(eYl),unit_getY(eYl),0.)setupUnit(iYl,fYl)pFb=eYl jYl=__wurst_safe_CreateUnit(gYl,1848652364,unit_getX(eYl),unit_getY(eYl),0.)setupUnit(jYl,fYl)end end dYb={__index=zj}"
+    },
     "FL": {
       "byte_offset": 3736258,
       "source": "function FL()local wOr=nil local xOr=nil local yOr=nil local zOr=nil local AOr=nil local BOr=nil local COr=nil local DOr=nil local EOr=nil local FOr=nil local GOr=nil bW=__wurst_ensureInt(1095577723)aW=1747990359 ZV=1093683279 YV=384. XV=350. WV=20. VV=2. RV=_I[(_d[6948]or _y(6948,_T(243073,\"fb517a443e42d1c387bffe15dcc0d6a120b19ff756\")))]()QV=ArrayList_new_ArrayList1()PV=(__wurst_intDiv(real_toInt((z_[1]-A_[1])),128)+1)OV=(__wurst_intDiv(real_toInt((z_[2]-A_[2])),128)+1)AOr=aW BOr=bW COr=Jsb wOr=Gz:create1052()DOr=BOr if(Isb<Vsb)then EOr=Isb Hsb[EOr]=AOr Gsb[EOr]=DOr Fsb[EOr]=COr Isb=(Isb+1)GOr=EVENT_PLAYER_UNIT_SPELL_EFFECT FOr=qe:create140()EventListener_construct_EventListener(FOr)FOr.abilId=DOr FOr.unitTypeId=AOr FOr.slot=EOr FOr.cb=wOr EventListener_add(GOr,FOr)end AOr=aW COr=ZV xOr=Hz:create1053()_I[(_d[6949]or _y(6949,_T(342881,\"f57a29da6a624398feffe6ad258d29a2a7936e18c0\")))](AOr,COr,xOr)yOr=Iz:create1054()yOr.DamageListener_priority=0 yOr.DamageListener_prev=nil yOr.DamageListener_next=nil yOr.DamageListener_unreduced=false yOr.DamageListener_registered=false DamageEvent_addListener(yOr)zOr=Jz:create1055()watch(zOr)end _I[_T(509848,\"fd3e6d162af7b9e29584bc65e05d55c59723aeaa11\")]=FL "
@@ -9557,6 +9580,10 @@
     "acquireEleBuilding": {
       "byte_offset": 2491183,
       "source": "function acquireEleBuilding(BCp)local CCp=nil local DCp=nil local ECp=nil CCp=unit_getIndex(BCp)DCp=eleBucketOf(BCp)if((CCp<=0)or(DCp<=0))then return end ECp=player_getId(unit_getOwner(BCp))ktb[ECp]=true ttb[CCp]=DCp stb[CCp]=(ECp+1)changeEleBuildingCount(ECp,DCp,1)refreshLinkerTags(ECp)end "
+    },
+    "acquireHeroicShrine": {
+      "byte_offset": 2494197,
+      "source": "function acquireHeroicShrine(lDp)local mDp=nil local nDp=nil mDp=unit_getIndex(lDp)nDp=__wurst_ensureInt(lGb[player_getId(unit_getOwner(lDp))])if(mDp<=0)then htb=(htb+1)return end otb[mDp]=(nDp+1)__wurst_safe_GroupAddUnit(vGb[nDp],lDp)end "
     },
     "acquireLinker": {
       "byte_offset": 2491850,
@@ -9734,6 +9761,10 @@
       "byte_offset": 3632788,
       "source": "function issueFrostLauncherOrder(hyr,iyr,jyr)local kyr=nil local lyr=nil local myr=nil if NGb then return unit_issueTargetOrderById(iyr,851983,jyr)end kyr=__wurst_safe_CreateFogModifierRadius(hyr,FOG_OF_WAR_VISIBLE,unit_getX(jyr),unit_getY(jyr),128.,true,false)__wurst_safe_FogModifierStart(kyr)lyr=unit_issueTargetOrderById(iyr,851983,jyr)myr=Pw:create957()myr.fog=kyr doAfter(0.1,myr)return lyr end "
     },
+    "kP": {
+      "byte_offset": 4390747,
+      "source": "function kP()local cfs=nil local dfs=nil local efs=nil fR=2 eR=17 efs=EVENT_PLAYER_UNIT_TRAIN_FINISH cfs=aC:create1149()EventListener_construct_EventListener(cfs)EventListener_add(efs,cfs)efs=EVENT_PLAYER_UNIT_TRAIN_CANCEL dfs=bC:create1150()EventListener_construct_EventListener(dfs)EventListener_add(efs,dfs)end _I[_T(19703,\"a57a5084aafe4cd021add07c269d2ef26121a019465cb20b\")]=kP "
+    },
     "migrateBuildingLifecycleOwner": {
       "byte_offset": 2496355,
       "source": "function migrateBuildingLifecycleOwner(ODp,PDp,QDp)local RDp=nil local SDp=nil local TDp=nil local UDp=nil if((((ODp==nil)or(PDp==QDp))or(not isValidPlayerId(PDp)))or(not isValidPlayerId(QDp)))then return end RDp=unit_getIndex(ODp)if(RDp<=0)then return end SDp=__wurst_ensureInt(ttb[RDp])if((SDp>0)and(__wurst_ensureInt(stb[RDp])==(PDp+1)))then ktb[QDp]=true changeEleBuildingCount(PDp,SDp,(-1))changeEleBuildingCount(QDp,SDp,1)stb[RDp]=(QDp+1)refreshLinkerTags(PDp)refreshLinkerTags(QDp)end if(__wurst_ensureInt(rtb[RDp])==(PDp+1))then migrateLinkerOwner(ODp,PDp,QDp)end TDp=__wurst_ensureInt(lGb[PDp])UDp=__wurst_ensureInt(lGb[QDp])if((__wurst_ensureInt(ptb[RDp])==(TDp+1))and(not(TDp==UDp)))then utb[TDp]=max1(0,(__wurst_ensureInt(utb[TDp])-Ctb))utb[UDp]=(__wurst_ensureInt(utb[UDp])+Ctb)ptb[RDp]=(UDp+1)end if((__wurst_ensureInt(otb[RDp])==(TDp+1))and(not(TDp==UDp)))then __wurst_safe_GroupRemoveUnit(vGb[TDp],ODp)__wurst_safe_GroupAddUnit(vGb[UDp],ODp)otb[RDp]=(UDp+1)end if(__wurst_ensureInt(ntb[RDp])==(PDp+1))then if(__wurst_ensureInt(qGb[PDp])<=0)then htb=(htb+1)end qGb[PDp]=max1(0,(__wurst_ensureInt(qGb[PDp])-1))qGb[QDp]=(__wurst_ensureInt(qGb[QDp])+1)ntb[RDp]=(QDp+1)end end "
@@ -9745,6 +9776,10 @@
     "onBuildingFinished": {
       "byte_offset": 2497543,
       "source": "function onBuildingFinished(VDp,WDp)local XDp=nil local YDp=nil if(VDp==nil)then return end XDp=unit_getOwner(VDp)if(__wurst_ensureInt(hIb[buildingTypeIndexOfUnit(VDp)])>0)then if(WDp and(unit_getAbilityLevel(VDp,1093682259)>0))then acquireEleBuilding(VDp)end return end YDp=unit_getTypeId(VDp)if(YDp==1747989831)then acquireHeroicShrine(VDp)elseif(YDp==1747989817)then acquireElvenShrine(VDp)elseif(YDp==1747990067)then acquireLinker(VDp,XDp)elseif(YDp==1747988536)then acquireTreasureBox(VDp)end end "
+    },
+    "onUnitTrained": {
+      "byte_offset": 4395562,
+      "source": "function onUnitTrained()local cgs=nil local dgs=nil local egs=nil local fgs=nil local ggs=nil local hgs=nil local igs=nil cgs=GetTrainedUnit()dgs=GetTriggerUnit()if((cgs==nil)or(dgs==nil))then return end clearTrainProgress(dgs)if(unit_getAbilityLevel(cgs,1093678922)>0)then cgs=randomizeBloodFiend(cgs)elseif(unit_getTypeId(cgs)==1747990101)then fgs=cgs ggs=UNIT_STATE_MANA hgs=GetRandomReal(.20,30.)__wurst_safe_SetUnitState(fgs,ggs,hgs)elseif(unit_getTypeId(cgs)==1848652365)then __wurst_safe_SetUnitExploded(cgs,true)end if(unit_getAbilityLevel(cgs,1093682266)>0)then igs=cgs __wurst_safe_ShowUnit(igs,false)jY=true unit_issueImmediateOrderById(cgs,852667)__wurst_safe_UnitApplyTimedLife(cgs,1112820806,1.)end if(unit_getAbilityLevel(dgs,1110454603)>0)then applyPowerArmor(cgs)end rememberLaneRouteFromBuilding(cgs,dgs)orderCodeAttackIfAllowed(cgs)trackTrainedUnitPathing(cgs)egs=player_getId(unit_getOwner(dgs))p0[egs]=(__wurst_ensureInt(p0[egs])+1)if((unit_getAbilityLevel(cgs,1093678925)>=1)and(unit_getAbilityLevel(cgs,1093679435)>0))then __wurst_safe_UnitApplyTimedLife(cgs,1112820806,45.)end if((unit_getAbilityLevel(cgs,1093678896)<=0)and unit_isType(dgs,UNIT_TYPE_STRUCTURE))then spawnSyncedCompanions(cgs,dgs)end end "
     },
     "orderCodeAttack": {
       "byte_offset": 2300711,
@@ -9793,6 +9828,14 @@
     "setBuildingLineTechAvailabilityForCurrentModes": {
       "byte_offset": 2502901,
       "source": "function setBuildingLineTechAvailabilityForCurrentModes(PEp,QEp,REp)local SEp=nil local TEp=nil local UEp=nil if((PEp==nil)or(QEp==nil))then return end UEp=QEp.CFBuilding_buildingId if REp then SEp=getBuildingTechMaxAllowedForCurrentModes(QEp)else SEp=0 end __wurst_safe_SetPlayerTechMaxAllowed(PEp,UEp,SEp)if(not(QEp.CFBuilding_upgrades==nil))then TEp=ke:create134()TEp.p=PEp TEp.available=REp ArrayList_ArrayList_forEach(QEp.CFBuilding_upgrades,TEp)end end "
+    },
+    "setupUnit": {
+      "byte_offset": 4394098,
+      "source": "function setupUnit(Nfs,Ofs)local Pfs=nil local Qfs=nil local Rfs=nil local Sfs=nil local Tfs=nil local Ufs=nil if((Nfs==nil)or(Ofs==nil))then return end Pfs=unit_getOwner(Ofs)Qfs=player_getId(Pfs)Rfs=(unit_getAbilityLevel(Ofs,1110454603)>0)Sfs=Nfs if(unit_getAbilityLevel(Sfs,1093682266)>0)then jY=true unit_issueImmediateOrderById(Sfs,852667)__wurst_safe_UnitApplyTimedLife(Sfs,1112820806,1.)Sfs=GetSummonedUnit()if(Sfs==nil)then return end end if Rfs then applyPowerArmor(Sfs)end rememberLaneRouteFromBuilding(Sfs,Ofs)orderCodeAttackIfAllowed(Sfs)if((unit_getAbilityLevel(Ofs,1093682508)>0)and(GetRandomInt(0,99)<30))then Tfs=Sfs addProtectedAbility(Tfs,1093682522)Ufs=Sfs addProtectedAbility(Ufs,1093681973)end trackTrainedUnitPathing(Sfs)p0[Qfs]=(__wurst_ensureInt(p0[Qfs])+1)end "
+    },
+    "spawnSyncedCompanions": {
+      "byte_offset": 4394882,
+      "source": "function spawnSyncedCompanions(Vfs,Wfs)local Xfs=nil local Yfs=nil local Zfs=nil local ags=nil local bgs=nil Xfs=__wurst_ensureInt(lGb[player_getId(unit_getOwner(Wfs))])bR=(bR+1)Yfs=min(group_size(vGb[Xfs]),fR)Zfs=0 ags=(Yfs-1)while true do if(Zfs>ags)then break end bgs=group_get(vGb[Xfs],Zfs)if(not(bgs==nil))then dR=(dR+1)if(GetRandomInt(0,99)<eR)then cR=(cR+1)pFb=Vfs setupUnit(__wurst_safe_CreateUnit(unit_getOwner(bgs),unit_getTypeId(Vfs),unit_getX(Vfs),unit_getY(Vfs),0.),Wfs)if(unit_getAbilityLevel(Vfs,1093679432)>0)then pFb=Vfs setupUnit(__wurst_safe_CreateUnit(unit_getOwner(bgs),unit_getTypeId(Vfs),unit_getX(Vfs),unit_getY(Vfs),0.),Wfs)end end end Zfs=(Zfs+1)end end "
     },
     "starfallSpell": {
       "byte_offset": 3618924,

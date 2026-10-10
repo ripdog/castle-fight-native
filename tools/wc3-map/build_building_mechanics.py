@@ -63,6 +63,7 @@ def build(map_version='9.27', revision='r1'):
     guard = next(r for r in rows('runtime-system-mechanics.tsv') if r['system_id'] == 'elemental-guard-tower-avalanche')
     launcher_codes += ['h061', 'A03Q', 'A0EV', 'A0DC', 'e008']
     shield = next(r for r in rows('runtime-system-mechanics.tsv') if r['system_id'] == 'targeted-negative-effect-shields')
+    replication = next(r for r in rows('runtime-system-mechanics.tsv') if r['system_id'] == 'heroic-shrine-companion-spawning')
     units = {r['rawcode']: r for r in rows('units.tsv') if r['rawcode'] in ('n00F', 'n00G')}
     protected = [r for r in rows('protected-ability-fields.tsv') if r['rawcode'] in ('A017', 'A018', 'A0HO', 'AM0{', *launcher_codes)]
     overheat_explosions = [r for r in rows('abilities.tsv') if r['rawcode'] == 'A09B']
@@ -85,7 +86,7 @@ def build(map_version='9.27', revision='r1'):
                      'CallbackSingle_doAfter_ReengageRuntime_call_doAfter_ReengageRuntime',
                      'CallbackSingle_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_ReengageRuntime',
                      'CallbackSingle_doAfter_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_doAfter_ReengageRuntime',
-                     *linker['source_functions'].split(','), 'onBuildingFinished',
+                     *replication['source_functions'].split(','), 'onUnitTrained', *linker['source_functions'].split(','), 'onBuildingFinished',
                      'EventListener_add_BuildingLifecycle_onEvent_add_BuildingLifecycle',
                      'EventListener_add_BuildingLifecycle_onEvent_add_BuildingLifecycle1',
                      *guard['source_functions'].split(','), *snow['source_functions'].split(','), *serpent['source_functions'].split(','), *ceremonial['source_functions'].split(','),
@@ -198,7 +199,9 @@ def build(map_version='9.27', revision='r1'):
     silver_visuals = [{'role':'caster','path':json.loads('"'+path+'"')} for path in re.findall(r'addEffect\("(.*?)",unit_getPos',traces[silver['source_functions'].split(',')[0]]['source'])]
     if not silver_visuals: raise ValueError('Silver Glade charge requires its literal caster art')
     silver_profile = project_silver(silver, selected, unit_rows, rows('abilities.tsv'), protected, traces, dict(zip(['major','minor'],map(int,map_version.split('.')))))
-    return {'map_version': map_version, 'schema_version': 2, 'source_revision': revision,
+    from project_production_replication import project as project_replication
+    return {'production_replication': project_replication(replication, traces), 'replication_source': replication,
+            'map_version': map_version, 'schema_version': 2, 'source_revision': revision,
             'extraction_git_tree': tree, 'source_sha256': sources,
             'starfall':starfall, 'starfall_spellcasting':starfall_profile, 'starfall_cast_visuals':[{'role':'caster','path':starfall_path}], 'wilderness':wilderness,'wilderness_spellcasting':wilderness_profile,'wilderness_cast_visuals':wilderness_visuals, 'silver_cast_visuals':silver_visuals, 'silver': silver, 'silver_spellcasting': silver_profile, 'linker': linker, 'linker_death_heal': project_death_heal(linker, buckets, traces),
             'guard': guard, 'guard_damage_proc': guard_profile,

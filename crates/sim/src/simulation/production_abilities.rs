@@ -66,6 +66,14 @@ fn simulation(workers: usize) -> Simulation {
     Simulation::new(SimulationConfig::default(), workers)
 }
 
+fn entity(sim: &Simulation, id: SimId) -> Entity {
+    sim.world
+        .iter_entities()
+        .find(|e| e.get::<SimId>() == Some(&id))
+        .unwrap()
+        .id()
+}
+
 fn restored(source: &Simulation, workers: usize) -> Simulation {
     let content = crate::castle_fight_content_bundle(crate::MapVersion::CASTLE_FIGHT_9_27).unwrap();
     let snapshot =
@@ -74,6 +82,134 @@ fn restored(source: &Simulation, workers: usize) -> Simulation {
     let mut result = simulation(workers);
     result.restore_snapshot(&snapshot).unwrap();
     result
+}
+
+#[test]
+fn source_marked_training_copies_initialize_complete_children_and_restore_across_workers() {
+    let version = crate::MapVersion::CASTLE_FIGHT_9_27;
+    let replication = crate::building_mechanics::production_replication_for_version(version);
+    let marked = crate::CastleFightUnitKind::ALL
+        .into_iter()
+        .filter(|kind| {
+            crate::content::unit_has_ability_for_version(
+                kind.definition_for_version(version).unwrap().rawcode,
+                AbilityId(replication.marker),
+                version,
+            )
+        })
+        .collect::<Vec<_>>();
+    assert!(!marked.is_empty());
+    let additional = [ability(10), ability(20)];
+    for kind in marked {
+        let (spawn, mut properties) = factory(&additional);
+        properties.production_unit.content = kind
+            .definition_for_version(version)
+            .unwrap()
+            .gameplay_properties()
+            .content;
+        let mut first = simulation(1);
+        first.spawn_building_with_properties(spawn, properties);
+        first.step();
+        first.step();
+        let mut second = restored(&first, 4);
+        for _ in 0..3 {
+            let a = first.step();
+            let b = second.step();
+            assert_eq!(a.units_spawned, b.units_spawned);
+            assert_eq!(first.checksum(), second.checksum());
+        }
+        assert_eq!(first.units().len(), replication.local_copies(true));
+        assert_spawned_definitions(&first, &additional);
+        let ids = first.units().into_iter().map(|u| u.id).collect::<Vec<_>>();
+        assert_ne!(ids[0], ids[1]);
+        for id in ids {
+            let entity = entity(&first, id);
+            assert_eq!(first.world.get::<Owner>(entity).unwrap().0, PlayerId(0));
+            assert_eq!(first.world.get::<ManaState>(entity).unwrap().current, 100);
+        }
+    }
+}
+
+#[test]
+fn marked_shrine_rolls_create_source_owned_pairs_without_recursive_training() {
+    let version = crate::MapVersion::CASTLE_FIGHT_9_27;
+    let replication = crate::building_mechanics::production_replication_for_version(version);
+    let body = crate::CastleFightUnitKind::ALL
+        .into_iter()
+        .find(|kind| {
+            crate::content::unit_has_ability_for_version(
+                kind.definition_for_version(version).unwrap().rawcode,
+                AbilityId(replication.marker),
+                version,
+            )
+        })
+        .unwrap()
+        .definition_for_version(version)
+        .unwrap();
+    let shrine = crate::CastleFightTowerKind::HeroicShrine
+        .definition_for_version(version)
+        .unwrap();
+    let mut observed_success = false;
+    let mut observed_failure = false;
+    for seed in 0..128 {
+        let mut sim = Simulation::new_with_gameplay_bundle_and_players(
+            SimulationConfig {
+                match_seed: seed,
+                ..SimulationConfig::default()
+            },
+            1,
+            CombatRules::default(),
+            crate::castle_fight_content_bundle(version)
+                .unwrap()
+                .identity
+                .into(),
+            &[
+                PlayerConfig {
+                    id: PlayerId(0),
+                    team: Team(0),
+                },
+                PlayerConfig {
+                    id: PlayerId(1),
+                    team: Team(0),
+                },
+                PlayerConfig {
+                    id: PlayerId(2),
+                    team: Team(1),
+                },
+            ],
+        );
+        sim.spawn_building_for_player_with_properties(
+            PlayerId(1),
+            shrine.spawn(Team(0), BuildingFootprint::new(20, 0, 4, 4)),
+            shrine.gameplay_properties(),
+        );
+        let (mut spawn, mut properties) = factory(&[ability(10)]);
+        spawn.production.as_mut().unwrap().initial_delay_ticks = 0;
+        properties.production_unit.content = body.gameplay_properties().content;
+        sim.spawn_building_for_player_with_properties(PlayerId(0), spawn, properties);
+        let count = sim.step().units_spawned;
+        let local = replication.local_copies(true);
+        if count == local {
+            observed_failure = true;
+        } else {
+            assert_eq!(count, local + replication.shrine_copies(true));
+            observed_success = true;
+        }
+        let (mut local_owned, mut shrine_owned) = (0, 0);
+        for unit in sim.units() {
+            match sim.world.get::<Owner>(entity(&sim, unit.id)).unwrap().0 {
+                PlayerId(0) => local_owned += 1,
+                PlayerId(1) => shrine_owned += 1,
+                other => panic!("unexpected clone owner {other:?}"),
+            }
+        }
+        assert_eq!(local_owned, local);
+        assert_eq!(shrine_owned, count - local);
+        if observed_success && observed_failure {
+            break;
+        }
+    }
+    assert!(observed_success && observed_failure);
 }
 
 fn assert_spawned_definitions(sim: &Simulation, expected: &[AutomaticAbilityProfile]) {
