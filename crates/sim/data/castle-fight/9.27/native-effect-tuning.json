@@ -4,6 +4,34 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A060",
+      "unit_rawcode": "n00J",
+      "kind": "cleave",
+      "radius_world": 175,
+      "damage_per_10k": 2500,
+      "targets": 1,
+      "provenance": {
+        "ability": "A060",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A026",
+      "unit_rawcode": "n00J",
+      "kind": "bash",
+      "chance_per_10k": 1500,
+      "bonus_damage": 25,
+      "stun_duration_millis": 2000,
+      "hero_stun_duration_millis": 1000,
+      "targets": "ground-units",
+      "provenance": {
+        "ability": "A026",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A07Z",
       "unit_rawcode": "h073",
       "kind": "feedback",

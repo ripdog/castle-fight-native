@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A060","unit_rawcode":"n00J","kind":"cleave"},
+    {"source_kind":"unit-ability","source_key":"A026","unit_rawcode":"n00J","kind":"bash"},
     {"source_kind":"unit-ability","source_key":"A07Z","unit_rawcode":"h073","kind":"feedback"},
     {"source_kind":"unit-ability","source_key":"A0CG","unit_rawcode":"e000","kind":"native-heal"},
     {"source_kind":"unit-ability","source_key":"A003","unit_rawcode":"e000","kind":"feedback"},
