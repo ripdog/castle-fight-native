@@ -22,6 +22,11 @@ pub(crate) use damage_proc::{
     BuildingDamageProcState, damage_proc_bindings, damage_proc_for_version,
     damage_proc_granted_sources, damage_proc_source,
 };
+mod night_elf;
+pub use night_elf::SilverGladeProfile;
+pub(crate) use night_elf::{
+    SilverGladeState, silver_bindings, silver_source, silver_spellcasting_for_version,
+};
 mod weather;
 pub(crate) use weather::WeatherState;
 pub use weather::{BuildingWeatherProfile, WeatherWaveProfile};

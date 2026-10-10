@@ -189,7 +189,7 @@ impl Simulation {
                         self.world.despawn(entity);
                     }
                 }
-                NativeAction::SupportOrders(_) => {}
+                NativeAction::SupportOrders(_) | NativeAction::SilverGlade(_) => {}
                 NativeAction::BuildingDamageProc(state) => {
                     self.advance_building_damage_proc(entity, state)
                 }

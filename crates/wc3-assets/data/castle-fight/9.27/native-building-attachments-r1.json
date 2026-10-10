@@ -929,6 +929,72 @@
       ]
     },
     {
+      "building_rawcode": "h07N",
+      "source_registration": "KK",
+      "source_factory": "Mw:create954",
+      "source_callback": "BuildingAttachmentHandler_registerBuildingAttach_RaceNelf_call_registerBuildingAttach_RaceNelf8",
+      "visuals": [
+        {
+          "model_path": "Abilities\\Spells\\Items\\ScrollOfRejuvenation\\ScrollManaHealth.mdl",
+          "yaw_degrees": 0.0,
+          "offset_world": [
+            0.0,
+            0.0,
+            110.0
+          ],
+          "scale": 1.2
+        },
+        {
+          "model_path": "Doodads\\Cinematic\\FirePillarMedium\\FirePillarMedium.mdl",
+          "yaw_degrees": 0.0,
+          "offset_world": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": 1.1,
+          "color_rgb": [
+            200,
+            200,
+            200
+          ]
+        }
+      ]
+    },
+    {
+      "building_rawcode": "h07O",
+      "source_registration": "KK",
+      "source_factory": "Lw:create953",
+      "source_callback": "BuildingAttachmentHandler_registerBuildingAttach_RaceNelf_call_registerBuildingAttach_RaceNelf7",
+      "visuals": [
+        {
+          "model_path": "Abilities\\Spells\\NightElf\\TargetArtLumber\\TargetArtLumber.mdl",
+          "yaw_degrees": 0.0,
+          "offset_world": [
+            15.0,
+            0.0,
+            10.0
+          ],
+          "scale": 0.6
+        },
+        {
+          "model_path": "Doodads\\Cinematic\\FirePillarMedium\\FirePillarMedium.mdl",
+          "yaw_degrees": 0.0,
+          "offset_world": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": 0.7,
+          "color_rgb": [
+            200,
+            200,
+            200
+          ]
+        }
+      ]
+    },
+    {
       "building_rawcode": "h088",
       "source_registration": "KK",
       "source_factory": "Hw:create949",
@@ -943,6 +1009,34 @@
             10.0
           ],
           "scale": 0.6
+        }
+      ]
+    },
+    {
+      "building_rawcode": "h08P",
+      "source_registration": "KK",
+      "source_factory": "Fw:create947",
+      "source_callback": "BuildingAttachmentHandler_registerBuildingAttach_RaceNelf_call_registerBuildingAttach_RaceNelf1",
+      "visuals": [
+        {
+          "model_path": "SharedModels\\EntangleWisp.mdl",
+          "yaw_degrees": 116.0,
+          "offset_world": [
+            -3.0,
+            -10.5,
+            0.0
+          ],
+          "scale": 1.0
+        },
+        {
+          "model_path": "Doodads\\Ruins\\Plants\\Ruins_Shrub\\Ruins_Shrub0.mdl",
+          "yaw_degrees": 323.0,
+          "offset_world": [
+            20.0,
+            5.75,
+            0.0
+          ],
+          "scale": 1.0
         }
       ]
     },

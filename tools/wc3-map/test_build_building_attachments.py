@@ -7,6 +7,18 @@ import build_runtime_catalog as catalog
 
 
 class BuildingAttachmentsTest(unittest.TestCase):
+    def test_every_promoted_nightelf_direct_factory_has_a_retained_decoration_projection(self):
+        import re
+        release = catalog._load_release(catalog.DEFAULT_RELEASES, '9.27', 'r1')
+        artifact = projection.build(release)
+        script = catalog._retained_file_bytes(catalog.REPO_ROOT,release['extraction']['git_tree'],'script/war3map.lua').decode()
+        promoted = {int.from_bytes(code.encode(),'big') for code in re.findall(r'=> b"(.{4})"', (catalog.REPO_ROOT/'crates/sim/src/content/roster.rs').read_text())}
+        start = script.index('function KK(')
+        script = script[start:script.index('function ',start+10)]
+        factories = {int(m[2]) for m in re.finditer(r'(\w+)=\w+:create\d+\(\)Dzb:HashMap_put\((\d+),\1\)', script)}
+        projected = {int.from_bytes(row['building_rawcode'].encode(),'big') for row in artifact['buildings']}
+        self.assertTrue(factories & promoted <= projected, 'a promoted direct attachment factory is missing its projection')
+
     def test_committed_projection_uses_retained_registration_and_script_geometry(self):
         release = catalog._load_release(catalog.DEFAULT_RELEASES, '9.27', 'r1')
         path = catalog.REPO_ROOT / 'crates/wc3-assets/data/castle-fight/9.27/native-building-attachments-r1.json'

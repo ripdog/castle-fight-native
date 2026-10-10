@@ -75,6 +75,11 @@ pub(super) fn native_building_trigger(
     ability: AutomaticAbilityProfile,
 ) -> Option<(AttackTargetMask, bool, bool)> {
     match ability.effect {
+        AbilityEffect::SilverGlade(p) => Some((
+            p.trigger_targets,
+            p.trigger_invulnerable,
+            p.trigger_spell_immune,
+        )),
         AbilityEffect::BuildingAura(p) => Some((
             p.trigger_targets,
             p.trigger_invulnerable,
@@ -124,6 +129,12 @@ pub(super) fn native_building_trigger(
     }
 }
 
+pub(super) fn native_building_trigger_unit_type(
+    ability: AutomaticAbilityProfile,
+    mechanical: bool,
+) -> bool {
+    !matches!(ability.effect,AbilityEffect::SilverGlade(p) if p.trigger_mechanical_only && !mechanical)
+}
 impl Simulation {
     pub(super) fn native_building_trigger_allowed(
         &self,
@@ -156,7 +167,8 @@ impl Simulation {
         let mut candidates = Vec::new();
         for (index, unit) in units.iter().enumerate() {
             *checks += 1;
-            if targets.can_target_unit(unit.target_movement_class())
+            if native_building_trigger_unit_type(ability, unit.mechanical)
+                && targets.can_target_unit(unit.target_movement_class())
                 && self.native_building_trigger_allowed(
                     source,
                     ability,

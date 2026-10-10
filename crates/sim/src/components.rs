@@ -1597,6 +1597,7 @@ pub enum AreaDamageOrigin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AbilityEffect {
+    SilverGlade(crate::building_mechanics::SilverGladeProfile),
     Heal(NativeHealProfile),
     WindWalk(WindWalkProfile),
     ScriptedRoots(ScriptedRootsProfile),
@@ -1763,6 +1764,7 @@ impl AbilityEffect {
     pub const fn stable_tag(self) -> u8 {
         match self {
             Self::Heal(_) => 41,
+            Self::SilverGlade(_) => 42,
             Self::WindWalk(_) => 40,
             Self::ScriptedRoots(_) => 39,
             Self::NativeWeatherVisual { .. } => 38,

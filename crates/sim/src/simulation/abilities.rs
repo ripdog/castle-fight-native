@@ -601,6 +601,9 @@ impl Simulation {
                             index,
                             units,
                         ));
+                    } else if let AbilityEffect::SilverGlade(p) = intent.ability.effect {
+                        self.add_silver_charge(source.team, p);
+                        metrics.effects += 1;
                     } else if let AbilityEffect::BuildingAura(profile) = intent.ability.effect {
                         self.start_aura_carrier(source, profile, units, buildings);
                         metrics.effects += 1;
@@ -899,7 +902,10 @@ impl Simulation {
                     }
                 }
                 AbilityIntentTarget::Building { id, position } => {
-                    if let AbilityEffect::BuildingAura(profile) = intent.ability.effect {
+                    if let AbilityEffect::SilverGlade(p) = intent.ability.effect {
+                        self.add_silver_charge(source.team, p);
+                        metrics.effects += 1;
+                    } else if let AbilityEffect::BuildingAura(profile) = intent.ability.effect {
                         self.start_aura_carrier(source, profile, units, buildings);
                         metrics.effects += 1;
                         emit_cast_visual = false;
@@ -2213,7 +2219,10 @@ impl Simulation {
                             else {
                                 return false;
                             };
-                            targets.can_target_unit(target.target_movement_class())
+                            super::building_spells::native_building_trigger_unit_type(
+                                ability,
+                                target.mechanical,
+                            ) && targets.can_target_unit(target.target_movement_class())
                                 && target.visible_to(source.team, self.next_tick)
                                 && self.native_building_trigger_allowed(
                                     source,

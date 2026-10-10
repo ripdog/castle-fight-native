@@ -22,6 +22,7 @@ mod master_projectiles;
 mod mirror_image;
 mod poison;
 mod resistant_skin;
+mod silver;
 mod speed_aura;
 mod sphere;
 mod stasis;

@@ -163,6 +163,7 @@ pub(crate) struct HailstoneState {
 
 #[derive(Component, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum NativeAction {
+    SilverGlade(crate::building_mechanics::SilverGladeState),
     ResumeAttack { source: SimId, due_tick: u64 },
     SupportOrders(SupportOrderQueue),
     BuildingDamageProc(crate::building_mechanics::BuildingDamageProcState),

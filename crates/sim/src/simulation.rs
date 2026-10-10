@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 72;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 73;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -34,6 +34,7 @@ mod support_orders;
 pub use death_healing::DeathHealVisualEvent;
 mod building_damage_procs;
 mod enchantments;
+mod night_elf;
 mod permanent_grants;
 mod weather;
 mod world_freezer;
@@ -4510,6 +4511,13 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
     }
     match spellcasting.ability.effect {
+        AbilityEffect::SilverGlade(p) => {
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::NativeBuildingSpellTrigger
+            );
+            assert!(p.radius >= 0 && p.health >= 0 && p.mana >= 0 && p.duration_ticks > 0);
+        }
         AbilityEffect::Heal(p) => {
             assert!(p.amount >= 0 && p.resume_attack_ticks > 0);
         }

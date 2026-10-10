@@ -152,6 +152,11 @@ impl Simulation {
                 continue;
             };
 
+            if !intent.completing_windup
+                && let TargetIndex::Unit(index) = intent.target
+            {
+                self.silver_attack_attempt(index, units, unit_health, completed_tick);
+            }
             let (status, timing, primary) = match intent.source {
                 AttackSourceIndex::Unit(index) => {
                     let primary = match intent.target {

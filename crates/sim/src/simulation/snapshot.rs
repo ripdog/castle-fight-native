@@ -6,7 +6,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 65;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 66;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -101,6 +101,17 @@ impl SimulationSnapshot {
                     if let Some(crate::SpellcastingProfile {
                         ability:
                             crate::AutomaticAbilityProfile {
+                                effect: crate::AbilityEffect::SilverGlade(p),
+                                ..
+                            },
+                        ..
+                    }) = unit.spellcasting
+                    {
+                        validate_content_version(p.map_version, content)?;
+                    }
+                    if let Some(crate::SpellcastingProfile {
+                        ability:
+                            crate::AutomaticAbilityProfile {
                                 effect: crate::AbilityEffect::WindWalk(profile),
                                 ..
                             },
@@ -137,6 +148,17 @@ impl SimulationSnapshot {
                 }
                 CanonicalEntity::Building(building) => {
                     rehydrate_optional_content(&mut building.content, content)?;
+                    if let Some(crate::SpellcastingProfile {
+                        ability:
+                            crate::AutomaticAbilityProfile {
+                                effect: crate::AbilityEffect::SilverGlade(p),
+                                ..
+                            },
+                        ..
+                    }) = building.spellcasting
+                    {
+                        validate_content_version(p.map_version, content)?;
+                    }
                     rehydrate_optional_content(&mut building.production_content, content)?;
                     if let Some(construction) = building.construction.as_deref_mut() {
                         rehydrate_building_properties(&mut construction.properties, content)?;
@@ -180,6 +202,9 @@ impl SimulationSnapshot {
                     validate_content_version(state.profile.map_version, content)?;
                 }
                 CanonicalEntity::NativeAction { action, .. } => {
+                    if let NativeAction::SilverGlade(state) = action {
+                        validate_content_version(state.profile.map_version, content)?;
+                    }
                     if let NativeAction::SupportOrders(state) = action {
                         validate_content_version(state.rules.map_version, content)?;
                     }
