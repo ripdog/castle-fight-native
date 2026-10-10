@@ -197,6 +197,12 @@ class NativeTuningProjectionTest(unittest.TestCase):
         self.assertTrue(profile["stack_damage"])
         self.assertFalse(profile["can_kill"])
         self.assertEqual((profile["hero_duration_ticks"], profile["movement_percent_delta"], profile["attack_speed_percent_delta"]), (8, -10, -15))
+        slow_poison = native.project_effect(recipe, {**fields, "dataa1": "-19"}, None, {}, {"native_base": "Aspo"})["profile"]
+        self.assertEqual((slow_poison["movement_percent_delta"], slow_poison["attack_speed_percent_delta"]), (-15, -10))
+        self.assertEqual(slow_poison["damage_per_second"], 19)
+        self.assertEqual(slow_poison["buff_rawcode"], profile["buff_rawcode"])
+        self.assertTrue(slow_poison["stack_damage"])
+        self.assertFalse(slow_poison["can_kill"])
         for override in ({"datad1": "3"}, {"targs1": "air,ground,mechanical"}):
             with self.assertRaisesRegex(ValueError, "organic mask"):
                 native.project_effect(recipe, {**fields, **override}, None, {}, {})

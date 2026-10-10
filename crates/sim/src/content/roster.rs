@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    Suumpmolk = 0x1000_004a => b"n004",
     MurlocAssassin = 0x1000_0049 => b"n00K",
     MurlocChampion = 0x1000_0048 => b"n00J",
     MurlocWarrior = 0x1000_0047 => b"n00I",
@@ -109,6 +110,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    SwampWell = 0x2000_004a => b"h00J",
     MurlocFortress = 0x2000_0049 => b"h022",
     MurlocVillage = 0x2000_0048 => b"h021",
     MurlocCamp = 0x2000_0047 => b"h020",

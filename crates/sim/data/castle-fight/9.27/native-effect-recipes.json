@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A00C","unit_rawcode":"n004","kind":"poison"},
     {"source_kind":"unit-ability","source_key":"A025","unit_rawcode":"n00K","kind":"critical-strike"},
     {"source_kind":"unit-ability","source_key":"A061","unit_rawcode":"n00K","kind":"feedback"},
     {"source_kind":"unit-ability","source_key":"A02N","unit_rawcode":"n00K","kind":"cleave"},
