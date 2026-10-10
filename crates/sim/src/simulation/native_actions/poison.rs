@@ -204,7 +204,8 @@ impl Simulation {
                 );
                 let floor = i32::from(!state.profile.can_kill);
                 if target.health > 0 {
-                    target.health = target.health.saturating_sub(event_damage).max(floor);
+                    let after = target.health.saturating_sub(event_damage).max(floor);
+                    super::super::death_healing::commit_health(units, index, after);
                 }
             }
             state.next_pulse_tick = state

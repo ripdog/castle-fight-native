@@ -384,6 +384,8 @@ The initial rules are explicit:
 
 Same-phase interactions are processed in canonical event order. This means same-tick mutual actions are not implicitly simultaneous: a source killed earlier in canonical resolution cannot complete a later unresolved action.
 
+A credited lethal damage event commits native death healing before the next damage event or recipient in the same area effect. Recipients must still be alive; this callback cannot resurrect an already-dead handle. The callback reads live completed building support and canonical ownership, retaining the precursor's registration during an upgrade. Team-wide enabling support does not multiply with duplicate sources; scaling counts the deceased unit owner's production sources. Exact source unit identity determines full versus reduced healing. Integer health truncates fractional healing before clamping to maximum life. Post-movement damage uses current positions. Recipient visual events are cosmetic and cannot affect authoritative health, identity allocation, checksums or restoration. A removal without a credited killer does not run this callback.
+
 ## 15. Movement/combat interaction
 
 Movement/combat interaction follows these initial rules:

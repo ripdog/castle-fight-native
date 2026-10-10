@@ -179,7 +179,8 @@ impl Simulation {
                     origin: AreaDamageOrigin::Caster,
                 },
             });
-            for target in units.iter_mut() {
+            for i in 0..units.len() {
+                let target = &mut units[i];
                 if target.health <= 0
                     || target.team == source.team
                     || target.classifications.invulnerable
@@ -207,7 +208,8 @@ impl Simulation {
                     target.snow_damage_taken_per_10k,
                 );
                 damage_thresholds::observe_damage_event(target, target.health, damage);
-                target.health = target.health.saturating_sub(damage);
+                let after = target.health.saturating_sub(damage);
+                death_healing::commit_health(units, i, after);
             }
             if !self.debug_buildings_invulnerable {
                 for target in buildings.iter_mut() {
@@ -238,6 +240,8 @@ impl Simulation {
                 }
             }
             // Asds kills its caster; its death flag controls corpse appearance, not a second AoE.
+            death_healing::refresh_support(units, buildings, None);
+            // Native caster suicide is a kill without a damage-event killer; fJ requires one.
             units[index].health = 0;
         }
     }

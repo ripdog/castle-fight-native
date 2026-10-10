@@ -149,9 +149,16 @@ impl Simulation {
                 unit_health[next_index],
                 event_damage,
             );
-            unit_health[next_index] = unit_health[next_index]
+            let after = unit_health[next_index]
                 .checked_sub(event_damage)
                 .expect("Chain Lightning damage overflow");
+            death_healing::commit_split_health(
+                units,
+                unit_health,
+                Some(positions),
+                next_index,
+                after,
+            );
             let next_position = positions[next_index];
             let mut points = [SimPoint::default(); MAX_BOUNCE_HITS + 1];
             points[0] = origin;
@@ -955,7 +962,8 @@ impl Simulation {
                 }
                 let radius_sq = square_i32(zone.profile.radius);
                 if zone.profile.target_ground_units {
-                    for unit in units.iter_mut() {
+                    for i in 0..units.len() {
+                        let unit = &mut units[i];
                         if unit.health <= 0
                             || unit.team == zone.source_team
                             || unit.classifications.invulnerable
@@ -976,10 +984,11 @@ impl Simulation {
                             unit.health,
                             event_damage,
                         );
-                        unit.health = unit
+                        let after = unit
                             .health
                             .checked_sub(event_damage)
                             .expect("Burning Oil unit damage overflow");
+                        death_healing::commit_health(units, i, after);
                     }
                 }
                 if zone.profile.target_buildings && !self.debug_buildings_invulnerable {
@@ -1012,6 +1021,7 @@ impl Simulation {
                             .expect("Burning Oil building damage overflow");
                     }
                 }
+                death_healing::refresh_support(units, buildings, None);
                 zone.pulse_index = zone
                     .pulse_index
                     .checked_add(1)

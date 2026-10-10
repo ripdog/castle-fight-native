@@ -206,6 +206,7 @@ pub struct PresentationSnapshot {
     pub burning_oil: BTreeMap<SimId, castle_fight_sim::BurningOilView>,
     pub attacks: Vec<AttackEvent>,
     pub ability_casts: Vec<AbilityCastEvent>,
+    pub death_heals: Vec<castle_fight_sim::DeathHealVisualEvent>,
     pub shrine_revivals: Vec<castle_fight_sim::ShrineRevivalEvent>,
     pub chain_lightnings: Vec<ChainLightningEvent>,
     pub snow_tiles: Vec<(SimPoint, Team, i32, u32)>,
@@ -449,6 +450,7 @@ impl PresentationSnapshot {
                 .collect(),
             attacks: simulation.attacks_last_tick().to_vec(),
             ability_casts: simulation.ability_casts_last_tick().to_vec(),
+            death_heals: simulation.death_heals_last_tick().to_vec(),
             shrine_revivals: simulation.shrine_revivals_last_tick().to_vec(),
             chain_lightnings: simulation.chain_lightnings_last_tick().to_vec(),
             snow_tiles: simulation.snow_tiles(),
@@ -712,6 +714,8 @@ impl PresentationSnapshot {
                     .target_position
                     .is_none_or(|p| fog.is_visible(team, p))
         });
+        self.death_heals
+            .retain(|event| fog.is_visible(team, event.position));
         self.shrine_revivals
             .retain(|event| fog.is_visible(team, event.position));
         self.chain_lightnings.retain(|event| {
@@ -741,6 +745,7 @@ impl PresentationSnapshot {
     fn clear_events(&mut self) {
         self.attacks.clear();
         self.ability_casts.clear();
+        self.death_heals.clear();
         self.shrine_revivals.clear();
         self.chain_lightnings.clear();
         self.building_spell_visuals.clear();
@@ -757,6 +762,7 @@ impl PresentationSnapshot {
         }
         prepend!(attacks);
         prepend!(ability_casts);
+        prepend!(death_heals);
         prepend!(shrine_revivals);
         prepend!(chain_lightnings);
         prepend!(building_spell_visuals);

@@ -31,13 +31,16 @@ impl Simulation {
                 &self.retired_damage_sources,
             );
         }
-        apply_ability_effect_to_unit(
+        let before = units[index].health;
+        let applied = apply_ability_effect_to_unit(
             &mut units[index],
             effect,
             team,
             self.next_tick,
             self.combat_rules.damage_rules,
-        )
+        );
+        death_healing::observe_inline_death(units, index, before);
+        applied
     }
 
     fn restore_pending_cast_target(
@@ -972,7 +975,9 @@ impl Simulation {
                     }
                 }
                 AbilityIntentTarget::AllEnemyUnits => {
-                    for target in units.iter_mut() {
+                    for i in 0..units.len() {
+                        let target = &mut units[i];
+                        let before = target.health;
                         if target.health <= 0 || target.team == source.team {
                             continue;
                         }
@@ -985,6 +990,7 @@ impl Simulation {
                         ) {
                             metrics.effects += 1;
                         }
+                        death_healing::observe_inline_death(units, i, before);
                     }
                 }
                 AbilityIntentTarget::AllFriendlyUnits => {
@@ -1036,7 +1042,8 @@ impl Simulation {
                             true,
                         );
                     }
-                    for target in units.iter_mut() {
+                    for i in 0..units.len() {
+                        let target = &mut units[i];
                         if target.health > 0
                             && target.team != source.team
                             && position.distance_sq(target.position) <= square_i32(radius)
@@ -1054,7 +1061,8 @@ impl Simulation {
                                 target.health,
                                 event_damage,
                             );
-                            target.health = target.health.saturating_sub(event_damage);
+                            let after = target.health.saturating_sub(event_damage);
+                            death_healing::commit_health(units, i, after);
                             metrics.effects += 1;
                         }
                     }

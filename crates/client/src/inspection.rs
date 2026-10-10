@@ -3480,6 +3480,7 @@ mod tests {
             attacks: Vec::new(),
             ability_casts: Vec::new(),
             chain_lightnings: Vec::new(),
+            death_heals: Vec::new(),
             shrine_revivals: Vec::new(),
             snow_tiles: Vec::new(),
             building_spell_visuals: Vec::new(),

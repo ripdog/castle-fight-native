@@ -763,10 +763,11 @@ pub(super) fn resolve_periodic_unit_statuses(
                     unit.status.pending_attack = None;
                     unit.status.action_animation = None;
                 }
-                unit.health = unit
+                let after = unit
                     .health
                     .checked_sub(event_damage)
                     .expect("damage-over-time health arithmetic overflow");
+                death_healing::commit_health(units, unit_index, after);
                 effect.next_pulse_tick = effect
                     .next_pulse_tick
                     .checked_add(u64::from(effect.pulse_interval_ticks))

@@ -138,7 +138,8 @@ impl Simulation {
         buildings: &mut [BuildingSnapshot],
     ) {
         let p = state.profile;
-        for target in units {
+        for i in 0..units.len() {
+            let target = &mut units[i];
             if target.health <= 0
                 || target.team == state.team
                 || target.classifications.invulnerable
@@ -167,7 +168,9 @@ impl Simulation {
                 target.snow_damage_taken_per_10k,
             );
             super::damage_thresholds::observe_damage_event(target, target.health, event_damage);
-            target.health = target.health.saturating_sub(event_damage);
+            let after = target.health.saturating_sub(event_damage);
+            death_healing::commit_health(units, i, after);
+            let target = &mut units[i];
             if target.health > 0
                 && !target.classifications.spell_immune
                 && p.freeze_targets
@@ -185,7 +188,7 @@ impl Simulation {
                 );
             }
         }
-        for target in buildings {
+        for target in buildings.iter_mut() {
             let distance_sq = point_to_footprint_distance_sq(
                 state.destination,
                 target.footprint,
@@ -264,6 +267,7 @@ impl Simulation {
         for (_, entity, state) in due {
             self.world.despawn(entity);
             self.resolve_hailstone(state, units, buildings);
+            death_healing::refresh_support(units, buildings, None);
         }
         let mut effects = 0;
         for (unit, health) in units.iter().zip(unit_health) {

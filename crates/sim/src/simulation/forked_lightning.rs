@@ -105,7 +105,8 @@ pub(super) fn resolve(
                     state.unit_health[i],
                     damage,
                 );
-                state.unit_health[i] = state.unit_health[i].saturating_sub(damage);
+                let after = state.unit_health[i].saturating_sub(damage);
+                death_healing::commit_split_health(state.units, state.unit_health, None, i, after);
             }
             TargetIndex::Building(i) => {
                 let damage = scale_damage_per_10k(
@@ -115,6 +116,11 @@ pub(super) fn resolve(
                     state.buildings[i].snow_damage_taken_per_10k,
                 );
                 state.building_health[i] = state.building_health[i].saturating_sub(damage);
+                death_healing::refresh_support(
+                    state.units,
+                    state.buildings,
+                    Some(state.building_health),
+                );
             }
         }
         let mut points = [SimPoint::default(); MAX_BOUNCE_HITS + 1];

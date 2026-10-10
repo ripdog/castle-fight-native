@@ -3,6 +3,19 @@
   "map_version": "9.27",
   "effects": [
     {
+      "source_kind": "unit-ability",
+      "source_key": "A0ET",
+      "unit_rawcode": "h063",
+      "kind": "critical-strike",
+      "chance_per_10k": 2000,
+      "damage_multiplier_per_10k": 20000,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A0ET",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
       "kind": "elven-automatic",
       "source_kind": "unit-ability",
       "source_key": "A0D9",

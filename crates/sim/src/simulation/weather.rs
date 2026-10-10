@@ -277,6 +277,7 @@ impl Simulation {
                             .apply_spell(burn, b.armor.armor_type),
                     );
                 }
+                death_healing::refresh_support(units, buildings, None);
             } else {
                 let target = &mut units[i];
                 let damage = self
@@ -288,7 +289,9 @@ impl Simulation {
                 if raw > 0 {
                     damage_thresholds::observe_damage_event(target, target.health, damage);
                 }
-                target.health = target.health.saturating_sub(damage);
+                let after = target.health.saturating_sub(damage);
+                death_healing::commit_health(units, i, after);
+                let target = &mut units[i];
                 if target.health > 0 && burn_winner {
                     let burn = apply_weather_burn(
                         &mut target.status,
@@ -304,8 +307,10 @@ impl Simulation {
                     if burn > 0 {
                         damage_thresholds::observe_damage_event(target, target.health, burn);
                     }
-                    target.health = target.health.saturating_sub(burn);
+                    let after = target.health.saturating_sub(burn);
+                    death_healing::commit_health(units, i, after);
                 }
+                let target = &units[i];
                 if p.shards == 0 {
                     self.last_ability_casts.push(AbilityCastEvent {
                         source: state.source,

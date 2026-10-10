@@ -13,6 +13,9 @@ pub(crate) use aura_carrier::{
     aura_carrier_bindings_for_version, aura_carrier_source_for_version,
     endurance_aura_spellcasting_for_version, healing_aura_spellcasting_for_version,
 };
+mod death_heal;
+pub(crate) use death_heal::death_heal_for_version;
+pub use death_heal::death_heal_visual_for_version;
 mod damage_proc;
 pub use damage_proc::BuildingDamageProcProfile;
 pub(crate) use damage_proc::{

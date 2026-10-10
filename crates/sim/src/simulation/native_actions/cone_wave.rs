@@ -119,7 +119,7 @@ impl Simulation {
             );
             let health = units[index].health;
             damage_thresholds::observe_damage_event(&mut units[index], health, damage);
-            units[index].health = health.saturating_sub(damage);
+            super::super::death_healing::commit_health(units, index, health.saturating_sub(damage));
             state.hit_targets.push(id);
             self.last_ability_casts.push(AbilityCastEvent {
                 source: state.source,

@@ -215,6 +215,7 @@ impl Simulation {
                 let mut targets = Vec::new();
                 let mut kills = 0;
                 let mut query = self.world.query::<(
+                    Entity,
                     &SimId,
                     &Team,
                     Option<&Position>,
@@ -222,10 +223,20 @@ impl Simulation {
                     Option<&UnitClassifications>,
                     Option<&Builder>,
                     Option<&ArmorProfile>,
-                    &mut Health,
+                    &Health,
                 )>();
-                for (id, team, position, footprint, classifications, builder, armor, mut health) in
-                    query.iter_mut(&mut self.world)
+                let mut eligible = Vec::new();
+                for (
+                    entity,
+                    id,
+                    team,
+                    position,
+                    footprint,
+                    classifications,
+                    builder,
+                    armor,
+                    health,
+                ) in query.iter(&self.world)
                 {
                     if *team == source_team || builder.is_some() {
                         continue;
@@ -256,11 +267,17 @@ impl Simulation {
                     if health.current <= 0 {
                         continue;
                     }
+                    eligible.push((*id, entity, armor.copied().unwrap_or_default()));
+                }
+                eligible.sort_unstable_by_key(|(id, _, _)| *id);
+                for (id, entity, armor) in eligible {
+                    if self.world.get::<Health>(entity).unwrap().current <= 0 {
+                        continue;
+                    }
                     // Source map invokes UnitDamageTarget twice: CHAOS/DEATH and
                     // NORMAL/MAGIC. The first uses physical armor; magic damage
                     // preserves normal attack-vs-armor-type scaling but ignores armor
                     // points. Keep the packets separate for deterministic mitigation.
-                    let armor = armor.copied().unwrap_or_default();
                     let damage_rules = self.combat_rules.damage_rules;
                     let death_packet = damage_rules.apply_attack(
                         rules.damage_each_packet,
@@ -273,12 +290,19 @@ impl Simulation {
                         armor.armor_type,
                         0,
                     );
-                    health.current = health.current.saturating_sub(death_packet);
-                    health.current = health.current.saturating_sub(magic_packet);
+                    for packet in [death_packet, magic_packet] {
+                        let mut health = self.world.get_mut::<Health>(entity).unwrap();
+                        let before = health.current;
+                        health.current = health.current.saturating_sub(packet);
+                        let died = before > 0 && health.current <= 0;
+                        if died {
+                            self.observe_world_death_heal(id);
+                        }
+                    }
                     // The original map counts eligible victims, not confirmed deaths,
                     // for deciding whether to refund an unused strike.
                     kills += 1;
-                    targets.push(*id);
+                    targets.push(id);
                 }
                 let team_index = usize::from(source_team.0);
                 self.team_rescue_ready_ticks[team_index] =

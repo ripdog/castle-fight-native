@@ -7,6 +7,7 @@ import io
 from pathlib import Path
 
 from build_runtime_catalog import _load_release, _retained_file_bytes
+from project_death_heal import project as project_death_heal
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / 'crates/sim/data/castle-fight/9.27/building-mechanics-r1.json'
@@ -48,6 +49,11 @@ def build(map_version='9.27', revision='r1'):
     launcher_codes += ['h047', 'A06P', 'A0AK']
     freezer = next(r for r in building_rows if r['building_rawcode'] == 'h03O')
     launcher_codes += ['h03O', 'h08U', 'A04I', 'A081', 'A080', 'A084', 'A082', 'A083', 'A04H']
+    linker = next(r for r in rows('runtime-system-mechanics.tsv') if r['system_id'] == 'elemental-linker-death-heal')
+    bucket_bytes = _retained_file_bytes(ROOT, tree, 'script/element-building-buckets.tsv')
+    sources['script/element-building-buckets.tsv'] = hashlib.sha256(bucket_bytes).hexdigest()
+    buckets = list(csv.DictReader(io.StringIO(bucket_bytes.decode()), delimiter='\t'))
+    launcher_codes += ['h063', 'A0ET', 'A06V']
     guard = next(r for r in rows('runtime-system-mechanics.tsv') if r['system_id'] == 'elemental-guard-tower-avalanche')
     launcher_codes += ['h061', 'A03Q', 'A0EV', 'A0DC', 'e008']
     shield = next(r for r in rows('runtime-system-mechanics.tsv') if r['system_id'] == 'targeted-negative-effect-shields')
@@ -73,6 +79,9 @@ def build(map_version='9.27', revision='r1'):
                      'CallbackSingle_doAfter_ReengageRuntime_call_doAfter_ReengageRuntime',
                      'CallbackSingle_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_ReengageRuntime',
                      'CallbackSingle_doAfter_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_doAfter_ReengageRuntime',
+                     *linker['source_functions'].split(','), 'onBuildingFinished',
+                     'EventListener_add_BuildingLifecycle_onEvent_add_BuildingLifecycle',
+                     'EventListener_add_BuildingLifecycle_onEvent_add_BuildingLifecycle1',
                      *guard['source_functions'].split(','), *snow['source_functions'].split(','), *serpent['source_functions'].split(','), *ceremonial['source_functions'].split(','),
                      *stasis['source_functions'].split(','), *enchantment['source_functions'].split(','), 'dummyCastPointFrom',
                      *healing['source_functions'].split(','), *endurance['source_functions'].split(','), 'dummyCarrierWithAbility', 'createSpellCarrier', 'QL', 'iD', 'hD',
@@ -173,6 +182,7 @@ def build(map_version='9.27', revision='r1'):
     guard_profile = project_guard(guard, selected, protected, traces)
     return {'map_version': map_version, 'schema_version': 2, 'source_revision': revision,
             'extraction_git_tree': tree, 'source_sha256': sources,
+            'linker': linker, 'linker_death_heal': project_death_heal(linker, buckets, traces),
             'guard': guard, 'guard_damage_proc': guard_profile,
             'city': mechanics, 'launchers': launchers, 'mushroom': mushroom, 'freezer': freezer,
             'freezer_animation_seconds': re.search(r'doAfter\(([\d.]+),', traces['CallbackSingle_doAfter_RaceNorthernAbilities_call_doAfter_RaceNorthernAbilities1']['source']).group(1),

@@ -4302,6 +4302,49 @@ fn sync_render_entities(
         }
     }
 
+    for heal in &samples.current.death_heals {
+        let Some((path, point)) =
+            castle_fight_sim::building_mechanics::death_heal_visual_for_version(heal.map_version)
+        else {
+            continue;
+        };
+        let Some(model) = wc3_visuals.system_model(path) else {
+            continue;
+        };
+        let root = imported_roots
+            .iter()
+            .find_map(|(entity, root)| (root.sim_id == heal.target).then_some(entity));
+        let (entity, pooled_scene) = spawn_or_reuse_timed_wc3_visual(
+            &mut commands,
+            &mut effect_pool,
+            model,
+            if root.is_some() {
+                Transform::IDENTITY
+            } else {
+                Transform::from_translation(sim_point_to_terrain_world(heal.position, &terrain))
+            },
+            !legacy_effect_pooling,
+        );
+        if let Some(root) = root {
+            commands.entity(root).add_child(entity);
+            commands.entity(entity).insert(Wc3AttachToNode {
+                owner_root: root,
+                attachment_point: point.to_owned(),
+            });
+        }
+        let lifetime = model.effect_lifetime_seconds(ABILITY_MODEL_EFFECT_SECONDS);
+        timed_effects.0.push(TimedWc3Effect {
+            entity,
+            remaining: lifetime,
+            lifetime,
+            mesh: None,
+            fade_material: None,
+            pooled_lightning: false,
+            pooled_scene,
+            owner_root: root,
+        });
+    }
+
     for revival in &samples.current.shrine_revivals {
         let Some(model) = wc3_visuals.system_model(revival.model_path) else {
             continue;

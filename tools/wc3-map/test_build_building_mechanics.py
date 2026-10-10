@@ -150,6 +150,23 @@ class BuildingMechanicsProjectionTests(unittest.TestCase):
                 return data.replace(before,after) if path=='script/war3map.lua' else data
             with mock.patch.object(MODULE,'_retained_file_bytes',changed),self.assertRaises(ValueError):MODULE.build()
 
+    def test_death_heal_projection_rejects_team_owner_type_and_lifecycle_drift(self):
+        original = MODULE._retained_file_bytes
+        def mutate(before, after):
+            def read(root, tree, path):
+                data = original(root, tree, path)
+                if path == 'script/war3map.lua':
+                    self.assertIn(before, data)
+                    data = data.replace(before, after, 1)
+                return data
+            return read
+        for before, after in [(b'TX=eleLinkerHealAmount(P2q)', b'TX=eleLinkerHealAmount(Q2q)'),
+                              (b'unit_getTypeId(jHr)==UX', b'unit_getTypeId(jHr)~=UX'),
+                              (b'(.2*TX)', b'(.3*TX)'),
+                              (b'onBuildingFinished(GetTriggerUnit(),true)', b'onBuildingFinished(GetTriggerUnit(),false)')]:
+            with self.subTest(before=before), mock.patch.object(MODULE, '_retained_file_bytes', side_effect=mutate(before, after)):
+                with self.assertRaises(ValueError): MODULE.build()
+
 
 if __name__ == "__main__":
     unittest.main()

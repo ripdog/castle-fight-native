@@ -384,7 +384,14 @@ impl Simulation {
                             unit_health[index],
                             event_damage,
                         );
-                        unit_health[index] = unit_health[index].saturating_sub(event_damage);
+                        let after = unit_health[index].saturating_sub(event_damage);
+                        death_healing::commit_split_health(
+                            units,
+                            unit_health,
+                            Some(positions),
+                            index,
+                            after,
+                        );
                         if damage > 0 {
                             result.effects += 1;
                         }

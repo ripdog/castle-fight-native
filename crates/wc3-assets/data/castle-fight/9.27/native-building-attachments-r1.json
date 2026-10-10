@@ -768,6 +768,29 @@
       ]
     },
     {
+      "building_rawcode": "h063",
+      "source_registration": "wK",
+      "source_factory": "Mu:create856",
+      "source_callback": "BuildingAttachmentHandler_registerBuildingAttach_RaceElemental_call_registerBuildingAttach_RaceElemental17",
+      "visuals": [
+        {
+          "model_path": "SharedModels\\NEBirth.mdl",
+          "yaw_degrees": 270.0,
+          "offset_world": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": 0.6,
+          "color_rgb": [
+            50,
+            150,
+            255
+          ]
+        }
+      ]
+    },
+    {
       "building_rawcode": "h06E",
       "source_registration": "wK",
       "source_factory": "Iu:create852",

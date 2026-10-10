@@ -302,9 +302,16 @@ impl Simulation {
                         unit_health[index],
                         event_damage,
                     );
-                    unit_health[index] = unit_health[index]
+                    let after = unit_health[index]
                         .checked_sub(event_damage)
                         .expect("Pulverize damage overflow");
+                    death_healing::commit_split_health(
+                        units,
+                        unit_health,
+                        Some(positions),
+                        index,
+                        after,
+                    );
                 }
                 self.last_ability_casts.push(AbilityCastEvent {
                     source: intent.source_id,

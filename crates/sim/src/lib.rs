@@ -110,12 +110,12 @@ pub use simulation::{
     BuilderView, BuildingCommandError, BuildingConstructionCancelError,
     BuildingConstructionCancelOutcome, BuildingPlacementError, BuildingSpellVisualEvent,
     BuildingSpellVisualKind, BuildingUpgradeError, BuildingView, BurningOilView,
-    CANONICAL_CHECKSUM_SCHEMA_VERSION, ChainLightningEvent, CombatRules, CorpseView, HexState,
-    MatchLifecycle, MatchOutcome, PlayerConfig, PlayerConnectionStatus, PlayerRoundScore,
-    PlayerView, ProjectileView, ProjectileViewKind, RoundScoreboard, ShrineRevivalEvent,
-    Simulation, SimulationConfig, SimulationSnapshot, SnapshotRestoreError, SnapshotWireError,
-    TargetlessLane, TeamObjectiveError, TickResult, TickTimings, UPHILL_MISS_CHANCE_SCALE,
-    UnitView,
+    CANONICAL_CHECKSUM_SCHEMA_VERSION, ChainLightningEvent, CombatRules, CorpseView,
+    DeathHealVisualEvent, HexState, MatchLifecycle, MatchOutcome, PlayerConfig,
+    PlayerConnectionStatus, PlayerRoundScore, PlayerView, ProjectileView, ProjectileViewKind,
+    RoundScoreboard, ShrineRevivalEvent, Simulation, SimulationConfig, SimulationSnapshot,
+    SnapshotRestoreError, SnapshotWireError, TargetlessLane, TeamObjectiveError, TickResult,
+    TickTimings, UPHILL_MISS_CHANCE_SCALE, UnitView,
 };
 pub use terrain::{
     TerrainElevationMap, TerrainElevationSample, TerrainLoadError, WC3_TERRAIN_TILE_WORLD_UNITS,

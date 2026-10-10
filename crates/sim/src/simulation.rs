@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 67;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 68;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -28,6 +28,8 @@ mod abilities;
 mod automatic_abilities;
 mod builder;
 mod building_bolts;
+mod death_healing;
+pub use death_healing::DeathHealVisualEvent;
 mod building_damage_procs;
 mod enchantments;
 mod permanent_grants;
@@ -693,6 +695,7 @@ pub struct Simulation {
     defense_alerts: Vec<DefenseAlert>,
     last_attacks: Vec<AttackEvent>,
     last_ability_casts: Vec<AbilityCastEvent>,
+    last_death_heals: Vec<DeathHealVisualEvent>,
     last_shrine_revivals: Vec<ShrineRevivalEvent>,
     shrine_death_generation: u64,
     retired_damage_sources: BTreeMap<SimId, source_damage_runtime::RetiredDamageSource>,
@@ -861,6 +864,7 @@ impl Simulation {
             defense_alerts: Vec::new(),
             last_attacks: Vec::new(),
             last_ability_casts: Vec::new(),
+            last_death_heals: Vec::new(),
             last_shrine_revivals: Vec::new(),
             shrine_death_generation: 1,
             retired_damage_sources: BTreeMap::new(),
@@ -1692,6 +1696,7 @@ impl Simulation {
         let mut units = self.snapshot_units();
         let mut buildings = self.snapshot_buildings();
         self.refresh_snow_protection(&mut units, &mut buildings);
+        death_healing::refresh_support(&mut units, &buildings, None);
         resolve_periodic_unit_statuses(
             &mut units,
             completed_tick,
@@ -1703,6 +1708,7 @@ impl Simulation {
             completed_tick,
             self.combat_rules.damage_rules,
         );
+        death_healing::refresh_support(&mut units, &buildings, None);
         self.resolve_burning_oil_zones(&mut units, &mut buildings, completed_tick);
         let grid = SpatialGrid::build(
             self.config.spatial_cell_size,
@@ -1908,6 +1914,9 @@ impl Simulation {
             &mut navigation_states,
         );
 
+        for (unit, position) in units.iter_mut().zip(&positions) {
+            unit.death_position = *position;
+        }
         let phase_start = Instant::now();
         self.refresh_snow_protection_at(&mut units, &mut buildings, Some(&positions));
         let ballistic_impacts = self.resolve_due_ballistic_impacts(BallisticImpactContext {
@@ -1977,6 +1986,7 @@ impl Simulation {
         );
         self.release_spheres(&mut units);
         self.observe_master_parasite_deaths(&units, &unit_health, &positions);
+        self.emit_death_heal_visuals(&units, &positions);
         let mut deaths = 0;
         let mut corpse_spawns = Vec::new();
         // Team contributions are phase-local derived state, never a stale persistent counter.
@@ -2366,6 +2376,7 @@ impl Simulation {
     pub fn clear_presentation_events(&mut self) {
         self.last_attacks.clear();
         self.last_ability_casts.clear();
+        self.last_death_heals.clear();
         self.last_shrine_revivals.clear();
         self.last_building_spell_visuals.clear();
         self.last_chain_lightnings.clear();
@@ -3431,6 +3442,10 @@ impl Simulation {
     }
 
     fn snapshot_units(&mut self) -> Vec<UnitSnapshot> {
+        self.snapshot_units_with_dead(false)
+    }
+
+    fn snapshot_units_with_dead(&mut self, include_dead: bool) -> Vec<UnitSnapshot> {
         let mut query = self.world.query::<(
             Entity,
             &SimId,
@@ -3450,7 +3465,9 @@ impl Simulation {
         let default_collision_radius = self.default_collision_radius();
         let mut units: Vec<_> = query
             .iter(&self.world)
-            .filter(|(_, _, _, _, _, health, _, _, _, _, _, _, _, _)| health.current > 0)
+            .filter(|(_, _, _, _, _, health, _, _, _, _, _, _, _, _)| {
+                include_dead || health.current > 0
+            })
             .map(
                 |(
                     entity,
@@ -3497,7 +3514,28 @@ impl Simulation {
                     let ability_state = entity_ref.get::<AutomaticAbilityState>().copied();
                     debug_assert_eq!(spellcasting.is_some(), mana_current.is_some());
                     debug_assert_eq!(spellcasting.is_some(), ability_state.is_some());
+                    let content = entity_ref.get::<ContentIdentity>();
+                    let death_heal = content.and_then(|c| {
+                        let p = crate::building_mechanics::death_heal_for_version(c.map_version)?;
+                        crate::content::unit_has_ability_for_version(
+                            c.rawcode,
+                            AbilityId(p.marker),
+                            c.map_version,
+                        )
+                        .then_some(death_healing::DeathHealSupport {
+                            version: c.map_version,
+                            active: false,
+                            healing: 0,
+                            radius: p.radius,
+                            other_type_per_10k: p.other_type_per_10k,
+                        })
+                    });
                     UnitSnapshot {
+                        rawcode: content.map_or(0, |c| c.rawcode),
+                        death_heal,
+                        death_position: position.0,
+                        death_heal_visuals: 0,
+                        death_heal_visual_version: None,
                         snow_damage_taken_per_10k: 10_000,
                         detection_teams: self.fog.as_ref().map_or(0, |fog| {
                             u8::from(fog.detects_invisible(Team(0), position.0))
@@ -3628,6 +3666,7 @@ impl Simulation {
                         !(attack.is_some() || spellcasting.is_some()) || status.is_some()
                     );
                     BuildingSnapshot {
+                        death_heal_contribution: death_healing::building_contribution(&entity_ref),
                         action_timing: entity_ref
                             .get::<ActionTimingProfile>()
                             .copied()
@@ -3676,6 +3715,11 @@ impl Simulation {
 
 #[derive(Debug, Clone, Copy)]
 struct UnitSnapshot {
+    rawcode: u32,
+    death_position: SimPoint,
+    death_heal: Option<death_healing::DeathHealSupport>,
+    death_heal_visuals: u16,
+    death_heal_visual_version: Option<crate::MapVersion>,
     snow_damage_taken_per_10k: u16,
     detection_teams: u8,
     map_version: Option<crate::MapVersion>,
@@ -3789,6 +3833,7 @@ impl UnitSnapshot {
 
 #[derive(Debug, Clone, Copy)]
 struct BuildingSnapshot {
+    death_heal_contribution: Option<death_healing::DeathHealContribution>,
     action_timing: ActionTimingProfile,
     secondary_attack: Option<SecondaryAttackProfile>,
     passive_effects: PassiveUnitEffects,
@@ -5569,9 +5614,16 @@ impl Simulation {
                         state.match_seed,
                     );
                 }
-                state.unit_health[index] = state.unit_health[index]
+                let after = state.unit_health[index]
                     .checked_sub(event_damage)
                     .expect("unit damage arithmetic overflowed validated bounds");
+                death_healing::commit_split_health(
+                    state.units,
+                    state.unit_health,
+                    Some(state.unit_positions),
+                    index,
+                    after,
+                );
                 let source_index = find_unit_index(state.units, source_id);
                 if state.unit_health[index] <= 0
                     && !dummy_killed
@@ -5620,6 +5672,11 @@ impl Simulation {
                         ))
                         .expect("building damage arithmetic overflowed validated bounds");
                 }
+                death_healing::refresh_support(
+                    state.units,
+                    state.buildings,
+                    Some(state.building_health),
+                );
                 Some(footprint_center_point(
                     state.buildings[index].footprint,
                     state.navigation_cell_size,
@@ -5792,9 +5849,10 @@ fn apply_pending_attack_effects(
             unit_health[index],
             event_damage,
         );
-        unit_health[index] = unit_health[index]
+        let after = unit_health[index]
             .checked_sub(event_damage)
             .expect("Feedback health overflow");
+        death_healing::commit_split_health(units, unit_health, None, index, after);
     }
     if unit_health[index] <= 0 {
         return PendingAttackEffectResult::default();
@@ -5853,9 +5911,10 @@ fn apply_pending_attack_effects(
                         unit_health[index],
                         event_damage,
                     );
-                    unit_health[index] = unit_health[index]
+                    let after = unit_health[index]
                         .checked_sub(event_damage)
                         .expect("Chain Lightning damage overflow");
+                    death_healing::commit_split_health(units, unit_health, None, index, after);
 
                     let mut points = [SimPoint::default(); MAX_BOUNCE_HITS + 1];
                     points[0] = source.position;

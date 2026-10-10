@@ -6015,7 +6015,7 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
                 .or_insert_with(|| visual.clone());
         }
         match (binding.owner_kind.as_str(), binding.role.as_str()) {
-            ("systems", "resurrection" | "attachment") => {
+            ("systems", "resurrection" | "attachment" | "death-heal") => {
                 system_models.insert(system_model_identity(&binding.source_model), visual);
             }
             ("units", "attack1_projectile") => {

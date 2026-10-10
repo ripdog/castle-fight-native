@@ -1239,6 +1239,23 @@ fn append_building_script_visuals(
         })
         .collect();
     visuals.assets.extend(aliases);
+    visuals.assets.push(VisualAssetSpec {
+        owner_kind: "systems".to_owned(),
+        owner_rawcode: String::from_utf8(
+            (data["linker_death_heal"]["source_rawcode"]
+                .as_u64()
+                .ok_or("death-heal source")? as u32)
+                .to_be_bytes()
+                .to_vec(),
+        )?,
+        source_unit_rawcode: None,
+        role: "death-heal".to_owned(),
+        model_path: data["linker_death_heal"]["model_path"]
+            .as_str()
+            .ok_or("death-heal model")?
+            .to_owned(),
+        missile_arc: None,
+    });
     // A09L's Mana Shield art belongs to its persistent B01H status, not interception.
     // Keep that status recipe, but let a consume event show only the source's Vd art.
     visuals

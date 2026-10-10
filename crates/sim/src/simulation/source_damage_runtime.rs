@@ -62,9 +62,9 @@ impl DamageStorage<'_> {
             .checked_sub(amount)
             .expect("source damage health overflow");
         if let Some(health) = self.health.as_mut() {
-            health[index] = after;
+            death_healing::commit_split_health(self.units, health, None, index, after);
         } else {
-            self.units[index].health = after;
+            death_healing::commit_health(self.units, index, after);
         }
     }
 }

@@ -79,6 +79,19 @@ impl Simulation {
     /// Source owner-change event for this script-managed building. The shrine contribution follows
     /// the new owner's team immediately, including while construction is still in progress.
     pub fn transfer_golden_shrine_owner(&mut self, shrine: SimId, owner: PlayerId) -> bool {
+        if !self.world.iter_entities().any(|e| {
+            e.get::<SimId>() == Some(&shrine)
+                && e.get::<ContentIdentity>()
+                    .copied()
+                    .is_some_and(is_golden_shrine)
+        }) {
+            return false;
+        }
+        self.transfer_building_owner(shrine, owner)
+    }
+
+    /// Transfer a registered lifecycle-support building, including an Elemental production source.
+    pub fn transfer_building_owner(&mut self, shrine: SimId, owner: PlayerId) -> bool {
         let Some(team) = self.player_state(owner).map(|player| player.team) else {
             return false;
         };
@@ -88,9 +101,16 @@ impl Simulation {
             .find(|entity| {
                 entity.get::<SimId>() == Some(&shrine)
                     && entity.get::<BuildingFootprint>().is_some()
-                    && entity
-                        .get::<ContentIdentity>()
-                        .is_some_and(|content| is_golden_shrine(*content))
+                    && entity.get::<ContentIdentity>().is_some_and(|content| {
+                        is_golden_shrine(*content)
+                            || crate::building_mechanics::death_heal_for_version(
+                                content.map_version,
+                            )
+                            .is_some_and(|p| {
+                                content.rawcode == p.source_rawcode
+                                    || p.production_rawcodes.contains(&content.rawcode)
+                            })
+                    })
             })
             .map(|entity| entity.id())
         else {
@@ -128,6 +148,9 @@ impl Simulation {
         building.insert((Owner(owner), team));
         if let Some(mut construction) = building.get_mut::<BuildingConstruction>() {
             construction.building.team = team;
+            if let Some(source) = &mut construction.upgrade_from {
+                source.building.team = team;
+            }
         }
         true
     }

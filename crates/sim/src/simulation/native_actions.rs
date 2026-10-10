@@ -271,6 +271,7 @@ impl Simulation {
                             target.health,
                             event_damage,
                         );
+                        let before = target.health;
                         target.health = target.health.saturating_sub(event_damage);
                         if damage > 0 && profile.cleanse {
                             cleanse_native_status(&mut target.status);
@@ -309,6 +310,7 @@ impl Simulation {
                             target_position: Some(target.position),
                             effect: AbilityEffect::PhoenixFire(profile),
                         });
+                        death_healing::observe_inline_death(units, index, before);
                     } else if let Some(target) = buildings
                         .iter_mut()
                         .find(|target| target.id == state.target)
@@ -401,6 +403,7 @@ impl Simulation {
                     }
                 }
             }
+            death_healing::refresh_support(units, buildings, None);
         }
     }
 }

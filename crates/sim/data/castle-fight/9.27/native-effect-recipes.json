@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind": "unit-ability", "source_key": "A0ET", "unit_rawcode": "h063", "kind": "critical-strike"},
     {"source_kind": "unit-ability", "source_key": "A0D9", "unit_rawcode": "h076", "kind": "phoenix-fire"},
     {"source_kind": "unit-ability", "source_key": "A0FG", "unit_rawcode": "h06E", "kind": "building-weather"},
     {"source_kind": "ability-effect", "source_key": "A0D0", "kind": "native-weather-wave"},

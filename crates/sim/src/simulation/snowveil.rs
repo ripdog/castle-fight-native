@@ -189,8 +189,9 @@ impl Simulation {
         let mut buildings = self.snapshot_buildings();
         self.refresh_snow_protection(&mut units, &mut buildings);
         let state = self.world.entity(entity).get::<SnowveilState>().unwrap();
-        let mut damage_updates = Vec::new();
-        for target in &mut units {
+        death_healing::refresh_support(&mut units, &buildings, None);
+        for i in 0..units.len() {
+            let target = &mut units[i];
             if target.health <= 0
                 || target.team == team
                 || !target.classifications.combat_sapper
@@ -215,11 +216,14 @@ impl Simulation {
                     target.snow_damage_taken_per_10k,
                 );
                 super::damage_thresholds::observe_damage_event(target, target.health, event_damage);
-                target.health = target.health.saturating_sub(event_damage);
-                damage_updates.push((target.entity, target.health, target.status));
+                let after = target.health.saturating_sub(event_damage);
+                death_healing::commit_health(&mut units, i, after);
             }
         }
-        for (entity, health, status) in damage_updates {
+        let positions: Vec<_> = units.iter().map(|u| u.position).collect();
+        self.emit_death_heal_visuals(&units, &positions);
+        for unit in units {
+            let (entity, health, status) = (unit.entity, unit.health, unit.status);
             self.world
                 .entity_mut(entity)
                 .get_mut::<Health>()

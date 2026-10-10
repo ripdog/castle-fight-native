@@ -753,7 +753,8 @@ impl Simulation {
                         0
                     }
                 };
-                for (target_index, target) in units.iter_mut().enumerate() {
+                for target_index in 0..units.len() {
+                    let target = &mut units[target_index];
                     if unit_health[target_index] <= 0
                         || target.team == unit.team
                         || target.target_movement_class() != MovementClass::Ground
@@ -772,7 +773,14 @@ impl Simulation {
                         unit_health[target_index],
                         event_damage,
                     );
-                    unit_health[target_index] -= damage;
+                    let after = unit_health[target_index].saturating_sub(damage);
+                    death_healing::commit_split_health(
+                        units,
+                        unit_health,
+                        Some(positions),
+                        target_index,
+                        after,
+                    );
                 }
                 for (target_index, target) in buildings.iter().enumerate() {
                     if building_health[target_index] <= 0 || target.team == unit.team {
@@ -788,6 +796,7 @@ impl Simulation {
                         .damage_rules
                         .apply_spell(damage_at(distance), target.armor.armor_type);
                 }
+                death_healing::refresh_support(units, buildings, Some(building_health));
             }
             if !changed {
                 break;

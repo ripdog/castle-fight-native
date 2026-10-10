@@ -95,7 +95,14 @@ fn advance(m: &mut MasterMover, p: MasterMoverProfile, bounds: [i32; 4]) -> bool
     let point = m.position();
     point.x >= bounds[0] && point.y >= bounds[1] && point.x <= bounds[2] && point.y <= bounds[3]
 }
-fn direct_damage(unit: &mut UnitSnapshot, damage: i32, rules: DamageRules, tick: u64) {
+fn direct_damage(
+    units: &mut [UnitSnapshot],
+    index: usize,
+    damage: i32,
+    rules: DamageRules,
+    tick: u64,
+) {
+    let unit = &mut units[index];
     if unit.classifications.invulnerable || unit.classifications.spell_immune {
         return;
     }
@@ -105,7 +112,8 @@ fn direct_damage(unit: &mut UnitSnapshot, damage: i32, rules: DamageRules, tick:
         tick,
     );
     damage_thresholds::observe_damage_event(unit, unit.health, damage);
-    unit.health = unit.health.saturating_sub(damage);
+    let after = unit.health.saturating_sub(damage);
+    death_healing::commit_health(units, index, after);
 }
 
 impl Simulation {
@@ -397,7 +405,8 @@ impl Simulation {
                     && m.position().distance_sq(u.position) <= square_i32(p.lightning.radius)
             }) {
                 direct_damage(
-                    &mut units[target],
+                    units,
+                    target,
                     m.damage,
                     self.combat_rules.damage_rules,
                     self.next_tick,
@@ -468,7 +477,8 @@ impl Simulation {
             m.budget -= p.frost.decrement;
             if let Some(target) = hit {
                 direct_damage(
-                    &mut units[target],
+                    units,
+                    target,
                     m.damage,
                     self.combat_rules.damage_rules,
                     self.next_tick,
@@ -488,11 +498,15 @@ impl Simulation {
                         u64::from(p.nova_reveal_ticks),
                         false,
                     );
-                    for u in units.iter_mut().filter(|u| {
-                        u.health > 0
-                            && u.team != m.team
-                            && center.distance_sq(u.position) <= square_i32(p.nova.radius)
-                    }) {
+                    for i in 0..units.len() {
+                        let u = &mut units[i];
+                        if u.health <= 0
+                            || u.team == m.team
+                            || center.distance_sq(u.position) > square_i32(p.nova.radius)
+                        {
+                            continue;
+                        }
+                        let before = u.health;
                         apply_ability_effect_to_unit(
                             u,
                             p.nova.effect(u.id == id),
@@ -500,6 +514,7 @@ impl Simulation {
                             self.next_tick,
                             self.combat_rules.damage_rules,
                         );
+                        death_healing::observe_inline_death(units, i, before);
                     }
                     self.last_ability_casts.push(AbilityCastEvent {
                         source: m.source,
