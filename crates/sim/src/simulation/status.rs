@@ -799,7 +799,20 @@ pub(super) fn resolve_periodic_unit_statuses(
 }
 
 pub(super) fn effective_armor_points_per_100(unit: &UnitSnapshot) -> i32 {
-    unit.status.effective_armor_points_per_100(unit.armor)
+    unit.passive_effects
+        .iter()
+        .filter_map(|effect| match effect {
+            PassiveUnitEffect::SpikedShell(profile) => Some(profile.armor_bonus_per_100),
+            _ => None,
+        })
+        .fold(
+            unit.status.effective_armor_points_per_100(unit.armor),
+            |armor, bonus| {
+                armor
+                    .checked_add(bonus)
+                    .expect("native armor bonus exceeds i32")
+            },
+        )
 }
 
 pub(super) fn apply_melee_reactive_armor_effects(

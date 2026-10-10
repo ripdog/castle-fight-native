@@ -76,6 +76,7 @@ fn air_bonus_rewrites_reduced_damage_without_combat_sapper_or_immunity_gate() {
     sim.apply_damage_to_target(
         TargetIndex::Unit(index),
         WeaponDamageEvent {
+            kind: WeaponDamageKind::Ranged,
             source_id: source,
             damage: 173,
             damage_type: DamageType::Magic,

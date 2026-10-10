@@ -331,6 +331,17 @@ class NativeTuningProjectionTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             native.project_effect(recipe, {**fields, "targs1": "ground,enemies,structure,nonhero"}, None, {}, {})
 
+    def test_spiked_shell_retains_independent_factors_and_native_armor(self) -> None:
+        recipe = {"kind": "spiked-shell", "source_key": "TEST", "source_kind": "unit-ability"}
+        fields = {"dataa1": "0.63", "datab1": "0.81", "datac1": "-2.5", "targs1": "_"}
+        effect = native.project_effect(recipe, fields, None, {}, {"native_base": "ANth"})
+        self.assertEqual(effect["profile"], {"ability": int.from_bytes(b"TEST", "big"), "returned_damage_per_10k": 6300, "received_damage_per_10k": 8100, "armor_bonus_per_100": -250})
+        negative = native.project_effect(recipe, {**fields, "dataa1": "-1", "datab1": "-2"}, None, {}, {"native_base": "AUts"})
+        self.assertEqual((negative["profile"]["returned_damage_per_10k"], negative["profile"]["received_damage_per_10k"]), (0, 0))
+        for base, mask in [("Adef", "_"), ("ANth", "enemy")]:
+            with self.subTest(base=base, mask=mask), self.assertRaises(ValueError):
+                native.project_effect(recipe, {**fields, "targs1": mask}, None, {}, {"native_base": base})
+
     def test_cleave_projects_geometry_and_rejects_unrepresented_classes(self) -> None:
         recipe = {"kind": "cleave", "source_key": "TEST", "source_kind": "unit-ability"}
         fields = {"area1": "123", "dataa1": "0.37", "targs1": "ground,enemy,structure"}

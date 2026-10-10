@@ -27,6 +27,7 @@ mod resistant_skin;
 mod silver;
 mod speed_aura;
 mod sphere;
+mod spiked_shell;
 mod stasis;
 mod stat_buffs;
 mod wilderness;

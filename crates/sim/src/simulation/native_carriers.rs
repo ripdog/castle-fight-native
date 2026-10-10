@@ -346,6 +346,7 @@ impl Simulation {
                                 .apply_damage_to_target(
                                     TargetIndex::Unit(index),
                                     WeaponDamageEvent {
+                                        kind: WeaponDamageKind::Ranged,
                                         source_id: bolt.source,
                                         damage,
                                         damage_type,
@@ -512,6 +513,7 @@ fn cleanse_native_effects(
             PassiveUnitEffect::Aura(p) => Some(p.ability),
             PassiveUnitEffect::SpeedAura(p) => Some(p.ability),
             PassiveUnitEffect::Sphere(p) => Some(p.ability),
+            PassiveUnitEffect::SpikedShell(p) => Some(p.ability),
             PassiveUnitEffect::SpellResistance(p) => Some(p.ability),
             PassiveUnitEffect::Feedback(p) => Some(p.ability),
             PassiveUnitEffect::FrostAttack(p) => Some(p.ability),

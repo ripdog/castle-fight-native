@@ -54,8 +54,9 @@ pub use components::{
     PoisonProfile, PoisonStatus, ProductionProfile, PulverizeEffectProfile, ResolvedUnitDefinition,
     ScriptedRootsProfile, SecondaryAttackProfile, SecondaryResurrectionState, SelfDestructProfile,
     SimId, SpeedAuraProfile, SpellcastingProfile, SphereAttachmentState, SphereProfile,
-    SplashFalloffProfile, StatusState, Team, TriggeredAttackEffect, TriggeredSpellProcProfile,
-    UnitClassifications, UnitGameplayProperties, UnitSpawn, UnitTemplate,
+    SpikedShellProfile, SplashFalloffProfile, StatusState, Team, TriggeredAttackEffect,
+    TriggeredSpellProcProfile, UnitClassifications, UnitGameplayProperties, UnitSpawn,
+    UnitTemplate,
 };
 pub use content::{
     CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION, CASTLE_FIGHT_CONTENT_REVISION_927,

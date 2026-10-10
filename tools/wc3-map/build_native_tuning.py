@@ -334,6 +334,13 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         effect["chance_per_10k"] = number("DataA1", 10_000)
     elif kind == "spell-resistance":
         effect["damage_taken_per_10k"] = 10_000 - number("DataB1", 10_000)
+    elif kind == "spiked-shell":
+        if mechanics.get("native_base") not in {"ANth", "AUts"} or fields["targs1"] != "_":
+            raise ValueError("Spiked Shell requires the native intrinsic passive")
+        effect.update(profile={"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
+            "returned_damage_per_10k": max(0, number("DataA1", 10_000)),
+            "received_damage_per_10k": max(0, number("DataB1", 10_000)),
+            "armor_bonus_per_100": number("DataC1", 100)})
     elif kind == "cleave":
         if mechanics.get("native_base") not in {"ACce", "ANca"}:
             raise ValueError("cleave requires the native Cleaving Attack base")

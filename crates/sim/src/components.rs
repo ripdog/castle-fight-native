@@ -1009,6 +1009,26 @@ pub enum PassiveUnitEffect {
     Feedback(FeedbackEffectProfile),
     FrostAttack(FrostAttackEffectProfile),
     Pulverize(PulverizeEffectProfile),
+    SpikedShell(SpikedShellProfile),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SpikedShellProfile {
+    pub ability: AbilityId,
+    pub returned_damage_per_10k: u32,
+    pub received_damage_per_10k: u32,
+    pub armor_bonus_per_100: i32,
+}
+
+impl SpikedShellProfile {
+    pub(crate) const fn canonical_words(self) -> [u64; 4] {
+        [
+            self.ability.0 as u64,
+            self.returned_damage_per_10k as u64,
+            self.received_damage_per_10k as u64,
+            self.armor_bonus_per_100 as i64 as u64,
+        ]
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

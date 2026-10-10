@@ -376,6 +376,11 @@ impl Simulation {
                         let applied = self.apply_damage_to_target(
                             intent.target,
                             WeaponDamageEvent {
+                                kind: if intent.attack.delivery == AttackDelivery::Melee {
+                                    WeaponDamageKind::Melee
+                                } else {
+                                    WeaponDamageKind::Ranged
+                                },
                                 source_id: intent.source_id,
                                 damage,
                                 damage_type: intent.damage_type,
@@ -450,6 +455,7 @@ impl Simulation {
                                     self.apply_damage_to_target_with_armor_rule(
                                         target,
                                         WeaponDamageEvent {
+                                            kind: WeaponDamageKind::Cleave,
                                             source_id: intent.source_id,
                                             damage: splash_damage,
                                             damage_type: intent.damage_type,
@@ -1000,7 +1006,8 @@ impl Simulation {
                 | PassiveUnitEffect::Sphere(_)
                 | PassiveUnitEffect::SpeedAura(_)
                 | PassiveUnitEffect::Aura(_)
-                | PassiveUnitEffect::SpellResistance(_) => {}
+                | PassiveUnitEffect::SpellResistance(_)
+                | PassiveUnitEffect::SpikedShell(_) => {}
             }
         }
         // Native Demolish modifies weapon damage without becoming Critical Strike or

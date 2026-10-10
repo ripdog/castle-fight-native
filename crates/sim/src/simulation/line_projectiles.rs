@@ -127,6 +127,7 @@ impl Simulation {
                     .apply_damage_to_target(
                         target,
                         WeaponDamageEvent {
+                            kind: WeaponDamageKind::Ranged,
                             source_id: p.source,
                             damage,
                             damage_type: p.damage_type,

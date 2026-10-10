@@ -4,6 +4,37 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A01C",
+      "unit_rawcode": "n007",
+      "kind": "spiked-shell",
+      "profile": {
+        "ability": 1093677379,
+        "returned_damage_per_10k": 6000,
+        "received_damage_per_10k": 8000,
+        "armor_bonus_per_100": 0
+      },
+      "provenance": {
+        "ability": "A01C",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A068",
+      "unit_rawcode": "n007",
+      "kind": "bash",
+      "chance_per_10k": 1500,
+      "bonus_damage": 25,
+      "stun_duration_millis": 2000,
+      "hero_stun_duration_millis": 1000,
+      "targets": "ground-units",
+      "provenance": {
+        "ability": "A068",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A02Y",
       "unit_rawcode": "h032",
       "kind": "sphere",

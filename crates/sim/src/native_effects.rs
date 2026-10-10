@@ -28,6 +28,7 @@ const TUNING_9_27_JSON: &str = include_str!("../data/castle-fight/9.27/native-ef
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum NativeEffectImplementationId {
+    WarcraftSpikedShellV1,
     WarcraftDeathSpawnV1,
     WarcraftCompanionProductionV1,
     WarcraftSilverGladeV1,
@@ -92,6 +93,7 @@ impl NativeEffectImplementationId {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::WarcraftSpikedShellV1 => 90,
             Self::WarcraftDeathSpawnV1 => 89,
             Self::WarcraftCompanionProductionV1 => 88,
             Self::WarcraftStarfallV1 => 87,
@@ -690,6 +692,12 @@ enum TuningEffect {
         unit_rawcode: String,
         profile: crate::components::CorruptionProfile,
     },
+    SpikedShell {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        profile: crate::components::SpikedShellProfile,
+    },
     Sphere {
         source_kind: String,
         source_key: String,
@@ -994,6 +1002,7 @@ impl TuningEffect {
             | Self::DamageThreshold { source_kind, .. }
             | Self::KillBerserk { source_kind, .. }
             | Self::Corruption { source_kind, .. }
+            | Self::SpikedShell { source_kind, .. }
             | Self::Sphere { source_kind, .. }
             | Self::SpeedAura { source_kind, .. }
             | Self::NativeAura { source_kind, .. }
@@ -1038,6 +1047,7 @@ impl TuningEffect {
             | Self::DamageThreshold { source_key, .. }
             | Self::KillBerserk { source_key, .. }
             | Self::Corruption { source_key, .. }
+            | Self::SpikedShell { source_key, .. }
             | Self::Sphere { source_key, .. }
             | Self::SpeedAura { source_key, .. }
             | Self::NativeAura { source_key, .. }
@@ -1075,6 +1085,7 @@ impl TuningEffect {
             | Self::DamageThreshold { unit_rawcode, .. }
             | Self::KillBerserk { unit_rawcode, .. }
             | Self::Corruption { unit_rawcode, .. }
+            | Self::SpikedShell { unit_rawcode, .. }
             | Self::Sphere { unit_rawcode, .. }
             | Self::SpeedAura { unit_rawcode, .. }
             | Self::NativeAura { unit_rawcode, .. }
@@ -1133,6 +1144,7 @@ impl TuningEffect {
             Self::NativeAura { .. } => NativeEffectImplementationId::WarcraftNativeAuraV1,
             Self::SpeedAura { .. } => NativeEffectImplementationId::WarcraftSpeedAuraV1,
             Self::Corruption { .. } => NativeEffectImplementationId::WarcraftCorruptionV1,
+            Self::SpikedShell { .. } => NativeEffectImplementationId::WarcraftSpikedShellV1,
             Self::Sphere { .. } => NativeEffectImplementationId::WarcraftSphereV1,
             Self::BuildingImprovement { .. } | Self::BuildingManaRegeneration { .. } => {
                 NativeEffectImplementationId::WarcraftBuildingImprovementV1
@@ -1183,6 +1195,7 @@ impl TuningEffect {
             Self::NativeAura { .. } => "native-aura",
             Self::SpeedAura { .. } => "speed-aura",
             Self::Corruption { .. } => "corruption",
+            Self::SpikedShell { .. } => "spiked-shell",
             Self::Sphere { .. } => "sphere",
             Self::BuildingImprovement { .. } => "building-improvement",
             Self::BuildingManaRegeneration { .. } => "building-mana-regeneration",
@@ -1392,6 +1405,7 @@ fn native_unit_mechanics_from_tuning(
                 | TuningEffect::Poison { .. }
                 | TuningEffect::KillBerserk { .. }
                 | TuningEffect::Corruption { .. }
+                | TuningEffect::SpikedShell { .. }
                 | TuningEffect::Sphere { .. }
                 | TuningEffect::SpeedAura { .. }
                 | TuningEffect::NativeAura { .. }
@@ -1625,6 +1639,7 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             })
         }
         TuningEffect::Corruption { profile, .. } => PassiveUnitEffect::Corruption(*profile),
+        TuningEffect::SpikedShell { profile, .. } => PassiveUnitEffect::SpikedShell(*profile),
         TuningEffect::Sphere { profile, .. } => {
             assert!((1..=3).contains(&profile.attachment_count) && profile.speed_per_tick > 0);
             PassiveUnitEffect::Sphere(*profile)

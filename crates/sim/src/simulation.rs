@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 77;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 78;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -76,6 +76,7 @@ mod match_rules;
 mod match_rules_tests;
 mod mirror_images;
 mod source_damage_runtime;
+mod spiked_shell;
 use match_rules::{PendingRescueStrike, PlayerStrikeState};
 pub use match_rules::{PlayerRoundScore, RescueStrikeVisualEvent, RoundScoreboard};
 mod movement;
@@ -5675,12 +5676,21 @@ enum DamageArmorRule {
     IgnorePoints,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WeaponDamageKind {
+    Melee,
+    Ranged,
+    Cleave,
+    Defensive,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct WeaponDamageEvent {
     source_id: SimId,
     damage: i32,
     damage_type: DamageType,
     completed_tick: u64,
+    kind: WeaponDamageKind,
 }
 
 impl Simulation {
@@ -5713,6 +5723,7 @@ impl Simulation {
             damage,
             damage_type,
             completed_tick,
+            kind,
         } = event;
         match target {
             TargetIndex::Unit(index) => {
@@ -5731,20 +5742,34 @@ impl Simulation {
                         DamageArmorRule::IgnorePoints => 0,
                     },
                 );
-                let adjusted_damage = night_elf::hardened_skin_after_armor(
-                    &mut state.units[index],
+                let shell = spiked_shell::damage(
+                    &state.units[index],
                     adjusted_damage,
-                    source_id,
-                    completed_tick,
+                    kind == WeaponDamageKind::Melee,
                 );
-                let event_damage = scale_damage_per_10k(
-                    native_kill_effects::damage_after_native_incoming(
-                        &state.units[index],
-                        adjusted_damage,
-                        completed_tick,
-                    ),
-                    state.units[index].snow_damage_taken_per_10k,
-                );
+                let adjusted_damage =
+                    if matches!(kind, WeaponDamageKind::Melee | WeaponDamageKind::Ranged) {
+                        night_elf::hardened_skin_after_armor(
+                            &mut state.units[index],
+                            shell.incoming,
+                            source_id,
+                            completed_tick,
+                        )
+                    } else {
+                        shell.incoming
+                    };
+                let event_damage = if kind == WeaponDamageKind::Defensive {
+                    spell_damage_after_defend(state.units[index], adjusted_damage, completed_tick)
+                } else {
+                    scale_damage_per_10k(
+                        native_kill_effects::damage_after_native_incoming(
+                            &state.units[index],
+                            adjusted_damage,
+                            completed_tick,
+                        ),
+                        state.units[index].snow_damage_taken_per_10k,
+                    )
+                };
                 let event_damage = source_damage_runtime::attack_damage_for_recipient(
                     source_id,
                     &state.units[index],
@@ -5836,6 +5861,36 @@ impl Simulation {
                     attacker_id: source_id,
                     attacked_tick: completed_tick,
                 });
+                if shell.count > 0
+                    && let Some(source_index) = find_unit_index(state.units, source_id)
+                {
+                    let shell_source = state.units[index].id;
+                    for returned in shell.returned[..shell.count].iter().copied() {
+                        self.apply_damage_to_target(
+                            TargetIndex::Unit(source_index),
+                            WeaponDamageEvent {
+                                source_id: shell_source,
+                                damage: returned,
+                                damage_type: DamageType::Spells,
+                                completed_tick,
+                                kind: WeaponDamageKind::Defensive,
+                            },
+                            buildings_invulnerable,
+                            DamageTargetState {
+                                match_seed: state.match_seed,
+                                damage_rules: state.damage_rules,
+                                units: state.units,
+                                buildings: state.buildings,
+                                unit_positions: state.unit_positions,
+                                unit_health: state.unit_health,
+                                building_health: state.building_health,
+                                attackers_this_tick: state.attackers_this_tick,
+                                next_defense_alerts: state.next_defense_alerts,
+                                navigation_cell_size: state.navigation_cell_size,
+                            },
+                        );
+                    }
+                }
                 Some(state.unit_positions[index])
             }
             TargetIndex::Building(index) => {

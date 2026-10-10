@@ -2361,6 +2361,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                 hash.write_u16(profile.damage_per_10k);
                 hash.write_u8(profile.targets.bits());
             }
+            PassiveUnitEffect::SpikedShell(profile) => {
+                hash.write_u8(25);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
             PassiveUnitEffect::Corruption(profile) => {
                 hash.write_u8(24);
                 for word in profile.canonical_words() {

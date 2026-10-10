@@ -337,6 +337,7 @@ impl Simulation {
                         .apply_damage_to_target(
                             target,
                             WeaponDamageEvent {
+                                kind: WeaponDamageKind::Ranged,
                                 source_id: snapshot.projectile.source,
                                 damage: defense.damage,
                                 damage_type: snapshot.projectile.damage_type,
@@ -442,6 +443,7 @@ impl Simulation {
                         .apply_damage_to_target(
                             target,
                             WeaponDamageEvent {
+                                kind: WeaponDamageKind::Ranged,
                                 source_id: snapshot.projectile.reflector,
                                 damage: snapshot.projectile.damage,
                                 damage_type: snapshot.projectile.damage_type,
@@ -535,6 +537,7 @@ impl Simulation {
                         .apply_damage_to_target(
                             target,
                             WeaponDamageEvent {
+                                kind: WeaponDamageKind::Ranged,
                                 source_id: snapshot.projectile.source,
                                 damage: defense.damage,
                                 damage_type: snapshot.projectile.damage_type,
@@ -759,6 +762,7 @@ impl Simulation {
                         .apply_damage_to_target(
                             target,
                             WeaponDamageEvent {
+                                kind: WeaponDamageKind::Ranged,
                                 source_id: snapshot.projectile.source,
                                 damage,
                                 damage_type: snapshot.projectile.damage_type,

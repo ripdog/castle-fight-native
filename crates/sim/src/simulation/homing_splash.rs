@@ -83,6 +83,7 @@ impl Simulation {
                 self.apply_damage_to_target(
                     target,
                     WeaponDamageEvent {
+                        kind: WeaponDamageKind::Ranged,
                         source_id: projectile.source,
                         damage,
                         damage_type: projectile.damage_type,
