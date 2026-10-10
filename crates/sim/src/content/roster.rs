@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    GlaiveThrower = 0x1000_0046 => b"e002",
     FaerieDragon = 0x1000_0045 => b"e000",
     AvatarOfVengeance = 0x1000_0044 => b"e00A",
     AvengingSpirit = 0x1000_0043 => b"e00B",
@@ -105,6 +106,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    NightelfSiegeFactory = 0x2000_0046 => b"h011",
     FountainOfWonders = 0x2000_0045 => b"h00B",
     ScorchedMansion = 0x2000_0044 => b"h07N",
     PillagedHut = 0x2000_0043 => b"h07O",

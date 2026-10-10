@@ -106,3 +106,12 @@ Validation: 31 catalog checks, three orb/Sphere interaction tests, two native Sp
 - Verification: synthetic fixtures distinguish native air/invulnerable/magic-immune eligibility from ground-only automatic selection and reject ancient, mechanical and hostile recipients. Parent resources commit once, pending deadlines survive mixed-worker wire restoration, and projection mutations reject changed callback caster identity/order/delay or effect masks. Catalog-wide inventory/weapon/economy/corpse closure supplies numeric evidence. Direct same-identity native Heal art is now included in the shared source-unit aliases instead of being skipped as a proxy self-reference.
 
 Validation: focused Heal fixtures, catalog/tuning/presentation projection checks, strict workspace/all-target Clippy, formatting and full effects export are recorded in `.local-tools/orc-validation/faerie-*.log`.
+
+
+## Nightelf Siege Factory / Glaive Thrower
+
+- Identity/source: runtime r91; `h011` (`hbla`) produces mechanical `e002` (`ebal`). Protected native life/armor/damage/cadence override poisoned static object fields. All movement, collision, acquisition, economy/construction/repair/production and corpse fields consume retained catalogs. Unit and building inventories are empty; `KK` installs no decoration factory or hidden spell. Mechanical corpses preserve decay while native resurrection excludes mechanical bodies.
+- Weapons: enabled slot one is native `mbounce`, with retained ground/structure/ward targeting, bounce cap, search radius and damage retention. The inherited slot-two `aline` weapon is disabled and produces no projectile or payload. Shared bouncing missiles retain history and next-flight damage, never revisit a recipient, and independently apply ordinary armor/protection/evasion on impact. Released flights survive caster death and wire restoration.
+- Presentation/verification: original Ancient of Wonders/Glaive Thrower bodies, lifecycle/attack clips, glaive missile and source UI are present in native packs. Catalog-wide complete inventory/weapon/economy/corpse closure and reusable synthetic bounce/restore fixtures cover the promotion without copied map values. No new state schema or per-entity mechanic is required.
+
+Validation: catalog, shared bounce/restore, strict workspace/all-target Clippy, formatting, projection reproduction and whitespace checks are recorded in `.local-tools/orc-validation/glaive-*.log`.
