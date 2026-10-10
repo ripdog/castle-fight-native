@@ -83,20 +83,16 @@ pub(super) fn refresh_support(
     }
 }
 
-pub(super) fn observe_inline_death(units: &mut [UnitSnapshot], index: usize, before: i32) {
-    if before > 0 && units[index].health <= 0 {
-        heal(units, None, None, index);
-    }
-}
-
+#[cfg(test)]
 pub(super) fn commit_health(units: &mut [UnitSnapshot], index: usize, after: i32) {
     let before = units[index].health;
     units[index].health = after;
     if before > 0 && after <= 0 {
-        heal(units, None, None, index);
+        on_death(units, None, None, index, None);
     }
 }
 
+#[cfg(test)]
 pub(super) fn commit_split_health(
     units: &mut [UnitSnapshot],
     health: &mut [i32],
@@ -107,8 +103,134 @@ pub(super) fn commit_split_health(
     let before = health[index];
     health[index] = after;
     if before > 0 && after <= 0 {
-        heal(units, Some(health), positions, index);
+        on_death(units, Some(health), positions, index, None);
     }
+}
+
+/// Every positive-to-zero transition carries the actual native damage-source handle.
+pub(super) fn commit_health_from(
+    units: &mut [UnitSnapshot],
+    index: usize,
+    after: i32,
+    source: Option<SimId>,
+) {
+    let before = units[index].health;
+    units[index].health = after;
+    if before > 0 && after <= 0 {
+        on_death(units, None, None, index, source);
+    }
+}
+pub(super) fn observe_inline_death_from(
+    units: &mut [UnitSnapshot],
+    index: usize,
+    before: i32,
+    source: Option<SimId>,
+) {
+    if before > 0 && units[index].health <= 0 {
+        on_death(units, None, None, index, source);
+    }
+}
+pub(super) fn commit_split_health_from(
+    units: &mut [UnitSnapshot],
+    health: &mut [i32],
+    positions: Option<&[SimPoint]>,
+    index: usize,
+    after: i32,
+    source: Option<SimId>,
+) {
+    let before = health[index];
+    health[index] = after;
+    if before > 0 && after <= 0 {
+        on_death(units, Some(health), positions, index, source);
+    }
+}
+fn on_death(
+    units: &mut [UnitSnapshot],
+    mut health: Option<&mut [i32]>,
+    positions: Option<&[SimPoint]>,
+    index: usize,
+    source: Option<SimId>,
+) {
+    let dead = units[index];
+    if dead.classifications.combat_sapper
+        && let Some(killer) = source.and_then(|id| find_unit_index(units, id))
+    {
+        // fJ applies retaliation recursively before looking up/healing the killer.
+        if let Some(p) = dead.death_rule
+            && p.retaliation_damage > 0
+        {
+            let target = units[killer];
+            let current = health.as_ref().map_or(target.health, |v| v[killer]);
+            if current > 0 && !target.classifications.invulnerable {
+                let damage = dead.death_rules.apply_attack_with_armor_per_100(
+                    p.retaliation_damage,
+                    DamageType::Chaos,
+                    target.armor.armor_type,
+                    effective_armor_points_per_100(&target),
+                );
+                let damage = scale_damage_per_10k(
+                    native_kill_effects::damage_after_native_incoming(
+                        &target,
+                        damage,
+                        dead.death_tick,
+                    ),
+                    target.snow_damage_taken_per_10k,
+                );
+                // The dying native handle retains source-damage grants; Forge's dummy remains a separate source.
+                if let Some(h) = health.as_deref_mut() {
+                    source_damage_runtime::dispatch(
+                        dead.id,
+                        killer,
+                        damage,
+                        source_damage_runtime::SourceDamageState {
+                            units,
+                            health: h,
+                            rules: dead.death_rules,
+                            tick: dead.death_tick,
+                        },
+                        &BTreeMap::new(),
+                    );
+                    damage_thresholds::observe_damage_event(&mut units[killer], h[killer], damage);
+                    let after = h[killer].saturating_sub(damage);
+                    commit_split_health_from(units, h, positions, killer, after, Some(dead.id));
+                } else {
+                    source_damage_runtime::dispatch_inline(
+                        dead.id,
+                        killer,
+                        damage,
+                        units,
+                        dead.death_rules,
+                        dead.death_tick,
+                        &BTreeMap::new(),
+                    );
+                    let current = units[killer].health;
+                    damage_thresholds::observe_damage_event(&mut units[killer], current, damage);
+                    commit_health_from(
+                        units,
+                        killer,
+                        current.saturating_sub(damage),
+                        Some(dead.id),
+                    );
+                }
+            }
+        }
+        let current = health.as_ref().map_or(units[killer].health, |v| v[killer]);
+        if current > 0
+            && let Some(p) = units[killer].death_rule
+        {
+            let amount = i32::try_from(
+                i64::from(units[killer].health_max) * i64::from(p.heal_percent) / 100,
+            )
+            .expect("native percent heal bounds");
+            let after = current.saturating_add(amount).min(units[killer].health_max);
+            if let Some(h) = &mut health {
+                h[killer] = after;
+            } else {
+                units[killer].health = after;
+            }
+        }
+    }
+    heal(units, health, positions, index);
 }
 
 fn heal(

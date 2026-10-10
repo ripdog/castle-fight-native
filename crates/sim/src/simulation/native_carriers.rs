@@ -385,12 +385,13 @@ impl Simulation {
                             event_damage,
                         );
                         let after = unit_health[index].saturating_sub(event_damage);
-                        death_healing::commit_split_health(
+                        death_healing::commit_split_health_from(
                             units,
                             unit_health,
                             Some(positions),
                             index,
                             after,
+                            None,
                         );
                         if damage > 0 {
                             result.effects += 1;
@@ -497,6 +498,7 @@ fn cleanse_native_effects(
             PassiveUnitEffect::LavaSpawn(_) => None,
             PassiveUnitEffect::MirrorImage(profile) => Some(profile.ability),
             PassiveUnitEffect::DamageCharge(profile) => Some(profile.marker),
+            PassiveUnitEffect::Corruption(p) => Some(p.ability),
             PassiveUnitEffect::Poison(p) => Some(p.ability),
             PassiveUnitEffect::KillBerserk(p) => Some(p.ability),
             PassiveUnitEffect::DamageThreshold(p) => Some(p.ability),

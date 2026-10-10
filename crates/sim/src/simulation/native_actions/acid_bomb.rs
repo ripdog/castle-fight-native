@@ -190,7 +190,7 @@ impl Simulation {
             } else {
                 state.profile.secondary_damage
             };
-            let duration = if target.classifications.hero {
+            let duration = if target.classifications.uses_hero_spell_rules() {
                 state.profile.hero_duration_ticks
             } else {
                 state.profile.duration_ticks
@@ -246,7 +246,7 @@ pub(in crate::simulation) fn resolve_periodic_acid_bomb(
             let unit = &mut units[index];
             super::super::damage_thresholds::observe_damage_event(unit, unit.health, event_damage);
             let after = unit.health.saturating_sub(event_damage);
-            super::super::death_healing::commit_health(units, index, after);
+            super::super::death_healing::commit_health_from(units, index, after, acid.source);
         }
         acid.next_pulse_tick = acid
             .next_pulse_tick

@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 70;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 71;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -102,9 +102,9 @@ pub use snapshot::{
     SnapshotWireError,
 };
 use status::{
-    apply_ability_effect_to_unit, apply_melee_reactive_armor_effects, apply_timed_armor_modifier,
-    apply_timed_attack_speed_modifier, apply_timed_damage_over_time, apply_timed_movement_modifier,
-    effective_armor_points_per_100, effective_attack_cooldown_ticks,
+    apply_ability_effect_to_unit, apply_corruption, apply_melee_reactive_armor_effects,
+    apply_timed_armor_modifier, apply_timed_attack_speed_modifier, apply_timed_damage_over_time,
+    apply_timed_movement_modifier, effective_armor_points_per_100, effective_attack_cooldown_ticks,
     purge_expired_status_modifiers, resolve_periodic_unit_statuses,
 };
 
@@ -3534,6 +3534,14 @@ impl Simulation {
                         })
                     });
                     UnitSnapshot {
+                        death_rule: content.and_then(|c| {
+                            crate::native_effects::unit_death_rule_for_version(
+                                c.map_version,
+                                c.rawcode,
+                            )
+                        }),
+                        death_rules: self.combat_rules.damage_rules,
+                        death_tick: self.next_tick,
                         rawcode: content.map_or(0, |c| c.rawcode),
                         death_heal,
                         death_position: position.0,
@@ -3718,6 +3726,9 @@ impl Simulation {
 
 #[derive(Debug, Clone, Copy)]
 struct UnitSnapshot {
+    death_rule: Option<crate::native_effects::NativeUnitDeathRule>,
+    death_rules: DamageRules,
+    death_tick: u64,
     rawcode: u32,
     death_position: SimPoint,
     death_heal: Option<death_healing::DeathHealSupport>,
@@ -5646,12 +5657,13 @@ impl Simulation {
                 let after = state.unit_health[index]
                     .checked_sub(event_damage)
                     .expect("unit damage arithmetic overflowed validated bounds");
-                death_healing::commit_split_health(
+                death_healing::commit_split_health_from(
                     state.units,
                     state.unit_health,
                     Some(state.unit_positions),
                     index,
                     after,
+                    Some(source_id),
                 );
                 let source_index = find_unit_index(state.units, source_id);
                 if state.unit_health[index] <= 0
@@ -5789,14 +5801,14 @@ fn apply_pending_attack_effects(
             && building_health[index] > 0
             && !buildings[index].classifications.spell_immune
             && !buildings[index].classifications.invulnerable
-            && !(profile.nonhero_only && buildings[index].classifications.hero)
+            && !(profile.nonhero_only && buildings[index].classifications.uses_hero_spell_rules())
         {
             let status = buildings[index].status.get_or_insert_default();
             apply_roots_status(
                 status,
                 profile,
                 completed_tick,
-                buildings[index].classifications.hero,
+                buildings[index].classifications.uses_hero_spell_rules(),
                 false,
             );
         }
@@ -5881,7 +5893,14 @@ fn apply_pending_attack_effects(
         let after = unit_health[index]
             .checked_sub(event_damage)
             .expect("Feedback health overflow");
-        death_healing::commit_split_health(units, unit_health, None, index, after);
+        death_healing::commit_split_health_from(
+            units,
+            unit_health,
+            None,
+            index,
+            after,
+            Some(source.id),
+        );
     }
     if unit_health[index] <= 0 {
         return PendingAttackEffectResult::default();
@@ -5943,7 +5962,14 @@ fn apply_pending_attack_effects(
                     let after = unit_health[index]
                         .checked_sub(event_damage)
                         .expect("Chain Lightning damage overflow");
-                    death_healing::commit_split_health(units, unit_health, None, index, after);
+                    death_healing::commit_split_health_from(
+                        units,
+                        unit_health,
+                        None,
+                        index,
+                        after,
+                        Some(source.id),
+                    );
 
                     let mut points = [SimPoint::default(); MAX_BOUNCE_HITS + 1];
                     points[0] = source.position;
@@ -5986,9 +6012,10 @@ fn apply_pending_attack_effects(
                     && profile
                         .targets
                         .can_target_unit(units[index].target_movement_class())
-                    && !(profile.nonhero_only && units[index].classifications.hero)
+                    && !(profile.nonhero_only
+                        && units[index].classifications.uses_hero_spell_rules())
                 {
-                    let hero = units[index].classifications.hero;
+                    let hero = units[index].classifications.uses_hero_spell_rules();
                     apply_roots_status(
                         &mut units[index].status,
                         profile,
@@ -6043,7 +6070,7 @@ fn apply_frost_attack(
     profile: crate::components::FrostAttackEffectProfile,
     tick: u64,
 ) {
-    let duration = if unit.classifications.hero {
+    let duration = if unit.classifications.uses_hero_spell_rules() {
         profile.hero_duration_ticks
     } else {
         profile.duration_ticks

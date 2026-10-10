@@ -99,7 +99,7 @@ impl Simulation {
         if target.team == state.team || target.classifications.invulnerable {
             return;
         }
-        let duration = if target.classifications.hero {
+        let duration = if target.classifications.uses_hero_spell_rules() {
             state.profile.hero_duration_ticks
         } else {
             state.profile.duration_ticks

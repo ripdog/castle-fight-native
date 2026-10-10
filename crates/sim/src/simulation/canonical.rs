@@ -2337,6 +2337,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                 hash.write_u16(profile.damage_per_10k);
                 hash.write_u8(profile.targets.bits());
             }
+            PassiveUnitEffect::Corruption(profile) => {
+                hash.write_u8(24);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
             PassiveUnitEffect::SourceDamageDispatcher(ability) => {
                 hash.write_u8(23);
                 hash.write_u32(ability.0);
@@ -2492,6 +2498,7 @@ fn hash_splash_falloff_profile(hash: &mut Fnv64, profile: crate::components::Spl
 
 fn hash_unit_classifications(hash: &mut Fnv64, flags: UnitClassifications) {
     hash.write_u8(u8::from(flags.hero));
+    hash.write_u8(u8::from(flags.resistant_skin));
     hash.write_u8(u8::from(flags.summoned));
     hash.write_u8(u8::from(flags.spell_immune));
     hash.write_u8(u8::from(flags.invisible));
@@ -2541,6 +2548,12 @@ fn hash_pending_attack_effects(hash: &mut Fnv64, effects: PendingAttackEffects) 
         hash_poison_profile(hash, profile);
     }
 
+    hash.write_u8(u8::from(effects.corruption.is_some()));
+    if let Some(profile) = effects.corruption {
+        for word in profile.canonical_words() {
+            hash.write_u64(word);
+        }
+    }
     hash_frost_profile_option(hash, effects.frost);
     hash.write_u16(effects.stun_duration_ticks);
     if let Some(profile) = effects.feedback {

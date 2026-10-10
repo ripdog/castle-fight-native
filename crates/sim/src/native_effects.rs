@@ -28,6 +28,8 @@ const TUNING_9_27_JSON: &str = include_str!("../data/castle-fight/9.27/native-ef
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum NativeEffectImplementationId {
+    WarcraftCorruptionV1,
+    WarcraftResistantSkinV1,
     WarcraftBuildingImprovementV1,
     WarcraftBuildingDamageProcV1,
     WarcraftWeatherWaveV1,
@@ -85,6 +87,8 @@ impl NativeEffectImplementationId {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::WarcraftCorruptionV1 => 84,
+            Self::WarcraftResistantSkinV1 => 83,
             Self::WarcraftBuildingImprovementV1 => 79,
             Self::WarcraftBuildingDamageProcV1 => 82,
             Self::WarcraftWeatherWaveV1 => 81,
@@ -142,7 +146,8 @@ impl NativeEffectImplementationId {
     const fn requires_tuning(self) -> bool {
         !matches!(
             self,
-            Self::WarcraftMarkerOnlyV1
+            Self::WarcraftResistantSkinV1
+                | Self::WarcraftMarkerOnlyV1
                 | Self::WarcraftZeroDamageBarrageV1
                 | Self::WarcraftHumanSupportV1
                 | Self::WarcraftHumanPassiveV1
@@ -530,6 +535,7 @@ struct TuningFile {
     schema_version: u32,
     map_version: String,
     buff_families: Vec<NativeBuffRecord>,
+    unit_death_rules: Vec<NativeUnitDeathRule>,
     effects: Vec<TuningEffect>,
 }
 
@@ -659,6 +665,12 @@ enum TuningEffect {
         damage_taken_bonus_per_10k: i16,
         #[allow(dead_code)]
         provenance: serde_json::Value,
+    },
+    Corruption {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        profile: crate::components::CorruptionProfile,
     },
     Sphere {
         source_kind: String,
@@ -962,6 +974,7 @@ impl TuningEffect {
             | Self::Poison { source_kind, .. }
             | Self::DamageThreshold { source_kind, .. }
             | Self::KillBerserk { source_kind, .. }
+            | Self::Corruption { source_kind, .. }
             | Self::Sphere { source_kind, .. }
             | Self::SpeedAura { source_kind, .. }
             | Self::NativeAura { source_kind, .. }
@@ -1004,6 +1017,7 @@ impl TuningEffect {
             | Self::Poison { source_key, .. }
             | Self::DamageThreshold { source_key, .. }
             | Self::KillBerserk { source_key, .. }
+            | Self::Corruption { source_key, .. }
             | Self::Sphere { source_key, .. }
             | Self::SpeedAura { source_key, .. }
             | Self::NativeAura { source_key, .. }
@@ -1039,6 +1053,7 @@ impl TuningEffect {
             | Self::Poison { unit_rawcode, .. }
             | Self::DamageThreshold { unit_rawcode, .. }
             | Self::KillBerserk { unit_rawcode, .. }
+            | Self::Corruption { unit_rawcode, .. }
             | Self::Sphere { unit_rawcode, .. }
             | Self::SpeedAura { unit_rawcode, .. }
             | Self::NativeAura { unit_rawcode, .. }
@@ -1095,6 +1110,7 @@ impl TuningEffect {
             Self::KillBerserk { .. } => NativeEffectImplementationId::WarcraftKillBerserkV1,
             Self::NativeAura { .. } => NativeEffectImplementationId::WarcraftNativeAuraV1,
             Self::SpeedAura { .. } => NativeEffectImplementationId::WarcraftSpeedAuraV1,
+            Self::Corruption { .. } => NativeEffectImplementationId::WarcraftCorruptionV1,
             Self::Sphere { .. } => NativeEffectImplementationId::WarcraftSphereV1,
             Self::BuildingImprovement { .. } | Self::BuildingManaRegeneration { .. } => {
                 NativeEffectImplementationId::WarcraftBuildingImprovementV1
@@ -1143,6 +1159,7 @@ impl TuningEffect {
             Self::KillBerserk { .. } => "kill-berserk",
             Self::NativeAura { .. } => "native-aura",
             Self::SpeedAura { .. } => "speed-aura",
+            Self::Corruption { .. } => "corruption",
             Self::Sphere { .. } => "sphere",
             Self::BuildingImprovement { .. } => "building-improvement",
             Self::BuildingManaRegeneration { .. } => "building-mana-regeneration",
@@ -1332,6 +1349,7 @@ fn native_unit_mechanics_from_tuning(
                 | TuningEffect::DamageCharge { .. }
                 | TuningEffect::Poison { .. }
                 | TuningEffect::KillBerserk { .. }
+                | TuningEffect::Corruption { .. }
                 | TuningEffect::Sphere { .. }
                 | TuningEffect::SpeedAura { .. }
                 | TuningEffect::NativeAura { .. }
@@ -1552,6 +1570,7 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
                 damage_taken_bonus_per_10k: *damage_taken_bonus_per_10k,
             })
         }
+        TuningEffect::Corruption { profile, .. } => PassiveUnitEffect::Corruption(*profile),
         TuningEffect::Sphere { profile, .. } => {
             assert!((1..=3).contains(&profile.attachment_count) && profile.speed_per_tick > 0);
             PassiveUnitEffect::Sphere(*profile)
@@ -2298,6 +2317,7 @@ mod tests {
             tuning_9_27: TuningFile {
                 schema_version: 3,
                 buff_families: Vec::new(),
+                unit_death_rules: Vec::new(),
                 map_version: "9.27".to_owned(),
                 effects: vec![TuningEffect::OrbSpellProc {
                     source_kind: "ability-effect".to_owned(),
@@ -2384,6 +2404,7 @@ mod tests {
         let mut tuning = TuningFile {
             schema_version: 3,
             buff_families: Vec::new(),
+            unit_death_rules: Vec::new(),
             map_version: "9.27".to_owned(),
             effects: vec![frost("F002", 100), frost("F001", 100)],
         };
@@ -2540,4 +2561,42 @@ mod tests {
         assert_eq!(spellcasting.ability.mana_cost, 35);
         assert_eq!(spellcasting.ability.cooldown_ticks, 240);
     }
+}
+
+/// Audited native ancestry binding; this flag does not make the handle an actual hero.
+pub(crate) fn resistant_skin_for_version(version: MapVersion, abilities: &[u32]) -> bool {
+    abilities.iter().any(|ability| {
+        catalog().bindings.iter().any(|binding| {
+            binding.source == NativeEffectSource::new(NativeEffectSourceKind::UnitAbility, *ability)
+                && binding.valid_versions.contains(version)
+                && binding.implementation == NativeEffectImplementationId::WarcraftResistantSkinV1
+        })
+    })
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+pub(crate) struct NativeUnitDeathRule {
+    pub rawcode: u32,
+    pub heal_percent: u16,
+    pub retaliation_damage: i32,
+}
+pub(crate) fn unit_death_rule_for_version(
+    version: MapVersion,
+    rawcode: u32,
+) -> Option<NativeUnitDeathRule> {
+    catalog()
+        .tuning(version)?
+        .unit_death_rules
+        .iter()
+        .find(|r| r.rawcode == rawcode)
+        .copied()
+}
+
+pub(crate) fn unit_death_rules_for_version(
+    version: MapVersion,
+) -> impl Iterator<Item = NativeUnitDeathRule> {
+    catalog()
+        .tuning(version)
+        .into_iter()
+        .flat_map(|t| t.unit_death_rules.iter().copied())
 }

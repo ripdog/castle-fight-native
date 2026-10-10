@@ -98,7 +98,7 @@ impl Simulation {
             {
                 continue;
             }
-            let duration = if unit.classifications.hero {
+            let duration = if unit.classifications.uses_hero_spell_rules() {
                 state.profile.hero_stun_ticks
             } else {
                 state.profile.stun_ticks

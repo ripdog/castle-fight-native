@@ -332,6 +332,16 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         effect.update(chance_per_10k=number("DataA1", 100),
                       damage_multiplier_per_10k=number("DataB1", 10_000),
                       targets=unit_targets(fields["targs1"], allow_structures=True))
+    elif kind == "corruption":
+        if (mechanics["native_base"] != "AIcb" or number("DataA1") != 0
+            or number("DataE1") != 1 or set(fields["targs1"].split(",")) != {"ground", "air", "ward"}):
+            raise ValueError("Corruption requires audited zero-bonus native orb and weapon index")
+        ticks = lambda key: int((Decimal(fields[key]) * 30).to_integral_value(rounding="ROUND_CEILING"))
+        effect.update(profile={"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
+            "buff": {"rawcode": int.from_bytes(fields["buffid1"].encode(), "big"), "positive": False,
+                "stealable": False, "organic_only": False},
+            "armor_reduction_per_100": number("DataB1", 100), "duration_ticks": ticks("dur1"),
+            "hero_duration_ticks": ticks("herodur1"), "targets": 3})
     elif kind == "sphere":
         if mechanics["native_base"] != "Asph" or not 1 <= number("Targetattachcount") <= 3:
             raise ValueError("Sphere must retain an audited native attachment count")
@@ -793,9 +803,12 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             detail.update(effect_key=effect_key, effect_fields=abilities[effect_key],
                 effect_protected=protected.get(effect_key, {}), mechanics_row=spell, semantics_row=semantics)
         effects.append(project_effect(recipe, abilities[source], unit, protected.get(source, {}), detail))
+    from project_unit_death_rules import project as project_death_rules
+    death_rules = project_death_rules(rows(retained("resolved/production-unit-special-mechanics.tsv")), functions)
     families = [{"source_key": key, "buff": buff_identity(abilities[key], positive=base != "ACff")}
         for key, base in sorted(ability_bases.items()) if base in {"Ainf", "ACf2", "ACff", "AIrr", "AEer", "Aenr"}]
     return {"schema_version": 3, "map_version": release["map_version"], "effects": effects,
+        "unit_death_rules": death_rules, "unit_death_rules_source": {"git_tree": tree, "path": "resolved/production-unit-special-mechanics.tsv", "function": "fJ"},
         "buff_families": families, "buff_family_source": {"git_tree": tree, "path": "resolved/object-fields.tsv"}}
 
 

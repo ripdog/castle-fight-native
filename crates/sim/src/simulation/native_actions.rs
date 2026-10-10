@@ -278,7 +278,7 @@ impl Simulation {
                             cleanse_native_status(&mut target.status);
                         }
                         if target.health > 0 {
-                            let duration = if target.classifications.hero {
+                            let duration = if target.classifications.uses_hero_spell_rules() {
                                 profile.hero_stun_ticks
                             } else {
                                 profile.stun_ticks
@@ -311,7 +311,12 @@ impl Simulation {
                             target_position: Some(target.position),
                             effect: AbilityEffect::PhoenixFire(profile),
                         });
-                        death_healing::observe_inline_death(units, index, before);
+                        death_healing::observe_inline_death_from(
+                            units,
+                            index,
+                            before,
+                            Some(state.source),
+                        );
                     } else if let Some(target) = buildings
                         .iter_mut()
                         .find(|target| target.id == state.target)

@@ -178,7 +178,7 @@ pub(super) fn apply_ability_effect_to_unit(
             {
                 return false;
             }
-            let duration = if target.classifications.hero {
+            let duration = if target.classifications.uses_hero_spell_rules() {
                 hero_duration_ticks
             } else {
                 duration_ticks
@@ -219,7 +219,7 @@ pub(super) fn apply_ability_effect_to_unit(
                 .health
                 .checked_sub(event_damage)
                 .expect("area stun damage overflow");
-            let duration = if target.classifications.hero {
+            let duration = if target.classifications.uses_hero_spell_rules() {
                 hero_stun_ticks
             } else {
                 stun_ticks
@@ -255,7 +255,7 @@ pub(super) fn apply_ability_effect_to_unit(
             if target.classifications.spell_immune || target.mechanical {
                 return false;
             }
-            let duration = if target.classifications.hero {
+            let duration = if target.classifications.uses_hero_spell_rules() {
                 hero_duration_ticks
             } else {
                 duration_ticks
@@ -769,7 +769,7 @@ pub(super) fn resolve_periodic_unit_statuses(
                     .health
                     .checked_sub(event_damage)
                     .expect("damage-over-time health arithmetic overflow");
-                death_healing::commit_health(units, unit_index, after);
+                death_healing::commit_health_from(units, unit_index, after, effect.source);
                 effect.next_pulse_tick = effect
                     .next_pulse_tick
                     .checked_add(u64::from(effect.pulse_interval_ticks))
@@ -846,4 +846,38 @@ pub(super) fn effective_attack_cooldown_ticks(base_ticks: u16, status: StatusSta
     u16::try_from(scaled.div_ceil(u64::try_from(percent).expect("positive attack speed")))
         .expect("effective attack cooldown exceeds u16")
         .max(1)
+}
+
+/// Native attack orb lands before damage and refreshes one shared armor family.
+pub(super) fn apply_corruption(
+    target: TargetIndex,
+    profile: Option<crate::components::CorruptionProfile>,
+    tick: u64,
+    units: &mut [UnitSnapshot],
+) {
+    let (TargetIndex::Unit(i), Some(p)) = (target, profile) else {
+        return;
+    };
+    let u = &mut units[i];
+    if u.health <= 0
+        || u.classifications.invulnerable
+        || !p.targets.can_target_unit(u.target_movement_class())
+    {
+        return;
+    }
+    let duration = if u.classifications.uses_hero_spell_rules() {
+        p.hero_duration_ticks
+    } else {
+        p.duration_ticks
+    };
+    apply_timed_armor_modifier(
+        &mut u.status,
+        TimedArmorModifier {
+            id: ModifierId(p.ability.0),
+            native_buff: Some(p.buff),
+            armor_bonus_per_100: -p.armor_reduction_per_100,
+            expires_tick: tick + u64::from(duration),
+            ..TimedArmorModifier::default()
+        },
+    );
 }

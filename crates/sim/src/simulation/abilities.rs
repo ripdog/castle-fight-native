@@ -7,7 +7,7 @@ pub(super) fn native_fire_buff_active(status: &StatusState, ability: AbilityId, 
 }
 
 impl Simulation {
-    fn apply_source_ability_to_unit(
+    pub(super) fn apply_source_ability_to_unit(
         &self,
         source: SimId,
         team: Team,
@@ -39,7 +39,7 @@ impl Simulation {
             self.next_tick,
             self.combat_rules.damage_rules,
         );
-        death_healing::observe_inline_death(units, index, before);
+        death_healing::observe_inline_death_from(units, index, before, Some(source));
         applied
     }
 
@@ -993,7 +993,7 @@ impl Simulation {
                         ) {
                             metrics.effects += 1;
                         }
-                        death_healing::observe_inline_death(units, i, before);
+                        death_healing::observe_inline_death_from(units, i, before, Some(source.id));
                     }
                 }
                 AbilityIntentTarget::AllFriendlyUnits => {
@@ -1065,7 +1065,7 @@ impl Simulation {
                                 event_damage,
                             );
                             let after = target.health.saturating_sub(event_damage);
-                            death_healing::commit_health(units, i, after);
+                            death_healing::commit_health_from(units, i, after, Some(source.id));
                             metrics.effects += 1;
                         }
                     }
@@ -1702,7 +1702,7 @@ impl Simulation {
                     ) && (!candidate.classifications.combat_sapper
                         || candidate.classifications.invulnerable
                         || candidate.classifications.spell_immune
-                        || (candidate.classifications.hero
+                        || (candidate.classifications.uses_hero_spell_rules()
                             && !matches!(ability.effect, AbilityEffect::FrostNova { .. }))))
                     || (ability.target_policy == AbilityTargetPolicy::RandomGroundEnemyUnit
                         && candidate.target_movement_class() != MovementClass::Ground)
@@ -1747,7 +1747,7 @@ impl Simulation {
                 || (ability.target_policy == AbilityTargetPolicy::FlyingEnemyUnit
                     && (target.target_movement_class() != MovementClass::Air
                         || !target.classifications.combat_sapper
-                        || (target.classifications.hero
+                        || (target.classifications.uses_hero_spell_rules()
                             && !matches!(ability.effect, AbilityEffect::Ensnare { .. }))))
                 || self.ability_source_distance_sq(source.origin, target.position)
                     > square_i32(ability.range)
@@ -2126,7 +2126,7 @@ impl Simulation {
                                 && (ability.target_policy != AbilityTargetPolicy::FlyingEnemyUnit
                                     || (target.target_movement_class() == MovementClass::Air
                                         && target.classifications.combat_sapper
-                                        && (!target.classifications.hero
+                                        && (!target.classifications.uses_hero_spell_rules()
                                             || matches!(
                                                 ability.effect,
                                                 AbilityEffect::FrostNova { .. }
@@ -2169,7 +2169,7 @@ impl Simulation {
                             ) || (target.classifications.combat_sapper
                                 && !target.classifications.invulnerable
                                 && !target.classifications.spell_immune
-                                && (!target.classifications.hero
+                                && (!target.classifications.uses_hero_spell_rules()
                                     || matches!(ability.effect, AbilityEffect::FrostNova { .. }))))
                                 && target.team != source.team
                                 && target.target_movement_class() == MovementClass::Ground

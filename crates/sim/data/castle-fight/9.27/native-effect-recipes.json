@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A073","unit_rawcode":"e00B","kind":"evasion"},
+    {"source_kind":"unit-ability","source_key":"A07C","unit_rawcode":"e00B","kind":"corruption"},
     {"source_kind":"unit-ability","source_key":"A078","unit_rawcode":"n020","kind":"wind-walk"},
     {"source_kind":"unit-ability","source_key":"A075","unit_rawcode":"n020","kind":"feedback"},
     {"source_kind":"unit-ability","source_key":"A077","unit_rawcode":"n01Z","kind":"wind-walk"},

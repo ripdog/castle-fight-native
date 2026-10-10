@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "bindings": [
+    { "source_kind": "unit-ability", "source_key": "A073", "implementation": "warcraft-evasion-v1", "valid_from": "9.27", "valid_through": "9.27" },
+    { "source_kind": "unit-ability", "source_key": "A07C", "implementation": "warcraft-corruption-v1", "valid_from": "9.27", "valid_through": "9.27" },
+    { "source_kind": "unit-ability", "source_key": "A07B", "implementation": "warcraft-resistant-skin-v1", "valid_from": "9.27", "valid_through": "9.27" },
     {"source_kind":"unit-ability","source_key":"A078","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A075","implementation":"warcraft-feedback-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A077","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},

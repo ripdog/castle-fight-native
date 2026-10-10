@@ -3523,6 +3523,11 @@ fn prewarm_timed_wc3_effects(
                     .passive_effects
                     .iter()
                     .filter_map(|effect| match effect {
+                        PassiveUnitEffect::Corruption(p) => Some((
+                            p.ability.0,
+                            definition.attack.cooldown_ticks,
+                            Some((p.ability.0, p.duration_ticks)),
+                        )),
                         PassiveUnitEffect::Defend(profile) => {
                             Some((profile.ability.0, u16::MAX, None))
                         }

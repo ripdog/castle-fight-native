@@ -209,7 +209,7 @@ impl Simulation {
                 );
                 damage_thresholds::observe_damage_event(target, target.health, damage);
                 let after = target.health.saturating_sub(damage);
-                death_healing::commit_health(units, i, after);
+                death_healing::commit_health_from(units, i, after, Some(source.id));
             }
             if !self.debug_buildings_invulnerable {
                 for target in buildings.iter_mut() {

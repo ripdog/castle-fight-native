@@ -169,7 +169,7 @@ impl Simulation {
             );
             super::damage_thresholds::observe_damage_event(target, target.health, event_damage);
             let after = target.health.saturating_sub(event_damage);
-            death_healing::commit_health(units, i, after);
+            death_healing::commit_health_from(units, i, after, None);
             let target = &mut units[i];
             if target.health > 0
                 && !target.classifications.spell_immune
@@ -179,7 +179,7 @@ impl Simulation {
                 freeze(
                     &mut target.status,
                     self.next_tick,
-                    if target.classifications.hero {
+                    if target.classifications.uses_hero_spell_rules() {
                         p.hero_freeze_ticks
                     } else {
                         p.freeze_ticks
@@ -221,7 +221,7 @@ impl Simulation {
                 freeze(
                     target.status.get_or_insert_default(),
                     self.next_tick,
-                    if target.classifications.hero {
+                    if target.classifications.uses_hero_spell_rules() {
                         p.hero_freeze_ticks
                     } else {
                         p.freeze_ticks

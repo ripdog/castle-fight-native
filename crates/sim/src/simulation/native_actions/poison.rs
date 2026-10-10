@@ -20,7 +20,7 @@ impl Simulation {
         profile: PoisonProfile,
         tick: u64,
     ) {
-        let duration = if target.classifications.hero {
+        let duration = if target.classifications.uses_hero_spell_rules() {
             profile.hero_duration_ticks
         } else {
             profile.duration_ticks
@@ -205,7 +205,12 @@ impl Simulation {
                 let floor = i32::from(!state.profile.can_kill);
                 if target.health > 0 {
                     let after = target.health.saturating_sub(event_damage).max(floor);
-                    super::super::death_healing::commit_health(units, index, after);
+                    super::super::death_healing::commit_health_from(
+                        units,
+                        index,
+                        after,
+                        Some(state.source),
+                    );
                 }
             }
             state.next_pulse_tick = state

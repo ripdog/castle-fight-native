@@ -204,6 +204,7 @@ pub struct SecondaryAttackProfile {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct PendingAttackEffects {
+    pub corruption: Option<CorruptionProfile>,
     pub poison: Option<PoisonProfile>,
     pub stun_duration_ticks: u16,
     pub triggered_spell: Option<TriggeredAttackEffect>,
@@ -875,6 +876,32 @@ pub struct FeedbackEffectProfile {
     pub targets: AttackTargetMask,
 }
 
+/// Native AIcb on-hit armor family, independent of spell damage/immunity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CorruptionProfile {
+    pub ability: AbilityId,
+    pub buff: NativeBuffIdentity,
+    pub armor_reduction_per_100: i16,
+    pub duration_ticks: u16,
+    pub hero_duration_ticks: u16,
+    pub targets: AttackTargetMask,
+}
+impl CorruptionProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 9] {
+        [
+            u64::from(self.ability.0),
+            u64::from(self.buff.rawcode),
+            self.buff.positive as u64,
+            self.buff.stealable as u64,
+            self.buff.organic_only as u64,
+            self.armor_reduction_per_100 as u64,
+            u64::from(self.duration_ticks),
+            u64::from(self.hero_duration_ticks),
+            u64::from(self.targets.bits()),
+        ]
+    }
+}
+
 /// Intrinsic target classifications, independent of armor type or presentation.
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnitClassifications {
@@ -882,6 +909,8 @@ pub struct UnitClassifications {
     #[serde(default)]
     pub melee_attacker: bool,
     pub hero: bool,
+    /// Native Arsk: hero targeting/duration rules for negative spells only.
+    pub resistant_skin: bool,
     pub summoned: bool,
     pub spell_immune: bool,
     /// Native invisibility; revelation is tracked independently by status buff identity.
@@ -895,6 +924,13 @@ pub struct UnitClassifications {
     pub summoned_marker: bool,
     /// Native IsUnitIllusion handle classification (not the summoned marker).
     pub illusion: bool,
+}
+
+impl UnitClassifications {
+    #[must_use]
+    pub const fn uses_hero_spell_rules(self) -> bool {
+        self.hero || self.resistant_skin
+    }
 }
 
 /// Per-handle script flags, never part of a cold resurrection definition.
@@ -924,6 +960,7 @@ pub(crate) struct ProductionUnitClassifications(pub UnitClassifications);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PassiveUnitEffect {
+    Corruption(CorruptionProfile),
     SourceDamageDispatcher(AbilityId),
     HealthScaledAftershock(HealthScaledAftershockProfile),
     DamageRetaliation(DamageRetaliationProfile),

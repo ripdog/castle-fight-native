@@ -56,15 +56,15 @@ impl DamageStorage<'_> {
             .as_ref()
             .map_or(self.units[index].health, |health| health[index])
     }
-    fn damage(&mut self, index: usize, amount: i32) {
+    fn damage(&mut self, index: usize, amount: i32, credit: Option<SimId>) {
         let after = self
             .health(index)
             .checked_sub(amount)
             .expect("source damage health overflow");
         if let Some(health) = self.health.as_mut() {
-            death_healing::commit_split_health(self.units, health, None, index, after);
+            death_healing::commit_split_health_from(self.units, health, None, index, after, credit);
         } else {
-            death_healing::commit_health(self.units, index, after);
+            death_healing::commit_health_from(self.units, index, after, credit);
         }
     }
 }
@@ -167,7 +167,7 @@ fn dispatch_inner(
                 );
                 let health = state.health(index);
                 damage_thresholds::observe_damage_event(&mut state.units[index], health, amount);
-                state.damage(index, amount);
+                state.damage(index, amount, None);
             }
         }
     }
@@ -239,7 +239,7 @@ fn aftershock_inner(source: SimId, victim: usize, state: &mut DamageStorage<'_>)
     let health = state.health(victim);
     // The nested Aftershock hit disables hhb but leaves independent low-life listeners.
     damage_thresholds::observe_damage(&mut state.units[victim], health);
-    state.damage(victim, amount);
+    state.damage(victim, amount, Some(source));
     if state.health(victim) <= 0 && state.health(source_index) > 0 {
         native_kill_effects::activate_kill_berserk(&mut state.units[source_index], state.tick);
     }

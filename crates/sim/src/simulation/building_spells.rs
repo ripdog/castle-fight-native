@@ -515,7 +515,7 @@ impl Simulation {
             // The recovered level-one target mask has no organic restriction: mechanical units
             // are not rejected just because the unmodified AOhx base mask includes organic.
             if !target.classifications.spell_immune {
-                let duration = if target.classifications.hero {
+                let duration = if target.classifications.uses_hero_spell_rules() {
                     profile.hero_duration_ticks
                 } else {
                     profile.duration_ticks
@@ -774,12 +774,13 @@ impl Simulation {
                         event_damage,
                     );
                     let after = unit_health[target_index].saturating_sub(damage);
-                    death_healing::commit_split_health(
+                    death_healing::commit_split_health_from(
                         units,
                         unit_health,
                         Some(positions),
                         target_index,
                         after,
+                        None,
                     );
                 }
                 for (target_index, target) in buildings.iter().enumerate() {

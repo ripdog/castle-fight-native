@@ -9,6 +9,16 @@ import build_runtime_catalog as catalog
 
 
 class NativeTuningProjectionTest(unittest.TestCase):
+    def test_corruption_projects_native_family_without_spell_immunity_or_organic_gate(self):
+        recipe = {"kind":"corruption", "source_kind":"unit-ability", "source_key":"TEST", "unit_rawcode":"UNIT"}
+        fields = {"dataa1":"0", "datae1":"1", "datab1":"3", "targs1":"air,ground,ward", "buffid1":"BUFF", "dur1":"0.3", "herodur1":"0.1"}
+        p = native.project_effect(recipe, fields, None, {}, {"native_base":"AIcb"})["profile"]
+        self.assertEqual((p["armor_reduction_per_100"], p["duration_ticks"], p["hero_duration_ticks"]), (300,9,3))
+        self.assertFalse(p["buff"]["organic_only"])
+        for changed in [{"dataa1":"1"}, {"datae1":"2"}, {"targs1":"air,ground,nonhero"}]:
+            with self.assertRaises(ValueError):
+                native.project_effect(recipe, {**fields, **changed}, None, {}, {"native_base":"AIcb"})
+
     def test_scripted_roots_reconciles_parent_child_resources_and_origin(self):
         recipe = {"kind":"scripted-roots", "source_kind":"unit-ability", "source_key":"ORDR", "unit_rawcode":"UNIT"}
         fields = {"targs1":"enemies,ground,neutral,nonhero,vulnerable", "cost1":"999", "cool1":"999", "rng1":"71"}

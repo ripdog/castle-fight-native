@@ -106,7 +106,14 @@ pub(super) fn resolve(
                     damage,
                 );
                 let after = state.unit_health[i].saturating_sub(damage);
-                death_healing::commit_split_health(state.units, state.unit_health, None, i, after);
+                death_healing::commit_split_health_from(
+                    state.units,
+                    state.unit_health,
+                    None,
+                    i,
+                    after,
+                    Some(source.id),
+                );
             }
             TargetIndex::Building(i) => {
                 let damage = scale_damage_per_10k(

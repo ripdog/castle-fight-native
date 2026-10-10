@@ -3,6 +3,40 @@
   "map_version": "9.27",
   "effects": [
     {
+      "source_kind": "unit-ability",
+      "source_key": "A073",
+      "unit_rawcode": "e00B",
+      "kind": "evasion",
+      "chance_per_10k": 3000,
+      "provenance": {
+        "ability": "A073",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A07C",
+      "unit_rawcode": "e00B",
+      "kind": "corruption",
+      "profile": {
+        "ability": 1093678915,
+        "buff": {
+          "rawcode": 1110454609,
+          "positive": false,
+          "stealable": false,
+          "organic_only": false
+        },
+        "armor_reduction_per_100": 400,
+        "duration_ticks": 45,
+        "hero_duration_ticks": 45,
+        "targets": 3
+      },
+      "provenance": {
+        "ability": "A07C",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
       "source_key": "A078",
@@ -3331,6 +3365,23 @@
       }
     }
   ],
+  "unit_death_rules": [
+    {
+      "rawcode": 1697656897,
+      "heal_percent": 20,
+      "retaliation_damage": 350
+    },
+    {
+      "rawcode": 1697656898,
+      "heal_percent": 14,
+      "retaliation_damage": 0
+    }
+  ],
+  "unit_death_rules_source": {
+    "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+    "path": "resolved/production-unit-special-mechanics.tsv",
+    "function": "fJ"
+  },
   "buff_families": [
     {
       "source_key": "A00W",

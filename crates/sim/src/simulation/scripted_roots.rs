@@ -12,7 +12,7 @@ pub(super) fn primary_eligible(
         && unit.target_movement_class() == MovementClass::Ground
         && !unit.classifications.invulnerable
         && !unit.classifications.spell_immune
-        && !(p.primary_nonhero_only && unit.classifications.hero)
+        && !(p.primary_nonhero_only && unit.classifications.uses_hero_spell_rules())
         && unit.visible_to(team, tick)
 }
 
@@ -94,7 +94,7 @@ impl Simulation {
                 || u.classifications.spell_immune
                 || (u.is_invisible(self.next_tick) && !u.visible_to(source.team, self.next_tick))
                 || !p.roots.targets.can_target_unit(u.target_movement_class())
-                || (p.roots.nonhero_only && u.classifications.hero)
+                || (p.roots.nonhero_only && u.classifications.uses_hero_spell_rules())
                 || origin.distance_sq(u.position) > square_i32(p.child_range)
             {
                 continue;
@@ -103,7 +103,7 @@ impl Simulation {
                 &mut u.status,
                 p.roots,
                 self.next_tick,
-                u.classifications.hero,
+                u.classifications.uses_hero_spell_rules(),
                 true,
             );
             applied += 1;

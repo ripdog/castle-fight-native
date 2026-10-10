@@ -113,7 +113,7 @@ fn direct_damage(
     );
     damage_thresholds::observe_damage_event(unit, unit.health, damage);
     let after = unit.health.saturating_sub(damage);
-    death_healing::commit_health(units, index, after);
+    death_healing::commit_health_from(units, index, after, None);
 }
 
 impl Simulation {
@@ -514,7 +514,7 @@ impl Simulation {
                             self.next_tick,
                             self.combat_rules.damage_rules,
                         );
-                        death_healing::observe_inline_death(units, i, before);
+                        death_healing::observe_inline_death_from(units, i, before, None);
                     }
                     self.last_ability_casts.push(AbilityCastEvent {
                         source: m.source,

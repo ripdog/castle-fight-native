@@ -208,7 +208,7 @@ impl Simulation {
                     (
                         units[i].position,
                         Some(units[i].target_movement_class()),
-                        units[i].classifications.hero,
+                        units[i].classifications.uses_hero_spell_rules(),
                     )
                 };
                 let winner = |family| {
@@ -290,13 +290,13 @@ impl Simulation {
                     damage_thresholds::observe_damage_event(target, target.health, damage);
                 }
                 let after = target.health.saturating_sub(damage);
-                death_healing::commit_health(units, i, after);
+                death_healing::commit_health_from(units, i, after, None);
                 let target = &mut units[i];
                 if target.health > 0 && burn_winner {
                     let burn = apply_weather_burn(
                         &mut target.status,
                         p,
-                        target.classifications.hero,
+                        target.classifications.uses_hero_spell_rules(),
                         self.next_tick,
                     );
                     let burn = self
@@ -308,7 +308,7 @@ impl Simulation {
                         damage_thresholds::observe_damage_event(target, target.health, burn);
                     }
                     let after = target.health.saturating_sub(burn);
-                    death_healing::commit_health(units, i, after);
+                    death_healing::commit_health_from(units, i, after, None);
                 }
                 let target = &units[i];
                 if p.shards == 0 {

@@ -407,3 +407,116 @@ fn zero_count_keeps_native_recipient_art_and_healing_clamps_to_life_capacity() {
     commit_health(&mut units, 1, 0);
     assert_eq!(units[2].health, 100);
 }
+
+#[test]
+fn credited_kill_healing_uses_victim_class_and_source_handle_for_inline_and_split_life() {
+    for split in [false, true] {
+        let mut s = sim(1);
+        for (team, x) in [(0, 0), (1, 1), (1, 2)] {
+            unit(&mut s, team, x);
+        }
+        let mut units = s.snapshot_units();
+        units[0].health = 40;
+        units[0].death_rule = Some(crate::native_effects::NativeUnitDeathRule {
+            rawcode: 0,
+            heal_percent: 17,
+            retaliation_damage: 0,
+        });
+        units[2].classifications.combat_sapper = false;
+        let source = units[0].id;
+        if split {
+            let mut h: Vec<_> = units.iter().map(|u| u.health).collect();
+            commit_split_health_from(&mut units, &mut h, None, 1, 0, Some(source));
+            assert_eq!(h[0], 57);
+            commit_split_health_from(&mut units, &mut h, None, 1, -1, Some(source));
+            commit_split_health_from(&mut units, &mut h, None, 2, 0, Some(source));
+            assert_eq!(h[0], 57, "already dead/non-sapper deaths cannot heal again");
+        } else {
+            commit_health_from(&mut units, 1, 0, Some(source));
+            assert_eq!(units[0].health, 57);
+            commit_health_from(&mut units, 1, -1, Some(source));
+            commit_health_from(&mut units, 2, 0, Some(source));
+            assert_eq!(units[0].health, 57);
+        }
+    }
+}
+
+#[test]
+fn death_retaliation_precedes_healing_and_cannot_revive_a_recursively_dead_killer() {
+    for split in [false, true] {
+        let mut s = sim(1);
+        for (team, x) in [(0, 0), (1, 1)] {
+            unit(&mut s, team, x);
+        }
+        let mut u = s.snapshot_units();
+        u[0].health = 20;
+        u[0].death_rule = Some(crate::native_effects::NativeUnitDeathRule {
+            rawcode: 0,
+            heal_percent: 90,
+            retaliation_damage: 40,
+        });
+        u[1].death_rule = Some(crate::native_effects::NativeUnitDeathRule {
+            rawcode: 0,
+            heal_percent: 0,
+            retaliation_damage: 30,
+        });
+        u[0].classifications.spell_immune = true;
+        let killer = u[0].id;
+        if split {
+            let mut h = vec![20, 100];
+            commit_split_health_from(&mut u, &mut h, None, 1, 0, Some(killer));
+            assert!(h[0] <= 0 && h[1] <= 0);
+        } else {
+            commit_health_from(&mut u, 1, 0, Some(killer));
+            assert!(u[0].health <= 0 && u[1].health <= 0);
+        }
+    }
+}
+
+#[test]
+fn kill_heal_is_immediate_before_linker_and_missing_source_does_not_claim_credit() {
+    let mut s = sim(1);
+    for (team, x) in [(0, 0), (0, 1), (0, 2)] {
+        unit(&mut s, team, x);
+    }
+    let mut u = s.snapshot_units();
+    u[0].health = 40;
+    u[0].death_rule = Some(crate::native_effects::NativeUnitDeathRule {
+        rawcode: 0,
+        heal_percent: 30,
+        retaliation_damage: 0,
+    });
+    u[1].death_heal = Some(support());
+    u[0].rawcode = 1;
+    u[1].rawcode = 1;
+    let killer = u[0].id;
+    commit_health_from(&mut u, 1, 0, Some(killer));
+    assert_eq!(u[0].health, 93);
+    commit_health_from(&mut u, 2, 0, None);
+    assert_eq!(u[0].health, 93);
+}
+
+#[test]
+fn spell_resolution_carries_actual_source_credit_into_shared_death_callbacks() {
+    let mut s = sim(1);
+    for (team, x) in [(0, 0), (1, 1)] {
+        unit(&mut s, team, x);
+    }
+    let mut u = s.snapshot_units();
+    u[0].health = 40;
+    u[0].death_rule = Some(crate::native_effects::NativeUnitDeathRule {
+        rawcode: 0,
+        heal_percent: 19,
+        retaliation_damage: 0,
+    });
+    let source = u[0].id;
+    s.apply_source_ability_to_unit(
+        source,
+        Team(0),
+        1,
+        AbilityEffect::Damage { amount: 1000 },
+        &mut u,
+    );
+    assert_eq!(u[0].health, 59);
+    assert!(u[1].health <= 0);
+}

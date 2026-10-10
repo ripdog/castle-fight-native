@@ -152,12 +152,13 @@ impl Simulation {
             let after = unit_health[next_index]
                 .checked_sub(event_damage)
                 .expect("Chain Lightning damage overflow");
-            death_healing::commit_split_health(
+            death_healing::commit_split_health_from(
                 units,
                 unit_health,
                 Some(positions),
                 next_index,
                 after,
+                Some(state.source),
             );
             let next_position = positions[next_index];
             let mut points = [SimPoint::default(); MAX_BOUNCE_HITS + 1];
@@ -318,6 +319,12 @@ impl Simulation {
                     if defense.damage <= 0 && defense.reflected {
                         continue;
                     }
+                    apply_corruption(
+                        target,
+                        snapshot.projectile.on_hit.corruption,
+                        completed_tick,
+                        units,
+                    );
                     if self
                         .apply_damage_to_target(
                             target,
@@ -988,7 +995,7 @@ impl Simulation {
                             .health
                             .checked_sub(event_damage)
                             .expect("Burning Oil unit damage overflow");
-                        death_healing::commit_health(units, i, after);
+                        death_healing::commit_health_from(units, i, after, Some(zone.source));
                     }
                 }
                 if zone.profile.target_buildings && !self.debug_buildings_invulnerable {

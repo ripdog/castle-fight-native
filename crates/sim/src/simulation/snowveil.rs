@@ -217,7 +217,7 @@ impl Simulation {
                 );
                 super::damage_thresholds::observe_damage_event(target, target.health, event_damage);
                 let after = target.health.saturating_sub(event_damage);
-                death_healing::commit_health(&mut units, i, after);
+                death_healing::commit_health_from(&mut units, i, after, None);
             }
         }
         let positions: Vec<_> = units.iter().map(|u| u.position).collect();

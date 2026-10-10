@@ -311,7 +311,7 @@ impl Simulation {
             );
         }
         if target.movement_class == MovementClass::Ground
-            && (!p.roots.nonhero_only || !target.classifications.hero)
+            && (!p.roots.nonhero_only || !target.classifications.uses_hero_spell_rules())
             && p.roots
                 .targets
                 .can_target_unit(target.target_movement_class())
@@ -320,7 +320,7 @@ impl Simulation {
                 &mut target.status,
                 p.roots,
                 self.next_tick,
-                target.classifications.hero,
+                target.classifications.uses_hero_spell_rules(),
                 true,
             );
             self.last_ability_casts.push(AbilityCastEvent {

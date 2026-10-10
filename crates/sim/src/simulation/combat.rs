@@ -315,12 +315,13 @@ impl Simulation {
                     let after = unit_health[index]
                         .checked_sub(event_damage)
                         .expect("Pulverize damage overflow");
-                    death_healing::commit_split_health(
+                    death_healing::commit_split_health_from(
                         units,
                         unit_health,
                         Some(positions),
                         index,
                         after,
+                        Some(intent.source_id),
                     );
                 }
                 self.last_ability_casts.push(AbilityCastEvent {
@@ -357,6 +358,7 @@ impl Simulation {
                             building_health,
                         ) =>
                     {
+                        apply_corruption(intent.target, on_hit.corruption, completed_tick, units);
                         let applied = self.apply_damage_to_target(
                             intent.target,
                             WeaponDamageEvent {
@@ -541,9 +543,10 @@ impl Simulation {
                             (
                                 on_hit.stun_duration_ticks,
                                 on_hit.triggered_spell,
-                                on_hit.feedback
+                                on_hit.feedback,
+                                on_hit.corruption
                             ),
-                            (0, None, None),
+                            (0, None, None, None),
                             "ballistic stun/triggered-spell/Feedback passives are unsupported"
                         );
                         let travel_ticks =
@@ -825,6 +828,9 @@ impl Simulation {
                 .flat_map(|grants| grants.passive_effects()),
         ) {
             match effect {
+                PassiveUnitEffect::Corruption(profile) => {
+                    assert!(on_hit.corruption.replace(profile).is_none());
+                }
                 PassiveUnitEffect::Poison(profile) => {
                     assert!(
                         on_hit.poison.replace(profile).is_none(),
@@ -883,7 +889,9 @@ impl Simulation {
                         .checked_add(profile.bonus_damage)
                         .expect("passive attack bonus damage overflowed");
                     let duration = match intent.target {
-                        TargetIndex::Unit(index) if units[index].classifications.hero => {
+                        TargetIndex::Unit(index)
+                            if units[index].classifications.uses_hero_spell_rules() =>
+                        {
                             profile.hero_stun_duration_ticks
                         }
                         _ => profile.stun_duration_ticks,
