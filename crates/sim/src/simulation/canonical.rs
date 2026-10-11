@@ -472,6 +472,55 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                             hash.write_u64(word);
                         }
                     }
+                    NativeAction::Parasite(p) => {
+                        hash.write_u8(19);
+                        for word in p.profile.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                        hash.write_u64(p.source.0);
+                        hash.write_u8(p.owner.0);
+                        hash.write_u8(p.team.0);
+                        hash.write_u64(p.target.0);
+                        hash.write_i32(p.position.x);
+                        hash.write_i32(p.position.y);
+                        hash.write_u8(p.buff_until_tick.is_some() as u8);
+                        hash.write_u64(p.buff_until_tick.unwrap_or(0));
+                    }
+                    NativeAction::TimedLife {
+                        child,
+                        expires_tick,
+                    } => {
+                        hash.write_u8(20);
+                        hash.write_u64(child.0);
+                        hash.write_u64(expires_tick);
+                    }
+                    NativeAction::ImmediateSummonOrder {
+                        source,
+                        ability,
+                        due_tick,
+                        resume_delay_ticks,
+                    } => {
+                        hash.write_u8(17);
+                        hash.write_u64(source.0);
+                        hash.write_u32(ability.0);
+                        hash.write_u64(due_tick);
+                        hash.write_u16(resume_delay_ticks);
+                    }
+                    NativeAction::SummonFamily {
+                        source,
+                        ability,
+                        children,
+                        expires_tick,
+                    } => {
+                        hash.write_u8(18);
+                        hash.write_u64(source.0);
+                        hash.write_u32(ability.0);
+                        hash.write_u64(expires_tick);
+                        hash.write_u64(children.len() as u64);
+                        for child in children {
+                            hash.write_u64(child.0);
+                        }
+                    }
                     NativeAction::ResumeAttack { source, due_tick } => {
                         hash.write_u8(14);
                         hash.write_u64(source.0);
@@ -1875,6 +1924,18 @@ fn hash_action_timing(hash: &mut Fnv64, timing: ActionTimingProfile) {
 }
 
 fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
+    match status.purge {
+        Some(p) => {
+            hash.write_u8(1);
+            for word in p.profile.canonical_words() {
+                hash.write_u64(word);
+            }
+            hash.write_u64(p.applied_tick);
+            hash.write_u64(p.pause_until_tick);
+            hash.write_u64(p.expires_tick);
+        }
+        None => hash.write_u8(0),
+    }
     hash.write_u8(u8::from(status.support_order.is_some()));
     if let Some(order) = status.support_order {
         for id in [order.selected_target, order.order_target] {
@@ -2113,6 +2174,7 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     let count = usize::from(status.movement_modifier_count);
     debug_assert!(count <= MAX_TIMED_MOVEMENT_MODIFIERS);
     for modifier in &status.movement_modifiers[..count] {
+        hash.write_u8(u8::from(modifier.undispellable));
         hash.write_u64(u64::from(modifier.id.0));
         hash.write_i32(i32::from(modifier.percent_delta));
         hash.write_u64(modifier.expires_tick);
@@ -2121,6 +2183,7 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     let count = usize::from(status.attack_speed_modifier_count);
     debug_assert!(count <= MAX_TIMED_ATTACK_SPEED_MODIFIERS);
     for modifier in &status.attack_speed_modifiers[..count] {
+        hash.write_u8(u8::from(modifier.undispellable));
         hash.write_u64(u64::from(modifier.id.0));
         hash.write_i32(i32::from(modifier.percent_delta));
         hash.write_u64(modifier.expires_tick);
@@ -2130,6 +2193,7 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     debug_assert!(count <= MAX_TIMED_ARMOR_MODIFIERS);
     for modifier in &status.armor_modifiers[..count] {
         hash.write_u8(u8::from(modifier.aura_membership));
+        hash.write_u8(u8::from(modifier.undispellable));
         hash.write_u64(u64::from(modifier.id.0));
         if let Some(buff) = modifier.native_buff {
             hash.write_u8(1);
@@ -2363,6 +2427,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
             }
             PassiveUnitEffect::SpikedShell(profile) => {
                 hash.write_u8(25);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
+            PassiveUnitEffect::HardenedSkin(profile) => {
+                hash.write_u8(26);
                 for word in profile.canonical_words() {
                     hash.write_u64(word);
                 }
@@ -2729,6 +2799,12 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             }
         }
         AbilityEffect::Heal(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
+        AbilityEffect::SirenPurge(p) => p.visit_canonical_words(|word| hash.write_u64(word)),
+        AbilityEffect::NativeSummon(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);
             }

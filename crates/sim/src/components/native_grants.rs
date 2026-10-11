@@ -190,7 +190,7 @@ impl NativeAbilityGrants {
         result
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = NativeAbilityGrant> + '_ {
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = NativeAbilityGrant> + '_ {
         self.entries[..usize::from(self.count)]
             .iter()
             .map(|entry| entry.expect("active grant slot"))
@@ -211,12 +211,9 @@ impl NativeAbilityGrants {
             count < MAX_PERMANENT_NATIVE_ABILITIES,
             "native ability grant capacity exhausted"
         );
-        let slot = self
-            .iter()
-            .take_while(|entry| entry.ability < grant.ability)
-            .count();
-        self.entries.copy_within(slot..count, slot + 1);
-        self.entries[slot] = Some(grant);
+        // Native blocks are evaluated in reverse acquisition order. Preserve it
+        // for authoritative behavior and wire continuation; repeated grants do not reorder.
+        self.entries[count] = Some(grant);
         self.count += 1;
         true
     }

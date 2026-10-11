@@ -195,7 +195,7 @@ impl Simulation {
                             team: source.team,
                             origin: AbilitySourceOrigin::Unit(source.position),
                             health: source.health,
-                            stunned_until_tick: source.status.stunned_until_tick,
+                            stunned_until_tick: source.status.action_pause_until_tick(),
                             spellcasting: source.spellcasting.filter(|profile| {
                                 !source.abilities_disabled
                                     && (!source.status.is_casting(self.next_tick)
@@ -274,7 +274,7 @@ impl Simulation {
                         team: source.team,
                         origin: AbilitySourceOrigin::Unit(source.position),
                         health: source.health,
-                        stunned_until_tick: source.status.stunned_until_tick,
+                        stunned_until_tick: source.status.action_pause_until_tick(),
                         spellcasting: source.spellcasting,
                         mana_current: source.mana_current,
                         ability_state: source.ability_state,
@@ -347,6 +347,7 @@ impl Simulation {
                             | AbilityEffect::SpellSteal { .. }
                             | AbilityEffect::Ensnare { .. }
                             | AbilityEffect::ScriptedRoots(_)
+                            | AbilityEffect::SirenPurge(_)
                     ))
                     && !self.ability_target_is_valid(
                         source,
@@ -578,7 +579,11 @@ impl Simulation {
             let mut emit_cast_visual = true;
             match intent.target {
                 AbilityIntentTarget::Unit { index, .. } => {
-                    if let AbilityEffect::ScriptedRoots(p) = intent.ability.effect {
+                    if let AbilityEffect::SirenPurge(p) = intent.ability.effect {
+                        let applied = self.cast_siren_purge(source, index, p, units);
+                        emit_cast_visual = applied > 0;
+                        metrics.effects += applied;
+                    } else if let AbilityEffect::ScriptedRoots(p) = intent.ability.effect {
                         metrics.effects += self.cast_scripted_roots(source, index, p, units);
                     } else if let AbilityEffect::Ensnare {
                         profile,
@@ -1148,56 +1153,65 @@ impl Simulation {
                     }
                 }
                 AbilityIntentTarget::Point { position } => {
-                    let AbilityEffect::ArtilleryBombardment {
-                        min_damage,
-                        max_damage,
-                        speed_per_tick,
-                        splash,
-                        burning_oil,
-                    } = intent.ability.effect
-                    else {
-                        unreachable!("ground point target requires Artillery")
-                    };
-                    let AbilitySourceOrigin::Building(footprint) = source.origin else {
-                        unreachable!("Artillery must originate at a building")
-                    };
-                    let launch_position =
-                        footprint_center_point(footprint, self.config.navigation_cell_size);
-                    let roll = deterministic_random(
-                        self.config.match_seed,
-                        self.next_tick,
-                        source.id,
-                        RANDOM_PURPOSE_ARTILLERY_DAMAGE,
-                        state.cast_sequence,
-                    );
-                    let damage = min_damage
-                        + i32::try_from(roll % u64::try_from(max_damage - min_damage + 1).unwrap())
-                            .unwrap();
-                    let impact_tick = self.next_tick
-                        + projectile_travel_ticks(
-                            launch_position.distance_sq(position),
+                    if let AbilityEffect::NativeSummon(p) = intent.ability.effect {
+                        let AbilitySourceIndex::Unit(index) = source.source else {
+                            unreachable!()
+                        };
+                        metrics.effects += self.cast_native_summon(index, p, units);
+                    } else {
+                        let AbilityEffect::ArtilleryBombardment {
+                            min_damage,
+                            max_damage,
                             speed_per_tick,
+                            splash,
+                            burning_oil,
+                        } = intent.ability.effect
+                        else {
+                            unreachable!("ground point target requires Artillery")
+                        };
+                        let AbilitySourceOrigin::Building(footprint) = source.origin else {
+                            unreachable!("Artillery must originate at a building")
+                        };
+                        let launch_position =
+                            footprint_center_point(footprint, self.config.navigation_cell_size);
+                        let roll = deterministic_random(
+                            self.config.match_seed,
+                            self.next_tick,
+                            source.id,
+                            RANDOM_PURPOSE_ARTILLERY_DAMAGE,
+                            state.cast_sequence,
                         );
-                    let projectile_id = self.allocate_id();
-                    self.world.spawn((
-                        projectile_id,
-                        BallisticProjectile {
-                            source: source.id,
-                            source_team: source.team,
-                            target_mask: AttackTargetMask::ALL,
-                            damage,
-                            burning_oil: Some(burning_oil),
-                            splash_falloff: Some(splash),
-                            frost: None,
-                            damage_type: DamageType::Siege,
-                            launch_position,
-                            destination: position,
-                            impact_radius: splash.outer_radius,
-                            launch_tick: self.next_tick,
-                            impact_tick,
-                        },
-                    ));
-                    metrics.effects += 1;
+                        let damage = min_damage
+                            + i32::try_from(
+                                roll % u64::try_from(max_damage - min_damage + 1).unwrap(),
+                            )
+                            .unwrap();
+                        let impact_tick = self.next_tick
+                            + projectile_travel_ticks(
+                                launch_position.distance_sq(position),
+                                speed_per_tick,
+                            );
+                        let projectile_id = self.allocate_id();
+                        self.world.spawn((
+                            projectile_id,
+                            BallisticProjectile {
+                                source: source.id,
+                                source_team: source.team,
+                                target_mask: AttackTargetMask::ALL,
+                                damage,
+                                burning_oil: Some(burning_oil),
+                                splash_falloff: Some(splash),
+                                frost: None,
+                                damage_type: DamageType::Siege,
+                                launch_position,
+                                destination: position,
+                                impact_radius: splash.outer_radius,
+                                launch_tick: self.next_tick,
+                                impact_tick,
+                            },
+                        ));
+                        metrics.effects += 1;
+                    }
                 }
             }
             let resurrection = match intent.ability.effect {
@@ -1251,6 +1265,7 @@ impl Simulation {
                 self.last_ability_casts.push(AbilityCastEvent {
                     source: intent.source_id,
                     ability: match intent.ability.effect {
+                        AbilityEffect::SirenPurge(p) => p.child.ability,
                         AbilityEffect::AreaStun { ability, .. }
                         | AbilityEffect::AreaDebuff { ability, .. }
                         | AbilityEffect::FrostNova { ability, .. } => ability,
@@ -1451,6 +1466,7 @@ impl Simulation {
                 UnitSpawn::from_template(team, position, definition.template),
                 definition,
             );
+            self.rebind_native_summon_families(corpse.source_unit, unit);
             let entity = self
                 .world
                 .iter_entities()
@@ -1501,7 +1517,20 @@ impl Simulation {
 
         let mut candidate_checks = 0usize;
         let target = match spellcasting.ability.target_policy {
-            AbilityTargetPolicy::ScriptedController => None,
+            AbilityTargetPolicy::ScriptedController => {
+                if state.manual_cast_requested
+                    && matches!(spellcasting.ability.effect, AbilityEffect::NativeSummon(_))
+                {
+                    match source.origin {
+                        AbilitySourceOrigin::Unit(position) => {
+                            Some(AbilityIntentTarget::Point { position })
+                        }
+                        _ => None,
+                    }
+                } else {
+                    None
+                }
+            }
             AbilityTargetPolicy::NativeBuildingSpellTrigger => self.native_building_trigger_target(
                 source,
                 spellcasting.ability,
@@ -1744,6 +1773,7 @@ impl Simulation {
                 *candidate_checks += 1;
                 let candidate = &units[unit_index];
                 if candidate.health <= 0
+                    || (matches!(ability.effect, AbilityEffect::SirenPurge(p) if !super::native_summons::purge_primary_eligible(candidate, source.team, p, self.next_tick)))
                     || (matches!(ability.effect, AbilityEffect::ScriptedRoots(p) if !super::scripted_roots::primary_eligible(candidate, source.team, p, self.next_tick)))
                     || (matches!(
                         ability.effect,
@@ -2168,6 +2198,7 @@ impl Simulation {
                 let target = &units[index];
                 target.id == id
                     && target.health > 0
+                    && !matches!(ability.effect, AbilityEffect::SirenPurge(p) if !super::native_summons::purge_primary_eligible(target, source.team, p, self.next_tick))
                     && !matches!(ability.effect, AbilityEffect::ScriptedRoots(p) if !super::scripted_roots::primary_eligible(target, source.team, p, self.next_tick))
                     && match ability.target_policy {
                         AbilityTargetPolicy::FlyingEnemyUnit
@@ -2384,6 +2415,8 @@ impl Simulation {
             }
             AbilityIntentTarget::Point { .. } => {
                 ability.target_policy == AbilityTargetPolicy::RandomEnemyBasePoint
+                    || (ability.target_policy == AbilityTargetPolicy::ScriptedController
+                        && matches!(ability.effect, AbilityEffect::NativeSummon(_)))
             }
         }
     }

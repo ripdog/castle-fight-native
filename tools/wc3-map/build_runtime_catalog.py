@@ -282,7 +282,8 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
     bounce_fields: dict[str, dict[str, str]] = {}
     line_fields: dict[str, dict[str, str]] = {}
     corpse_fields: dict[str, dict[str, str]] = {}
-    death_spawn_bodies: set[str] = set()
+    native_summon_bodies: set[str] = set()
+    native_parasite_bodies: set[str] = set()
     splash_homing_fields: dict[str, dict[str, str]] = {}
     objects: dict[str, dict[str, Any]] = {}
     far_sight: dict[str, dict[str, int]] = {}
@@ -293,7 +294,12 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
                 body = json.loads(row["recovered_value_json"])
                 if not isinstance(body, str) or len(body) != 4:
                     raise SystemExit("native death spawn requires one resolved child identity")
-                death_spawn_bodies.add(body)
+                native_summon_bodies.add(body)
+            if row["category"] == "abilities" and row["base_rawcode"] in {"AOsf", "ACpa"} and row["level"] == "1" and row["source_field"].lower() == "unitid1":
+                body = json.loads(row["recovered_value_json"])
+                if not isinstance(body, str) or len(body) != 4:
+                    raise SystemExit("native Feral Spirit requires one resolved summon body")
+                (native_parasite_bodies if row["base_rawcode"] == "ACpa" else native_summon_bodies).add(body)
             if row["category"] == "units" and row["field_id"] in {"ua1w", "umh1"}:
                 splash_homing_fields.setdefault(row["rawcode"], {})[row["field_id"]] = row["recovered_value_json"].strip('"')
             if row["category"] == "units" and row["field_id"] in {"udea", "udtm"}:
@@ -429,15 +435,17 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
     air_bonuses = project_air_bonus(list(csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree,
         "resolved/production-unit-special-mechanics.tsv").decode()), delimiter="\t")), functions)
     return {
-        "schema_version": 9,
+        "schema_version": 10,
         "air_attack_bonuses": air_bonuses,
         "air_attack_bonuses_source": {"git_tree": git_tree, "path": "resolved/production-unit-special-mechanics.tsv",
             "functions": ["hL", "shouldApplyRiptideAirBonus", "addRiptideAirDamageBonus", "DamageListener_addListener_RiptideAttack_onEvent_addListener_RiptideAttack"]},
         "homing_splash_rawcodes": [rawcode for rawcode, fields in sorted(splash_homing_fields.items())
             if fields.get("ua1w") == "msplash" and fields.get("umh1") == "1"],
-        "death_spawn_bodies": [
+        # Original base parents can reference unmodified vanilla bodies absent from this
+        # retained map. Only its resolved body objects have authoritative corpse evidence.
+        "native_summon_bodies": [
             _summon_body_corpse(rawcode, corpse_fields[rawcode], misc_values, simulation_hz)
-            for rawcode in sorted(death_spawn_bodies)
+            for rawcode in sorted(native_summon_bodies | (native_parasite_bodies & corpse_fields.keys()))
         ],
         "production_handoffs": handoffs,
         "fog_rules": {

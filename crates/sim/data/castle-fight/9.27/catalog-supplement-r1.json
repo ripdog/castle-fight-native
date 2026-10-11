@@ -1,5 +1,5 @@
 {
-  "schema_version": 9,
+  "schema_version": 10,
   "air_attack_bonuses": [
     {
       "rawcode": "n03U",
@@ -27,9 +27,21 @@
     "n01R",
     "u000"
   ],
-  "death_spawn_bodies": [
+  "native_summon_bodies": [
+    {
+      "rawcode": "e00D",
+      "does_decay": true,
+      "decay_start_ticks": 95,
+      "lifetime_ticks": 905
+    },
     {
       "rawcode": "n00T",
+      "does_decay": true,
+      "decay_start_ticks": 90,
+      "lifetime_ticks": 900
+    },
+    {
+      "rawcode": "n00W",
       "does_decay": true,
       "decay_start_ticks": 90,
       "lifetime_ticks": 900
@@ -51,6 +63,12 @@
       "does_decay": true,
       "decay_start_ticks": 70,
       "lifetime_ticks": 880
+    },
+    {
+      "rawcode": "nfbr",
+      "does_decay": true,
+      "decay_start_ticks": 30,
+      "lifetime_ticks": 840
     }
   ],
   "production_handoffs": [

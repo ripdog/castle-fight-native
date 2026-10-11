@@ -320,11 +320,16 @@ fn repeated_permanent_grants_do_not_stack_and_recover_independently_of_their_sou
 }
 
 #[test]
-fn identity_scoped_grants_share_native_life_with_other_casts_and_canonicalize_inventory_order() {
+fn identity_scoped_grants_share_native_life_and_preserve_acquisition_order() {
     let grants = profile().always;
     let forward = NativeAbilityGrants::from_slice(&grants);
     let reverse = NativeAbilityGrants::from_slice(&grants.into_iter().rev().collect::<Vec<_>>());
-    assert_eq!(forward, reverse);
+    assert_ne!(forward, reverse);
+    assert_eq!(forward.iter().collect::<Vec<_>>(), grants);
+    assert_eq!(
+        reverse.iter().collect::<Vec<_>>(),
+        grants.into_iter().rev().collect::<Vec<_>>()
+    );
     let mut sim = simulation(1);
     let target = ally(&mut sim);
     let mut units = sim.snapshot_units();
@@ -467,10 +472,11 @@ fn native_grant_wire_inventory_rejects_duplicate_invalid_and_over_capacity_paylo
         serde_json::from_str::<NativeAbilityGrants>(&encoded).unwrap(),
         NativeAbilityGrants::from_slice(&grants)
     );
-    let reversed = serde_json::to_string(&grants.into_iter().rev().collect::<Vec<_>>()).unwrap();
+    let reverse = grants.into_iter().rev().collect::<Vec<_>>();
+    let reversed = serde_json::to_string(&reverse).unwrap();
     assert_eq!(
         serde_json::from_str::<NativeAbilityGrants>(&reversed).unwrap(),
-        NativeAbilityGrants::from_slice(&grants)
+        NativeAbilityGrants::from_slice(&reverse)
     );
     for invalid in [
         vec![grants[0], grants[0]],

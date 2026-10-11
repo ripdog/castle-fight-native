@@ -116,6 +116,7 @@ fn failed_children_consume_selection_capacity_before_fallback_and_native_range_c
     let mut units = s.snapshot_units();
     units[1].status.armor_modifier_count = 1;
     units[1].status.armor_modifiers[0] = TimedArmorModifier {
+        undispellable: false,
         id: ModifierId(555),
         native_buff: Some(crate::NativeBuffIdentity {
             rawcode: 100,

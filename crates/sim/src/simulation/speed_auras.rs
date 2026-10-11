@@ -85,6 +85,7 @@ impl Simulation {
                 apply_timed_armor_modifier(
                     &mut target.status,
                     TimedArmorModifier {
+                        undispellable: false,
                         aura_membership: true,
                         id,
                         native_buff: Some(crate::NativeBuffIdentity {

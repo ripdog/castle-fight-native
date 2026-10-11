@@ -125,6 +125,7 @@ fn refresh_status(
         apply_timed_armor_modifier(
             status,
             TimedArmorModifier {
+                undispellable: false,
                 id,
                 native_buff: Some(crate::NativeBuffIdentity {
                     rawcode: representative.profile.buff_rawcode,

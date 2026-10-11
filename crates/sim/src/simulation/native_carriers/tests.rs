@@ -60,6 +60,7 @@ fn status(sim: &mut Simulation, id: SimId) {
     apply_timed_armor_modifier(
         &mut s,
         TimedArmorModifier {
+            undispellable: false,
             id: ModifierId(900),
             armor_bonus_per_100: 100,
             expires_tick: tick + 1000,
@@ -450,6 +451,7 @@ fn permanent_ability_removal_is_exact_and_native_buff_identity_is_not_a_grant() 
         apply_timed_armor_modifier(
             &mut s,
             TimedArmorModifier {
+                undispellable: false,
                 id,
                 armor_bonus_per_100: 100,
                 expires_tick: u64::MAX,
@@ -537,6 +539,7 @@ fn carrier_rejects_allies_structures_immunity_and_invisibility_until_revealed() 
     apply_timed_armor_modifier(
         &mut status,
         TimedArmorModifier {
+            undispellable: false,
             id: ModifierId(815),
             revealed_to: Some(Team(0)),
             expires_tick: 1000,

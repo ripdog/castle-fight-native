@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r105";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r106";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 60;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 61;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -290,6 +290,17 @@ impl CastleFightContentBundle {
                     })
             })
             .or_else(|| {
+                if self.map_version == MapVersion::CASTLE_FIGHT_9_27
+                    && extracted_content_927()
+                        .native_noncombat_summons
+                        .contains(&rawcode)
+                {
+                    return Some(ContentIdentity {
+                        map_version: self.map_version,
+                        rawcode,
+                        name: extracted_content_927().units[&rawcode].name,
+                    });
+                }
                 (rawcode == u32::from_be_bytes(*b"hcas")).then_some(ContentIdentity {
                     map_version: self.map_version,
                     rawcode,
@@ -1845,6 +1856,21 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A02Q") => {
+            0x4000_016c
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A02R") => {
+            0x4000_016d
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A02S") => {
+            0x4000_016b
+        }
+        (NativeEffectSourceKind::AbilityEffect, v) if v == u32::from_be_bytes(*b"A02T") => {
+            0x4000_016a
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A02U") => {
+            0x4000_0169
+        }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A01C") => {
             0x4000_0167
         }
@@ -3173,6 +3199,12 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
                     hash.write_u64(word);
                 }
             }
+            PassiveUnitEffect::HardenedSkin(profile) => {
+                hash.write_u8(26);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
             PassiveUnitEffect::Corruption(profile) => {
                 hash.write_u8(24);
                 for word in profile.canonical_words() {
@@ -3407,6 +3439,12 @@ fn hash_automatic_ability_profile(hash: &mut ContentHash64, ability: AutomaticAb
             }
         }
         AbilityEffect::Heal(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
+        AbilityEffect::SirenPurge(p) => p.visit_canonical_words(|word| hash.write_u64(word)),
+        AbilityEffect::NativeSummon(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);
             }
@@ -3842,6 +3880,8 @@ struct ExtractedBuilding927 {
 
 #[derive(Debug, Clone, Copy)]
 struct ExtractedUnit927 {
+    native_health: Option<i32>,
+    native_armor: Option<ArmorProfile>,
     action_timing: ActionTimingProfile,
     mana_maximum: i32,
     native_mana: Option<ManaProfile>,
@@ -3965,7 +4005,7 @@ struct CatalogSupplement927 {
     fog_rules: CatalogFogRules927,
     spell_reveals: Vec<CatalogSpellReveal927>,
     production_handoffs: Vec<CatalogProductionHandoff927>,
-    death_spawn_bodies: Vec<CatalogSummonBodyCorpse927>,
+    native_summon_bodies: Vec<CatalogSummonBodyCorpse927>,
     homing_splash_rawcodes: Vec<String>,
     air_attack_bonuses: Vec<CatalogAirAttackBonus927>,
 }
@@ -4189,6 +4229,7 @@ struct CatalogLineWeapon927 {
 
 #[derive(Debug)]
 struct ExtractedContent927 {
+    native_noncombat_summons: std::collections::BTreeSet<u32>,
     buildings: BTreeMap<u32, ExtractedBuilding927>,
     units: BTreeMap<u32, ExtractedUnit927>,
     unit_abilities: BTreeMap<u32, Vec<u32>>,
@@ -4297,7 +4338,7 @@ impl ExtractedContent927 {
             .into_iter()
             .map(|weapon| (parse_rawcode(&weapon.rawcode), weapon))
             .collect();
-        let death_spawn_bodies = supplement.death_spawn_bodies;
+        let native_summon_bodies = supplement.native_summon_bodies;
         let air_attack_bonuses = supplement
             .air_attack_bonuses
             .into_iter()
@@ -4458,6 +4499,11 @@ impl ExtractedContent927 {
                 rawcode,
             );
             let row = ExtractedUnit927 {
+                native_health: parse_optional_i32_927(columns[11])?,
+                native_armor: parse_optional_i32_927(columns[17])?.map(|amount| ArmorProfile {
+                    armor_type: parse_armor_type_927(columns[18]).expect("native armor type"),
+                    armor_points: amount.try_into().expect("native armor amount"),
+                }),
                 mana_maximum: parse_optional_i32_927(columns[14])?.unwrap_or(0),
                 native_mana: if !charge_controls_mana
                     && parse_optional_i32_927(columns[14])?.unwrap_or(0) > 0
@@ -4744,26 +4790,34 @@ impl ExtractedContent927 {
         // Native death-spawn children are outside the trained-unit report. Their own
         // retained unit fields/protected values supply weapons; the generated native
         // closure supplies corpse flags and versioned global decay defaults.
-        for body in death_spawn_bodies {
+        let mut native_noncombat_summons = std::collections::BTreeSet::new();
+        for body in native_summon_bodies {
             let rawcode = parse_rawcode(&body.rawcode);
             let unit = &units[&rawcode];
-            let protected = &protected_stats[&rawcode];
-            primary_attacks
-                .entry(rawcode)
-                .or_insert_with(|| ExtractedAttack927 {
-                    damage_type: unit.attack1_damage_type.expect("summon weapon type"),
-                    weapon_kind: unit.attack1_weapon_kind.expect("summon weapon delivery"),
-                    targets: unit.attack1_targets.expect("summon weapon mask"),
-                    damage: protected.attack1_damage.or(unit.attack1_damage),
-                    range: protected
-                        .attack1_range
-                        .or(unit.attack1_range)
-                        .expect("summon weapon range"),
-                    cooldown_ticks: protected
-                        .attack1_cooldown_ticks
-                        .or(unit.attack1_cooldown_ticks)
-                        .expect("summon weapon cadence"),
-                });
+            let protected = protected_stats.get(&rawcode);
+            if unit.attack1_damage_type.is_some() {
+                primary_attacks
+                    .entry(rawcode)
+                    .or_insert_with(|| ExtractedAttack927 {
+                        damage_type: unit.attack1_damage_type.expect("summon weapon type"),
+                        weapon_kind: unit.attack1_weapon_kind.expect("summon weapon delivery"),
+                        targets: unit.attack1_targets.expect("summon weapon mask"),
+                        damage: protected
+                            .and_then(|p| p.attack1_damage)
+                            .or(unit.attack1_damage),
+                        range: protected
+                            .and_then(|p| p.attack1_range)
+                            .or(unit.attack1_range)
+                            .expect("summon weapon range"),
+                        cooldown_ticks: protected
+                            .and_then(|p| p.attack1_cooldown_ticks)
+                            .or(unit.attack1_cooldown_ticks)
+                            .expect("summon weapon cadence"),
+                    });
+            }
+            if unit.attack1_damage_type.is_none() {
+                native_noncombat_summons.insert(rawcode);
+            }
             corpses.entry(rawcode).or_insert(ExtractedCorpse927 {
                 does_decay: body.does_decay,
                 decay_start_ticks: body.decay_start_ticks,
@@ -4946,6 +5000,7 @@ impl ExtractedContent927 {
             .map_err(|error| format!("invalid 9.27 war3mapMisc.txt damage table: {error}"))?;
 
         Ok(Self {
+            native_noncombat_summons,
             buildings,
             units,
             unit_abilities,
@@ -4977,7 +5032,7 @@ impl ExtractedContent927 {
 fn catalog_supplement_927() -> Result<CatalogSupplement927, String> {
     let supplement: CatalogSupplement927 = serde_json::from_str(CATALOG_SUPPLEMENT_927_R1_JSON)
         .map_err(|error| format!("invalid 9.27 catalog supplement: {error}"))?;
-    if supplement.schema_version != 9 {
+    if supplement.schema_version != 10 {
         return Err(format!(
             "unsupported 9.27 catalog supplement schema {}",
             supplement.schema_version
@@ -6125,6 +6180,69 @@ pub(crate) fn native_mana_profile_for_version(
 pub(crate) fn building_has_production(version: MapVersion, rawcode: u32) -> bool {
     version == MapVersion::CASTLE_FIGHT_9_27
         && extracted_content_927().production.contains_key(&rawcode)
+}
+
+/// Original noncombat native summon bodies consume retained unit fields, without setupUnit.
+pub(crate) fn native_noncombat_summon_for_version(
+    rawcode: u32,
+    version: MapVersion,
+) -> ResolvedUnitDefinition {
+    assert_eq!(version, MapVersion::CASTLE_FIGHT_9_27);
+    let content = extracted_content_927();
+    assert!(content.native_noncombat_summons.contains(&rawcode));
+    let unit = &content.units[&rawcode];
+    assert!(unit.attack1_damage_type.is_none() && !unit.sapper);
+    let corpse = content
+        .corpses
+        .get(&rawcode)
+        .filter(|c| c.does_decay)
+        .map(|c| CorpseProfile {
+            definition: CorpseDefinitionId(rawcode),
+            decay_start_ticks: c.decay_start_ticks,
+            lifetime_ticks: c.lifetime_ticks,
+        });
+    ResolvedUnitDefinition {
+        template: UnitTemplate {
+            health: unit.native_health.expect("native body health"),
+            // Inert engine weapon slot; the retained object has both weapons disabled.
+            attack: AttackProfile {
+                delivery: AttackDelivery::Melee,
+                damage: 0,
+                range: 0,
+                acquisition_range: 0,
+                cooldown_ticks: 1,
+            },
+            movement: MovementProfile {
+                speed_per_tick: unit.move_speed_per_tick.expect("native body movement"),
+            },
+        },
+        properties: UnitGameplayProperties {
+            content: Some(ContentIdentity {
+                map_version: version,
+                rawcode,
+                name: unit.name,
+            }),
+            action_timing: unit.action_timing,
+            armor: unit.native_armor.expect("native body armor"),
+            health_regen_per_second_per_10k: unit
+                .health_regen_per_second_per_10k
+                .unwrap_or(0)
+                .try_into()
+                .unwrap(),
+            classifications: UnitClassifications {
+                summoned: true,
+                ..unit.target_classifications
+            },
+            mechanical: unit.mechanical,
+            movement_class: unit.movement_class.expect("native body movement class"),
+            collision_radius: Some(unit.collision_radius),
+            corpse,
+            attack_targets: AttackTargetMask::from_capabilities(false, false, false),
+            ..Default::default()
+        },
+        spellcasting: None,
+        additional_abilities: None,
+    }
 }
 
 #[cfg(test)]

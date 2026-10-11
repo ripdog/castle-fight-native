@@ -4,6 +4,217 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A02Q",
+      "unit_rawcode": "n00W",
+      "kind": "hardened-skin",
+      "profile": {
+        "ability": 1093677649,
+        "effect": {
+          "HardenedSkin": {
+            "chance_per_10k": 5000,
+            "minimum_damage": 5,
+            "ignored_damage": 35
+          }
+        }
+      },
+      "provenance": {
+        "ability": "A02Q",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A02R",
+      "unit_rawcode": "n00W",
+      "kind": "critical-strike",
+      "chance_per_10k": 1000,
+      "damage_multiplier_per_10k": 30000,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A02R",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A02S",
+      "unit_rawcode": "n00S",
+      "spellcasting": {
+        "mana": {
+          "maximum": 300,
+          "starting": 225,
+          "regen_per_tick_per_10k": 2147503648
+        },
+        "ability": {
+          "id": 1093677651,
+          "mana_cost": 70,
+          "cooldown_ticks": 1800,
+          "range": 819200,
+          "target_policy": "ScriptedController",
+          "effect": {
+            "NativeSummon": {
+              "map_version": {
+                "major": 9,
+                "minor": 27
+              },
+              "ability": 1093677651,
+              "body_rawcode": 1848651863,
+              "count": 2,
+              "duration_ticks": 1350,
+              "forward_distance": 204800
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 20000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "functions": [
+          "CallbackSingle_doAfter_RaceNagaAbilities_call_doAfter_RaceNagaAbilities",
+          "CallbackSingle_doAfter_doAfter_RaceNagaAbilities_call_doAfter_doAfter_RaceNagaAbilities",
+          "UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceNagaAbilities_cast_registerUnitSpellWithTargetOrder_RaceNagaAbilities"
+        ]
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "ability-effect",
+      "source_key": "A02T",
+      "unit_rawcode": "n00S",
+      "spellcasting": {
+        "mana": {
+          "maximum": 300,
+          "starting": 225,
+          "regen_per_tick_per_10k": 2147503648
+        },
+        "ability": {
+          "id": 1093677652,
+          "mana_cost": 0,
+          "cooldown_ticks": 0,
+          "range": 1024000,
+          "target_policy": "ScriptedController",
+          "effect": {
+            "SirenPurge": {
+              "child": {
+                "ability": 1093677652,
+                "range": 1024000,
+                "targets": 3,
+                "movement_factor_per_10k": 50000,
+                "minimum_speed_per_tick": 1707,
+                "duration_ticks": 300,
+                "hero_duration_ticks": 90,
+                "pause_ticks": 30,
+                "hero_pause_ticks": 0,
+                "summoned_damage": 150
+              },
+              "summon_ability": 1093677651,
+              "summon_delay_ticks": 30,
+              "resume_delay_ticks": 30,
+              "parent_nonhero_only": true,
+              "parent": {
+                "buff_rawcode": 1110454585,
+                "map_version": {
+                  "major": 9,
+                  "minor": 27
+                },
+                "speed_per_tick": 64853,
+                "duration_ticks": 1,
+                "hero_duration_ticks": 1,
+                "body_rawcode": 1852203634,
+                "count": 1,
+                "body_duration_ticks": 1
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 20000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "functions": [
+          "CallbackSingle_doAfter_RaceNagaAbilities_call_doAfter_RaceNagaAbilities",
+          "CallbackSingle_doAfter_doAfter_RaceNagaAbilities_call_doAfter_doAfter_RaceNagaAbilities",
+          "UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceNagaAbilities_cast_registerUnitSpellWithTargetOrder_RaceNagaAbilities"
+        ]
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A02U",
+      "unit_rawcode": "n00S",
+      "spellcasting": {
+        "mana": {
+          "maximum": 300,
+          "starting": 225,
+          "regen_per_tick_per_10k": 2147503648
+        },
+        "ability": {
+          "id": 1093677653,
+          "mana_cost": 50,
+          "cooldown_ticks": 300,
+          "range": 819200,
+          "target_policy": "RandomGroundEnemyUnit",
+          "effect": {
+            "SirenPurge": {
+              "child": {
+                "ability": 1093677652,
+                "range": 1024000,
+                "targets": 3,
+                "movement_factor_per_10k": 50000,
+                "minimum_speed_per_tick": 1707,
+                "duration_ticks": 300,
+                "hero_duration_ticks": 90,
+                "pause_ticks": 30,
+                "hero_pause_ticks": 0,
+                "summoned_damage": 150
+              },
+              "summon_ability": 1093677651,
+              "summon_delay_ticks": 30,
+              "resume_delay_ticks": 30,
+              "parent_nonhero_only": true,
+              "parent": {
+                "buff_rawcode": 1110454585,
+                "map_version": {
+                  "major": 9,
+                  "minor": 27
+                },
+                "speed_per_tick": 64853,
+                "duration_ticks": 1,
+                "hero_duration_ticks": 1,
+                "body_rawcode": 1852203634,
+                "count": 1,
+                "body_duration_ticks": 1
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 20000,
+      "effect_ability_rawcode": "A02T",
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "functions": [
+          "CallbackSingle_doAfter_RaceNagaAbilities_call_doAfter_RaceNagaAbilities",
+          "CallbackSingle_doAfter_doAfter_RaceNagaAbilities_call_doAfter_doAfter_RaceNagaAbilities",
+          "UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceNagaAbilities_cast_registerUnitSpellWithTargetOrder_RaceNagaAbilities"
+        ]
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A01C",
       "unit_rawcode": "n007",
       "kind": "spiked-shell",

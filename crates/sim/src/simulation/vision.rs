@@ -459,6 +459,7 @@ mod tests {
         apply_timed_armor_modifier(
             &mut sim.world.get_mut::<StatusState>(id).unwrap(),
             TimedArmorModifier {
+                undispellable: false,
                 id: ModifierId(900),
                 expires_tick: 3,
                 revealed_to: Some(Team(0)),

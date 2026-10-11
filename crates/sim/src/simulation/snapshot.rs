@@ -6,7 +6,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 71;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 72;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -1394,6 +1394,7 @@ mod tests {
             };
             let mut status = source_entity.get_mut::<StatusState>().unwrap();
             status.movement_modifiers[0] = TimedMovementModifier {
+                undispellable: false,
                 id: ModifierId(7),
                 percent_delta: -25,
                 expires_tick: 77,

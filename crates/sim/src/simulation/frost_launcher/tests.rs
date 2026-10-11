@@ -144,6 +144,7 @@ fn global_structure_selector_distinguishes_script_exclusions_from_native_attack_
     apply_timed_armor_modifier(
         &mut s,
         TimedArmorModifier {
+            undispellable: false,
             id: ModifierId(p.excluded_buff),
             expires_tick: 1000,
             ..Default::default()

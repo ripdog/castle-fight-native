@@ -165,7 +165,10 @@ pub(crate) struct HailstoneState {
 pub(crate) enum NativeAction {
     Starfall(crate::building_mechanics::StarfallState),
     SilverGlade(crate::building_mechanics::SilverGladeState),
-    ResumeAttack { source: SimId, due_tick: u64 },
+    ResumeAttack {
+        source: SimId,
+        due_tick: u64,
+    },
     SupportOrders(SupportOrderQueue),
     BuildingDamageProc(crate::building_mechanics::BuildingDamageProcState),
     Weather(crate::building_mechanics::WeatherState),
@@ -180,6 +183,23 @@ pub(crate) enum NativeAction {
     HealingWave(HealingWaveState),
     Bolt(NativeBoltState),
     Hailstone(HailstoneState),
+    ImmediateSummonOrder {
+        source: SimId,
+        ability: AbilityId,
+        due_tick: u64,
+        resume_delay_ticks: u16,
+    },
+    Parasite(super::native_summons::NativeParasiteState),
+    TimedLife {
+        child: SimId,
+        expires_tick: u64,
+    },
+    SummonFamily {
+        source: SimId,
+        ability: AbilityId,
+        children: Vec<SimId>,
+        expires_tick: u64,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

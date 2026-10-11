@@ -27,6 +27,7 @@ pub(super) fn activate_kill_berserk(source: &mut UnitSnapshot, tick: u64) {
         apply_timed_armor_modifier(
             &mut source.status,
             TimedArmorModifier {
+                undispellable: false,
                 aura_membership: false,
                 id,
                 damage_taken_bonus_per_10k: profile.damage_taken_bonus_per_10k,

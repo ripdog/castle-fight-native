@@ -14,6 +14,11 @@ pub(crate) use master_projectiles::{
     MasterFan, MasterMinion, MasterMover, MasterParasite, MasterProjectileState,
 };
 pub use master_projectiles::{MasterMoverProfile, MasterProjectileProfile, NativeNovaProfile};
+mod native_summons;
+pub(crate) use native_summons::NativeParasiteState;
+pub use native_summons::{
+    NativeParasiteProfile, NativeSummonProfile, PurgeProfile, PurgeState, SirenPurgeProfile,
+};
 mod native_actions;
 pub(crate) use native_actions::{
     AcidBombMissileState, AuraCarrierState, ConeWaveState, EnsnareMissileState, HailstoneState,
@@ -1010,6 +1015,7 @@ pub enum PassiveUnitEffect {
     FrostAttack(FrostAttackEffectProfile),
     Pulverize(PulverizeEffectProfile),
     SpikedShell(SpikedShellProfile),
+    HardenedSkin(NativeAbilityGrant),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1134,7 +1140,7 @@ impl PassiveUnitEffects {
         }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = PassiveUnitEffect> + '_ {
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = PassiveUnitEffect> + '_ {
         self.effects[..usize::from(self.count)]
             .iter()
             .map(|effect| effect.expect("active passive effect slot must be populated"))
@@ -1774,6 +1780,8 @@ pub enum AbilityEffect {
         splash: SplashFalloffProfile,
         burning_oil: BurningOilEffectProfile,
     },
+    SirenPurge(SirenPurgeProfile),
+    NativeSummon(NativeSummonProfile),
 }
 
 impl AbilityEffect {
@@ -1786,6 +1794,8 @@ impl AbilityEffect {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::SirenPurge(_) => 45,
+            Self::NativeSummon(_) => 46,
             Self::Heal(_) => 41,
             Self::SilverGlade(_) => 42,
             Self::Wilderness(_) => 43,
@@ -1870,6 +1880,7 @@ pub struct AutomaticAbilityState {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimedMovementModifier {
+    pub undispellable: bool,
     pub id: ModifierId,
     pub percent_delta: i16,
     pub expires_tick: u64,
@@ -1877,6 +1888,7 @@ pub struct TimedMovementModifier {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimedAttackSpeedModifier {
+    pub undispellable: bool,
     pub id: ModifierId,
     pub percent_delta: i16,
     pub expires_tick: u64,
@@ -1884,6 +1896,7 @@ pub struct TimedAttackSpeedModifier {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimedArmorModifier {
+    pub undispellable: bool,
     /// Last completed tick’s intrinsic aura membership, visible until the next resample.
     pub aura_membership: bool,
     pub id: ModifierId,
@@ -2004,6 +2017,7 @@ pub struct StatusState {
     pub illusion: Option<IllusionState>,
     pub damage_charge: Option<DamageChargeState>,
     pub spheres: [Option<SphereAttachmentState>; 4],
+    pub purge: Option<PurgeState>,
     pub acid_bomb: Option<AcidBombStatus>,
     pub poison: Option<PoisonStatus>,
     pub damage_threshold: DamageThresholdState,
@@ -2085,12 +2099,24 @@ impl StatusState {
 
     #[must_use]
     pub const fn attacks_disabled(self, tick: u64) -> bool {
-        tick < self.stunned_until_tick || tick < self.rooted_until_tick
+        tick < self.action_pause_until_tick() || tick < self.rooted_until_tick
     }
 
     #[must_use]
     pub const fn is_stunned(self, tick: u64) -> bool {
-        tick < self.stunned_until_tick
+        tick < self.action_pause_until_tick()
+    }
+
+    pub const fn action_pause_until_tick(self) -> u64 {
+        let purge = match self.purge {
+            Some(p) => p.pause_until_tick,
+            None => 0,
+        };
+        if purge > self.stunned_until_tick {
+            purge
+        } else {
+            self.stunned_until_tick
+        }
     }
 
     #[must_use]

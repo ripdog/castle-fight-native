@@ -794,7 +794,7 @@ impl Simulation {
                                 .targets
                                 .can_target_unit(units[index].target_movement_class())
                         {
-                            apply_frost_attack(&mut units[index], profile, completed_tick);
+                            apply_native_frost_attack(&mut units[index], profile, completed_tick);
                         }
                     }
                 }

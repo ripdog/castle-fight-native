@@ -19,6 +19,7 @@ fn profile() -> SpellcastingProfile {
 
 fn buff(positive: bool) -> TimedArmorModifier {
     TimedArmorModifier {
+        undispellable: false,
         aura_membership: false,
         id: ModifierId(82),
         native_buff: Some(NativeBuffIdentity {
@@ -67,6 +68,7 @@ fn positive_transfer_moves_one_complete_bundle_preserves_expiry_and_leaves_intri
     grant(&mut sim, donor, buff(true));
     grant(&mut sim, already_buffed, buff(true));
     let intrinsic = TimedArmorModifier {
+        undispellable: false,
         aura_membership: false,
         id: ModifierId(80),
         armor_bonus_per_100: 200,

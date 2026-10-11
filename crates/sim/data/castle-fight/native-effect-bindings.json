@@ -1,6 +1,11 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A02Q","implementation":"warcraft-hardened-skin-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A02R","implementation":"warcraft-critical-strike-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A02S","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"ability-effect","source_key":"A02T","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A02U","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A01C","implementation":"warcraft-spiked-shell-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A068","implementation":"warcraft-bash-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A02Y","implementation":"warcraft-sphere-v1","valid_from":"9.27","valid_through":"9.27"},

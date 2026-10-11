@@ -171,6 +171,57 @@ impl Simulation {
                 continue;
             }
             match action {
+                NativeAction::Parasite(state) => self.advance_native_parasite(entity, state, units),
+                NativeAction::TimedLife {
+                    child,
+                    expires_tick,
+                } => {
+                    if self.next_tick >= expires_tick {
+                        self.expire_native_summons(&[child], units);
+                        self.world.despawn(entity);
+                    }
+                }
+                NativeAction::ImmediateSummonOrder {
+                    source,
+                    ability,
+                    due_tick,
+                    resume_delay_ticks,
+                } => {
+                    if self.next_tick >= due_tick {
+                        self.attempt_native_summon_order(
+                            source,
+                            ability,
+                            resume_delay_ticks,
+                            units,
+                        );
+                        self.world.despawn(entity);
+                    }
+                }
+                NativeAction::SummonFamily {
+                    source,
+                    ability,
+                    ref children,
+                    expires_tick,
+                } => {
+                    let source_exists = self.world.iter_entities().any(|e| {
+                        e.get::<SimId>() == Some(&source)
+                            || e.get::<Corpse>().is_some_and(|c| c.source_unit == source)
+                    });
+                    let source_lost_ability = find_unit_index(units, source).is_some_and(|i| {
+                        units[i].abilities_disabled
+                            || !(units[i]
+                                .spellcasting
+                                .is_some_and(|p| p.ability.id == ability)
+                                || self
+                                    .world
+                                    .get::<AdditionalAutomaticAbilities>(units[i].entity)
+                                    .is_some_and(|set| set.get(ability).is_some()))
+                    });
+                    if self.next_tick >= expires_tick || !source_exists || source_lost_ability {
+                        self.expire_native_summons(children, units);
+                        self.world.despawn(entity);
+                    }
+                }
                 NativeAction::ResumeAttack { source, due_tick } => {
                     if self.next_tick >= due_tick {
                         if let Some(i) = find_unit_index(units, source)

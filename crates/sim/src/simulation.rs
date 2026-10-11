@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 78;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 79;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -75,6 +75,7 @@ mod match_rules;
 #[cfg(test)]
 mod match_rules_tests;
 mod mirror_images;
+mod native_summons;
 mod source_damage_runtime;
 mod spiked_shell;
 use match_rules::{PendingRescueStrike, PlayerStrikeState};
@@ -1996,6 +1997,7 @@ impl Simulation {
         );
         self.release_spheres(&mut units);
         self.observe_master_parasite_deaths(&units, &unit_health, &positions);
+        self.observe_native_parasite_deaths(&units, &unit_health, &positions);
         self.emit_death_heal_visuals(&units, &positions);
         let mut deaths = 0;
         let mut corpse_spawns = Vec::new();
@@ -2897,7 +2899,8 @@ impl Simulation {
                 apply_timed_armor_modifier(
                     &mut target.status,
                     TimedArmorModifier {
-                        aura_membership: false,
+                        undispellable: false,
+                        aura_membership: true,
                         id: ModifierId(profile.ability.0),
                         native_buff: None,
                         armor_bonus_per_100: profile.armor_bonus_per_100,
@@ -2993,7 +2996,8 @@ impl Simulation {
                 apply_timed_armor_modifier(
                     &mut status,
                     TimedArmorModifier {
-                        aura_membership: false,
+                        undispellable: false,
+                        aura_membership: true,
                         id: ModifierId(profile.ability.0),
                         armor_bonus_per_100: profile.armor_bonus_per_100,
                         damage_bonus_per_10k: profile.damage_bonus_per_10k,
@@ -4723,6 +4727,12 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                 }
             }
         }
+        AbilityEffect::SirenPurge(p) => {
+            assert!(p.child.range > 0 && p.child.duration_ticks > 0);
+        }
+        AbilityEffect::NativeSummon(p) => {
+            assert!(p.count > 0 && p.duration_ticks > 0);
+        }
         AbilityEffect::BuildingAcidBomb(p) => {
             assert!(p.child.speed_per_tick > 0 && p.child.range > 0 && p.child.radius >= 0);
             assert!(
@@ -6041,7 +6051,7 @@ fn apply_pending_attack_effects(
             .targets
             .can_target_unit(units[index].target_movement_class())
     {
-        apply_frost_attack(&mut units[index], profile, completed_tick);
+        apply_native_frost_attack(&mut units[index], profile, completed_tick);
     }
     if let Some(profile) = effects.feedback
         && !units[index].classifications.spell_immune
@@ -6590,4 +6600,13 @@ fn building_source_query_radius(
                 .expect("building query footprint extent overflow"),
         )
         .expect("building acquisition query radius overflow")
+}
+
+fn apply_native_frost_attack(
+    unit: &mut UnitSnapshot,
+    profile: crate::FrostAttackEffectProfile,
+    tick: u64,
+) {
+    apply_frost_attack(unit, profile, tick);
+    status::mark_modifier_undispellable(&mut unit.status, ModifierId(profile.ability.0));
 }

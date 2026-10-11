@@ -202,39 +202,48 @@ pub(super) fn hardened_skin_after_armor(
     if unit.abilities_disabled || damage <= 0 {
         return damage;
     }
-    let Some(grant) = unit.status.native_grants.iter().find(|g| {
-        matches!(
-            g.effect,
-            crate::NativeAbilityGrantEffect::HardenedSkin { .. }
-        )
-    }) else {
-        return damage;
-    };
-    let crate::NativeAbilityGrantEffect::HardenedSkin {
-        chance_per_10k,
-        ignored_damage,
-        minimum_damage,
-    } = grant.effect
-    else {
-        unreachable!()
-    };
-    let sequence = unit.status.hardened_skin_sequence;
-    unit.status.hardened_skin_sequence = sequence
-        .checked_add(1)
-        .expect("native incoming attack sequence overflow");
-    let rolled = deterministic_random(
-        unit.damage_seed,
-        tick,
-        unit.id,
-        0x4841_5244_534b_494e ^ u64::from(grant.ability.0) ^ source.0,
-        sequence,
-    ) % 10000;
-    if rolled < u64::from(chance_per_10k) {
-        damage
-            .saturating_sub(ignored_damage)
-            .max(minimum_damage)
-            .min(damage)
-    } else {
-        damage
+    let grants =
+        unit.status
+            .native_grants
+            .iter()
+            .rev()
+            .chain(unit.passive_effects.iter().rev().filter_map(|effect| {
+                if let PassiveUnitEffect::HardenedSkin(grant) = effect {
+                    Some(grant)
+                } else {
+                    None
+                }
+            }));
+    let mut sequence = None;
+    for grant in grants {
+        let crate::NativeAbilityGrantEffect::HardenedSkin {
+            chance_per_10k,
+            ignored_damage,
+            minimum_damage,
+        } = grant.effect
+        else {
+            continue;
+        };
+        let sequence = *sequence.get_or_insert_with(|| {
+            let sequence = unit.status.hardened_skin_sequence;
+            unit.status.hardened_skin_sequence = sequence
+                .checked_add(1)
+                .expect("native incoming attack sequence overflow");
+            sequence
+        });
+        let rolled = deterministic_random(
+            unit.damage_seed,
+            tick,
+            unit.id,
+            0x4841_5244_534b_494e ^ u64::from(grant.ability.0) ^ source.0,
+            sequence,
+        ) % 10000;
+        if rolled < u64::from(chance_per_10k) {
+            return damage
+                .saturating_sub(ignored_damage)
+                .max(minimum_damage)
+                .min(damage);
+        }
     }
+    damage
 }

@@ -3494,7 +3494,11 @@ fn prewarm_timed_wc3_effects(
                             duration_ticks,
                             ..
                         } => Some((modifier.0, duration_ticks)),
-                        AbilityEffect::Ensnare { .. }
+                        AbilityEffect::SirenPurge(p) => {
+                            Some((p.child.ability.0, p.child.duration_ticks))
+                        }
+                        AbilityEffect::NativeSummon(_)
+                        | AbilityEffect::Ensnare { .. }
                         | AbilityEffect::SpellSteal { .. }
                         | AbilityEffect::HealingWave(_)
                         | AbilityEffect::SolarStrike { .. }

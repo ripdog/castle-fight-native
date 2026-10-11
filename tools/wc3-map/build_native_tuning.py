@@ -161,6 +161,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     if kind == "wind-walk":
         from project_wind_walk import project
         return project(recipe, fields, unit, protected, mechanics)
+    if kind in {"siren-purge", "feral-spirit"}:
+        from project_naga_unit import project
+        return project(recipe, fields, unit, protected, mechanics)
     if kind == "scripted-roots":
         from project_scripted_roots import project
         return project(recipe, fields, unit, protected, mechanics)
@@ -334,6 +337,12 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         effect["chance_per_10k"] = number("DataA1", 10_000)
     elif kind == "spell-resistance":
         effect["damage_taken_per_10k"] = 10_000 - number("DataB1", 10_000)
+    elif kind == "hardened-skin":
+        if mechanics.get("native_base") != "Assk" or set(fields["targs1"].split(",")) != {"enemy", "ally"} or number("DataD1") != 1 or number("DataE1") != 1:
+            raise ValueError("Hardened Skin requires its native ranged/melee flags and incoming mask")
+        effect["profile"] = {"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
+            "effect": {"HardenedSkin": {"chance_per_10k": number("DataA1", 100),
+                "minimum_damage": number("DataB1"), "ignored_damage": number("DataC1")}}}
     elif kind == "spiked-shell":
         if mechanics.get("native_base") not in {"ANth", "AUts"} or fields["targs1"] != "_":
             raise ValueError("Spiked Shell requires the native intrinsic passive")
@@ -753,7 +762,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         source = recipe["source_key"]
         if recipe["kind"] in {"inner-fire", "spell-steal"} and default_autocast.get(recipe.get("unit_rawcode")) != source:
             raise ValueError("native buff source must retain default-active autocast")
-        spell = spell_mechanics.get(source)
+        spell = spell_mechanics.get("A02U" if recipe["kind"] == "siren-purge" else source)
         if spell is None and recipe["kind"] in {"healing-wave", "solar-strike", "war-stomp", "howl-of-terror", "frost-nova", "ensnare"}:
             matches = [row for row in spell_mechanics.values() if row["unit_rawcode"] == recipe.get("unit_rawcode")
                 and source in spell_semantics[row["ability_rawcode"]]["effect_rawcodes"].split(",")]
@@ -761,6 +770,15 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
                 raise ValueError(f"proxy child {source} needs one semantic parent for its source unit")
             spell = matches[0]
         detail = dict(mechanics.get(recipe.get("unit_rawcode", ""), {}))
+        if recipe["kind"] in {"siren-purge", "feral-spirit"}:
+            parent = "A02U"
+            spell = spell_mechanics[parent]
+            names = [spell["handler_function"], *spell["delayed_callback_functions"].split(",")]
+            detail.update(map_version=dict(zip(["major", "minor"], map(int, release["map_version"].split(".")))),
+                git_tree=tree, naga_functions={name: functions[name] for name in names},
+                purge_fields=abilities["A02T"], purge_base=ability_bases["A02T"],
+                purge_protected=protected["A02T"], parent_fields=abilities[parent])
+
         if recipe["kind"] == "health-scaled-aftershock":
             detail.update(aftershock=aftershocks[recipe["unit_rawcode"]], aftershock_handler=functions["handleSourceDamageEffects"],
                 damage_runtime=functions["code__addAction_DamageRuntime"], sapper_registration=functions["onUnitEnteredMap"],

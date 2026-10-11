@@ -1,6 +1,11 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A02Q","unit_rawcode":"n00W","kind":"hardened-skin"},
+    {"source_kind":"unit-ability","source_key":"A02R","unit_rawcode":"n00W","kind":"critical-strike"},
+    {"source_kind":"unit-ability","source_key":"A02S","unit_rawcode":"n00S","kind":"feral-spirit"},
+    {"source_kind":"ability-effect","source_key":"A02T","unit_rawcode":"n00S","kind":"siren-purge"},
+    {"source_kind":"unit-ability","source_key":"A02U","unit_rawcode":"n00S","kind":"siren-purge"},
     {"source_kind":"unit-ability","source_key":"A01C","unit_rawcode":"n007","kind":"spiked-shell"},
     {"source_kind":"unit-ability","source_key":"A068","unit_rawcode":"n007","kind":"bash"},
     {"source_kind":"unit-ability","source_key":"A02Y","unit_rawcode":"h032","kind":"sphere"},

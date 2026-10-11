@@ -1690,8 +1690,16 @@ pub(super) fn effective_movement_speed(unit: &UnitSnapshot) -> i32 {
         .map_or(unit.movement.speed_per_tick, |charge| {
             charge.profile.armed_speed_per_tick
         });
-    i32::try_from(i64::from(speed) * i64::from(percent) / 100)
-        .expect("effective movement speed overflowed validated bounds")
+    let speed_after_modifiers = i32::try_from(i64::from(speed) * i64::from(percent) / 100)
+        .expect("effective movement speed overflowed validated bounds");
+    if speed > 0
+        && percent > 0
+        && let Some(purge) = unit.status.purge
+    {
+        speed_after_modifiers.max(purge.profile.minimum_speed_per_tick)
+    } else {
+        speed_after_modifiers
+    }
 }
 
 fn offset_point(point: SimPoint, x: i32, y: i32) -> Option<SimPoint> {

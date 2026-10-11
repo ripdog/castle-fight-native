@@ -433,6 +433,7 @@ fn secondary_attack_and_speed_modifiers_scale_windup_inside_the_existing_cycle()
             .entity;
         let mut status = sim.world.get_mut::<StatusState>(entity).unwrap();
         status.attack_speed_modifiers[0] = TimedAttackSpeedModifier {
+            undispellable: false,
             id: ModifierId(123),
             percent_delta: speed_delta,
             expires_tick: 100,

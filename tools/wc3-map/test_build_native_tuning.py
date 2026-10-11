@@ -9,6 +9,16 @@ import build_runtime_catalog as catalog
 
 
 class NativeTuningProjectionTest(unittest.TestCase):
+    def test_hardened_skin_requires_native_attack_flags_and_projects_independent_fields(self):
+        recipe={'kind':'hardened-skin','source_kind':'unit-ability','source_key':'SKIN','unit_rawcode':'UNIT'}
+        fields={'dataa1':'23','datab1':'2','datac1':'7','datad1':'1','datae1':'1','targs1':'enemy,ally'}
+        detail={'native_base':'Assk'}
+        effect=native.project_effect(recipe,fields,None,{},detail)['profile']['effect']['HardenedSkin']
+        self.assertEqual(effect,{'chance_per_10k':2300,'minimum_damage':2,'ignored_damage':7})
+        for changed in ({'datad1':'0'},{'datae1':'0'},{'targs1':'enemy'}):
+            with self.assertRaises(ValueError):native.project_effect(recipe,{**fields,**changed},None,{},detail)
+        with self.assertRaises(ValueError):native.project_effect(recipe,fields,None,{}, {'native_base':'ANth'})
+
     def test_death_spawn_projects_native_child_and_count_without_inventing_timed_life(self):
         recipe = {"kind": "death-spawn", "source_kind": "unit-ability", "source_key": "SPLT", "unit_rawcode": "BODY"}
         fields = {"cost1": "0", "cool1": "0", "dur1": "0", "herodur1": "0", "dataa1": "3", "datab1": "NEXT"}

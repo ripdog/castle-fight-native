@@ -35,6 +35,7 @@ fn native_fire_requires_own_team_reveal_but_committed_flight_survives_reveal_exp
         apply_timed_armor_modifier(
             &mut status,
             TimedArmorModifier {
+                undispellable: false,
                 id: ModifierId(200),
                 expires_tick: 20,
                 revealed_to: Some(Team(1)),
@@ -56,6 +57,7 @@ fn native_fire_requires_own_team_reveal_but_committed_flight_survives_reveal_exp
         apply_timed_armor_modifier(
             &mut status,
             TimedArmorModifier {
+                undispellable: false,
                 id: ModifierId(201),
                 expires_tick: expiry,
                 revealed_to: Some(Team(0)),

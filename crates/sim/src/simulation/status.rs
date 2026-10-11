@@ -99,6 +99,7 @@ pub(super) fn apply_ability_effect_to_unit(
             apply_timed_armor_modifier(
                 &mut target.status,
                 TimedArmorModifier {
+                    undispellable: false,
                     aura_membership: false,
                     id: modifier,
                     native_buff: Some(buff),
@@ -204,6 +205,7 @@ pub(super) fn apply_ability_effect_to_unit(
             apply_timed_armor_modifier(
                 &mut target.status,
                 TimedArmorModifier {
+                    undispellable: false,
                     aura_membership: false,
                     id: ModifierId(ability.0),
                     armor_bonus_per_100: armor_delta_per_100,
@@ -281,6 +283,7 @@ pub(super) fn apply_ability_effect_to_unit(
             apply_timed_armor_modifier(
                 &mut target.status,
                 TimedArmorModifier {
+                    undispellable: false,
                     aura_membership: false,
                     id: modifier,
                     native_buff,
@@ -308,6 +311,7 @@ pub(super) fn apply_ability_effect_to_unit(
             apply_timed_armor_modifier(
                 &mut target.status,
                 TimedArmorModifier {
+                    undispellable: false,
                     aura_membership: false,
                     id: modifier,
                     native_buff,
@@ -362,6 +366,7 @@ pub(super) fn apply_ability_effect_to_unit(
             apply_timed_armor_modifier(
                 &mut target.status,
                 TimedArmorModifier {
+                    undispellable: false,
                     aura_membership: false,
                     id: modifier,
                     native_buff,
@@ -401,6 +406,7 @@ pub(super) fn apply_ability_effect_to_unit(
             apply_timed_armor_modifier(
                 &mut target.status,
                 TimedArmorModifier {
+                    undispellable: false,
                     aura_membership: false,
                     id: modifier,
                     native_buff,
@@ -418,7 +424,9 @@ pub(super) fn apply_ability_effect_to_unit(
                 },
             );
         }
-        AbilityEffect::WindWalk(_)
+        AbilityEffect::NativeSummon(_)
+        | AbilityEffect::SirenPurge(_)
+        | AbilityEffect::WindWalk(_)
         | AbilityEffect::MasterProjectiles(_)
         | AbilityEffect::ScriptedRoots(_)
         | AbilityEffect::Ensnare { .. }
@@ -443,6 +451,7 @@ pub(super) fn apply_ability_effect_to_unit(
 }
 
 pub(super) fn purge_expired_status_modifiers(status: &mut StatusState, tick: u64) {
+    super::native_summons::advance_purge(status, tick);
     if status
         .acid_bomb
         .is_some_and(|acid| tick >= acid.expires_tick)
@@ -558,6 +567,7 @@ pub(super) fn apply_timed_movement_modifier(
                 .movement_modifiers
                 .copy_within(index..count, index + 1);
             status.movement_modifiers[index] = crate::components::TimedMovementModifier {
+                undispellable: false,
                 id: modifier_id,
                 percent_delta,
                 expires_tick,
@@ -594,6 +604,7 @@ pub(super) fn apply_timed_attack_speed_modifier(
                 .attack_speed_modifiers
                 .copy_within(index..count, index + 1);
             status.attack_speed_modifiers[index] = TimedAttackSpeedModifier {
+                undispellable: false,
                 id: modifier_id,
                 percent_delta,
                 expires_tick,
@@ -903,6 +914,7 @@ pub(super) fn apply_corruption(
     apply_timed_armor_modifier(
         &mut u.status,
         TimedArmorModifier {
+            undispellable: true,
             id: ModifierId(p.ability.0),
             native_buff: Some(p.buff),
             armor_bonus_per_100: -p.armor_reduction_per_100,
@@ -935,5 +947,20 @@ pub(super) fn corruption_hit_event(
             duration_ticks: p.duration_ticks,
             hero_duration_ticks: p.hero_duration_ticks,
         },
+    }
+}
+
+pub(super) fn mark_modifier_undispellable(status: &mut StatusState, id: ModifierId) {
+    for modifier in &mut status.movement_modifiers[..usize::from(status.movement_modifier_count)] {
+        if modifier.id == id {
+            modifier.undispellable = true;
+        }
+    }
+    for modifier in
+        &mut status.attack_speed_modifiers[..usize::from(status.attack_speed_modifier_count)]
+    {
+        if modifier.id == id {
+            modifier.undispellable = true;
+        }
     }
 }

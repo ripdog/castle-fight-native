@@ -276,6 +276,7 @@ fn missile_damage_orders_mirror_at_impact_and_stun_cancels_uncommitted_cast() {
 fn mirror_purges_native_buff_families_but_preserves_intrinsic_and_script_grants() {
     let mut status = StatusState::default();
     status.armor_modifiers[0] = TimedArmorModifier {
+        undispellable: false,
         id: ModifierId(1),
         native_buff: Some(crate::NativeBuffIdentity {
             rawcode: 2,
@@ -288,6 +289,7 @@ fn mirror_purges_native_buff_families_but_preserves_intrinsic_and_script_grants(
         ..Default::default()
     };
     status.armor_modifiers[1] = TimedArmorModifier {
+        undispellable: false,
         id: ModifierId(3),
         expires_tick: u64::MAX,
         armor_bonus_per_100: 300,
