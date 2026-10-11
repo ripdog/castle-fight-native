@@ -1,0 +1,12 @@
+# Chaos implementation
+
+Retained Castle Fight 9.27/r1 extraction tree: `8ea806dca331ff254995e94e6f0baf225a14bf10`. Builder `X00O`, registration `kK` and resolved command-card positions define the order. Complete each root and its entire upgrade chain before moving right. Only completed entities become buildable. The first chain is Lesser Demon Cage → Greater Demon Cage → Serenity.
+
+## Lesser Demon Cage / Satyr
+
+- Identity/source: runtime r118; `h01I` (`hbla`) produces `n00A` (`nsty`) in the top-left slot. Protected body life, armor, movement, attack damage/dice and range override static sentinels. Both ordinary weapon slots, Normal homing missile, independent air/ground/structure targeting, acquisition/collision, regeneration, raisable/decaying organic corpse, production, construction/repair/economy and upgrade relationships consume retained versioned catalogs.
+- Complete inventory/control flow: the building inventory is empty. The body's shared `A0CV` hidden Channel marker retains assassination-target classification without a cast or passive art. Literal references close to object registration, protected statistics, `xO` combat metadata and `kK` race registration. `lK` installs no Satyr spell or proxy; common train/entry/setup callbacks supply normal lane orders and existing shrine handling. No decoration factory, hidden grant, delayed effect or resource controller is added. Native sapper/ward classification remains independent of ordinary ground targeting.
+- Presentation/state: exact Satyr, Chaos Peon builder and Demon Cage models, missiles, ordinary/lifecycle clips and UI are delivered. Existing authoritative production, attack, corpse and wire state cover this ordinary line; no new serialized shape is introduced. Chaos becomes selectable with this completed root. The incomplete upgrades remain unavailable until their own mechanics are verified.
+- Verification: catalog-wide importer and source-closure checks cover statistics, complete inventory, weapons, corpse, economy, panel order and relationships without duplicating extracted values. Source presentation audit has no findings; no entity-specific engine behavior requires a new fixture.
+
+Validation: 36 catalog/import checks and ten source-projection checks passed. Strict workspace/all-target Clippy, formatting and diff checks passed. Chaos presentation delivery has no findings. Logs: `.local-tools/orc-validation/satyr-*` and `chaos-presentation.json`.
