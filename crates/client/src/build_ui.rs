@@ -810,7 +810,9 @@ fn handle_production_train_hotkey(
     else {
         return;
     };
-    if hotkey_just_pressed(&keys, definition.train_hotkey)
+    if definition
+        .train_hotkey
+        .is_some_and(|hotkey| hotkey_just_pressed(&keys, hotkey))
         && production_queue_has_room(&state, &authoritative)
     {
         submit_production_queue_change(
@@ -997,7 +999,7 @@ fn action_hotkey_for_state(
         return state
             .actor
             .and_then(|actor| production_definition_for_actor(actor, authoritative, content))
-            .map(|definition| definition.train_hotkey);
+            .and_then(|definition| definition.train_hotkey);
     }
     action_hotkey(action, content)
 }

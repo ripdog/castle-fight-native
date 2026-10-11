@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r112";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r113";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 65;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 66;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1272,7 +1272,7 @@ pub struct CastleFightProductionDefinition {
     pub unit: CastleFightUnitKind,
     pub produced_unit: CastleFightUnitDefinition,
     pub train_command_position: CommandCardPosition,
-    pub train_hotkey: char,
+    pub train_hotkey: Option<char>,
     pub train_basic_tooltip: &'static str,
     pub train_extended_tooltip: &'static str,
     pub command_card_position: CommandCardPosition,
@@ -2974,7 +2974,12 @@ fn hash_production_definition(
     hash_unit_definition(hash, definition.produced_unit);
     hash.write_u8(definition.train_command_position.x);
     hash.write_u8(definition.train_command_position.y);
-    hash.write_u32(definition.train_hotkey as u32);
+    if let Some(hotkey) = definition.train_hotkey {
+        hash.write_u8(1);
+        hash.write_u32(hotkey as u32);
+    } else {
+        hash.write_u8(0);
+    }
     hash.write_u8(definition.command_card_position.x);
     hash.write_u8(definition.command_card_position.y);
     hash.write_u32(definition.hotkey as u32);
@@ -6148,15 +6153,10 @@ fn production_definition(
         .get(&production.unit_rawcode)
         .copied()
         .unwrap_or(CommandCardPosition::new(0, 0));
-    let train_hotkey = *content
+    let train_hotkey = content
         .building_hotkeys
         .get(&production.unit_rawcode)
-        .unwrap_or_else(|| {
-            panic!(
-                "produced unit {:#010x} missing train hotkey",
-                produced_unit.rawcode
-            )
-        });
+        .copied();
     let train_tooltips = content
         .units
         .get(&production.unit_rawcode)
@@ -6365,6 +6365,19 @@ mod tests {
         );
         unit.attack1_weapon_kind = None;
         assert!(native_primary_attack_927(&unit, Some(&p)).is_none());
+    }
+
+    #[test]
+    fn training_hotkeys_preserve_authored_absence_across_the_complete_catalog() {
+        let content = extracted_content_927();
+        for kind in CastleFightProductionKind::ALL {
+            let d = kind.definition();
+            let trained = content.production[&d.rawcode].unit_rawcode;
+            assert_eq!(
+                d.train_hotkey,
+                content.building_hotkeys.get(&trained).copied()
+            );
+        }
     }
 
     #[test]

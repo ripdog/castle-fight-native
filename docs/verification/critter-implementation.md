@@ -20,3 +20,14 @@ Validation: 34 catalog/importer checks, ten projection checks, strict workspace/
 - Presentation/verification: exact source crab variant/skin/scale and Temple of Tides building art, ordinary/lifecycle clips and UI are delivered. Catalog-wide checks and the shared production/upgrade machinery cover these definitions without copied tuning values.
 
 Validation: 34 catalog checks, strict simulation/all-target Clippy, formatting, diff checks and source-manifest reproduction passed. Logs: `.local-tools/orc-validation/rockcrab-*`.
+
+
+## Spinecrab Tidepool / Spiny Crab
+
+- Identity/source: runtime r113; `h0Z3` (`hbla`) produces `n0Z3` (`ncrb`), the next root to the right. Protected statistics, Pierce missile delivery/speed, independent primary ground/air/structure mask, disabled secondary weapon, acquisition/collision/movement, regeneration, organic raisable/decaying corpse and independent production/construction/repair/economy consume retained catalogs. The source marks this line anti-air; it has no upgrades.
+- Complete inventory/control flow: both inventories are empty and all literal references close to registration/protected metadata. The native Sludge Missile art does not grant a poison or slow effect. No proxy, trained-unit bonus, factory, spell or mana loop is added. Sapper/ward classification remains separate from ordinary ground targeting and corpse flags.
+- Presentation/verification: exact source Spider Crab model/skin/scale and Defiled Fountain building art, Sludge Missile, ordinary/lifecycle clips and UI are delivered. Existing authoritative homing flight and catalog-wide checks cover complete ordinary definitions and worker-independent missile continuation.
+
+Training-card correction: Spiny Crab has no authored hotkey. Production definitions now preserve optional source hotkeys; keyboard handling and tooltip shortcuts skip absent bindings. A catalog-wide check validates both present and absent source bindings. Content bundle schema advances to 66 for the typed definition change.
+
+Validation: 35 catalog/importer checks, strict workspace/all-target Clippy, formatting, diff checks and source-manifest reproduction passed. Presentation closure remains zero findings. Logs: `.local-tools/orc-validation/spiny-crab-*`.
