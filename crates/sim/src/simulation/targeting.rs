@@ -824,7 +824,7 @@ impl Simulation {
         {
             return false;
         }
-        let Some((attack, _, _)) = source.attack_for_unit(target.target_movement_class()) else {
+        let Some((attack, _, _)) = source.attack_for_unit_target(target) else {
             return false;
         };
         let in_attack_range = attack.in_range(distance_sq);

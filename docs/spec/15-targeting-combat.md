@@ -83,6 +83,8 @@ Navigation reachability and targetability remain separate concepts, but an attac
 
 The current authoritative ordinary-attack filter is an explicit target mask with independent ground-unit, air-unit, and building bits. Movement class does not imply attack capability: a ground melee unit may be authored to hit air, an air unit may be ground-only, and an attack building uses the same mask. Target-class filtering applies to fresh acquisition, sticky retention, retaliation/ally-defense validation, the final attack-intent gate, and bounce-chain candidates. Native splash has a separately authored collateral mask; it MUST consume that mask independently of the primary weapon's target permission.
 
+A combat unit’s melee weapon authored with zero range uses physical contact as its attack envelope: the sum of both unit collision radii, or the attacking unit radius measured from a building footprint edge. Pursuit, reachability and attack release use that same derived envelope. Two canonical coordinate subunits accommodate integer rounding of the circular contact goal, so legal non-overlapping bodies can engage. The authoritative content range remains zero. Positive authored ranges and ranged delivery retain their existing range contract.
+
 Examples:
 
 - a long-range attacker already able to hit a caged unit does not need a ground route to that unit;

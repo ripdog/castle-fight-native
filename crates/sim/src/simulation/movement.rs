@@ -222,8 +222,7 @@ impl Simulation {
                 if unit_health[target_index] <= 0 {
                     return None;
                 }
-                let (attack, _, _) =
-                    unit.attack_for_unit(units[target_index].target_movement_class())?;
+                let (attack, _, _) = unit.attack_for_unit_target(&units[target_index])?;
                 let target_position = units[target_index].position;
                 let approach_range = unit
                     .spellcasting
@@ -713,8 +712,7 @@ impl Simulation {
                     if unit_health[target_index] <= 0 {
                         return None;
                     }
-                    let (attack, _, _) =
-                        unit.attack_for_unit(units[target_index].target_movement_class())?;
+                    let (attack, _, _) = unit.attack_for_unit_target(&units[target_index])?;
                     let target_position = units[target_index].position;
                     if current.distance_sq(target_position) <= attack.range_sq() {
                         attack_goal = Some(current);

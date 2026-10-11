@@ -11,6 +11,7 @@ mod aura_carrier;
 mod buff_transfer;
 mod burning_oil;
 mod cone_wave;
+mod contact;
 mod corruption;
 mod damage_charge;
 mod damage_threshold;

@@ -3879,6 +3879,16 @@ struct UnitSnapshot {
     ability_state: Option<AutomaticAbilityState>,
 }
 
+// A zero-range melee weapon still reaches physical contact. Use the same
+// derived envelope for pursuit, reachability and release; never rewrite content.
+// Two coordinate quanta cover truncation of both axes at a circular contact goal.
+fn melee_contact_attack(mut attack: AttackProfile, contact_radius: i32) -> AttackProfile {
+    if attack.range == 0 && attack.delivery == AttackDelivery::Melee {
+        attack.range = contact_radius.saturating_add(2);
+    }
+    attack
+}
+
 impl UnitSnapshot {
     fn effective_passive_effects(&self) -> impl Iterator<Item = PassiveUnitEffect> + '_ {
         self.passive_effects.iter().chain(
@@ -3906,6 +3916,18 @@ impl UnitSnapshot {
             || self.status.is_revealed_to(team, tick)
             || self.detection_teams & (1 << team.0) != 0
             || (!self.is_invisible(tick) && self.visible_teams & (1 << team.0) != 0)
+    }
+
+    fn attack_for_unit_target(
+        self,
+        target: &UnitSnapshot,
+    ) -> Option<(AttackProfile, AttackTargetMask, DamageType)> {
+        let (attack, mask, damage) = self.attack_for_unit(target.target_movement_class())?;
+        Some((
+            melee_contact_attack(attack, self.collision_radius + target.collision_radius),
+            mask,
+            damage,
+        ))
     }
 
     fn attack_for_unit(
@@ -3936,11 +3958,19 @@ impl UnitSnapshot {
             && !self.primary_attack_targets().can_target_buildings()
             && secondary.targets.can_target_buildings()
         {
-            return Some((secondary.attack, secondary.targets, secondary.damage_type));
+            return Some((
+                melee_contact_attack(secondary.attack, self.collision_radius),
+                secondary.targets,
+                secondary.damage_type,
+            ));
         }
         self.primary_attack_targets()
             .can_target_buildings()
-            .then_some((self.attack, self.primary_attack_targets(), self.damage_type))
+            .then_some((
+                melee_contact_attack(self.attack, self.collision_radius),
+                self.primary_attack_targets(),
+                self.damage_type,
+            ))
     }
 
     fn primary_attack_targets(self) -> AttackTargetMask {

@@ -1100,7 +1100,7 @@ impl Simulation {
                     let (target, distance_sq, attack, attack_targets, damage_type) =
                         if let Some(index) = find_unit_index(units, target_id) {
                             let (attack, targets, damage_type) =
-                                source.attack_for_unit(units[index].target_movement_class())?;
+                                source.attack_for_unit_target(&units[index])?;
                             (
                                 TargetIndex::Unit(index),
                                 source.position.distance_sq(units[index].position),

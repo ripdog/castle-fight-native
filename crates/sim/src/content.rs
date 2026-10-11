@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r113";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r114";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -4644,7 +4644,7 @@ impl ExtractedContent927 {
                 attack1_damage_type,
                 attack1_damage: parse_optional_decimal_rounded_i32_927(columns[36])?,
                 attack1_cooldown_ticks: parse_optional_seconds_to_ticks_u16_927(columns[30])?,
-                attack1_range: parse_optional_i32_927(columns[29])?.map(world),
+                attack1_range: parse_native_weapon_range_927(columns[29])?.map(world),
                 attack1_weapon_kind,
                 attack1_targets,
             };
@@ -5615,6 +5615,16 @@ fn parse_optional_u16_927(value: &str) -> Result<Option<u16>, String> {
         .map_err(|_| format!("invalid unsigned integer {value:?}"))
 }
 
+// A literal SLK dash is the native integer zero, unlike a missing catalog cell
+// or the protection sentinels. Keep it for weapons enabled over an unarmed base.
+fn parse_native_weapon_range_927(value: &str) -> Result<Option<i32>, String> {
+    if value.trim() == "-" {
+        Ok(Some(0))
+    } else {
+        parse_optional_i32_927(value)
+    }
+}
+
 fn parse_optional_i32_927(value: &str) -> Result<Option<i32>, String> {
     let value = value.trim();
     if value.is_empty()
@@ -6363,6 +6373,11 @@ mod tests {
             (weapon.damage, weapon.range, weapon.cooldown_ticks),
             (Some(3), 17, 8)
         );
+        unit.attack1_range = parse_native_weapon_range_927("-").unwrap();
+        assert_eq!(native_primary_attack_927(&unit, None).unwrap().range, 0);
+        assert_eq!(parse_native_weapon_range_927("").unwrap(), None);
+        assert_eq!(parse_native_weapon_range_927("2147483647").unwrap(), None);
+        assert!(parse_native_weapon_range_927("not-a-number").is_err());
         unit.attack1_weapon_kind = None;
         assert!(native_primary_attack_927(&unit, Some(&p)).is_none());
     }
