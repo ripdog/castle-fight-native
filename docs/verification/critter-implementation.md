@@ -11,3 +11,12 @@ Retained Castle Fight 9.27/r1 extraction tree: `8ea806dca331ff254995e94e6f0baf22
 Campaign import correction: the extracted default-combat attack report omits campaign bodies. Missing enabled primary weapons now derive from the already retained `units.tsv` and protected overlays, preserving existing report rows and never arming an object with its weapon disabled. A synthetic importer fixture proves protected precedence, static fallback and disabled-weapon rejection. Corpse/economy/production reports already include the campaign race.
 
 Validation: 34 catalog/importer checks, ten projection checks, strict workspace/all-target Clippy, source-manifest reproduction, formatting and diff checks passed. Critter presentation closure has zero findings (13 source entities, 23 model/dependency bindings). Logs: `.local-tools/orc-validation/mudcrab-*`.
+
+
+## Rockcrab Burrow / Rock Crab — Mudcrab upgrade
+
+- Identity/source: runtime r112; `h0Z2` (`hbla`) upgrades the source top-left root and produces `n0Z2` (`nsc2`). Protected statistics, both weapon slots, Normal ground/structure melee attack, acquisition/collision/movement, regeneration, organic raisable/decaying corpse and independent production/construction/repair/economy consume retained catalogs. The authored precursor/upgrade edge controls menu access and upgrade transport.
+- Complete inventory/control flow: neither object has abilities. Script closure remains registration, metadata/upgrade registration and protected statistics; no proxy, bonus, factory or extra clock is added. Native sapper/ward and ground target classifications remain distinct. The existing upgrade lifecycle retains owner/team/production state and resolves the upgraded body independently.
+- Presentation/verification: exact source crab variant/skin/scale and Temple of Tides building art, ordinary/lifecycle clips and UI are delivered. Catalog-wide checks and the shared production/upgrade machinery cover these definitions without copied tuning values.
+
+Validation: 34 catalog checks, strict simulation/all-target Clippy, formatting, diff checks and source-manifest reproduction passed. Logs: `.local-tools/orc-validation/rockcrab-*`.
