@@ -3458,6 +3458,7 @@ mod tests {
 
     fn empty_samples() -> PresentationSamples {
         let snapshot = PresentationSnapshot {
+            native_parasite_buffs: Vec::new(),
             aura_carriers: BTreeMap::new(),
             burning_oil: BTreeMap::new(),
             projectile_positions: Default::default(),

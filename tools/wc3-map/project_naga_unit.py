@@ -6,11 +6,14 @@ import re
 def project_parasite(fields, version):
     raw = lambda code: int.from_bytes(code.encode('ascii'), 'big')
     tick = lambda value: int((Decimal(str(value)) * 30).to_integral_value(rounding=ROUND_CEILING))
+    if len(fields['buffid1']) != 4 or len(fields['unitid1']) != 4:
+        raise ValueError('native Parasite requires resolved buff and body identities')
     if any(Decimal(str(fields[k])) != 0 for k in ('dataa1','datab1','datac1','datad1')):
         raise ValueError('script parent requires zero native Parasite damage and slows')
     if fields['missilehoming'] != '1' or Decimal(str(fields['datae1'])) != 1:
         raise ValueError('script parent requires one native homing Parasite death summon')
     return {'buff_rawcode': raw(fields['buffid1']), 'map_version': version, 'speed_per_tick': int(Decimal(str(fields['missilespeed'])) * 1024 / 30),
+        'affects_invulnerable': 'invulnerable' in fields.get('targs1', '').split(','),
         'duration_ticks': tick(fields['dur1']), 'hero_duration_ticks': tick(fields['herodur1']),
         'body_rawcode': raw(fields['unitid1']), 'count': int(fields['datae1']), 'body_duration_ticks': tick(fields['cast1'])}
 

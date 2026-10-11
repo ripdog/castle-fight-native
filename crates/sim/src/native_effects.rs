@@ -88,12 +88,14 @@ pub enum NativeEffectImplementationId {
     WarcraftWorldFreezerV1,
     WarcraftBarrageV1,
     WarcraftPersistentCarrierV1,
+    WarcraftNagaEarthquakeV1,
 }
 
 impl NativeEffectImplementationId {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::WarcraftNagaEarthquakeV1 => 92,
             Self::WarcraftSpikedShellV1 => 90,
             Self::WarcraftHardenedSkinV1 => 91,
             Self::WarcraftDeathSpawnV1 => 89,
@@ -1241,6 +1243,10 @@ pub fn resolve_native_effect_requirements(
     version: MapVersion,
     roots: &[NativeEffectSource],
 ) -> Result<Vec<ResolvedNativeEffectBinding>, NativeEffectResolveError> {
+    let (pyramid_roots, roots): (Vec<_>, Vec<_>) = roots
+        .iter()
+        .copied()
+        .partition(|s| crate::building_mechanics::pyramid_source(version, *s));
     let (silver_roots, roots): (Vec<_>, Vec<_>) = roots
         .iter()
         .copied()
@@ -1285,6 +1291,9 @@ pub fn resolve_native_effect_requirements(
         .copied()
         .partition(|source| crate::building_mechanics::hex_source_for_version(*source, version));
     let mut resolved = catalog().resolve_requirements(version, &ordinary_roots)?;
+    if !pyramid_roots.is_empty() {
+        resolved.extend(crate::building_mechanics::pyramid_bindings(version));
+    }
     if !starfall_roots.is_empty() {
         resolved.extend(crate::building_mechanics::starfall_bindings(version));
     }
@@ -1499,6 +1508,9 @@ pub fn native_effect_implementation_for(
     let source = NativeEffectSourceKind::parse(source_kind)
         .zip(rawcode(source_key).ok())
         .map(|(kind, key)| NativeEffectSource::new(kind, key));
+    if source.is_some_and(|s| crate::building_mechanics::pyramid_source(version, s)) {
+        return Some(NativeEffectImplementationId::WarcraftNagaEarthquakeV1);
+    }
     if source.is_some_and(|source| crate::building_mechanics::starfall_source(version, source)) {
         return Some(NativeEffectImplementationId::WarcraftStarfallV1);
     }

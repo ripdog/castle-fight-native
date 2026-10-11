@@ -781,10 +781,11 @@ fn load_visual_assets(
                 poison_stacking_flags.insert(rawcode.to_owned(), flags);
             }
             if field == "abuf" && row.get(level).unwrap_or_default() == "1" {
-                ability_buff_ids.insert(
-                    rawcode.to_owned(),
-                    parse_json_comma_list(row.get(recovered).unwrap_or_default()),
-                );
+                let mut buffs = parse_json_comma_list(row.get(recovered).unwrap_or_default());
+                if base_rawcode == "ACpa" && buffs.is_empty() {
+                    buffs = parse_json_comma_list(row.get(base_value).unwrap_or_default());
+                }
+                ability_buff_ids.insert(rawcode.to_owned(), buffs);
             }
         }
 
@@ -1049,7 +1050,7 @@ fn load_visual_assets(
             "Aenr" | "AEer" | "AOwk" => &["movement"],
             "Afrz" => &["freeze"],
             "Aoar" => &["regeneration"],
-            "AOae" | "SCae" => &["movement"],
+            "AOae" | "SCae" | "AHtc" | "ACpa" => &["movement"],
             "Asta" | "AHtb" | "ACtb" => &["stun"],
             // Frost Armor applies one persistent shield buff and one reactive slow buff.
             "ACf2" => &["armor", "movement"],
@@ -1092,7 +1093,10 @@ fn load_visual_assets(
                     return Err(format!("unsupported projected buff model {model_path}").into());
                 }
                 status_visuals.push(StatusVisualSpec {
-                    ability_rawcode: if matches!(base_rawcode, "AHbz" | "ACrg" | "ANrf" | "ACrf") {
+                    ability_rawcode: if matches!(
+                        base_rawcode,
+                        "AHbz" | "ACrg" | "ANrf" | "ACrf" | "ACpa"
+                    ) {
                         buff_rawcode.clone()
                     } else {
                         ability_rawcode.clone()

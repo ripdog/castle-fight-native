@@ -39,6 +39,7 @@ fn purge() -> SirenPurgeProfile {
             buff_rawcode: 960,
             map_version: MapVersion::CASTLE_FIGHT_9_27,
             speed_per_tick: 100,
+            affects_invulnerable: false,
             duration_ticks: 1,
             hero_duration_ticks: 1,
             body_rawcode: u32::from_be_bytes(*b"nfbr"),

@@ -202,6 +202,7 @@ pub struct PresentationSnapshot {
     pub buildings: BTreeMap<SimId, BuildingSample>,
     pub corpses: BTreeMap<SimId, CorpseView>,
     pub projectiles: BTreeMap<SimId, ProjectileView>,
+    pub native_parasite_buffs: Vec<(SimId, u32)>,
     pub aura_carriers: BTreeMap<SimId, castle_fight_sim::AuraCarrierView>,
     pub burning_oil: BTreeMap<SimId, castle_fight_sim::BurningOilView>,
     pub attacks: Vec<AttackEvent>,
@@ -438,6 +439,7 @@ impl PresentationSnapshot {
             buildings,
             corpses,
             projectiles,
+            native_parasite_buffs: simulation.native_parasite_buffs(),
             aura_carriers: simulation
                 .aura_carriers()
                 .into_iter()

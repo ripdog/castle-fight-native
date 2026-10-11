@@ -26,6 +26,14 @@ class NativeBuffProjectionTests(unittest.TestCase):
         self.assertEqual(projection["NONE"]["icon_art"], "")
         self.assertEqual(projection["NONE"]["icon_art_source"], "resolved")
 
+    def test_empty_native_parasite_buff_uses_base_and_explicit_buff_overrides_it(self):
+        inherited = row("abilities", "CAST", "ACpa", "abuf", "")
+        inherited["base_value_json"] = json.dumps("STOK,NONE")
+        skin = "[STOK]\nTargetart=stock.mdl\n[NONE]\n"
+        self.assertEqual([p["rawcode"] for p in buffs.project(skin, [inherited])], ["NONE", "STOK"])
+        inherited["recovered_value_json"] = json.dumps("NONE")
+        self.assertEqual([p["rawcode"] for p in buffs.project(skin, [inherited])], ["NONE"])
+
     def test_ground_effect_references_preserve_skin_and_explicit_override(self):
         skin = "[FIRE]\nEffectart=embers.mdl\n"
         fields = [row("abilities", "CAST", "BASE", "aeff", "FIRE,CUST,NONE"),

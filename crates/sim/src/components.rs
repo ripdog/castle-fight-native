@@ -1782,6 +1782,7 @@ pub enum AbilityEffect {
     },
     SirenPurge(SirenPurgeProfile),
     NativeSummon(NativeSummonProfile),
+    NagaEarthquake(crate::building_mechanics::NagaEarthquakeProfile),
 }
 
 impl AbilityEffect {
@@ -1796,6 +1797,7 @@ impl AbilityEffect {
         match self {
             Self::SirenPurge(_) => 45,
             Self::NativeSummon(_) => 46,
+            Self::NagaEarthquake(_) => 47,
             Self::Heal(_) => 41,
             Self::SilverGlade(_) => 42,
             Self::Wilderness(_) => 43,

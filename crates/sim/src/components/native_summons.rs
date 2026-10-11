@@ -97,6 +97,7 @@ pub struct NativeParasiteProfile {
     pub buff_rawcode: u32,
     pub map_version: crate::MapVersion,
     pub speed_per_tick: i32,
+    pub affects_invulnerable: bool,
     pub duration_ticks: u16,
     pub hero_duration_ticks: u16,
     pub body_rawcode: u32,
@@ -104,12 +105,13 @@ pub struct NativeParasiteProfile {
     pub body_duration_ticks: u16,
 }
 impl NativeParasiteProfile {
-    pub(crate) fn canonical_words(self) -> [u64; 9] {
+    pub(crate) fn canonical_words(self) -> [u64; 10] {
         [
             self.buff_rawcode.into(),
             self.map_version.major.into(),
             self.map_version.minor.into(),
             self.speed_per_tick as u64,
+            u64::from(self.affects_invulnerable),
             self.duration_ticks.into(),
             self.hero_duration_ticks.into(),
             self.body_rawcode.into(),

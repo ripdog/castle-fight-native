@@ -1852,6 +1852,25 @@
       "target_attachments": []
     },
     {
+      "base_rawcode": "BNpa",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNParasite.blp",
+      "icon_art_source": "native",
+      "native_section": "BNpa",
+      "rawcode": "BNpa",
+      "target_art": [
+        "Abilities\\Spells\\Other\\Parasite\\ParasiteTarget.mdl"
+      ],
+      "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": [
+        {
+          "index": 0,
+          "point": "overhead",
+          "source": "native"
+        }
+      ]
+    },
+    {
       "base_rawcode": "BNpi",
       "icon_art": null,
       "icon_art_source": "absent",
@@ -1859,6 +1878,17 @@
       "rawcode": "BNpi",
       "target_art": [],
       "target_art_source": "native",
+      "target_attachment_count": null,
+      "target_attachments": []
+    },
+    {
+      "base_rawcode": "BNpm",
+      "icon_art": "ReplaceableTextures\\CommandButtons\\BTNParasite.blp",
+      "icon_art_source": "native",
+      "native_section": "BNpm",
+      "rawcode": "BNpm",
+      "target_art": [],
+      "target_art_source": "absent",
       "target_attachment_count": null,
       "target_attachments": []
     },

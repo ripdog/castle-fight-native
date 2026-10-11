@@ -2783,6 +2783,11 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
                 hash.write_u64(word);
             }
         }
+        AbilityEffect::NagaEarthquake(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         AbilityEffect::Starfall(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);

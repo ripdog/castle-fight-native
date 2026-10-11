@@ -60,7 +60,7 @@ pub(super) fn advance_purge(status: &mut StatusState, tick: u64) {
     }
 }
 
-fn dispel_magic_buffs(status: &mut StatusState) {
+pub(super) fn dispel_magic_buffs(status: &mut StatusState) {
     // Poison and Purge are undispellable. Intrinsic abilities, permanent grants,
     // stun and independent order recovery are not ordinary magic buffs.
     let poison = status.poison.map(|p| p.profile.buff_rawcode);
@@ -134,24 +134,7 @@ impl Simulation {
         let owner = find_unit_index(units, source.id)
             .map(|i| units[i].owner)
             .expect("native unit caster owner");
-        let id = self.allocate_id();
-        self.world.spawn((
-            id,
-            NativeAction::Parasite(crate::components::NativeParasiteState {
-                source: source.id,
-                owner,
-                team: source.team,
-                target: parent_target.id,
-                profile: p.parent,
-                position: match source.origin {
-                    AbilitySourceOrigin::Unit(p) => p,
-                    AbilitySourceOrigin::Building(f) => {
-                        footprint_center_point(f, self.config.navigation_cell_size)
-                    }
-                },
-                buff_until_tick: None,
-            }),
-        ));
+        self.launch_native_parasite(source, owner, parent_target.id, p.parent);
         let u = &mut units[target];
         if u.health <= 0
             || u.classifications.invulnerable
@@ -330,35 +313,96 @@ impl Simulation {
         usize::from(p.count)
     }
 
+    /// Derived recipient art identities from authoritative native buffs. No presentation timer.
+    #[must_use]
+    pub fn native_parasite_buffs(&self) -> Vec<(SimId, u32)> {
+        let tick = self.next_tick.saturating_sub(1);
+        let mut buffs: Vec<_> = self
+            .world
+            .iter_entities()
+            .filter_map(|e| {
+                let NativeAction::Parasite(p) = e.get::<NativeAction>()? else {
+                    return None;
+                };
+                p.buff_until_tick
+                    .filter(|&until| tick < until)
+                    .map(|_| (p.target, p.profile.buff_rawcode))
+            })
+            .collect();
+        buffs.sort_unstable();
+        buffs.dedup();
+        buffs
+    }
+
+    pub(super) fn launch_native_parasite(
+        &mut self,
+        source: AbilitySourceSnapshot,
+        owner: PlayerId,
+        target: SimId,
+        profile: crate::NativeParasiteProfile,
+    ) {
+        let id = self.allocate_id();
+        self.world.spawn((
+            id,
+            NativeAction::Parasite(crate::components::NativeParasiteState {
+                source: source.id,
+                owner,
+                team: source.team,
+                target,
+                profile,
+                position: match source.origin {
+                    AbilitySourceOrigin::Unit(p) => p,
+                    AbilitySourceOrigin::Building(f) => {
+                        footprint_center_point(f, self.config.navigation_cell_size)
+                    }
+                },
+                buff_until_tick: None,
+            }),
+        ));
+    }
+
     pub(super) fn advance_native_parasite(
         &mut self,
         entity: Entity,
         mut p: crate::components::NativeParasiteState,
         units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
     ) {
-        let Some(i) = find_unit_index(units, p.target) else {
+        let target = find_unit_index(units, p.target)
+            .map(|i| {
+                let u = units[i];
+                (u.health, u.position, u.classifications)
+            })
+            .or_else(|| {
+                find_building_index(buildings, p.target).map(|i| {
+                    let b = buildings[i];
+                    (
+                        b.health,
+                        footprint_center_point(b.footprint, self.config.navigation_cell_size),
+                        b.classifications,
+                    )
+                })
+            });
+        let Some((health, position, flags)) = target else {
             self.world.despawn(entity);
             return;
         };
-        let u = units[i];
         if p.buff_until_tick
             .is_some_and(|until| self.next_tick >= until)
-            || (p.buff_until_tick.is_none() && u.health <= 0)
+            || (p.buff_until_tick.is_none() && health <= 0)
         {
             self.world.despawn(entity);
             return;
         }
         if p.buff_until_tick.is_none() {
-            let distance = p.position.distance_sq(u.position);
-            p.position = p
-                .position
-                .step_towards(u.position, p.profile.speed_per_tick);
+            let distance = p.position.distance_sq(position);
+            p.position = p.position.step_towards(position, p.profile.speed_per_tick);
             if distance <= square_i32(p.profile.speed_per_tick) {
-                if u.classifications.invulnerable || u.classifications.spell_immune {
+                if (flags.invulnerable && !p.profile.affects_invulnerable) || flags.spell_immune {
                     self.world.despawn(entity);
                     return;
                 }
-                let duration = if u.classifications.uses_hero_spell_rules() {
+                let duration = if flags.uses_hero_spell_rules() {
                     p.profile.hero_duration_ticks
                 } else {
                     p.profile.duration_ticks
@@ -380,7 +424,11 @@ impl Simulation {
                 for previous in replaced {
                     self.world.despawn(previous);
                 }
-                p.buff_until_tick = Some(self.next_tick + u64::from(duration));
+                p.buff_until_tick = Some(if duration == 0 {
+                    u64::MAX
+                } else {
+                    self.next_tick + u64::from(duration)
+                });
             }
         }
         self.world
@@ -393,6 +441,8 @@ impl Simulation {
         units: &[UnitSnapshot],
         health: &[i32],
         positions: &[SimPoint],
+        buildings: &[BuildingSnapshot],
+        building_health: &[i32],
     ) {
         let mut deaths: Vec<_> = self
             .world
@@ -401,16 +451,27 @@ impl Simulation {
                 let NativeAction::Parasite(p) = entity.get::<NativeAction>()? else {
                     return None;
                 };
-                let i = find_unit_index(units, p.target)?;
-                (health[i] <= 0
-                    && p.buff_until_tick
-                        .is_some_and(|until| self.next_tick < until))
-                .then_some((
-                    *entity.get::<SimId>()?,
-                    entity.id(),
-                    p.clone(),
-                    positions[i],
-                ))
+                let dead_position = find_unit_index(units, p.target)
+                    .filter(|&i| health[i] <= 0)
+                    .map(|i| positions[i])
+                    .or_else(|| {
+                        find_building_index(buildings, p.target)
+                            .filter(|&i| building_health[i] <= 0)
+                            .map(|i| {
+                                footprint_center_point(
+                                    buildings[i].footprint,
+                                    self.config.navigation_cell_size,
+                                )
+                            })
+                    })?;
+                p.buff_until_tick
+                    .is_some_and(|until| self.next_tick < until)
+                    .then_some((
+                        *entity.get::<SimId>()?,
+                        entity.id(),
+                        p.clone(),
+                        dead_position,
+                    ))
             })
             .collect();
         deaths.sort_unstable_by_key(|(id, ..)| *id);

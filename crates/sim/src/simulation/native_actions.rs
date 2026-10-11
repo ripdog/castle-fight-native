@@ -171,7 +171,9 @@ impl Simulation {
                 continue;
             }
             match action {
-                NativeAction::Parasite(state) => self.advance_native_parasite(entity, state, units),
+                NativeAction::Parasite(state) => {
+                    self.advance_native_parasite(entity, state, units, buildings)
+                }
                 NativeAction::TimedLife {
                     child,
                     expires_tick,

@@ -63,7 +63,10 @@ def project(skin, rows):
     buffs = {}
     for row in rows:
         if row["category"] == "abilities" and row["field_id"] in {"abuf", "aeff"}:
-            references.update(string_list(json.loads(row["recovered_value_json"])))
+            value = json.loads(row["recovered_value_json"])
+            if row["field_id"] == "abuf" and row["base_rawcode"] == "ACpa" and not value:
+                value = json.loads(row["base_value_json"])
+            references.update(string_list(value))
         elif row["category"] == "buffs":
             buff = buffs.setdefault(row["rawcode"], {"base": row["base_rawcode"], "fields": {}})
             if buff["base"] != row["base_rawcode"]:

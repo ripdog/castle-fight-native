@@ -45,6 +45,8 @@ def build(map_version='9.27', revision='r1'):
     launcher_codes += ['h07H','A08E','A08C','A08D','A08F']
     silver = next(r for r in building_rows if r['building_rawcode'] == 'h08P')
     launcher_codes += ['h08P','A08B','A08A','A08H']
+    pyramid = next(r for r in building_rows if r['building_rawcode'] == 'h00I')
+    launcher_codes += ['h00I', 'A00M', 'A00B']
     grant_params = json.loads(ceremonial['parameters_json'])
     grant_codes = [value.to_bytes(4, 'big').decode() for value in grant_params['always_ability_ids']
                    + [value for option in grant_params['option_ability_ids'] for value in option]]
@@ -71,6 +73,9 @@ def build(map_version='9.27', revision='r1'):
     selected = {code: {r['field_id'] + ':' + r['level']: json.loads(r['recovered_value_json'])
                        for r in fields if r['rawcode'] == code}
                 for code in ('h00Z', 'A017', 'A018', 'A09L', 'A070', 'BOhx', 'B01H', 'n00F', 'n00G', 'h07W', 'A0HO', 'AM0{', *launcher_codes)}
+    for code in ('A00M',):
+        selected[code]['native_base_buff'] = json.loads(next(r['base_value_json'] for r in fields
+            if r['rawcode'] == code and r['field_id'] == 'abuf' and r['level'] == '1'))
     markers = {r['rawcode']: r['abilities'].split(',') for r in rows('units.tsv')
                if any(a in r['abilities'].split(',') for a in ('A070', 'A08H', 'Avul')) or r['rawcode'] == 'h06B'}
     script_bytes = _retained_file_bytes(ROOT, tree, 'script/war3map.lua')
@@ -90,7 +95,7 @@ def build(map_version='9.27', revision='r1'):
                      'EventListener_add_BuildingLifecycle_onEvent_add_BuildingLifecycle',
                      'EventListener_add_BuildingLifecycle_onEvent_add_BuildingLifecycle1',
                      *guard['source_functions'].split(','), *snow['source_functions'].split(','), *serpent['source_functions'].split(','), *ceremonial['source_functions'].split(','),
-                     *starfall['source_functions'].split(','), 'QG', 'DummyRecycler_get', 'createDummy', 'dummyCastImmediateFrom1', 'CallbackSingle_doAfter_SpellHelpers_call_doAfter_SpellHelpers2', 'ForGroupCallback_forUnitsInRect_RaceNelfAbilities_callback_forUnitsInRect_RaceNelfAbilities', *wilderness['source_functions'].split(','), *silver['source_functions'].split(','), *stasis['source_functions'].split(','), *enchantment['source_functions'].split(','), 'dummyCastPointFrom',
+                     *starfall['source_functions'].split(','), 'QG', 'DummyRecycler_get', 'createDummy', 'dummyCastImmediateFrom1', 'CallbackSingle_doAfter_SpellHelpers_call_doAfter_SpellHelpers2', 'ForGroupCallback_forUnitsInRect_RaceNelfAbilities_callback_forUnitsInRect_RaceNelfAbilities', *wilderness['source_functions'].split(','), *silver['source_functions'].split(','), *pyramid['source_functions'].split(','), 'randomAliveEnemyGround', 'ForGroupCallback_forUnitsInRect_SpellHelpers_callback_forUnitsInRect_SpellHelpers1', *stasis['source_functions'].split(','), *enchantment['source_functions'].split(','), 'dummyCastPointFrom',
                      *healing['source_functions'].split(','), *endurance['source_functions'].split(','), 'dummyCarrierWithAbility', 'createSpellCarrier', 'QL', 'iD', 'hD',
                      'CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities1',
                      'CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities2',
@@ -199,8 +204,11 @@ def build(map_version='9.27', revision='r1'):
     silver_visuals = [{'role':'caster','path':json.loads('"'+path+'"')} for path in re.findall(r'addEffect\("(.*?)",unit_getPos',traces[silver['source_functions'].split(',')[0]]['source'])]
     if not silver_visuals: raise ValueError('Silver Glade charge requires its literal caster art')
     silver_profile = project_silver(silver, selected, unit_rows, rows('abilities.tsv'), protected, traces, dict(zip(['major','minor'],map(int,map_version.split('.')))))
+    from project_naga_building import project_pyramid
+    pyramid_profile = project_pyramid(pyramid, selected, unit_rows, rows('abilities.tsv'), protected, traces, dict(zip(['major', 'minor'], map(int, map_version.split('.')))))
     from project_production_replication import project as project_replication
-    return {'production_replication': project_replication(replication, traces), 'replication_source': replication,
+    return {'pyramid': pyramid, 'pyramid_spellcasting': pyramid_profile,
+            'production_replication': project_replication(replication, traces), 'replication_source': replication,
             'map_version': map_version, 'schema_version': 2, 'source_revision': revision,
             'extraction_git_tree': tree, 'source_sha256': sources,
             'starfall':starfall, 'starfall_spellcasting':starfall_profile, 'starfall_cast_visuals':[{'role':'caster','path':starfall_path}], 'wilderness':wilderness,'wilderness_spellcasting':wilderness_profile,'wilderness_cast_visuals':wilderness_visuals, 'silver_cast_visuals':silver_visuals, 'silver': silver, 'silver_spellcasting': silver_profile, 'linker': linker, 'linker_death_heal': project_death_heal(linker, buckets, traces),

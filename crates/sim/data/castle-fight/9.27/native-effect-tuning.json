@@ -123,6 +123,7 @@
                   "minor": 27
                 },
                 "speed_per_tick": 64853,
+                "affects_invulnerable": false,
                 "duration_ticks": 1,
                 "hero_duration_ticks": 1,
                 "body_rawcode": 1852203634,
@@ -189,6 +190,7 @@
                   "minor": 27
                 },
                 "speed_per_tick": 64853,
+                "affects_invulnerable": false,
                 "duration_ticks": 1,
                 "hero_duration_ticks": 1,
                 "body_rawcode": 1852203634,

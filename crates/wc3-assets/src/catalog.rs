@@ -829,12 +829,15 @@ mod tests {
                 "Apxf" | "Aven" | "ACvs" | "Abof" | "ANab" => "damage_over_time",
                 "Afrz" => "freeze",
                 "Aoar" => "regeneration",
-                "AOae" | "SCae" => "movement",
+                "AOae" | "SCae" | "AHtc" | "ACpa" => "movement",
                 "Asta" | "AHtb" | "ACtb" => "stun",
                 _ => continue,
             };
-            let references: String =
+            let mut references: String =
                 serde_json::from_str(&row[column("recovered_value_json")]).unwrap();
+            if &row[column("base_rawcode")] == "ACpa" && references.is_empty() {
+                references = serde_json::from_str(&row[column("base_value_json")]).unwrap();
+            }
             let mut references: Vec<_> = references
                 .split(',')
                 .filter(|code| !code.is_empty())
@@ -850,7 +853,12 @@ mod tests {
             for buff in references {
                 for path in buffs[buff]["target_art"].as_array().unwrap() {
                     assert!(catalog.status_visuals.iter().any(|visual| {
-                        visual.ability_rawcode == row[column("rawcode")]
+                        visual.ability_rawcode
+                            == if &row[column("base_rawcode")] == "ACpa" {
+                                buff
+                            } else {
+                                &row[column("rawcode")]
+                            }
                             && visual.buff_rawcode == buff
                             && visual.status_kind == kind
                             && Some(visual.model_path.as_str()) == path.as_str()

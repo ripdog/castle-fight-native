@@ -3494,6 +3494,7 @@ fn prewarm_timed_wc3_effects(
                             duration_ticks,
                             ..
                         } => Some((modifier.0, duration_ticks)),
+                        AbilityEffect::NagaEarthquake(p) => Some((p.child.0, p.duration_ticks)),
                         AbilityEffect::SirenPurge(p) => {
                             Some((p.child.ability.0, p.child.duration_ticks))
                         }
@@ -4493,6 +4494,11 @@ fn sync_render_entities(
                 continue;
             }
             let position = match visual.anchor {
+                Wc3AbilityVisualAnchor::Source
+                    if matches!(cast.effect, AbilityEffect::NagaEarthquake(_)) =>
+                {
+                    target_position
+                }
                 Wc3AbilityVisualAnchor::Source => source_position,
                 Wc3AbilityVisualAnchor::Target => target_position,
             };
@@ -5253,6 +5259,41 @@ fn sync_render_entities(
         }
     }
 
+    for &(id, buff) in &samples.current.native_parasite_buffs {
+        let target = if let Some(u) = samples.current.units.get(&id).filter(|u| u.health > 0) {
+            Some((
+                id,
+                unit_ground_position(u.position, u.movement_class, &terrain),
+                render_map.units.get(&id).and_then(|e| e.model_root),
+            ))
+        } else {
+            samples
+                .current
+                .buildings
+                .get(&id)
+                .filter(|b| b.health > 0)
+                .map(|b| {
+                    let (mut position, _) = metrics.footprint_center_size(b.footprint);
+                    position.y = building_terrain_height(&metrics, &terrain, b.footprint);
+                    (
+                        id,
+                        position,
+                        render_map.buildings.get(&id).and_then(|e| e.model_root),
+                    )
+                })
+        };
+        if let Some(target) = target {
+            spawn_status_visuals(
+                &mut commands,
+                &mut render_map,
+                (&wc3_visuals, &mut effect_pool, !legacy_effect_pooling),
+                target,
+                buff,
+                Wc3StatusVisualKind::Movement,
+            );
+        }
+    }
+
     for corpse in samples.current.corpses.values() {
         if render_map.corpses.contains_key(&corpse.id) {
             continue;
@@ -5806,6 +5847,18 @@ fn entity_status_visual_is_active(
     ability_rawcode: u32,
     kind: Wc3StatusVisualKind,
 ) -> bool {
+    if kind == Wc3StatusVisualKind::Movement
+        && snapshot
+            .native_parasite_buffs
+            .binary_search(&(target, ability_rawcode))
+            .is_ok()
+    {
+        return snapshot.units.get(&target).is_some_and(|u| u.health > 0)
+            || snapshot
+                .buildings
+                .get(&target)
+                .is_some_and(|b| b.health > 0);
+    }
     if kind == Wc3StatusVisualKind::AuraCarrier {
         return snapshot.aura_carriers.get(&target).is_some_and(|carrier| {
             carrier.ability.0 == ability_rawcode

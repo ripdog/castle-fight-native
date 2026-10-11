@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 79;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 80;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -34,6 +34,7 @@ mod support_orders;
 pub use death_healing::DeathHealVisualEvent;
 mod building_damage_procs;
 mod enchantments;
+mod naga;
 mod night_elf;
 mod permanent_grants;
 mod starfall;
@@ -1997,7 +1998,13 @@ impl Simulation {
         );
         self.release_spheres(&mut units);
         self.observe_master_parasite_deaths(&units, &unit_health, &positions);
-        self.observe_native_parasite_deaths(&units, &unit_health, &positions);
+        self.observe_native_parasite_deaths(
+            &units,
+            &unit_health,
+            &positions,
+            &buildings,
+            &building_health,
+        );
         self.emit_death_heal_visuals(&units, &positions);
         let mut deaths = 0;
         let mut corpse_spawns = Vec::new();
@@ -4575,6 +4582,15 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
     }
     match spellcasting.ability.effect {
+        AbilityEffect::NagaEarthquake(p) => {
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::NativeBuildingSpellTrigger
+            );
+            assert!(
+                p.radius > 0 && p.damage >= 0 && p.duration_ticks > 0 && p.parent.buff_rawcode != 0
+            );
+        }
         AbilityEffect::Starfall(p) => {
             assert_eq!(
                 spellcasting.ability.target_policy,
