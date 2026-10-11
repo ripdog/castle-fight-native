@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    GiantReefCrab = 0x1000_0059 => b"n0Z7",
     HermitCrab = 0x1000_0058 => b"n0Z4",
     SpinyCrab = 0x1000_0057 => b"n0Z3",
     RockCrab = 0x1000_0056 => b"n0Z2",
@@ -124,6 +125,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    ReefGuardian = 0x2000_0059 => b"h0Z7",
     HermitMound = 0x2000_0058 => b"h0Z4",
     SpinecrabTidepool = 0x2000_0057 => b"h0Z3",
     RockcrabBurrow = 0x2000_0056 => b"h0Z2",

@@ -58,7 +58,7 @@ A newly visible closer unit MUST NOT cause gratuitous retargeting while an exist
 
 ## 4. Candidate discovery
 
-Target candidate discovery SHOULD use the dynamic spatial index rather than scanning all enemies.
+Target candidate discovery SHOULD use the dynamic spatial index rather than scanning all enemies. Acquisition range and attack reach are independent authored fields; valid content may have acquisition range smaller than weapon range. Fresh acquisition uses the former, while pursuit and attack release use their existing independent retention/reach rules. Validation MUST NOT expand either field or reject that relationship.
 
 A query may be based on acquisition range and may inspect one or more spatial cells.
 

@@ -1,6 +1,34 @@
 use super::*;
 
 #[test]
+fn acquisition_can_be_shorter_than_reach_without_blocking_retaliatory_attacks() {
+    let mut sim = simulation(1);
+    let mut spawn = unit(0, 80, 11, AttackDelivery::RangedInstant);
+    spawn.attack.range = 160 * SUBUNITS_PER_WORLD_UNIT;
+    spawn.attack.acquisition_range = 80 * SUBUNITS_PER_WORLD_UNIT;
+    let source = sim.spawn_unit(spawn);
+    let mut passive = unit(1, 200, 0, AttackDelivery::Melee);
+    passive.attack.range = 0;
+    passive.attack.acquisition_range = 0;
+    let target = sim.spawn_unit(passive);
+    for _ in 0..2 {
+        sim.step();
+    }
+    assert_eq!(sim.unit(source).unwrap().target, None);
+    assert_eq!(sim.unit(target).unwrap().health, 1000);
+    *sim.world
+        .get_mut::<AttackProfile>(entity(&sim, target))
+        .unwrap() = unit(1, 200, 3, AttackDelivery::RangedInstant).attack;
+    let mut restored = wire_restored(&sim, 4);
+    for _ in 0..3 {
+        assert_eq!(sim.step().checksum, restored.step().checksum);
+    }
+    assert_eq!(sim.unit(source).unwrap().target, Some(target));
+    assert_eq!(sim.unit(target).unwrap().health, 989);
+    assert_eq!(sim.unit(source).unwrap().attack, spawn.attack);
+}
+
+#[test]
 fn zero_range_melee_uses_contact_for_pursuit_and_release_after_wire_restore() {
     let mut sim = simulation(1);
     let mut spawn = unit(0, 80, 10, AttackDelivery::Melee);

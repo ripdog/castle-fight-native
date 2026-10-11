@@ -4603,7 +4603,7 @@ fn navigation_boundary_coordinate(cell: i32, cell_size: i32) -> i32 {
 fn validate_attack_profile(attack: AttackProfile) {
     assert!(attack.damage >= 0);
     assert!(attack.range >= 0);
-    assert!(attack.acquisition_range >= attack.range);
+    assert!(attack.acquisition_range >= 0);
     match attack.delivery {
         AttackDelivery::Melee | AttackDelivery::RangedInstant => {}
         AttackDelivery::RangedGuaranteedHit { speed_per_tick } => {
