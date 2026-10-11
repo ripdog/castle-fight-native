@@ -204,6 +204,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    OracleOfSirens = 0x2100_0024 => b"h00M",
     AncientPyramide = 0x2100_0023 => b"h00I",
     StarfallObelisk = 0x2100_0022 => b"h07I",
     ElunesLantern = 0x2100_0021 => b"h073",

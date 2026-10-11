@@ -372,3 +372,218 @@ fn native_parent_impact_rechecks_immunity_and_zero_duration_uses_native_permanen
         }
     }
 }
+
+fn charm() -> crate::building_mechanics::NagaCharmProfile {
+    crate::building_mechanics::NagaCharmProfile {
+        parent: profile().parent,
+        map_version: MapVersion::CASTLE_FIGHT_9_27,
+        trigger_targets: AttackTargetMask::GROUND_AND_BUILDINGS,
+        trigger_invulnerable: true,
+        trigger_spell_immune: false,
+        trigger_mechanical_only: true,
+        selector_exclusions: profile().selector_exclusions,
+        selector_excluded_rawcode: 509,
+        child: AbilityId(508),
+        child_range: 1000 * SUBUNITS_PER_WORLD_UNIT,
+        targets: AttackTargetMask::AIR_AND_GROUND,
+        maximum_creep_level: 7,
+        ownership_rejection: AbilityId(510),
+        order_block: AbilityId(511),
+        defender_rawcode: 512,
+        defender_delay_ticks: 3,
+        vision_radius: 100 * SUBUNITS_PER_WORLD_UNIT,
+        vision_ticks: 3,
+    }
+}
+fn charm_caster(s: &mut Simulation) -> SimId {
+    let id = building(s, 0, 1, true);
+    s.world
+        .get_mut::<SpellcastingProfile>(entity(s, id))
+        .unwrap()
+        .ability
+        .effect = AbilityEffect::NagaCharm(charm());
+    // A separate mechanical non-sapper is the native trigger, never the callback candidate.
+    let id = unit(s, 1, 100, false);
+    s.world.entity_mut(entity(s, id)).insert((
+        crate::components::MechanicalUnit,
+        crate::components::BuildTimeTicks(4),
+        crate::components::RepairTimeTicks(4),
+    ));
+    id
+}
+#[test]
+fn native_charm_changes_ownership_without_replacing_identity_or_native_timed_life() {
+    let mut s = simulation();
+    charm_caster(&mut s);
+    let id = unit(&mut s, 1, 500, true);
+    let e = entity(&s, id);
+    s.world.entity_mut(e).insert(MovementClass::Air);
+    let mut status = *s.world.get::<StatusState>(e).unwrap();
+    apply_timed_movement_modifier(&mut status, ModifierId(700), -25, 50);
+    status.movement_modifiers[0].undispellable = true;
+    apply_timed_movement_modifier(&mut status, ModifierId(701), 25, 50);
+    s.world.entity_mut(e).insert(status);
+    let timer = s.allocate_id();
+    s.world.spawn((
+        timer,
+        crate::components::NativeAction::TimedLife {
+            child: id,
+            expires_tick: 5,
+        },
+    ));
+    s.step();
+    let u = s.unit(id).unwrap();
+    assert_eq!((u.owner, u.team, u.health), (PlayerId(0), Team(0), 1000));
+    assert_eq!(entity(&s, id), e);
+    assert_eq!(u.status.movement_modifier_count, 1);
+    assert_eq!(u.status.movement_modifiers[0].id, ModifierId(701));
+    assert_eq!(u.movement_class, MovementClass::Air);
+    let mut other = restored(&s);
+    for _ in 0..6 {
+        assert_eq!(s.step().checksum, other.step().checksum);
+    }
+    assert!(s.unit(id).is_none());
+}
+#[test]
+fn charm_native_rejection_is_independent_of_global_selector_and_neutral_creep_limit() {
+    for flags in [
+        UnitClassifications {
+            hero: true,
+            ..Default::default()
+        },
+        UnitClassifications {
+            resistant_skin: true,
+            ..Default::default()
+        },
+        UnitClassifications {
+            spell_immune: true,
+            ..Default::default()
+        },
+        UnitClassifications {
+            invulnerable: true,
+            ..Default::default()
+        },
+        UnitClassifications {
+            invisible: true,
+            ..Default::default()
+        },
+        UnitClassifications {
+            neutral_hostile_creep_level: Some(8),
+            ..Default::default()
+        },
+    ] {
+        let mut s = simulation();
+        charm_caster(&mut s);
+        let id = unit(&mut s, 1, 500, true);
+        s.world
+            .entity_mut(entity(&s, id))
+            .insert(UnitClassifications {
+                combat_sapper: true,
+                ..flags
+            });
+        s.step();
+        assert_eq!(s.unit(id).unwrap().owner, PlayerId(1));
+        assert!(s.last_ability_casts.is_empty());
+        assert_eq!(s.snapshot_buildings()[0].mana_current, Some(2));
+    }
+    let mut s = simulation();
+    building(&mut s, 0, 1, false);
+    let id = unit(&mut s, 1, 500, true);
+    let src = source(&mut s);
+    let mut units = s.snapshot_units();
+    units[0].classifications.neutral_hostile_creep_level = Some(8);
+    let mut p = charm();
+    p.maximum_creep_level = 0;
+    assert!(s.cast_naga_charm(src, AbilityId(501), id, p, 0, &mut units));
+    assert_eq!(units[0].classifications.neutral_hostile_creep_level, None);
+}
+#[test]
+fn charm_precast_shield_consumption_and_owner_event_rollback_are_distinct() {
+    for rollback in [false, true] {
+        let mut s = simulation();
+        charm_caster(&mut s);
+        let id = unit(&mut s, 1, 500, true);
+        let e = entity(&s, id);
+        let mut status = *s.world.get::<StatusState>(e).unwrap();
+        apply_timed_movement_modifier(&mut status, ModifierId(700), -25, 50);
+        if rollback {
+            status.native_grants = NativeAbilityGrants::from_slice(&[NativeAbilityGrant {
+                ability: charm().ownership_rejection,
+                effect: NativeAbilityGrantEffect::AuraMarker,
+            }]);
+        } else {
+            s.set_negative_building_shield(id, 2, None);
+            s.world.get_mut::<Health>(e).unwrap().current = 200;
+        }
+        s.world.entity_mut(e).insert(status);
+        s.step();
+        let u = s.unit(id).unwrap();
+        assert_eq!((u.owner, u.team), (PlayerId(1), Team(1)));
+        assert_eq!(u.status.movement_modifier_count, u8::from(!rollback));
+        assert_eq!(s.last_ability_casts.len(), usize::from(rollback));
+        if !rollback {
+            assert_eq!(u.health, 1000);
+            assert_eq!(u.negative_building_shield_level, 1);
+        }
+        let mut other = restored(&s);
+        assert_eq!(s.step().checksum, other.step().checksum);
+    }
+}
+#[test]
+fn charm_defender_owner_callback_has_an_independent_deadline_and_survives_source_removal() {
+    let mut s = simulation();
+    building(&mut s, 0, 1, false);
+    let id = unit(&mut s, 1, 500, true);
+    let src = source(&mut s);
+    let mut units = s.snapshot_units();
+    units[0].rawcode = charm().defender_rawcode;
+    assert!(s.cast_naga_charm(src, AbilityId(501), id, charm(), 0, &mut units));
+    assert!(s.world.iter_entities().any(|e| matches!(e.get::<crate::components::NativeAction>(),
+        Some(crate::components::NativeAction::ResumeAttack { source, due_tick: 3 }) if *source == id)));
+    s.world.despawn(entity(&s, src.id));
+    let mut other = restored(&s);
+    for _ in 0..4 {
+        assert_eq!(s.step().checksum, other.step().checksum);
+    }
+    assert!(!s.world.iter_entities().any(|e| matches!(
+        e.get::<crate::components::NativeAction>(),
+        Some(crate::components::NativeAction::ResumeAttack { .. })
+    )));
+}
+
+#[test]
+fn ownership_listener_uses_a_second_independent_shield_attempt() {
+    let mut outcomes = [false; 3];
+    for seed in 0..80 {
+        let mut config = simulation().config.clone();
+        config.match_seed = seed;
+        let mut s = Simulation::new(config, 1);
+        building(&mut s, 0, 1, false);
+        let id = unit(&mut s, 1, 500, true);
+        s.set_negative_building_shield(id, 0, None);
+        for mut state in s
+            .world
+            .query::<&mut building_spells::BuildingSpellTargetState>()
+            .iter_mut(&mut s.world)
+        {
+            state.overheat_level = 1;
+        }
+        let src = source(&mut s);
+        let mut units = s.snapshot_units();
+        let cast = s.cast_naga_charm(src, AbilityId(501), id, charm(), 0, &mut units);
+        outcomes[if !cast {
+            0
+        } else if units[0].team == Team(1) {
+            1
+        } else {
+            2
+        }] = true;
+        if outcomes.into_iter().all(|o| o) {
+            break;
+        }
+    }
+    assert!(
+        outcomes.into_iter().all(|o| o),
+        "native first block, owner rollback and successful transfer must all be reachable"
+    );
+}

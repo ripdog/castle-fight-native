@@ -1,7 +1,7 @@
 import copy
 import json
 import unittest
-from project_naga_building import project_pyramid
+from project_naga_building import project_pyramid, project_oracle
 
 
 class NagaBuildingProjectionTest(unittest.TestCase):
@@ -47,6 +47,46 @@ class NagaBuildingProjectionTest(unittest.TestCase):
             with self.subTest(child=key), self.assertRaises(ValueError): project_pyramid(*f)
         f = self.fixture(); f[4][-1]['runtime_value'] = '1'
         with self.assertRaises(ValueError): project_pyramid(*f)
+
+
+class OracleProjectionTests(unittest.TestCase):
+    def oracle(self):
+        f = NagaBuildingProjectionTest().fixture()
+        raw = lambda code: int.from_bytes(code.encode(), 'big')
+        f[0].update(mechanic_kind='dummy-target-ability', target_selector='random-alive-enemy')
+        f[1]['CHLD'] = {'atar:1': 'air,ground,nonhero,enemy,neutral', 'acas:1': 0, 'Nch1:1': 7, 'aran:1': 19}
+        f[3][1]['base_rawcode'] = 'ACch'
+        f[5].update({
+            'oracleSpell': {'source': f'Btr=randomAliveEnemy(Atr) if((Btr==nil)or checkForShield(Btr))then return end dummyCastTargetWithVision(Atr,{raw("CHLD")},91,Btr,unit_getPos(ztr),2.)'},
+            'ForGroupCallback_forUnitsInRect_SpellHelpers_callback_forUnitsInRect_SpellHelpers': {'source': 'isAliveCombatSapper(zOn)unit_isEnemyOf(zOn,yOn.p)unit_getAbilityLevel(zOn,3)<=0 unit_getAbilityLevel(zOn,4)<=0 not(unit_getTypeId(zOn)==8)'},
+            'mJ': {'source': 'unit_getAbilityLevel(U3q,5)>0)or hasShield(U3q) unit_getTypeId(U3q)==9 doAfter(.1,Z3q) __wurst_safe_SetUnitOwner(U3q,W3q,true) orderCodeAttackIfAllowed(U3q)'},
+            'orderCodeAttackIfAllowed': {'source': 'unit_getAbilityLevel(V9o,6)>=1'},
+            'dummyCastTargetWithVision1': {'source': 'x[2],12.,true,false doAfter(.2,x)'},
+        })
+        return f
+
+    def test_charm_preserves_native_parent_resources_and_ownership_controls(self):
+        p = project_oracle(*self.oracle())['ability']
+        self.assertEqual(p['mana_cost'], 7)
+        e = p['effect']['NagaCharm']
+        self.assertEqual((e['ownership_rejection'], e['order_block'], e['defender_delay_ticks']), (5, 6, 3))
+        self.assertEqual((e['vision_radius'], e['vision_ticks']), (12 * 1024, 6))
+        self.assertEqual((e['targets'], e['maximum_creep_level']), (3, 7))
+
+    def test_missing_shield_rollback_or_independent_selector_is_rejected(self):
+        for name, token in [('oracleSpell', 'randomAliveEnemy'), ('oracleSpell', 'checkForShield'),
+                            ('mJ', '__wurst_safe_SetUnitOwner(U3q,W3q,true)'),
+                            ('mJ', 'hasShield(U3q)'), ('orderCodeAttackIfAllowed', 'unit_getAbilityLevel')]:
+            f = self.oracle(); f[5][name]['source'] = f[5][name]['source'].replace(token, 'changed')
+            with self.subTest(token=token), self.assertRaises(ValueError): project_oracle(*f)
+
+    def test_native_charm_mask_base_and_secondary_cost_cannot_drift(self):
+        f = self.oracle(); f[1]['CHLD']['atar:1'] = 'air,ground,enemy'
+        with self.assertRaises(ValueError): project_oracle(*f)
+        f = self.oracle(); f[3][1]['base_rawcode'] = 'AOhx'
+        with self.assertRaises(ValueError): project_oracle(*f)
+        f = self.oracle(); f[4][-2]['runtime_value'] = '1'
+        with self.assertRaises(ValueError): project_oracle(*f)
 
 
 if __name__ == '__main__': unittest.main()

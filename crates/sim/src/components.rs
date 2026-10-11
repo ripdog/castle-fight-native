@@ -939,6 +939,8 @@ pub struct UnitClassifications {
     pub hero: bool,
     /// Native Arsk: hero targeting/duration rules for negative spells only.
     pub resistant_skin: bool,
+    /// Present only while the handle belongs to the native Neutral Hostile creep group.
+    pub neutral_hostile_creep_level: Option<u16>,
     pub ancient: bool,
     pub summoned: bool,
     pub spell_immune: bool,
@@ -1783,6 +1785,7 @@ pub enum AbilityEffect {
     SirenPurge(SirenPurgeProfile),
     NativeSummon(NativeSummonProfile),
     NagaEarthquake(crate::building_mechanics::NagaEarthquakeProfile),
+    NagaCharm(crate::building_mechanics::NagaCharmProfile),
 }
 
 impl AbilityEffect {
@@ -1798,6 +1801,7 @@ impl AbilityEffect {
             Self::SirenPurge(_) => 45,
             Self::NativeSummon(_) => 46,
             Self::NagaEarthquake(_) => 47,
+            Self::NagaCharm(_) => 48,
             Self::Heal(_) => 41,
             Self::SilverGlade(_) => 42,
             Self::Wilderness(_) => 43,

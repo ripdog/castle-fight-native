@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r107";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r108";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 62;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 63;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1384,6 +1384,11 @@ impl CastleFightTowerKind {
         let expected_name = extracted_content_927().buildings[&rawcode].name;
         let mut definition = extracted_tower_definition_927(rawcode, expected_name);
         definition.spellcasting = match self {
+            Self::OracleOfSirens => {
+                Some(crate::building_mechanics::oracle_spellcasting_for_version(
+                    MapVersion::CASTLE_FIGHT_9_27,
+                ))
+            }
             Self::AncientPyramide => {
                 Some(crate::building_mechanics::pyramid_spellcasting_for_version(
                     MapVersion::CASTLE_FIGHT_9_27,
@@ -1643,6 +1648,7 @@ impl CastleFightTowerDefinition {
                     hero: false,
                     summoned: false,
                     resistant_skin: false,
+                    neutral_hostile_creep_level: None,
                     ancient: false,
                     spell_immune: false,
                     combat_sapper: false,
@@ -1861,6 +1867,12 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A00O") => {
+            0x4000_0170
+        }
+        (NativeEffectSourceKind::AbilityEffect, v) if v == u32::from_be_bytes(*b"A00N") => {
+            0x4000_0171
+        }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A00M") => {
             0x4000_016e
         }
@@ -2904,6 +2916,10 @@ fn hash_unit_definition(hash: &mut ContentHash64, definition: CastleFightUnitDef
 fn hash_classifications(hash: &mut ContentHash64, flags: UnitClassifications) {
     hash.write_u8(u8::from(flags.hero));
     hash.write_u8(u8::from(flags.resistant_skin));
+    hash.write_u8(u8::from(flags.neutral_hostile_creep_level.is_some()));
+    if let Some(level) = flags.neutral_hostile_creep_level {
+        hash.write_u16(level);
+    }
     hash.write_u8(u8::from(flags.ancient));
     hash.write_u8(u8::from(flags.summoned));
     hash.write_u8(u8::from(flags.spell_immune));
@@ -3434,6 +3450,11 @@ fn hash_automatic_ability_profile(hash: &mut ContentHash64, ability: AutomaticAb
         hash.write_u8(0);
     }
     match ability.effect {
+        AbilityEffect::NagaCharm(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         AbilityEffect::NagaEarthquake(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);
@@ -4557,6 +4578,7 @@ impl ExtractedContent927 {
                         MapVersion::CASTLE_FIGHT_9_27,
                         &abilities,
                     ),
+                    neutral_hostile_creep_level: None,
                     melee_attacker: attack1_enabled && columns[28] == "normal",
                     hero: columns[2]
                         .as_bytes()

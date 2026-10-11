@@ -2599,6 +2599,10 @@ fn hash_splash_falloff_profile(hash: &mut Fnv64, profile: crate::components::Spl
 fn hash_unit_classifications(hash: &mut Fnv64, flags: UnitClassifications) {
     hash.write_u8(u8::from(flags.hero));
     hash.write_u8(u8::from(flags.resistant_skin));
+    hash.write_u8(u8::from(flags.neutral_hostile_creep_level.is_some()));
+    if let Some(level) = flags.neutral_hostile_creep_level {
+        hash.write_u16(level);
+    }
     hash.write_u8(u8::from(flags.ancient));
     hash.write_u8(u8::from(flags.summoned));
     hash.write_u8(u8::from(flags.spell_immune));
@@ -2779,6 +2783,11 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             }
         }
         AbilityEffect::BuildingStasis(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
+        AbilityEffect::NagaCharm(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);
             }

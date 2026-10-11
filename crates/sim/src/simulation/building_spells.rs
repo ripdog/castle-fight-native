@@ -75,6 +75,11 @@ pub(super) fn native_building_trigger(
     ability: AutomaticAbilityProfile,
 ) -> Option<(AttackTargetMask, bool, bool)> {
     match ability.effect {
+        AbilityEffect::NagaCharm(p) => Some((
+            p.trigger_targets,
+            p.trigger_invulnerable,
+            p.trigger_spell_immune,
+        )),
         AbilityEffect::NagaEarthquake(p) => Some((
             p.trigger_targets,
             p.trigger_invulnerable,
@@ -149,6 +154,7 @@ pub(super) fn native_building_trigger_unit_type(
     mechanical: bool,
 ) -> bool {
     match ability.effect {
+        AbilityEffect::NagaCharm(p) => !p.trigger_mechanical_only || mechanical,
         AbilityEffect::NagaEarthquake(p) => !p.trigger_mechanical_only || mechanical,
         AbilityEffect::SilverGlade(p) => !p.trigger_mechanical_only || mechanical,
         AbilityEffect::Starfall(p) => !p.trigger_mechanical_only || mechanical,

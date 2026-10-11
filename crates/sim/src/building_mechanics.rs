@@ -24,7 +24,8 @@ pub(crate) use damage_proc::{
 };
 mod naga;
 mod night_elf;
-pub use naga::NagaEarthquakeProfile;
+pub use naga::{NagaCharmProfile, NagaEarthquakeProfile};
+pub(crate) use naga::{oracle_bindings, oracle_source, oracle_spellcasting_for_version};
 pub(crate) use naga::{pyramid_bindings, pyramid_source, pyramid_spellcasting_for_version};
 mod production_replication;
 pub use night_elf::{SilverGladeProfile, StarfallProfile, StarfallWaveProfile, WildernessProfile};

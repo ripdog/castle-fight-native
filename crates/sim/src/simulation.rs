@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 80;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 81;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -1721,7 +1721,7 @@ impl Simulation {
         );
         death_healing::refresh_support(&mut units, &buildings, None);
         self.resolve_burning_oil_zones(&mut units, &mut buildings, completed_tick);
-        let grid = SpatialGrid::build(
+        let mut grid = SpatialGrid::build(
             self.config.spatial_cell_size,
             units
                 .iter()
@@ -1759,6 +1759,34 @@ impl Simulation {
         self.apply_speed_auras(&mut units);
         self.resolve_damage_charge(&mut units, &mut buildings);
         let ability_metrics = self.resolve_automatic_abilities(&mut buildings, &mut units, &grid);
+        if self
+            .last_ability_casts
+            .iter()
+            .any(|c| matches!(c.effect, AbilityEffect::NagaCharm(_)))
+        {
+            // Ownership changes during spell resolution invalidate team partitions immediately.
+            grid = SpatialGrid::build(
+                self.config.spatial_cell_size,
+                units
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, u)| u.health > 0)
+                    .flat_map(|(i, u)| {
+                        let component = (u.movement_class == MovementClass::Ground)
+                            .then(|| {
+                                self.topology
+                                    .component_id(self.topology.cell_of_point(u.position))
+                            })
+                            .flatten();
+                        [
+                            component.map(|c| (SpatialPartition::new(u.team.0, c), i, u.position)),
+                            Some((SpatialPartition::global(u.team.0), i, u.position)),
+                        ]
+                        .into_iter()
+                        .flatten()
+                    }),
+            );
+        }
         let abilities = phase_start.elapsed();
 
         let phase_start = Instant::now();
@@ -4582,6 +4610,13 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
     }
     match spellcasting.ability.effect {
+        AbilityEffect::NagaCharm(p) => {
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::NativeBuildingSpellTrigger
+            );
+            assert!(p.child_range > 0 && p.child.0 != 0 && p.parent.buff_rawcode != 0);
+        }
         AbilityEffect::NagaEarthquake(p) => {
             assert_eq!(
                 spellcasting.ability.target_policy,

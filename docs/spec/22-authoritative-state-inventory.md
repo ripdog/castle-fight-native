@@ -250,3 +250,6 @@ Timed movement, attack-speed and armor modifiers also retain native dispel immun
 
 
 Native Parasite profiles independently retain invulnerable eligibility and normal/hero buff duration. Released missiles can target unit or building handles; native zero buff duration has permanent semantics. Native recipient art is a derived view of active actions, rather than a second authoritative timer. Native Thunder Clap slow retains dispel immunity in existing timed modifier state. Bundle/checksum/snapshot compatibility advances to 62/80/73.
+
+
+Native ownership conversion preserves the logical body, immutable baseline/provenance and timed summon membership. Owner/team change on the same handle; spell-phase conversions rebuild derived spatial team partitions before combat decisions. Optional native Neutral Hostile creep level is authoritative classification, distinct from a player-owned body's ordinary level, and native conversion clears that role. Charm's independent parent, selector, native mask, ownership rejection and order callback parameters are version-scoped profile state. Bundle/checksum/snapshot schemas advance to 63/81/74.
