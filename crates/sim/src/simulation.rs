@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 81;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 82;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -35,6 +35,7 @@ pub use death_healing::DeathHealVisualEvent;
 mod building_damage_procs;
 mod enchantments;
 mod naga;
+mod native_building_auras;
 mod night_elf;
 mod permanent_grants;
 mod starfall;
@@ -1681,6 +1682,7 @@ impl Simulation {
         self.refresh_mana_improvement_links();
         self.refresh_carrier_auras_for_timers();
         self.refresh_native_mana_auras_for_timers();
+        self.refresh_native_building_auras_for_timers();
         self.advance_cooldowns();
         self.advance_rescue_strikes(completed_tick);
         self.resolve_shrine_revivals();
@@ -1758,7 +1760,9 @@ impl Simulation {
         self.apply_passive_auras(&mut units);
         self.apply_speed_auras(&mut units);
         self.resolve_damage_charge(&mut units, &mut buildings);
+        self.refresh_native_building_auras(&mut units, &mut buildings);
         let ability_metrics = self.resolve_automatic_abilities(&mut buildings, &mut units, &grid);
+        self.refresh_native_building_auras(&mut units, &mut buildings);
         if self
             .last_ability_casts
             .iter()

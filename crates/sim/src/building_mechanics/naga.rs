@@ -141,3 +141,45 @@ pub(crate) fn oracle_source(version: MapVersion, source: NativeEffectSource) -> 
     version == MapVersion::CASTLE_FIGHT_9_27
         && oracle_bindings(version).iter().any(|b| b.source == source)
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct NativeBuildingAuraProfile {
+    pub map_version: MapVersion,
+    pub source_rawcode: u32,
+    pub inventory: AbilityId,
+    pub armor_ability: AbilityId,
+    pub armor_buff: u32,
+    pub armor_radius: i32,
+    pub armor_bonus_per_100: i16,
+    pub armor_targets: crate::AttackTargetMask,
+    pub armor_invulnerable: bool,
+    pub regeneration_ability: AbilityId,
+    pub regeneration_radius: i32,
+    pub regeneration_per_second_per_10k: u32,
+    pub regeneration_targets: crate::AttackTargetMask,
+    pub regeneration_invulnerable: bool,
+}
+pub(crate) fn coral_auras_for_version(version: MapVersion) -> Option<NativeBuildingAuraProfile> {
+    static PROFILE: std::sync::OnceLock<NativeBuildingAuraProfile> = std::sync::OnceLock::new();
+    (version == MapVersion::CASTLE_FIGHT_9_27).then(|| {
+        *PROFILE.get_or_init(|| {
+            serde_json::from_value(evidence(version)["coral_auras"].clone())
+                .expect("retained Coral auras")
+        })
+    })
+}
+pub(crate) fn coral_bindings(version: MapVersion) -> Vec<ResolvedNativeEffectBinding> {
+    let Some(p) = coral_auras_for_version(version) else {
+        return Vec::new();
+    };
+    [p.inventory, p.armor_ability, p.regeneration_ability]
+        .into_iter()
+        .map(|a| ResolvedNativeEffectBinding {
+            source: NativeEffectSource::new(NativeEffectSourceKind::UnitAbility, a.0),
+            implementation: NativeEffectImplementationId::WarcraftNativeBuildingAurasV1,
+        })
+        .collect()
+}
+pub(crate) fn coral_source(version: MapVersion, source: NativeEffectSource) -> bool {
+    coral_bindings(version).iter().any(|b| b.source == source)
+}

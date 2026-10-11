@@ -118,3 +118,31 @@ def project_oracle(row, fields, units, abilities, protected, traces, version):
         'ability': {'id': raw(row['ability_rawcode']), 'mana_cost': integer(cost(row['ability_rawcode'], 'mana_cost')),
         'cooldown_ticks': tick(cost(row['ability_rawcode'], 'cooldown')), 'range': integer(parent['aran:1'], 1024),
         'target_policy': 'NativeBuildingSpellTrigger', 'effect': {'NagaCharm': profile}}}
+
+
+def project_coral(fields, abilities, traces, version):
+    raw = lambda code: int.from_bytes(code.encode('ascii'), 'big')
+    integer = lambda value, scale=1: int((Decimal(str(value)) * scale).to_integral_value(rounding=ROUND_CEILING))
+    source = traces['iD']['source']
+    match = re.search(r'elseif\(mho==(\d+)\)then safeUnitAddAbility\(jho,(\d+)\)safeUnitAddAbility\(jho,(\d+)\)', source)
+    if not match:
+        raise ValueError('Coral native construction aura additions changed')
+    building, armor_code, regen_code = [int(code).to_bytes(4, 'big').decode() for code in match.groups()]
+    if fields[building]['uaen:0'] != 0 or set(fields[building]['uabi:0'].split(',')) != {'A07V', 'A09A'}:
+        raise ValueError('Coral requires its unarmed native UI-only weapon modifier inventory')
+    armor, regen = fields[armor_code], fields[regen_code]
+    base = lambda code: next(a['base_rawcode'] for a in abilities if a['rawcode'] == code)
+    if base(armor_code) != 'ACav' or base(regen_code) != 'ACnr' or base('A07V') != 'Amgl':
+        raise ValueError('Coral native aura bases changed')
+    if (set(armor['atar:1'].split(',')) != {'friend', 'invulnerable', 'self', 'structure', 'vulnerable'}
+        or set(regen['atar:1'].split(',')) != {'air', 'friend', 'ground', 'invulnerable', 'vulnerable'}
+        or any(integer(a[k]) != 0 for a in [armor, regen] for k in ['adur:1', 'ahdu:1'])
+        or integer(armor['Had2:1']) != 0 or integer(regen['Oar2:1']) != 0):
+        raise ValueError('Coral requires separate zero-linger flat native masks')
+    return {'map_version': version, 'source_rawcode': raw(building), 'inventory': raw('A07V'),
+        'armor_ability': raw(armor_code), 'armor_buff': raw(armor['abuf:1']),
+        'armor_radius': integer(armor['aare:1'], 1024), 'armor_bonus_per_100': integer(armor['Had1:1'], 100),
+        'armor_targets': 4, 'armor_invulnerable': True,
+        'regeneration_ability': raw(regen_code), 'regeneration_radius': integer(regen['aare:1'], 1024),
+        'regeneration_per_second_per_10k': integer(regen['Oar1:1'], 10000),
+        'regeneration_targets': 3, 'regeneration_invulnerable': True}

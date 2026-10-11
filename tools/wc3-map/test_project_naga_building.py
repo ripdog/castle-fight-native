@@ -1,7 +1,7 @@
 import copy
 import json
 import unittest
-from project_naga_building import project_pyramid, project_oracle
+from project_naga_building import project_pyramid, project_oracle, project_coral
 
 
 class NagaBuildingProjectionTest(unittest.TestCase):
@@ -87,6 +87,36 @@ class OracleProjectionTests(unittest.TestCase):
         with self.assertRaises(ValueError): project_oracle(*f)
         f = self.oracle(); f[4][-2]['runtime_value'] = '1'
         with self.assertRaises(ValueError): project_oracle(*f)
+
+
+class CoralProjectionTests(unittest.TestCase):
+    def fixture(self):
+        raw = lambda c: int.from_bytes(c.encode(), 'big')
+        fields = {'BLDG': {'uaen:0': 0, 'uabi:0': 'A07V,A09A'},
+            'ARMR': {'atar:1': 'friend,invulnerable,self,structure,vulnerable', 'adur:1': 0, 'ahdu:1': 0,
+                'Had2:1': 0, 'Had1:1': 3.5, 'aare:1': 11, 'abuf:1': 'BUFF'},
+            'REGN': {'atar:1': 'air,friend,ground,invulnerable,vulnerable', 'adur:1': 0, 'ahdu:1': 0,
+                'Oar2:1': 0, 'Oar1:1': 2.25, 'aare:1': 19}}
+        abilities = [{'rawcode': c, 'base_rawcode': base} for c, base in [('ARMR', 'ACav'), ('REGN', 'ACnr'), ('A07V', 'Amgl')]]
+        trace = {'iD': {'source': f'elseif(mho=={raw("BLDG")})then safeUnitAddAbility(jho,{raw("ARMR")})safeUnitAddAbility(jho,{raw("REGN")})'}}
+        return [fields, abilities, trace, {'major': 1, 'minor': 2}]
+
+    def test_hidden_construction_auras_keep_independent_masks_ranges_and_rates(self):
+        p = project_coral(*self.fixture())
+        self.assertEqual((p['armor_targets'], p['regeneration_targets']), (4, 3))
+        self.assertEqual((p['armor_radius'], p['regeneration_radius']), (11*1024, 19*1024))
+        self.assertEqual((p['armor_bonus_per_100'], p['regeneration_per_second_per_10k']), (350, 22500))
+
+    def test_changed_construction_and_native_bases_are_rejected(self):
+        f = self.fixture(); f[2]['iD']['source'] = 'changed'
+        with self.assertRaises(ValueError): project_coral(*f)
+        f = self.fixture(); f[1][1]['base_rawcode'] = 'AOhw'
+        with self.assertRaises(ValueError): project_coral(*f)
+
+    def test_percentage_linger_or_ordinary_attack_cannot_be_silently_added(self):
+        for code, key, value in [('BLDG', 'uaen:0', 1), ('ARMR', 'Had2:1', 1), ('REGN', 'Oar2:1', 1), ('REGN', 'adur:1', 3)]:
+            f = self.fixture(); f[0][code][key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError): project_coral(*f)
 
 
 if __name__ == '__main__': unittest.main()

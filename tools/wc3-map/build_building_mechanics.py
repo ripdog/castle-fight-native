@@ -45,6 +45,7 @@ def build(map_version='9.27', revision='r1'):
     launcher_codes += ['h07H','A08E','A08C','A08D','A08F']
     silver = next(r for r in building_rows if r['building_rawcode'] == 'h08P')
     launcher_codes += ['h08P','A08B','A08A','A08H']
+    launcher_codes += ['h00G', 'A07V', 'A09A', 'A0HY', 'A007']
     oracle = next(r for r in building_rows if r['building_rawcode'] == 'h00M')
     launcher_codes += ['h00M', 'A00O', 'A00N']
     pyramid = next(r for r in building_rows if r['building_rawcode'] == 'h00I')
@@ -206,7 +207,7 @@ def build(map_version='9.27', revision='r1'):
     silver_visuals = [{'role':'caster','path':json.loads('"'+path+'"')} for path in re.findall(r'addEffect\("(.*?)",unit_getPos',traces[silver['source_functions'].split(',')[0]]['source'])]
     if not silver_visuals: raise ValueError('Silver Glade charge requires its literal caster art')
     silver_profile = project_silver(silver, selected, unit_rows, rows('abilities.tsv'), protected, traces, dict(zip(['major','minor'],map(int,map_version.split('.')))))
-    from project_naga_building import project_pyramid, project_oracle
+    from project_naga_building import project_pyramid, project_oracle, project_coral
     pyramid_profile = project_pyramid(pyramid, selected, unit_rows, rows('abilities.tsv'), protected, traces, dict(zip(['major', 'minor'], map(int, map_version.split('.')))))
     oracle_profile = project_oracle(oracle, selected, unit_rows, rows('abilities.tsv'), protected, traces, dict(zip(['major', 'minor'], map(int, map_version.split('.')))))
     from lua_index import _decode_lua_short_string_contents, _decode_w3p_string_payload
@@ -214,8 +215,9 @@ def build(map_version='9.27', revision='r1'):
         for m in re.finditer(rb'_(?:T|r)\("((?:\\.|[^"\\])*)"\)', traces['mJ']['source'].encode())]
     if len(owner_art) != 2 or owner_art[0] not in script_art['checkForShield'] or owner_art[1] != re.search(r'AddSpecialEffectTarget\(".*?",\w+,"(.*?)"', traces['checkForShield']['source'])[1]:
         raise ValueError('native owner rejection must retain the shared shield model and attachment')
+    coral_profile = project_coral(selected, rows('abilities.tsv'), traces, dict(zip(['major', 'minor'], map(int, map_version.split('.')))))
     from project_production_replication import project as project_replication
-    return {'oracle_owner_rejection_visual': {'model_path': owner_art[0], 'attachment': owner_art[1]}, 'oracle': oracle, 'oracle_spellcasting': oracle_profile, 'pyramid': pyramid, 'pyramid_spellcasting': pyramid_profile,
+    return {'coral_auras': coral_profile, 'oracle_owner_rejection_visual': {'model_path': owner_art[0], 'attachment': owner_art[1]}, 'oracle': oracle, 'oracle_spellcasting': oracle_profile, 'pyramid': pyramid, 'pyramid_spellcasting': pyramid_profile,
             'production_replication': project_replication(replication, traces), 'replication_source': replication,
             'map_version': map_version, 'schema_version': 2, 'source_revision': revision,
             'extraction_git_tree': tree, 'source_sha256': sources,
