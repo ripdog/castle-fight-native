@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r115";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r116";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -7642,12 +7642,45 @@ mod tests {
     }
 
     #[test]
-    fn imported_towers_are_fortified_and_keep_extracted_attack_types() {
-        let watch = CastleFightTowerKind::WatchTower.definition();
-        assert_eq!(watch.damage_type, DamageType::Pierce);
-        assert_eq!(watch.armor, ArmorProfile::new(ArmorType::Fortified, 5));
-        let poof = CastleFightTowerKind::PoofTower.definition();
-        assert_eq!(poof.damage_type, DamageType::Magic);
-        assert_eq!(poof.armor, ArmorProfile::new(ArmorType::Fortified, 5));
+    fn promoted_towers_retain_native_body_and_ordinary_weapon_fields() {
+        let source = extracted_content_927();
+        for kind in CastleFightTowerKind::ALL {
+            let definition = kind.definition();
+            let code = definition.rawcode;
+            let building = &source.buildings[&code];
+            let unit = &source.units[&code];
+            let protected = source.protected_stats.get(&code);
+            assert_eq!(
+                definition.health,
+                protected.map_or(building.health, |p| p.health)
+            );
+            assert_eq!(
+                definition.armor,
+                protected.map_or(building.armor, |p| p.armor)
+            );
+            // Scripted bombardment replaces its native attack with the separately tested
+            // artillery effect. Other towers retain their ordinary weapon unchanged.
+            if definition.spellcasting.is_some_and(|p| {
+                matches!(p.ability.effect, AbilityEffect::ArtilleryBombardment { .. })
+            }) {
+                assert!(definition.attack.is_none());
+                continue;
+            }
+            let weapon = native_primary_attack_927(unit, protected);
+            assert_eq!(
+                definition.attack.is_some(),
+                weapon.is_some(),
+                "{}",
+                definition.name
+            );
+            if let (Some(attack), Some(weapon)) = (definition.attack, weapon) {
+                assert_eq!(
+                    (Some(attack.damage), attack.range, attack.cooldown_ticks),
+                    (weapon.damage, weapon.range, weapon.cooldown_ticks)
+                );
+                assert_eq!(definition.attack_targets, weapon.targets);
+                assert_eq!(definition.damage_type, weapon.damage_type);
+            }
+        }
     }
 }

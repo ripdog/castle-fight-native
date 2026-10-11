@@ -52,3 +52,14 @@ Validation: all 700 simulation tests, all 206 map-tooling tests, strict workspac
 - Presentation: source Tomb of Relics model/skin/scale, lifecycle clips, native Carapace/Devotion icon and actual recipient aura art remain versioned asset bindings. The inherited Blacksmith upgrade tooltip does not create upgrades absent from inventory/control flow.
 
 Validation: strict workspace/all-target Clippy, formatting and diff checks passed; 701 simulation checks passed (the broad imported battle already passed in the Hermit chunk), including 35 catalog/import checks and both new shared aura fixtures. Native tuning/carrier/building-mechanic/buff-visual/source-manifest projections reproduce. Critter presentation remains zero findings. Logs: `.local-tools/orc-validation/tidal-cairn-*`.
+
+
+## Coral Spire
+
+- Identity/source: runtime r116; `h0Z6` inherits `hgtw` and occupies the next available root at (0,2). Protected life, primary damage/range overlays, ordinary Pierce missile damage/cadence/acquisition/delivery speed and independent air/ground mask, disabled secondary weapon, mechanical structure classification, regeneration, construction/repair/economy and command slot/hotkey all consume retained catalogs. Armor is the source Heavy (`large`) class; no Fortified override is present. Its ordinary weapon excludes structures.
+- Complete inventory/control flow: authored ability inventory is empty, with no upgrades or production body. Literal references close to `pK`, protected stats, object metadata and catalog drift/bootstrap. The inherited Guard Tower tooltip does not supply Magic Sentry, detection or an upgrade absent from object/script evidence. No hidden grant, dummy, spell, mana clock or extra state is created.
+- Presentation/verification: source Tidal Guardian model/skin/scale and Guard Tower Missile, ordinary/lifecycle clips and UI remain asset bindings. Existing deterministic guaranteed-hit missile delivery, action cadence and generic building construction/removal/worker-independent flight cover this ordinary tower.
+
+Catalog verification now checks every promoted tower against retained body/ordinary-weapon data, replacing the old two-tower fixed armor assertion. It covers the source Heavy armor exception, protected overrides, enabled/disabled weapons, cadence and independent masks without copying tuning values.
+
+Validation: all 35 catalog/import checks, strict simulation/all-target Clippy, source-manifest reproduction, formatting and diff checks passed. Logs: `.local-tools/orc-validation/coral-spire-*`.
