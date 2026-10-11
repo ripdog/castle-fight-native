@@ -146,3 +146,53 @@ def project_coral(fields, abilities, traces, version):
         'regeneration_ability': raw(regen_code), 'regeneration_radius': integer(regen['aare:1'], 1024),
         'regeneration_per_second_per_10k': integer(regen['Oar1:1'], 10000),
         'regeneration_targets': 3, 'regeneration_invulnerable': True}
+
+
+def project_tidal(row, fields, units, abilities, protected, traces, version):
+    raw = lambda c: int.from_bytes(c.encode(), 'big')
+    integer = lambda v, scale=1: int((Decimal(str(v)) * scale).to_integral_value(rounding=ROUND_CEILING))
+    tick = lambda v: integer(v, 30)
+    params = json.loads(row['parameters_json'])
+    child = params['effect_ability_id'].to_bytes(4, 'big').decode()
+    parent, native, building = fields[row['ability_rawcode']], fields[child], fields[row['building_rawcode']]
+    callback = traces['tidalSpell']['source']
+    if (row['target_selector'] != 'random-alive-enemy-ground' or row['mechanic_kind'] != 'dummy-target-ability'
+        or 'ytr=randomAliveEnemyGround(xtr)' not in callback or 'if(ytr==nil)then return end' not in callback
+        or f'dummyCastTargetWithVision(xtr,{raw(child)},{params["order_id"]},ytr,unit_getPos(wtr),{params["dummy_lifetime_seconds"]}.)' not in callback):
+        raise ValueError('Tidal requires independent ground selection and building-origin target vision dummy')
+    selector = traces['ForGroupCallback_forUnitsInRect_SpellHelpers_callback_forUnitsInRect_SpellHelpers1']['source']
+    exclusions = list(map(int, re.findall(r'unit_getAbilityLevel\(COn,(\d+)\)<=0', selector)))
+    if len(exclusions) != 2 or not all(t in selector for t in ['isAliveCombatSapper(COn)', 'unit_isEnemyOf(COn,BOn.p)', 'UNIT_TYPE_GROUND']):
+        raise ValueError('Tidal ground selector changed')
+    base = lambda code: next(a['base_rawcode'] for a in abilities if a['rawcode'] == code)
+    if (base(row['ability_rawcode']) != 'ACpa' or base(child) != 'ACcv'
+        or set(parent['atar:1'].split(',')) != {'enemies', 'ground', 'neutral', 'nonhero', 'sapper', 'vulnerable'}
+        or set(native['atar:1'].split(',')) != {'enemies', 'ground', 'neutral'}
+        or any(integer(parent[f'Poi{i}:1']) != 0 for i in range(1, 5)) or integer(native['acas:1']) != 0
+        or set(building['ua1g:0'].split(',')) != {'enemies', 'ground', 'sapper', 'vulnerable'}):
+        raise ValueError('Tidal parent, child or ordinary weapon native eligibility changed')
+    cost = lambda c, f: next(p['runtime_value'] for p in protected if p['rawcode'] == c and p['field'] == f)
+    if any(integer(cost(child, f)) != 0 for f in ['mana_cost', 'cooldown']):
+        raise ValueError('Tidal child must be free and immediate')
+    vision = traces['dummyCastTargetWithVision1']['source']
+    profile = {'map_version': version, 'source_rawcode': raw(row['building_rawcode']),
+        'selector_exclusions': exclusions, 'trigger_targets': 1, 'trigger_nonhero': True, 'trigger_sapper': True,
+        'trigger_invulnerable': False, 'trigger_spell_immune': False, 'child_range': integer(native['aran:1'], 1024),
+        'weapon_sapper': True, 'weapon_vulnerable': True,
+        'vision_radius': integer(re.search(r'(?:getY\(\w+\)|\w+\[2\]),([\d.]+),true,false', vision)[1], 1024),
+        'vision_ticks': tick(re.search(r'doAfter\(([\d.]+),', vision)[1]),
+        'wave': {'ability': raw(child), 'damage': integer(native['Ucs1:1']), 'maximum_damage': integer(native['Ucs2:1']),
+            'distance': integer(native['Ucs3:1'], 1024), 'initial_radius': integer(native['aare:1'], 1024),
+            'final_radius': integer(native['Ucs4:1'], 1024),
+            'speed_per_tick': integer(Decimal(str(native['amsp:0'])) / 30, 1024), 'targets': 1}}
+    profile['parent'] = project_parasite({'buffid1': parent['abuf:1'], 'missilehoming': parent['amho:0'],
+        'missilespeed': parent['amsp:0'], 'targs1': parent['atar:1'], 'dur1': parent['adur:1'], 'herodur1': parent['ahdu:1'],
+        'unitid1': parent['ipmu:1'], 'cast1': parent['Npa6:1'], 'datae1': parent['Npa5:1'],
+        **{f'data{letter}1': parent[f'Poi{i}:1'] for i, letter in enumerate('abcd', 1)}}, version)
+    unit = units[row['building_rawcode']]
+    amount = lambda k: 0 if unit[k].strip() in {'', '-', '_'} else integer(unit[k])
+    return {'mana': {'maximum': amount('mana_max'), 'starting': amount('mana_start'),
+        'regen_per_tick_per_10k': (1 << 31) | amount('mana_regen')},
+        'ability': {'id': raw(row['ability_rawcode']), 'mana_cost': integer(cost(row['ability_rawcode'], 'mana_cost')),
+            'cooldown_ticks': tick(cost(row['ability_rawcode'], 'cooldown')), 'range': integer(parent['aran:1'], 1024),
+            'target_policy': 'NativeBuildingSpellTrigger', 'effect': {'NagaTidalWave': profile}}}

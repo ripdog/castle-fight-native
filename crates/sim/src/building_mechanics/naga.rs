@@ -183,3 +183,85 @@ pub(crate) fn coral_bindings(version: MapVersion) -> Vec<ResolvedNativeEffectBin
 pub(crate) fn coral_source(version: MapVersion, source: NativeEffectSource) -> bool {
     coral_bindings(version).iter().any(|b| b.source == source)
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct NagaTidalWaveProfile {
+    pub map_version: MapVersion,
+    pub source_rawcode: u32,
+    pub parent: crate::NativeParasiteProfile,
+    pub trigger_targets: crate::AttackTargetMask,
+    pub trigger_nonhero: bool,
+    pub trigger_sapper: bool,
+    pub trigger_invulnerable: bool,
+    pub trigger_spell_immune: bool,
+    pub selector_exclusions: [AbilityId; 2],
+    pub child_range: i32,
+    pub vision_radius: i32,
+    pub vision_ticks: u16,
+    pub wave: crate::ConeWaveProfile,
+    pub weapon_sapper: bool,
+    pub weapon_vulnerable: bool,
+}
+impl NagaTidalWaveProfile {
+    pub(crate) fn canonical_words(self) -> impl Iterator<Item = u64> {
+        self.parent
+            .canonical_words()
+            .into_iter()
+            .chain(self.wave.canonical_words())
+            .chain([
+                u64::from(self.map_version.major),
+                u64::from(self.map_version.minor),
+                u64::from(self.source_rawcode),
+                u64::from(self.trigger_targets.bits()),
+                self.trigger_nonhero as u64,
+                self.trigger_sapper as u64,
+                self.trigger_invulnerable as u64,
+                self.trigger_spell_immune as u64,
+                u64::from(self.selector_exclusions[0].0),
+                u64::from(self.selector_exclusions[1].0),
+                self.child_range as u64,
+                self.vision_radius as u64,
+                u64::from(self.vision_ticks),
+                self.weapon_sapper as u64,
+                self.weapon_vulnerable as u64,
+            ])
+    }
+}
+pub(crate) fn tidal_spellcasting_for_version(version: MapVersion) -> Option<SpellcastingProfile> {
+    static PROFILE: std::sync::OnceLock<SpellcastingProfile> = std::sync::OnceLock::new();
+    (version == MapVersion::CASTLE_FIGHT_9_27).then(|| {
+        *PROFILE.get_or_init(|| {
+            serde_json::from_value(evidence(version)["tidal_spellcasting"].clone())
+                .expect("retained Tidal projection")
+        })
+    })
+}
+pub(crate) fn tidal_bindings(version: MapVersion) -> Vec<ResolvedNativeEffectBinding> {
+    let Some(spell) = tidal_spellcasting_for_version(version) else {
+        return Vec::new();
+    };
+    let AbilityEffect::NagaTidalWave(p) = spell.ability.effect else {
+        unreachable!()
+    };
+    [
+        (NativeEffectSourceKind::UnitAbility, spell.ability.id.0),
+        (NativeEffectSourceKind::AbilityEffect, p.wave.ability.0),
+    ]
+    .into_iter()
+    .map(|(kind, key)| ResolvedNativeEffectBinding {
+        source: NativeEffectSource::new(kind, key),
+        implementation: NativeEffectImplementationId::WarcraftNagaTidalWaveV1,
+    })
+    .collect()
+}
+pub(crate) fn tidal_source(version: MapVersion, source: NativeEffectSource) -> bool {
+    tidal_bindings(version).iter().any(|b| b.source == source)
+}
+
+impl std::hash::Hash for NagaTidalWaveProfile {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        for word in self.canonical_words() {
+            std::hash::Hash::hash(&word, state);
+        }
+    }
+}

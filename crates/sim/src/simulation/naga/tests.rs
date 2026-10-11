@@ -587,3 +587,144 @@ fn ownership_listener_uses_a_second_independent_shield_attempt() {
         "native first block, owner rollback and successful transfer must all be reachable"
     );
 }
+
+fn tidal_profile() -> crate::building_mechanics::NagaTidalWaveProfile {
+    crate::building_mechanics::NagaTidalWaveProfile {
+        map_version: MapVersion::CASTLE_FIGHT_9_27,
+        source_rawcode: 600,
+        parent: profile().parent,
+        trigger_targets: AttackTargetMask::GROUND_UNITS,
+        trigger_nonhero: true,
+        trigger_sapper: true,
+        trigger_invulnerable: false,
+        trigger_spell_immune: false,
+        selector_exclusions: profile().selector_exclusions,
+        child_range: 500 * SUBUNITS_PER_WORLD_UNIT,
+        vision_radius: 30 * SUBUNITS_PER_WORLD_UNIT,
+        vision_ticks: 3,
+        wave: crate::ConeWaveProfile {
+            ability: AbilityId(602),
+            damage: 17,
+            maximum_damage: 100,
+            distance: 300 * SUBUNITS_PER_WORLD_UNIT,
+            initial_radius: 10 * SUBUNITS_PER_WORLD_UNIT,
+            final_radius: 10 * SUBUNITS_PER_WORLD_UNIT,
+            speed_per_tick: 20 * SUBUNITS_PER_WORLD_UNIT,
+            targets: AttackTargetMask::GROUND_UNITS,
+        },
+        weapon_sapper: true,
+        weapon_vulnerable: true,
+    }
+}
+#[test]
+fn traveling_native_building_wave_has_independent_hero_selector_and_source_free_wire_lifetime() {
+    let mut sim = simulation();
+    let caster = building(&mut sim, 0, 1, false);
+    let trigger = unit(&mut sim, 1, 100, false);
+    let selected = unit(&mut sim, 1, 200, true);
+    sim.world
+        .get_mut::<UnitClassifications>(entity(&sim, selected))
+        .unwrap()
+        .hero = true;
+    let s = source(&mut sim);
+    let mut units = sim.snapshot_units();
+    assert!(sim.cast_naga_tidal_wave(s, AbilityId(601), trigger, tidal_profile(), 0, &mut units));
+    assert!(sim.remove_building(caster));
+    for _ in 0..3 {
+        sim.step();
+    }
+    assert_eq!(sim.unit(trigger).unwrap().health, 1000);
+    let mut copy = restored(&sim);
+    for _ in 0..20 {
+        assert_eq!(sim.step().checksum, copy.step().checksum);
+    }
+    assert_eq!(sim.unit(trigger).unwrap().health, 983); // Wave recipients need no combat-sapper flag.
+    assert_eq!(sim.unit(selected).unwrap().health, 983); // Hero is legal for the independently selected child.
+    assert_eq!(sim.projectile_count(), 0);
+}
+#[test]
+fn native_building_trigger_filters_sappers_and_heroes_without_changing_selector_or_resource_commit()
+{
+    let mut sim = simulation();
+    let caster = building(&mut sim, 0, 1, false);
+    let s = source(&mut sim);
+    let p = tidal_profile();
+    let ability = AutomaticAbilityProfile {
+        id: AbilityId(601),
+        mana_cost: 0,
+        cooldown_ticks: 9,
+        range: 500 * SUBUNITS_PER_WORLD_UNIT,
+        target_policy: AbilityTargetPolicy::NativeBuildingSpellTrigger,
+        effect: AbilityEffect::NagaTidalWave(p),
+    };
+    let flags = UnitClassifications {
+        combat_sapper: true,
+        ..Default::default()
+    };
+    let point = SimPoint::new(100 * SUBUNITS_PER_WORLD_UNIT, 20 * SUBUNITS_PER_WORLD_UNIT);
+    assert!(sim.native_building_trigger_allowed(s, ability, Team(1), 100, point, flags));
+    for change in 0..4 {
+        let mut f = flags;
+        match change {
+            0 => f.combat_sapper = false,
+            1 => f.hero = true,
+            2 => f.invulnerable = true,
+            _ => f.spell_immune = true,
+        }
+        assert!(!sim.native_building_trigger_allowed(s, ability, Team(1), 100, point, f));
+    }
+    sim.world.entity_mut(entity(&sim, caster)).insert((
+        SpellcastingProfile {
+            mana: ManaProfile {
+                maximum: 0,
+                starting: 0,
+                regen_per_tick_per_10k: 0,
+            },
+            ability,
+        },
+        ManaState {
+            current: 0,
+            regen_remainder_per_10k: 0,
+        },
+        AutomaticAbilityState {
+            ready_tick: 0,
+            cast_sequence: 0,
+            autocast_enabled: true,
+            manual_cast_requested: false,
+        },
+        StatusState::default(),
+    ));
+    unit(&mut sim, 1, 100, true);
+    sim.step();
+    assert!(
+        sim.world
+            .get::<AutomaticAbilityState>(entity(&sim, caster))
+            .unwrap()
+            .ready_tick
+            > 0
+    );
+    assert_eq!(sim.building(caster).unwrap().mana_current, Some(0));
+}
+
+#[test]
+fn authored_building_weapon_qualifiers_do_not_inherit_native_spell_nonhero_or_immunity_guards() {
+    let mut sim = simulation();
+    let d = crate::CastleFightTowerKind::TidalGuardian.definition();
+    sim.spawn_building_with_properties(
+        d.spawn(Team(0), BuildingFootprint::new(1, 1, 2, 2)),
+        d.gameplay_properties(),
+    );
+    let target = unit(&mut sim, 1, 100, true);
+    let b = sim.snapshot_buildings()[0];
+    let mut u = sim.snapshot_units()[0];
+    assert_eq!(u.id, target);
+    assert!(sim.native_building_weapon_target_allowed(&b, &u));
+    u.classifications.hero = true;
+    u.classifications.spell_immune = true;
+    assert!(sim.native_building_weapon_target_allowed(&b, &u));
+    u.classifications.combat_sapper = false;
+    assert!(!sim.native_building_weapon_target_allowed(&b, &u));
+    u.classifications.combat_sapper = true;
+    u.classifications.invulnerable = true;
+    assert!(!sim.native_building_weapon_target_allowed(&b, &u));
+}

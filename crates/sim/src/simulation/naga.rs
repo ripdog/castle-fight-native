@@ -287,3 +287,110 @@ fn clear_charm_debuffs(s: &mut StatusState) {
     s.damage_over_time
         .fill(crate::components::TimedDamageOverTime::default());
 }
+
+impl Simulation {
+    pub(super) fn cast_naga_tidal_wave(
+        &mut self,
+        source: AbilitySourceSnapshot,
+        ability: AbilityId,
+        trigger: SimId,
+        p: crate::building_mechanics::NagaTidalWaveProfile,
+        sequence: u64,
+        units: &mut [UnitSnapshot],
+    ) -> bool {
+        let owner = self
+            .world
+            .iter_entities()
+            .find(|e| e.get::<SimId>() == Some(&source.id))
+            .and_then(|e| e.get::<Owner>())
+            .map_or(PlayerId(source.team.0), |o| o.0);
+        self.launch_native_parasite(source, owner, trigger, p.parent);
+        let bounds =
+            crate::building_mechanics::snowveil_for_version(p.map_version).battlefield_bounds;
+        let selected = units
+            .iter()
+            .filter(|u| {
+                u.health > 0
+                    && u.team != source.team
+                    && u.classifications.combat_sapper
+                    && u.target_movement_class() == MovementClass::Ground
+                    && !p
+                        .selector_exclusions
+                        .into_iter()
+                        .any(|a| self.native_ability_installed(u, a))
+                    && u.position.x >= bounds[0]
+                    && u.position.x <= bounds[2]
+                    && u.position.y >= bounds[1]
+                    && u.position.y <= bounds[3]
+            })
+            .min_by_key(|u| {
+                (
+                    deterministic_ability_target_rank(
+                        self.config.match_seed,
+                        source.id,
+                        ability,
+                        sequence,
+                        u.id,
+                    ),
+                    u.id,
+                )
+            });
+        let Some(u) = selected.copied() else {
+            return false;
+        };
+        let origin = match source.origin {
+            AbilitySourceOrigin::Unit(p) => p,
+            AbilitySourceOrigin::Building(f) => {
+                footprint_center_point(f, self.config.navigation_cell_size)
+            }
+        };
+        if !u.visible_to(source.team, self.next_tick) {
+            self.reveal_area(
+                source.team,
+                u.position,
+                p.vision_radius,
+                u64::from(p.vision_ticks),
+                false,
+            );
+        }
+        if origin.distance_sq(u.position) > square_i32(p.child_range)
+            || u.classifications.invulnerable
+            || u.classifications.spell_immune
+            || (u.classifications.invisible && u.detection_teams & (1 << source.team.0) == 0)
+        {
+            return false;
+        }
+        let state = native_actions::cone_wave::new_state(
+            source.id,
+            source.team,
+            origin,
+            u.position,
+            p.wave,
+            self.next_tick,
+        );
+        let id = self.allocate_id();
+        self.world
+            .spawn((id, crate::components::NativeAction::ConeWave(state)));
+        true
+    }
+
+    pub(super) fn native_building_weapon_target_allowed(
+        &self,
+        source: &BuildingSnapshot,
+        target: &UnitSnapshot,
+    ) -> bool {
+        let Some(c) = self.world.get::<ContentIdentity>(source.entity) else {
+            return true;
+        };
+        let Some(spell) = crate::building_mechanics::tidal_spellcasting_for_version(c.map_version)
+        else {
+            return true;
+        };
+        let AbilityEffect::NagaTidalWave(p) = spell.ability.effect else {
+            unreachable!()
+        };
+        c.rawcode != p.source_rawcode
+            || ((!p.weapon_sapper || target.classifications.combat_sapper)
+                && (!p.weapon_vulnerable || !target.classifications.invulnerable))
+    }
+}

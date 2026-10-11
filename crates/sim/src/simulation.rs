@@ -4614,6 +4614,12 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
     }
     match spellcasting.ability.effect {
+        AbilityEffect::NagaTidalWave(_) => {
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::NativeBuildingSpellTrigger
+            );
+        }
         AbilityEffect::NagaCharm(p) => {
             assert_eq!(
                 spellcasting.ability.target_policy,

@@ -606,6 +606,16 @@ impl Simulation {
                             index,
                             units,
                         ));
+                    } else if let AbilityEffect::NagaTidalWave(p) = intent.ability.effect {
+                        metrics.effects += usize::from(self.cast_naga_tidal_wave(
+                            source,
+                            intent.ability.id,
+                            units[index].id,
+                            p,
+                            intent.cast_sequence,
+                            units,
+                        ));
+                        emit_cast_visual = false;
                     } else if let AbilityEffect::NagaCharm(p) = intent.ability.effect {
                         metrics.effects += usize::from(self.cast_naga_charm(
                             source,

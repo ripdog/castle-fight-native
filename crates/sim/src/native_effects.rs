@@ -91,6 +91,7 @@ pub enum NativeEffectImplementationId {
     WarcraftNagaEarthquakeV1,
     WarcraftNagaCharmV1,
     WarcraftNativeBuildingAurasV1,
+    WarcraftNagaTidalWaveV1,
 }
 
 impl NativeEffectImplementationId {
@@ -100,6 +101,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftNagaEarthquakeV1 => 92,
             Self::WarcraftNagaCharmV1 => 93,
             Self::WarcraftNativeBuildingAurasV1 => 94,
+            Self::WarcraftNagaTidalWaveV1 => 95,
             Self::WarcraftSpikedShellV1 => 90,
             Self::WarcraftHardenedSkinV1 => 91,
             Self::WarcraftDeathSpawnV1 => 89,
@@ -1247,6 +1249,10 @@ pub fn resolve_native_effect_requirements(
     version: MapVersion,
     roots: &[NativeEffectSource],
 ) -> Result<Vec<ResolvedNativeEffectBinding>, NativeEffectResolveError> {
+    let (tidal_roots, roots): (Vec<_>, Vec<_>) = roots
+        .iter()
+        .copied()
+        .partition(|s| crate::building_mechanics::tidal_source(version, *s));
     let (coral_roots, roots): (Vec<_>, Vec<_>) = roots
         .iter()
         .copied()
@@ -1301,6 +1307,9 @@ pub fn resolve_native_effect_requirements(
         .copied()
         .partition(|source| crate::building_mechanics::hex_source_for_version(*source, version));
     let mut resolved = catalog().resolve_requirements(version, &ordinary_roots)?;
+    if !tidal_roots.is_empty() {
+        resolved.extend(crate::building_mechanics::tidal_bindings(version));
+    }
     if !coral_roots.is_empty() {
         resolved.extend(crate::building_mechanics::coral_bindings(version));
     }
@@ -1524,6 +1533,9 @@ pub fn native_effect_implementation_for(
     let source = NativeEffectSourceKind::parse(source_kind)
         .zip(rawcode(source_key).ok())
         .map(|(kind, key)| NativeEffectSource::new(kind, key));
+    if source.is_some_and(|s| crate::building_mechanics::tidal_source(version, s)) {
+        return Some(NativeEffectImplementationId::WarcraftNagaTidalWaveV1);
+    }
     if source.is_some_and(|s| crate::building_mechanics::coral_source(version, s)) {
         return Some(NativeEffectImplementationId::WarcraftNativeBuildingAurasV1);
     }

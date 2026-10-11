@@ -75,6 +75,11 @@ pub(super) fn native_building_trigger(
     ability: AutomaticAbilityProfile,
 ) -> Option<(AttackTargetMask, bool, bool)> {
     match ability.effect {
+        AbilityEffect::NagaTidalWave(p) => Some((
+            p.trigger_targets,
+            p.trigger_invulnerable,
+            p.trigger_spell_immune,
+        )),
         AbilityEffect::NagaCharm(p) => Some((
             p.trigger_targets,
             p.trigger_invulnerable,
@@ -175,7 +180,14 @@ impl Simulation {
         let Some((_, invulnerable, spell_immune)) = native_building_trigger(ability) else {
             return false;
         };
-        health > 0
+        let native_class = match ability.effect {
+            AbilityEffect::NagaTidalWave(p) => {
+                (!p.trigger_nonhero || !flags.hero) && (!p.trigger_sapper || flags.combat_sapper)
+            }
+            _ => true,
+        };
+        native_class
+            && health > 0
             && team != source.team
             && (!flags.invulnerable || invulnerable)
             && (!flags.spell_immune || spell_immune)

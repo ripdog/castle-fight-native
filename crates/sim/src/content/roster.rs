@@ -204,6 +204,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    TidalGuardian = 0x2100_0026 => b"h00N",
     CoralStatue = 0x2100_0025 => b"h00G",
     OracleOfSirens = 0x2100_0024 => b"h00M",
     AncientPyramide = 0x2100_0023 => b"h00I",

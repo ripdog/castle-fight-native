@@ -60,7 +60,8 @@ pub(super) fn apply_ability_effect_to_unit(
         return false;
     }
     match effect {
-        AbilityEffect::NagaCharm(_)
+        AbilityEffect::NagaTidalWave(_)
+        | AbilityEffect::NagaCharm(_)
         | AbilityEffect::NagaEarthquake(_)
         | AbilityEffect::SilverGlade(_)
         | AbilityEffect::Wilderness(_)

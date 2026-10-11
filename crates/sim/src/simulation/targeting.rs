@@ -272,6 +272,7 @@ impl Simulation {
             query_radius,
             |index| {
                 let candidate = &units[index];
+                if !self.native_building_weapon_target_allowed(source, candidate) { return; }
                 if candidate.health <= 0
                     || !candidate.visible_to(source.team, self.next_tick)
 
@@ -340,7 +341,8 @@ impl Simulation {
             else {
                 return false;
             };
-            return target.team != source.team
+            return self.native_building_weapon_target_allowed(source, target)
+                && target.team != source.team
                 && target.health > 0
                 && target.visible_to(source.team, self.next_tick)
                 && point_to_footprint_distance_sq(

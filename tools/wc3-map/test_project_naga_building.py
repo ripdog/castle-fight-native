@@ -1,7 +1,7 @@
 import copy
 import json
 import unittest
-from project_naga_building import project_pyramid, project_oracle, project_coral
+from project_naga_building import project_pyramid, project_oracle, project_coral, project_tidal
 
 
 class NagaBuildingProjectionTest(unittest.TestCase):
@@ -117,6 +117,35 @@ class CoralProjectionTests(unittest.TestCase):
         for code, key, value in [('BLDG', 'uaen:0', 1), ('ARMR', 'Had2:1', 1), ('REGN', 'Oar2:1', 1), ('REGN', 'adur:1', 3)]:
             f = self.fixture(); f[0][code][key] = value
             with self.subTest(key=key), self.assertRaises(ValueError): project_coral(*f)
+
+
+class TidalProjectionTests(unittest.TestCase):
+    def fixture(self):
+        f = NagaBuildingProjectionTest().fixture()
+        f[0].update(mechanic_kind='dummy-target-ability')
+        f[1]['CAST'].update({'atar:1': 'enemies,ground,neutral,nonhero,sapper,vulnerable', 'abuf:1': 'BUFF'})
+        f[1]['CHLD'] = {'atar:1': 'enemies,ground,neutral', 'acas:1': 0, 'aran:1': 300,
+            'Ucs1:1': 17, 'Ucs2:1': 99, 'Ucs3:1': 70, 'Ucs4:1': 9, 'aare:1': 3, 'amsp:0': 60}
+        f[1]['BLDG'] = {'ua1g:0': 'enemies,ground,sapper,vulnerable'}
+        f[3][1]['base_rawcode'] = 'ACcv'
+        f[5]['tidalSpell'] = {'source': f'ytr=randomAliveEnemyGround(xtr)if(ytr==nil)then return end dummyCastTargetWithVision(xtr,{int.from_bytes(b"CHLD", "big")},91,ytr,unit_getPos(wtr),2.)'}
+        f[5]['dummyCastTargetWithVision1'] = {'source': 'x[2],12.,true,false doAfter(.2,x)'}
+        return f
+
+    def test_native_wave_is_projected_with_independent_parent_and_weapon_guards(self):
+        e = project_tidal(*self.fixture())['ability']['effect']['NagaTidalWave']
+        self.assertTrue(e['trigger_nonhero'] and e['trigger_sapper'] and e['weapon_vulnerable'])
+        self.assertEqual((e['wave']['damage'], e['wave']['initial_radius'], e['wave']['final_radius']), (17, 3*1024, 9*1024))
+        self.assertEqual(e['wave']['speed_per_tick'], 2*1024)
+
+    def test_source_origin_native_masks_and_secondary_resources_cannot_drift(self):
+        for code, key, value in [('CAST', 'atar:1', 'enemies,ground'), ('CHLD', 'atar:1', 'enemies,air,ground'), ('BLDG', 'ua1g:0', 'enemies,ground')]:
+            f = self.fixture(); f[1][code][key] = value
+            with self.subTest(code=code), self.assertRaises(ValueError): project_tidal(*f)
+        f = self.fixture(); f[5]['tidalSpell']['source'] = f[5]['tidalSpell']['source'].replace('unit_getPos(wtr)', 'unit_getPos(ytr)')
+        with self.assertRaises(ValueError): project_tidal(*f)
+        f = self.fixture(); f[4][-1]['runtime_value'] = '1'
+        with self.assertRaises(ValueError): project_tidal(*f)
 
 
 if __name__ == '__main__': unittest.main()

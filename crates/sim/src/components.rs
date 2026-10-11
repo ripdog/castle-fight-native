@@ -1786,6 +1786,7 @@ pub enum AbilityEffect {
     NativeSummon(NativeSummonProfile),
     NagaEarthquake(crate::building_mechanics::NagaEarthquakeProfile),
     NagaCharm(crate::building_mechanics::NagaCharmProfile),
+    NagaTidalWave(crate::building_mechanics::NagaTidalWaveProfile),
 }
 
 impl AbilityEffect {
@@ -1802,6 +1803,7 @@ impl AbilityEffect {
             Self::NativeSummon(_) => 46,
             Self::NagaEarthquake(_) => 47,
             Self::NagaCharm(_) => 48,
+            Self::NagaTidalWave(_) => 49,
             Self::Heal(_) => 41,
             Self::SilverGlade(_) => 42,
             Self::Wilderness(_) => 43,
