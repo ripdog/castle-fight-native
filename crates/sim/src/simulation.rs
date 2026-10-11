@@ -1757,7 +1757,7 @@ impl Simulation {
         self.resolve_support_orders(&mut units);
         self.resolve_world_freezer(&mut units, &mut buildings);
         self.resolve_native_actions(&mut units, &mut buildings);
-        self.apply_passive_auras(&mut units);
+        self.apply_passive_auras(&mut units, &buildings);
         self.apply_speed_auras(&mut units);
         self.resolve_damage_charge(&mut units, &mut buildings);
         self.refresh_native_building_auras(&mut units, &mut buildings);
@@ -2908,8 +2908,8 @@ impl Simulation {
         true
     }
 
-    fn apply_passive_auras(&self, units: &mut [UnitSnapshot]) {
-        let sources = units
+    fn apply_passive_auras(&self, units: &mut [UnitSnapshot], buildings: &[BuildingSnapshot]) {
+        let mut sources = units
             .iter()
             .filter(|unit| unit.health > 0)
             .flat_map(|unit| {
@@ -2923,7 +2923,34 @@ impl Simulation {
                     Some((unit.id, unit.team, unit.position, profile))
                 })
             })
+            .chain(
+                buildings
+                    .iter()
+                    .filter(|building| building.health > 0)
+                    .flat_map(|building| {
+                        building.passive_effects.iter().filter_map(move |effect| {
+                            let PassiveUnitEffect::Aura(profile) = effect else {
+                                return None;
+                            };
+                            if building.status.is_some_and(|status| {
+                                Self::passive_aura_suspended(&profile, &status, self.next_tick)
+                            }) {
+                                return None;
+                            }
+                            Some((
+                                building.id,
+                                building.team,
+                                footprint_center_point(
+                                    building.footprint,
+                                    self.config.navigation_cell_size,
+                                ),
+                                profile,
+                            ))
+                        })
+                    }),
+            )
             .collect::<Vec<_>>();
+        sources.sort_unstable_by_key(|source| source.0);
         for (source_id, team, position, profile) in sources {
             for target in units.iter_mut() {
                 if target.health <= 0
@@ -2980,29 +3007,35 @@ impl Simulation {
     // relying on a modifier from the previous combat phase to survive an extra tick.
     fn refresh_native_mana_auras_for_timers(&mut self) {
         let tick = self.next_tick;
-        let mut query = self.world.query::<(
+        let cell_size = self.config.navigation_cell_size;
+        let mut query = self.world.query_filtered::<(
             &SimId,
             &Team,
-            &Position,
+            Option<&Position>,
+            Option<&BuildingFootprint>,
             &Health,
             &PassiveUnitEffects,
-            &StatusState,
-        )>();
+            Option<&StatusState>,
+        ), bevy_ecs::query::Without<BuildingConstruction>>();
         let mut sources: Vec<_> = query
             .iter(&self.world)
-            .filter(|(_, _, _, health, _, _)| health.current > 0)
-            .flat_map(|(id, team, position, _, effects, status)| {
+            .filter(|(_, _, _, _, health, _, _)| health.current > 0)
+            .flat_map(|(id, team, position, footprint, _, effects, status)| {
+                let origin = position
+                    .map(|p| p.0)
+                    .or_else(|| footprint.map(|f| footprint_center_point(*f, cell_size)));
                 effects.iter().filter_map(move |effect| {
                     let PassiveUnitEffect::Aura(profile) = effect else {
                         return None;
                     };
-                    if profile.mana_regeneration_per_second_per_10k == 0 {
+                    if profile.mana_regeneration_per_second_per_10k == 0
+                        || status.is_some_and(|status| {
+                            Self::passive_aura_suspended(&profile, status, tick)
+                        })
+                    {
                         return None;
                     }
-                    if Self::passive_aura_suspended(&profile, status, tick) {
-                        return None;
-                    }
-                    Some((*id, *team, position.0, profile))
+                    Some((*id, *team, origin?, profile))
                 })
             })
             .collect();

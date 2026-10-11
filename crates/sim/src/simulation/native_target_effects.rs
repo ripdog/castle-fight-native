@@ -9,6 +9,7 @@ mod aftershock;
 mod air_attack_bonus;
 mod aura_carrier;
 mod buff_transfer;
+mod building_aura;
 mod burning_oil;
 mod cone_wave;
 mod contact;

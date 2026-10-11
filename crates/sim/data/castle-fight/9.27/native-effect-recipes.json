@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0Z1","unit_rawcode":"h0Z5","kind":"native-aura"},
     {"source_kind":"unit-ability","source_key":"A02Q","unit_rawcode":"n00W","kind":"hardened-skin"},
     {"source_kind":"unit-ability","source_key":"A02R","unit_rawcode":"n00W","kind":"critical-strike"},
     {"source_kind":"unit-ability","source_key":"A02S","unit_rawcode":"n00S","kind":"feral-spirit"},

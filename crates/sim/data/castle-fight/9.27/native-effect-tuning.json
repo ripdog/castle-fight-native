@@ -4,6 +4,23 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0Z1",
+      "unit_rawcode": "h0Z5",
+      "kind": "native-aura",
+      "radius_world": 500,
+      "damage_bonus_per_10k": 0,
+      "armor_bonus_per_100": 400,
+      "mana_regeneration_per_second_per_10k": 0,
+      "affects_melee": true,
+      "affects_ranged": true,
+      "linger_ticks": 0,
+      "provenance": {
+        "ability": "A0Z1",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A02Q",
       "unit_rawcode": "n00W",
       "kind": "hardened-skin",
