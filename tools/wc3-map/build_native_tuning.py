@@ -397,7 +397,7 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         if set(fields["targs1"].split(",")) != {"air", "ground", "friend", "self", "vuln", "invu"}:
             raise ValueError("native aura requires explicit target semantics")
         base = mechanics["native_base"]
-        damage, armor, mana, melee, ranged = 0, 0, 0, True, True
+        damage, armor, mana, returned, melee, ranged = 0, 0, 0, 0, True, True
         if base == "AIar":
             if number("DataD1") != 0 or number("DataB1") not in {0, 1} or number("DataC1") not in {0, 1}:
                 raise ValueError("native damage aura requires percent damage and explicit weapon classes")
@@ -410,9 +410,14 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
             if number("DataB1") != 0:
                 raise ValueError("native mana aura requires flat regeneration")
             mana = number("DataA1", 10_000)
+        elif base == "AEah":
+            if number("DataB1") != 1 or number("DataA1", 10_000) < 0:
+                raise ValueError("native thorns aura requires nonnegative percent-return damage")
+            returned = number("DataA1", 10_000)
         else:
             raise ValueError(f"unsupported native aura base {base}")
         effect.update(radius_world=number("Area1"), damage_bonus_per_10k=damage, armor_bonus_per_100=armor,
+            melee_damage_return_per_10k=returned,
             mana_regeneration_per_second_per_10k=mana, affects_melee=melee, affects_ranged=ranged,
             linger_ticks=int((Decimal(fields["dur1"]) * 30).to_integral_value(rounding="ROUND_CEILING")))
     elif kind == "pulverize":

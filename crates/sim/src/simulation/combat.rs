@@ -658,38 +658,44 @@ impl Simulation {
                             (0, PendingAttackEffects::default()),
                             "passive on-hit effects are not yet defined for bounce attacks"
                         );
-                        let travel_ticks =
-                            projectile_travel_ticks(intent.distance_sq, speed_per_tick);
-                        let impact_tick = completed_tick
-                            .checked_add(travel_ticks)
-                            .expect("projectile impact tick overflow");
-                        bounce_projectile_launches.push(BounceProjectileLaunch {
-                            source: intent.source_id,
-                            source_rawcode: self
-                                .world
-                                .get::<ContentIdentity>(match intent.source {
-                                    AttackSourceIndex::Unit(index) => units[index].entity,
-                                    AttackSourceIndex::Building(index) => buildings[index].entity,
-                                })
-                                .map(|content| content.rawcode),
-                            source_team: intent.source_team,
-                            source_is_building: matches!(
-                                intent.source,
-                                AttackSourceIndex::Building(_)
-                            ),
-                            target_mask: intent.attack_targets,
-                            target: intent.target_id,
-                            damage: intent.attack.damage,
-                            damage_type: intent.damage_type,
-                            launch_position: intent.source_position,
-                            launch_tick: completed_tick,
-                            impact_tick,
-                            speed_per_tick,
-                            bounce_range,
-                            max_bounces,
-                            damage_percent_per_bounce,
-                            allow_repeat_targets,
-                        });
+                        // A native zero-speed missile never reaches its victim. The attack
+                        // still commits its ordinary cadence and attack event.
+                        if speed_per_tick > 0 {
+                            let travel_ticks =
+                                projectile_travel_ticks(intent.distance_sq, speed_per_tick);
+                            let impact_tick = completed_tick
+                                .checked_add(travel_ticks)
+                                .expect("projectile impact tick overflow");
+                            bounce_projectile_launches.push(BounceProjectileLaunch {
+                                source: intent.source_id,
+                                source_rawcode: self
+                                    .world
+                                    .get::<ContentIdentity>(match intent.source {
+                                        AttackSourceIndex::Unit(index) => units[index].entity,
+                                        AttackSourceIndex::Building(index) => {
+                                            buildings[index].entity
+                                        }
+                                    })
+                                    .map(|content| content.rawcode),
+                                source_team: intent.source_team,
+                                source_is_building: matches!(
+                                    intent.source,
+                                    AttackSourceIndex::Building(_)
+                                ),
+                                target_mask: intent.attack_targets,
+                                target: intent.target_id,
+                                damage: intent.attack.damage,
+                                damage_type: intent.damage_type,
+                                launch_position: intent.source_position,
+                                launch_tick: completed_tick,
+                                impact_tick,
+                                speed_per_tick,
+                                bounce_range,
+                                max_bounces,
+                                damage_percent_per_bounce,
+                                allow_repeat_targets,
+                            });
+                        }
                     }
                 }
             }

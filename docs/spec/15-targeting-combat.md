@@ -526,3 +526,5 @@ Timed status modifiers retain whether native dispelling is allowed. Weapon Frost
 Native Hardened Skin evaluates abilities in reverse acquisition order and stops at the first successful block, with an independent incoming-attack sequence. Grant state retains acquisition order across wire continuation; duplicate grants preserve their original position. Intrinsic blocks remain available after failed later grants.
 
 Native zero-damage Parasite parents retain their own homing projectile, undispellable buff and death summon independently of spell-effect script callbacks. The same native buff replaces previous ownership on arrival. Death creates fresh native body state with its own timed life; caster removal does not cancel a released projectile or buff.
+
+A native bouncing weapon whose inherited and authored projectile-speed field is absent retains the native numeric default zero. It commits attack timing and ordinary attack events but cannot deliver a resolving missile or subsequent bounce damage. Its aura/passive inventory remains independent of that non-delivering weapon. Positive-speed bouncing weapons retain ordinary flight and per-hop targeting.

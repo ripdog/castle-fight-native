@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r118";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r119";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 66;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 67;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1011,6 +1011,7 @@ impl CastleFightUnitKind {
                 }));
                 if self == Self::Paladin {
                     effects.push(PassiveUnitEffect::Aura(AuraEffectProfile {
+                        melee_damage_return_per_10k: 0,
                         damage_bonus_per_10k: 0,
                         affects_melee: true,
                         affects_ranged: true,
@@ -1037,6 +1038,7 @@ impl CastleFightUnitKind {
                     },
                 ));
                 effects.push(PassiveUnitEffect::Aura(AuraEffectProfile {
+                    melee_damage_return_per_10k: 0,
                     damage_bonus_per_10k: 0,
                     affects_melee: true,
                     affects_ranged: true,
@@ -1049,6 +1051,7 @@ impl CastleFightUnitKind {
                 }));
             }
             Self::Warlock => effects.push(PassiveUnitEffect::Aura(AuraEffectProfile {
+                melee_damage_return_per_10k: 0,
                 damage_bonus_per_10k: 0,
                 affects_melee: true,
                 affects_ranged: true,
@@ -1872,6 +1875,9 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A05V") => {
+            0x4000_0178
+        }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0Z1") => {
             0x4000_0177
         }
@@ -3320,6 +3326,7 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
                 hash.write_i32(i32::from(profile.attack_speed_percent_delta));
             }
             PassiveUnitEffect::Aura(profile) => {
+                hash.write_u32(profile.melee_damage_return_per_10k);
                 hash.write_i32(i32::from(profile.damage_bonus_per_10k));
                 hash.write_u8(u8::from(profile.affects_melee));
                 hash.write_u8(u8::from(profile.affects_ranged));
@@ -4481,8 +4488,9 @@ impl ExtractedContent927 {
                 .parse::<i32>()
                 .map_err(|_| format!("unit {rawcode:#010x} has invalid collision radius"))?;
             let acquisition_range = parse_optional_i32_927(columns[22])?.map(world);
-            let projectile_speed_per_tick =
-                parse_optional_i32_927(columns[45])?.map(projectile_speed);
+            let projectile_speed_per_tick = parse_optional_i32_927(columns[45])?
+                .or_else(|| (columns[28] == "mbounce").then_some(0))
+                .map(projectile_speed);
             let outer_splash_radius = parse_optional_i32_927(columns[41])?.map(world);
             let splash_falloff = match (
                 parse_optional_i32_927(columns[39])?,

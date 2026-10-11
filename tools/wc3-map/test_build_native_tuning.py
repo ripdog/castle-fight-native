@@ -207,6 +207,16 @@ class NativeTuningProjectionTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "weapon classes"):
             native.project_effect(recipe, {**fields, "datad1": "1"}, None, {}, {"native_base": "AIar"})
 
+    def test_thorns_aura_projects_return_factor_without_damage_or_armor_bonus(self):
+        recipe = {"kind":"native-aura", "source_kind":"unit-ability", "source_key":"TEST", "unit_rawcode":"UNIT"}
+        fields = {"targs1":"air,ground,friend,self,vuln,invu", "area1":"71", "dataa1":"0.27", "datab1":"1", "dur1":"0"}
+        result = native.project_effect(recipe, fields, None, {}, {"native_base":"AEah"})
+        self.assertEqual((result["melee_damage_return_per_10k"], result["damage_bonus_per_10k"], result["armor_bonus_per_100"], result["linger_ticks"]), (2700, 0, 0, 0))
+        self.assertTrue(result["affects_melee"] and result["affects_ranged"])
+        for changes in ({"datab1":"0"}, {"dataa1":"-0.27"}, {"targs1":"air,ground,enemies"}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                native.project_effect(recipe, {**fields, **changes}, None, {}, {"native_base":"AEah"})
+
     def test_poison_projects_class_mask_short_hero_expiry_and_nonlethal_damage_stacking(self) -> None:
         recipe = {"kind": "poison", "source_kind": "unit-ability", "source_key": "TEST", "unit_rawcode": "UNIT"}
         fields = {"targs1": "air,ground,organic", "dataa1": "19", "datab1": "0.15", "datac1": "0.1", "datad1": "1", "dur1": "4", "herodur1": "0.25", "buffid1": "BUFF,SLOW"}

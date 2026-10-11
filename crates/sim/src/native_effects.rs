@@ -727,6 +727,7 @@ enum TuningEffect {
         profile: crate::components::SpeedAuraProfile,
     },
     NativeAura {
+        melee_damage_return_per_10k: u32,
         damage_bonus_per_10k: i16,
         armor_bonus_per_100: i16,
         affects_melee: bool,
@@ -1714,6 +1715,7 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             PassiveUnitEffect::SpeedAura(*profile)
         }
         TuningEffect::NativeAura {
+            melee_damage_return_per_10k,
             damage_bonus_per_10k,
             armor_bonus_per_100,
             affects_melee,
@@ -1724,6 +1726,7 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             mana_regeneration_per_second_per_10k,
             ..
         } => PassiveUnitEffect::Aura(crate::components::AuraEffectProfile {
+            melee_damage_return_per_10k: *melee_damage_return_per_10k,
             damage_bonus_per_10k: *damage_bonus_per_10k,
             affects_melee: *affects_melee,
             affects_ranged: *affects_ranged,

@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 82;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 83;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -2917,6 +2917,11 @@ impl Simulation {
                     let PassiveUnitEffect::Aura(profile) = effect else {
                         return None;
                     };
+                    if profile.melee_damage_return_per_10k > 0
+                        && (unit.abilities_disabled || unit.classifications.invisible)
+                    {
+                        return None;
+                    }
                     if Self::passive_aura_suspended(&profile, &unit.status, self.next_tick) {
                         return None;
                     }
@@ -2965,6 +2970,7 @@ impl Simulation {
                 apply_timed_armor_modifier(
                     &mut target.status,
                     TimedArmorModifier {
+                        melee_damage_return_per_10k: profile.melee_damage_return_per_10k,
                         undispellable: false,
                         aura_membership: true,
                         id: ModifierId(profile.ability.0),
@@ -3071,6 +3077,7 @@ impl Simulation {
                         undispellable: false,
                         aura_membership: true,
                         id: ModifierId(profile.ability.0),
+                        melee_damage_return_per_10k: profile.melee_damage_return_per_10k,
                         armor_bonus_per_100: profile.armor_bonus_per_100,
                         damage_bonus_per_10k: profile.damage_bonus_per_10k,
                         mana_regeneration_per_second_per_10k: profile
@@ -4636,7 +4643,7 @@ fn validate_attack_profile(attack: AttackProfile) {
             damage_percent_per_bounce,
             allow_repeat_targets: _,
         } => {
-            assert!(speed_per_tick > 0);
+            assert!(speed_per_tick >= 0);
             assert!(bounce_range >= 0);
             assert!(usize::from(max_bounces) < MAX_BOUNCE_HITS);
             assert!((1..=100).contains(&damage_percent_per_bounce));
@@ -5816,6 +5823,7 @@ enum WeaponDamageKind {
     Ranged,
     Cleave,
     Defensive,
+    Thorns,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -5861,7 +5869,10 @@ impl Simulation {
         } = event;
         match target {
             TargetIndex::Unit(index) => {
-                if state.unit_health[index] <= 0 || state.units[index].classifications.invulnerable
+                if state.unit_health[index] <= 0
+                    || state.units[index].classifications.invulnerable
+                    || (kind == WeaponDamageKind::Thorns
+                        && state.units[index].classifications.spell_immune)
                 {
                     return None;
                 }
@@ -5892,18 +5903,23 @@ impl Simulation {
                     } else {
                         shell.incoming
                     };
-                let event_damage = if kind == WeaponDamageKind::Defensive {
-                    spell_damage_after_defend(state.units[index], adjusted_damage, completed_tick)
-                } else {
-                    scale_damage_per_10k(
-                        native_kill_effects::damage_after_native_incoming(
-                            &state.units[index],
+                let event_damage =
+                    if matches!(kind, WeaponDamageKind::Defensive | WeaponDamageKind::Thorns) {
+                        spell_damage_after_defend(
+                            state.units[index],
                             adjusted_damage,
                             completed_tick,
-                        ),
-                        state.units[index].snow_damage_taken_per_10k,
-                    )
-                };
+                        )
+                    } else {
+                        scale_damage_per_10k(
+                            native_kill_effects::damage_after_native_incoming(
+                                &state.units[index],
+                                adjusted_damage,
+                                completed_tick,
+                            ),
+                            state.units[index].snow_damage_taken_per_10k,
+                        )
+                    };
                 let event_damage = source_damage_runtime::attack_damage_for_recipient(
                     source_id,
                     &state.units[index],
@@ -6000,14 +6016,18 @@ impl Simulation {
                 {
                     let shell_source = state.units[index].id;
                     for returned in shell.returned[..shell.count].iter().copied() {
-                        self.apply_damage_to_target(
+                        self.apply_damage_to_target_with_armor_rule(
                             TargetIndex::Unit(source_index),
                             WeaponDamageEvent {
                                 source_id: shell_source,
-                                damage: returned,
+                                damage: returned.damage,
                                 damage_type: DamageType::Spells,
                                 completed_tick,
-                                kind: WeaponDamageKind::Defensive,
+                                kind: if returned.thorns {
+                                    WeaponDamageKind::Thorns
+                                } else {
+                                    WeaponDamageKind::Defensive
+                                },
                             },
                             buildings_invulnerable,
                             DamageTargetState {
@@ -6021,6 +6041,11 @@ impl Simulation {
                                 attackers_this_tick: state.attackers_this_tick,
                                 next_defense_alerts: state.next_defense_alerts,
                                 navigation_cell_size: state.navigation_cell_size,
+                            },
+                            if returned.thorns {
+                                DamageArmorRule::IgnorePoints
+                            } else {
+                                DamageArmorRule::Standard
                             },
                         );
                     }

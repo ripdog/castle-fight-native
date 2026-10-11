@@ -314,6 +314,7 @@ pub(super) fn apply_ability_effect_to_unit(
             apply_timed_armor_modifier(
                 &mut target.status,
                 TimedArmorModifier {
+                    melee_damage_return_per_10k: 0,
                     undispellable: false,
                     aura_membership: false,
                     id: modifier,
@@ -369,6 +370,7 @@ pub(super) fn apply_ability_effect_to_unit(
             apply_timed_armor_modifier(
                 &mut target.status,
                 TimedArmorModifier {
+                    melee_damage_return_per_10k: 0,
                     undispellable: false,
                     aura_membership: false,
                     id: modifier,
@@ -409,6 +411,7 @@ pub(super) fn apply_ability_effect_to_unit(
             apply_timed_armor_modifier(
                 &mut target.status,
                 TimedArmorModifier {
+                    melee_damage_return_per_10k: 0,
                     undispellable: false,
                     aura_membership: false,
                     id: modifier,

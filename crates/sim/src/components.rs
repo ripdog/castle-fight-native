@@ -716,6 +716,7 @@ pub struct CleaveEffectProfile {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuraEffectProfile {
+    pub melee_damage_return_per_10k: u32,
     pub damage_bonus_per_10k: i16,
     pub affects_melee: bool,
     pub affects_ranged: bool,
@@ -1904,6 +1905,7 @@ pub struct TimedAttackSpeedModifier {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimedArmorModifier {
+    pub melee_damage_return_per_10k: u32,
     pub undispellable: bool,
     /// Last completed tick’s intrinsic aura membership, visible until the next resample.
     pub aura_membership: bool,

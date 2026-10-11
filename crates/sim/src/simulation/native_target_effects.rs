@@ -32,6 +32,7 @@ mod sphere;
 mod spiked_shell;
 mod stasis;
 mod stat_buffs;
+mod thorns;
 mod wilderness;
 
 fn unit(team: u8, x: i32, damage: i32, delivery: AttackDelivery) -> UnitSpawn {
@@ -1650,6 +1651,7 @@ fn native_mana_aura_retains_fractional_regeneration_and_continues_during_cast_co
             collision_radius: Some(CollisionRadius(0)),
             passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Aura(
                 crate::components::AuraEffectProfile {
+                    melee_damage_return_per_10k: 0,
                     damage_bonus_per_10k: 0,
                     affects_melee: true,
                     affects_ranged: true,
@@ -1712,6 +1714,7 @@ fn native_mana_aura_retains_fractional_regeneration_and_continues_during_cast_co
 fn native_damage_aura_filters_weapon_class_and_does_not_stack_duplicate_sources() {
     let mut sim = simulation(1);
     let aura = crate::components::AuraEffectProfile {
+        melee_damage_return_per_10k: 0,
         ability: AbilityId(98),
         radius: 100 * SUBUNITS_PER_WORLD_UNIT,
         damage_bonus_per_10k: 1700,
@@ -1788,6 +1791,7 @@ fn native_aura_keeps_its_authored_linger_after_source_removal_across_recovery() 
         UnitGameplayProperties {
             passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Aura(
                 crate::components::AuraEffectProfile {
+                    melee_damage_return_per_10k: 0,
                     ability: AbilityId(99),
                     radius: 100 * SUBUNITS_PER_WORLD_UNIT,
                     damage_bonus_per_10k: 0,
