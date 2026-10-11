@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    Mudcrab = 0x1000_0055 => b"n0Z1",
     SummonedLobster = 0x1000_0054 => b"n00W",
     NagaSiren = 0x1000_0053 => b"n00S",
     DragonTurtle = 0x1000_0052 => b"n007",
@@ -120,6 +121,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    MudcrabBurrow = 0x2000_0055 => b"h0Z1",
     NagaSpring = 0x2000_0053 => b"h01Z",
     ReptilePool = 0x2000_0052 => b"h01B",
     RoyalSpawningGrounds = 0x2000_0051 => b"h032",

@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r110";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r111";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -362,6 +362,7 @@ impl CastleFightContentBundle {
                         CastleFightBuilderRace::Elemental,
                         CastleFightBuilderRace::NightElf,
                         CastleFightBuilderRace::Naga,
+                        CastleFightBuilderRace::Critter,
                     ]
                 } else {
                     &[CastleFightBuilderRace::Human]
@@ -4886,6 +4887,15 @@ impl ExtractedContent927 {
             });
         }
 
+        // The default-combat report omits campaign units. Fill absent enabled native
+        // weapons from the same retained unit metadata and protected overlays; never
+        // replace a report row or infer a weapon for an unarmed object.
+        for (&rawcode, unit) in &units {
+            if let Some(attack) = native_primary_attack_927(unit, protected_stats.get(&rawcode)) {
+                primary_attacks.entry(rawcode).or_insert(attack);
+            }
+        }
+
         let mut upgrades = BTreeMap::<u32, ExtractedUpgradeLinks927>::new();
         for line in BUILDING_UPGRADES_927_TSV.lines().skip(1) {
             let mut columns = line.split('\t');
@@ -5920,6 +5930,26 @@ fn extracted_tower_definition_927(
     }
 }
 
+fn native_primary_attack_927(
+    unit: &ExtractedUnit927,
+    protected: Option<&ExtractedProtectedStats927>,
+) -> Option<ExtractedAttack927> {
+    Some(ExtractedAttack927 {
+        damage_type: unit.attack1_damage_type?,
+        weapon_kind: unit.attack1_weapon_kind?,
+        targets: unit.attack1_targets?,
+        damage: protected
+            .and_then(|p| p.attack1_damage)
+            .or(unit.attack1_damage),
+        range: protected
+            .and_then(|p| p.attack1_range)
+            .or(unit.attack1_range)?,
+        cooldown_ticks: protected
+            .and_then(|p| p.attack1_cooldown_ticks)
+            .or(unit.attack1_cooldown_ticks)?,
+    })
+}
+
 fn extracted_unit_definition_927(
     rawcode: u32,
     expected_name: &'static str,
@@ -6309,6 +6339,33 @@ pub(crate) fn native_noncombat_summon_for_version(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn absent_report_weapons_use_native_fields_and_protected_overlays_without_arming_disabled_objects()
+     {
+        let content = extracted_content_927();
+        let code = CastleFightUnitKind::Footman.definition().rawcode;
+        let mut unit = content.units[&code];
+        let mut p = content.protected_stats[&code];
+        unit.attack1_damage = Some(3);
+        unit.attack1_range = Some(17);
+        unit.attack1_cooldown_ticks = Some(8);
+        p.attack1_damage = Some(13);
+        p.attack1_range = Some(29);
+        p.attack1_cooldown_ticks = Some(5);
+        let weapon = native_primary_attack_927(&unit, Some(&p)).unwrap();
+        assert_eq!(
+            (weapon.damage, weapon.range, weapon.cooldown_ticks),
+            (Some(13), 29, 5)
+        );
+        let weapon = native_primary_attack_927(&unit, None).unwrap();
+        assert_eq!(
+            (weapon.damage, weapon.range, weapon.cooldown_ticks),
+            (Some(3), 17, 8)
+        );
+        unit.attack1_weapon_kind = None;
+        assert!(native_primary_attack_927(&unit, Some(&p)).is_none());
+    }
 
     #[test]
     fn resolved_sight_covers_every_playable_source_and_is_version_scoped() {
