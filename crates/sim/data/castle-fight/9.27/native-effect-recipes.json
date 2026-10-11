@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A05W","unit_rawcode":"n009","kind":"cleave"},
     {"source_kind":"ability-effect","source_key":"A0FS","unit_rawcode":"n02L","kind":"travelling-mana-clap"},
     {"source_kind":"unit-ability","source_key":"A0FU","unit_rawcode":"n02L","kind":"travelling-mana-clap"},
     {"source_kind":"unit-ability","source_key":"A0FR","unit_rawcode":"n02K","kind":"permanent-immolation"},

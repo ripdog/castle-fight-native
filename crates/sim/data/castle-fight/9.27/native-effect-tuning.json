@@ -3,6 +3,19 @@
   "map_version": "9.27",
   "effects": [
     {
+      "source_kind": "unit-ability",
+      "source_key": "A05W",
+      "unit_rawcode": "n009",
+      "kind": "cleave",
+      "radius_world": 175,
+      "damage_per_10k": 2500,
+      "targets": 1,
+      "provenance": {
+        "ability": "A05W",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
       "kind": "scripted-automatic",
       "source_kind": "ability-effect",
       "source_key": "A0FS",
