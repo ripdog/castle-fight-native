@@ -445,6 +445,8 @@ fn native_parent_flight_buff_ownership_and_timed_body_survive_wire_restore() {
     sim.world.spawn((
         id,
         NativeAction::Parasite(crate::components::NativeParasiteState {
+            ability: None,
+            position_tick: sim.tick(),
             source,
             owner,
             team: Team(0),
@@ -507,6 +509,8 @@ fn native_parent_flight_buff_ownership_and_timed_body_survive_wire_restore() {
         sim.world.spawn((
             id,
             NativeAction::Parasite(crate::components::NativeParasiteState {
+                ability: None,
+                position_tick: sim.tick(),
                 source: SimId(100),
                 owner,
                 team: Team(0),

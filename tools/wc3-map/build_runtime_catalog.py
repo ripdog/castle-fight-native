@@ -434,6 +434,13 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
         for row in csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree, "script/function-spans.tsv").decode()), delimiter="\t")}
     air_bonuses = project_air_bonus(list(csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree,
         "resolved/production-unit-special-mechanics.tsv").decode()), delimiter="\t")), functions)
+    replication = next(row for row in csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree,
+        'resolved/runtime-system-mechanics.tsv').decode()), delimiter='\t')
+        if row['system_id'] == 'heroic-shrine-companion-spawning')
+    # Direct training companions require the same source-owned cold body/corpse
+    # metadata as native summons, without acquiring a summoned classification.
+    for rawcode in json.loads(replication['parameters_json'])['twins_replacement_unit_ids']:
+        native_summon_bodies.add(int(rawcode).to_bytes(4, 'big').decode())
     return {
         "schema_version": 10,
         "air_attack_bonuses": air_bonuses,

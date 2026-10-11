@@ -348,6 +348,7 @@ impl Simulation {
                             | AbilityEffect::Ensnare { .. }
                             | AbilityEffect::ScriptedRoots(_)
                             | AbilityEffect::SirenPurge(_)
+                            | AbilityEffect::TravellingManaClap(_)
                     ))
                     && !self.ability_target_is_valid(
                         source,
@@ -579,7 +580,11 @@ impl Simulation {
             let mut emit_cast_visual = true;
             match intent.target {
                 AbilityIntentTarget::Unit { index, .. } => {
-                    if let AbilityEffect::SirenPurge(p) = intent.ability.effect {
+                    if let AbilityEffect::TravellingManaClap(p) = intent.ability.effect {
+                        self.cast_travelling_mana_clap(source, index, p, units);
+                        metrics.effects += 1;
+                        emit_cast_visual = false;
+                    } else if let AbilityEffect::SirenPurge(p) = intent.ability.effect {
                         let applied = self.cast_siren_purge(source, index, p, units);
                         emit_cast_visual = applied > 0;
                         metrics.effects += applied;
@@ -1822,8 +1827,9 @@ impl Simulation {
             |unit_index| {
                 *candidate_checks += 1;
                 let candidate = &units[unit_index];
-                if candidate.health <= 0
+                if candidate.health <= 0 || candidate.classifications.locust
                     || (matches!(ability.effect, AbilityEffect::SirenPurge(p) if !super::native_summons::purge_primary_eligible(candidate, source.team, p, self.next_tick)))
+                    || (matches!(ability.effect, AbilityEffect::TravellingManaClap(p) if !super::travelling_mana_clap::primary_eligible(candidate, source.team, p, self.next_tick)))
                     || (matches!(ability.effect, AbilityEffect::ScriptedRoots(p) if !super::scripted_roots::primary_eligible(candidate, source.team, p, self.next_tick)))
                     || (matches!(
                         ability.effect,
@@ -1974,15 +1980,16 @@ impl Simulation {
         ability: AutomaticAbilityProfile,
         target: &UnitSnapshot,
     ) -> bool {
-        target.visible_to(source.team, self.next_tick)
-            || ((!target.is_invisible(self.next_tick)
-                || target.status.is_revealed_to(source.team, self.next_tick))
-                && source
-                    .map_version
-                    .and_then(|version| {
-                        crate::content::spell_reveal_for_version(version, ability.id)
-                    })
-                    .is_some_and(|reveal| reveal.only_if_hidden))
+        !target.classifications.locust
+            && (target.visible_to(source.team, self.next_tick)
+                || ((!target.is_invisible(self.next_tick)
+                    || target.status.is_revealed_to(source.team, self.next_tick))
+                    && source
+                        .map_version
+                        .and_then(|version| {
+                            crate::content::spell_reveal_for_version(version, ability.id)
+                        })
+                        .is_some_and(|reveal| reveal.only_if_hidden)))
     }
 
     fn friendly_stat_buff_target_is_valid(
@@ -2004,6 +2011,7 @@ impl Simulation {
         };
         target.health > 0
             && target.team == source.team
+            && !target.classifications.locust
             && !target.classifications.invulnerable
             && self.ability_source_distance_sq(source.origin, target.position)
                 <= square_i32(ability.range.min(autocast_range))
@@ -2065,6 +2073,7 @@ impl Simulation {
         };
         target.health > 0
             && target.team != source.team
+            && !target.classifications.locust
             && !target.mechanical
             && (ability.target_policy == AbilityTargetPolicy::RandomEnemyDebuff
                 || target.visible_to(source.team, self.next_tick))
@@ -2124,6 +2133,7 @@ impl Simulation {
             .filter_map(|(index, candidate)| {
                 *candidate_checks += 1;
                 if candidate.health <= 0
+                    || candidate.classifications.locust
                     || candidate.team != source.team
                     || candidate.retaliation.attacked_tick != Some(previous_tick)
                     || self.ability_source_distance_sq(source.origin, candidate.position) > range_sq
@@ -2164,6 +2174,7 @@ impl Simulation {
             .filter_map(|(index, candidate)| {
                 *candidate_checks += 1;
                 (candidate.health > 0
+                    && !candidate.classifications.locust
                     && candidate.health < candidate.health_max
                     && candidate.team == source.team
                     && !candidate.mechanical
@@ -2247,8 +2258,10 @@ impl Simulation {
             AbilityIntentTarget::Unit { index, id } => {
                 let target = &units[index];
                 target.id == id
+                    && !target.classifications.locust
                     && target.health > 0
                     && !matches!(ability.effect, AbilityEffect::SirenPurge(p) if !super::native_summons::purge_primary_eligible(target, source.team, p, self.next_tick))
+                    && !matches!(ability.effect, AbilityEffect::TravellingManaClap(p) if !super::travelling_mana_clap::primary_eligible(target, source.team, p, self.next_tick))
                     && !matches!(ability.effect, AbilityEffect::ScriptedRoots(p) if !super::scripted_roots::primary_eligible(target, source.team, p, self.next_tick))
                     && match ability.target_policy {
                         AbilityTargetPolicy::FlyingEnemyUnit

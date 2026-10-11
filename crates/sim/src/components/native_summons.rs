@@ -122,6 +122,8 @@ impl NativeParasiteProfile {
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct NativeParasiteState {
+    pub ability: Option<AbilityId>,
+    pub position_tick: u64,
     pub source: SimId,
     pub owner: PlayerId,
     pub team: Team,

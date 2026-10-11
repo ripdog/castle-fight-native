@@ -33,6 +33,9 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    TwinSmiley = 0x1000_005e => b"n02L",
+    TwinWeeper = 0x1000_005d => b"n02K",
+    Twins = 0x1000_005c => b"e00E",
     QuillDemon = 0x1000_005b => b"z000",
     Satyr = 0x1000_005a => b"n00A",
     GiantReefCrab = 0x1000_0059 => b"n0Z7",
@@ -127,6 +130,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    Serenity = 0x2000_005c => b"h06O",
     GreaterDemonCage = 0x2000_005b => b"h026",
     LesserDemonCage = 0x2000_005a => b"h01I",
     ReefGuardian = 0x2000_0059 => b"h0Z7",

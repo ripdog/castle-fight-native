@@ -200,7 +200,7 @@ def audit_native_status_visuals(projection, fields, abilities, manifest):
     """Require source-linked persistent buff models, including native stock art and empty overrides."""
     recipes = {"Aenr": ("movement",), "AEer": ("movement",), "AOwk": ("movement",), "ACf2": ("armor", "movement"),
                "Ainf": ("armor",), "AIrr": ("armor",), "AHad": ("armor",), "ACav": ("armor",), "AIar": ("armor",),
-               "AIcb": ("armor",), "ACff": ("armor",), "Afae": ("armor",), "AEah": ("armor",), "Ablo": ("attack_speed",),
+               "AIcb": ("armor",), "ACff": ("armor",), "Afae": ("armor",), "AEah": ("armor",), "ANpi": ("armor",), "ACpi": ("armor",), "Ablo": ("attack_speed",),
                "Apxf": ("damage_over_time",), "Aven": ("damage_over_time",), "ACvs": ("damage_over_time",),
                "Abof": ("damage_over_time",), "ANab": ("damage_over_time",),
                "Afrz": ("freeze",), "Aoar": ("regeneration",), "SCae": ("movement",), "AOae": ("movement",), "AHtc": ("movement",), "Asta": ("stun",), "AHtb": ("stun",), "ACtb": ("stun",)}

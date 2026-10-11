@@ -1,6 +1,15 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"Aloc","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"Avul","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"ability-effect","source_key":"A0FS","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0FU","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0FR","implementation":"warcraft-permanent-immolation-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0FQ","implementation":"warcraft-cleave-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0FP","implementation":"warcraft-critical-strike-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0AI","implementation":"warcraft-spell-resistance-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0FO","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A05V","implementation":"warcraft-native-aura-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0Z1","implementation":"warcraft-native-aura-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A02Q","implementation":"warcraft-hardened-skin-v1","valid_from":"9.27","valid_through":"9.27"},

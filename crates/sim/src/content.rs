@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r119";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r120";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 67;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 68;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1652,6 +1652,7 @@ impl CastleFightTowerDefinition {
                 movement_class: MovementClass::Ground,
                 mechanical: false,
                 classifications: UnitClassifications {
+                    locust: false,
                     melee_attacker: false,
                     hero: false,
                     summoned: false,
@@ -1875,6 +1876,33 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"Aloc") => {
+            0x4000_0181
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"Avul") => {
+            0x4000_0180
+        }
+        (NativeEffectSourceKind::AbilityEffect, v) if v == u32::from_be_bytes(*b"A0FS") => {
+            0x4000_017f
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0FU") => {
+            0x4000_017e
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0FR") => {
+            0x4000_017d
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0FQ") => {
+            0x4000_017c
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0FP") => {
+            0x4000_017b
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0AI") => {
+            0x4000_017a
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0FO") => {
+            0x4000_0179
+        }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A05V") => {
             0x4000_0178
         }
@@ -2943,6 +2971,7 @@ fn hash_unit_definition(hash: &mut ContentHash64, definition: CastleFightUnitDef
 }
 
 fn hash_classifications(hash: &mut ContentHash64, flags: UnitClassifications) {
+    hash.write_u8(u8::from(flags.locust));
     hash.write_u8(u8::from(flags.hero));
     hash.write_u8(u8::from(flags.resistant_skin));
     hash.write_u8(u8::from(flags.neutral_hostile_creep_level.is_some()));
@@ -3260,6 +3289,12 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
                     hash.write_u64(word);
                 }
             }
+            PassiveUnitEffect::PermanentImmolation(profile) => {
+                hash.write_u8(27);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
             PassiveUnitEffect::HardenedSkin(profile) => {
                 hash.write_u8(26);
                 for word in profile.canonical_words() {
@@ -3521,6 +3556,11 @@ fn hash_automatic_ability_profile(hash: &mut ContentHash64, ability: AutomaticAb
             }
         }
         AbilityEffect::SirenPurge(p) => p.visit_canonical_words(|word| hash.write_u64(word)),
+        AbilityEffect::TravellingManaClap(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         AbilityEffect::NativeSummon(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);
@@ -3584,6 +3624,7 @@ fn hash_automatic_ability_profile(hash: &mut ContentHash64, ability: AutomaticAb
             }
         }
         AbilityEffect::Hailstone(profile) => hash_hailstone_content(hash, profile),
+        AbilityEffect::ManaBurnVisual => {}
         AbilityEffect::NativeWeatherVisual { duration_ticks } => hash.write_u16(duration_ticks),
         AbilityEffect::BuildingWeather(p) => {
             for word in p.canonical_words() {
@@ -4489,7 +4530,7 @@ impl ExtractedContent927 {
                 .map_err(|_| format!("unit {rawcode:#010x} has invalid collision radius"))?;
             let acquisition_range = parse_optional_i32_927(columns[22])?.map(world);
             let projectile_speed_per_tick = parse_optional_i32_927(columns[45])?
-                .or_else(|| (columns[28] == "mbounce").then_some(0))
+                .or_else(|| matches!(columns[28], "mbounce" | "msplash").then_some(0))
                 .map(projectile_speed);
             let outer_splash_radius = parse_optional_i32_927(columns[41])?.map(world);
             let splash_falloff = match (
@@ -4612,6 +4653,7 @@ impl ExtractedContent927 {
                 move_speed_per_tick,
                 mechanical,
                 target_classifications: UnitClassifications {
+                    locust: abilities.contains(&u32::from_be_bytes(*b"Aloc")),
                     ancient: classifications
                         .iter()
                         .any(|value| value.eq_ignore_ascii_case("ancient")),
@@ -5990,13 +6032,32 @@ fn extracted_unit_definition_927(
     let protected = content.protected_stats.get(&rawcode).unwrap_or_else(|| {
         panic!("unit {rawcode:#010x} missing from retained 9.27 protected stats")
     });
+    // Unit entities require an AttackProfile even when the native object has no weapon.
+    // An empty target mask and zero damage make this engine carrier inert; none of
+    // these placeholder fields are imported as a Warcraft weapon or tuning value.
+    let inert = ExtractedAttack927 {
+        damage_type: DamageType::Normal,
+        weapon_kind: ExtractedWeaponKind927::Melee,
+        targets: AttackTargetMask::from_capabilities(false, false, false),
+        damage: Some(0),
+        range: 0,
+        cooldown_ticks: 1,
+    };
     let attack = content.primary_attacks.get(&rawcode).unwrap_or_else(|| {
-        panic!("unit {rawcode:#010x} missing from retained 9.27 primary attacks")
+        assert!(
+            unit.attack1_weapon_kind.is_none(),
+            "armed object missing primary weapon"
+        );
+        &inert
     });
     assert_eq!(unit.name, expected_name, "unit name changed in extraction");
-    let acquisition_range = unit
-        .acquisition_range
-        .unwrap_or_else(|| panic!("unit {rawcode:#010x} is missing acquisition range"));
+    let acquisition_range = unit.acquisition_range.unwrap_or_else(|| {
+        assert!(
+            unit.attack1_weapon_kind.is_none(),
+            "armed object missing acquisition range"
+        );
+        0
+    });
     let delivery = match attack.weapon_kind {
         ExtractedWeaponKind927::Melee => AttackDelivery::Melee,
         ExtractedWeaponKind927::Instant => AttackDelivery::RangedInstant,
@@ -6017,9 +6078,12 @@ fn extracted_unit_definition_927(
                 speed_per_tick: unit.projectile_speed_per_tick.unwrap_or_else(|| {
                     panic!("ballistic unit {rawcode:#010x} is missing projectile speed")
                 }),
-                impact_radius: unit.outer_splash_radius.unwrap_or_else(|| {
-                    panic!("ballistic unit {rawcode:#010x} is missing splash radius")
-                }),
+                impact_radius: unit
+                    .outer_splash_radius
+                    .or_else(|| (attack.weapon_kind == ExtractedWeaponKind927::Splash).then_some(0))
+                    .unwrap_or_else(|| {
+                        panic!("ballistic unit {rawcode:#010x} is missing splash radius")
+                    }),
             }
         }
         ExtractedWeaponKind927::Bounce => {
@@ -6591,8 +6655,10 @@ mod tests {
         let mut homing = 0;
         for kind in CastleFightUnitKind::ALL {
             let definition = kind.definition();
-            if content.primary_attacks[&definition.rawcode].weapon_kind
-                != ExtractedWeaponKind927::Splash
+            if !content
+                .primary_attacks
+                .get(&definition.rawcode)
+                .is_some_and(|attack| attack.weapon_kind == ExtractedWeaponKind927::Splash)
             {
                 continue;
             }
@@ -6608,11 +6674,12 @@ mod tests {
                     AttackDelivery::RangedBallistic { .. }
                 ));
             }
-            assert!(
+            assert_eq!(
                 definition
                     .passive_effects
                     .iter()
-                    .any(|p| matches!(p, PassiveUnitEffect::SplashFalloff(_)))
+                    .any(|p| matches!(p, PassiveUnitEffect::SplashFalloff(_))),
+                content.units[&definition.rawcode].splash_falloff.is_some(),
             );
         }
         assert!(homing > 0);
@@ -6624,8 +6691,10 @@ mod tests {
         let mut promoted_lines = 0;
         for kind in CastleFightUnitKind::ALL {
             let definition = kind.definition();
-            if content.primary_attacks[&definition.rawcode].weapon_kind
-                != ExtractedWeaponKind927::Line
+            if !content
+                .primary_attacks
+                .get(&definition.rawcode)
+                .is_some_and(|attack| attack.weapon_kind == ExtractedWeaponKind927::Line)
             {
                 continue;
             }

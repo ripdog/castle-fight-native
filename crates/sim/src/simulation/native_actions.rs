@@ -171,6 +171,9 @@ impl Simulation {
                 continue;
             }
             match action {
+                NativeAction::TravellingManaClap(state) => {
+                    self.advance_travelling_mana_clap(entity, state, units);
+                }
                 NativeAction::Parasite(state) => {
                     self.advance_native_parasite(entity, state, units, buildings)
                 }

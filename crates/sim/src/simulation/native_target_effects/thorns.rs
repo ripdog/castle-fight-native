@@ -269,12 +269,13 @@ fn thorns_is_blocked_by_spell_immunity_but_a_fatal_hit_still_returns_damage() {
 }
 
 #[test]
-fn zero_speed_bounce_weapon_commits_attacks_without_inventing_impact_or_bounce_damage() {
-    let mut sim = simulation(1);
-    let mut spawn = unit(
-        0,
-        20,
-        100,
+fn zero_speed_projectile_weapons_commit_attacks_without_inventing_impact_or_hit_effects() {
+    for delivery in [
+        AttackDelivery::RangedGuaranteedHit { speed_per_tick: 0 },
+        AttackDelivery::RangedBallistic {
+            speed_per_tick: 0,
+            impact_radius: 0,
+        },
         AttackDelivery::Bounce {
             speed_per_tick: 0,
             bounce_range: 100 * SUBUNITS_PER_WORLD_UNIT,
@@ -282,20 +283,39 @@ fn zero_speed_bounce_weapon_commits_attacks_without_inventing_impact_or_bounce_d
             damage_percent_per_bounce: 60,
             allow_repeat_targets: false,
         },
-    );
-    spawn.attack.cooldown_ticks = 3;
-    sim.spawn_unit(spawn);
-    let victim = sim.spawn_unit(unit(1, 60, 0, AttackDelivery::Melee));
-    let collateral = sim.spawn_unit(unit(1, 80, 0, AttackDelivery::Melee));
-    let mut restored = wire_restored(&sim, 4);
-    let mut attacks = 0;
-    for _ in 0..12 {
-        let report = sim.step();
-        assert_eq!(report.checksum, restored.step().checksum);
-        attacks += report.attacks_resolved;
-        assert_eq!(sim.projectile_count(), 0);
+    ] {
+        let mut sim = simulation(1);
+        let mut spawn = unit(0, 20, 100, delivery);
+        spawn.attack.cooldown_ticks = 3;
+        sim.spawn_unit_with_properties(
+            spawn,
+            UnitGameplayProperties {
+                passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Bash(
+                    crate::BashEffectProfile {
+                        ability: AbilityId(796),
+                        chance_per_10k: 10_000,
+                        bonus_damage: 17,
+                        stun_duration_ticks: 8,
+                        hero_stun_duration_ticks: 3,
+                        targets: AttackTargetMask::AIR_AND_GROUND,
+                    },
+                )),
+                ..Default::default()
+            },
+        );
+        let victim = sim.spawn_unit(unit(1, 60, 0, AttackDelivery::Melee));
+        let collateral = sim.spawn_unit(unit(1, 80, 0, AttackDelivery::Melee));
+        let mut restored = wire_restored(&sim, 4);
+        let mut attacks = 0;
+        for _ in 0..12 {
+            let report = sim.step();
+            assert_eq!(report.checksum, restored.step().checksum);
+            attacks += report.attacks_resolved;
+            assert_eq!(sim.projectile_count(), 0);
+        }
+        assert!(attacks > 0);
+        assert_eq!(sim.unit(victim).unwrap().health, 1000);
+        assert_eq!(sim.unit(collateral).unwrap().health, 1000);
+        assert_eq!(sim.unit(victim).unwrap().status.stunned_until_tick, 0);
     }
-    assert!(attacks > 0);
-    assert_eq!(sim.unit(victim).unwrap().health, 1000);
-    assert_eq!(sim.unit(collateral).unwrap().health, 1000);
 }

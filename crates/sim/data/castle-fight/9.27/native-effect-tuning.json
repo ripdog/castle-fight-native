@@ -3,6 +3,188 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "scripted-automatic",
+      "source_kind": "ability-effect",
+      "source_key": "A0FS",
+      "unit_rawcode": "n02L",
+      "spellcasting": {
+        "mana": {
+          "maximum": 0,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147483648
+        },
+        "ability": {
+          "id": 1093682771,
+          "mana_cost": 0,
+          "cooldown_ticks": 0,
+          "range": 0,
+          "target_policy": "ScriptedController",
+          "effect": {
+            "FrostNova": {
+              "ability": 1093682771,
+              "radius": 614400,
+              "primary_damage": 0,
+              "area_damage": 20,
+              "duration_ticks": 150,
+              "hero_duration_ticks": 150,
+              "movement_percent_delta": -50,
+              "attack_speed_percent_delta": -50,
+              "targets": 1
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 0,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/object-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "script_visuals": [],
+        "functions": [
+          "UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceChaosAbilities_cast_registerUnitSpellWithTargetOrder_RaceChaosAbilities1",
+          "CallbackSingle_doAfter_RaceChaosAbilities_call_doAfter_RaceChaosAbilities1",
+          "ForGroupCallback_forUnitsInRange_doAfter_RaceChaosAbilities_callback_forUnitsInRange_doAfter_RaceChaosAbilities"
+        ]
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0FU",
+      "unit_rawcode": "n02L",
+      "spellcasting": {
+        "mana": {
+          "maximum": 0,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147483648
+        },
+        "ability": {
+          "id": 1093682773,
+          "mana_cost": 0,
+          "cooldown_ticks": 600,
+          "range": 819200,
+          "target_policy": "RandomGroundEnemyUnit",
+          "effect": {
+            "TravellingManaClap": {
+              "parent": {
+                "buff_rawcode": 1110454585,
+                "map_version": {
+                  "major": 9,
+                  "minor": 27
+                },
+                "speed_per_tick": 64853,
+                "affects_invulnerable": false,
+                "duration_ticks": 1,
+                "hero_duration_ticks": 1,
+                "body_rawcode": 1852203634,
+                "count": 1,
+                "body_duration_ticks": 1
+              },
+              "parent_nonhero_only": true,
+              "mover_rawcode": 1747990094,
+              "callback_speed_per_second": 716800,
+              "mover_speed_per_tick": 9216,
+              "mover_has_visible_model": false,
+              "mover_height_world_units": 100,
+              "mover_duration_ticks": 90,
+              "clap": {
+                "ability": 1093682771,
+                "radius": 614400,
+                "primary_damage": 0,
+                "area_damage": 20,
+                "duration_ticks": 150,
+                "hero_duration_ticks": 150,
+                "movement_percent_delta": -50,
+                "attack_speed_percent_delta": -50
+              },
+              "burn_radius": 614400,
+              "maximum_mana_burn": 100,
+              "excluded_ability": 1093679176,
+              "feedback_visual_ability": 1093682773
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 0,
+      "effect_ability_rawcode": "A0FS",
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/object-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "script_visuals": [
+          {
+            "owner_rawcode": "A0FU",
+            "source_unit_rawcode": null,
+            "script_source_unit_rawcode": "n02L",
+            "role": "mana-burn-target",
+            "model_path": "Abilities\\Spells\\Human\\Feedback\\SpellBreakerAttack.mdl"
+          }
+        ],
+        "functions": [
+          "UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceChaosAbilities_cast_registerUnitSpellWithTargetOrder_RaceChaosAbilities1",
+          "CallbackSingle_doAfter_RaceChaosAbilities_call_doAfter_RaceChaosAbilities1",
+          "ForGroupCallback_forUnitsInRange_doAfter_RaceChaosAbilities_callback_forUnitsInRange_doAfter_RaceChaosAbilities"
+        ]
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0FR",
+      "unit_rawcode": "n02K",
+      "kind": "permanent-immolation",
+      "profile": {
+        "ability": 1093682770,
+        "buff_rawcode": 1110454347,
+        "radius": 614400,
+        "damage": 25,
+        "interval_ticks": 30,
+        "targets": 3,
+        "organic_only": true
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "ANpi"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0FQ",
+      "unit_rawcode": "n02K",
+      "kind": "cleave",
+      "radius_world": 350,
+      "damage_per_10k": 5000,
+      "targets": 1,
+      "provenance": {
+        "ability": "A0FQ",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0FP",
+      "unit_rawcode": "n02L",
+      "kind": "critical-strike",
+      "chance_per_10k": 3000,
+      "damage_multiplier_per_10k": 40000,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A0FP",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0AI",
+      "unit_rawcode": "n02L",
+      "kind": "spell-resistance",
+      "damage_taken_per_10k": 1000,
+      "provenance": {
+        "ability": "A0AI",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A05V",
       "unit_rawcode": "z000",

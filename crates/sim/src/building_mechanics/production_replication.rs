@@ -7,6 +7,8 @@ pub(crate) struct ProductionReplicationProfile {
     pub marker: u32,
     pub local_extra_copies: usize,
     pub extra_copies_per_shrine: usize,
+    pub twins_marker: u32,
+    pub twins_children: [u32; 2],
     pub maximum_shrines: usize,
     pub chance_per_100: u64,
 }

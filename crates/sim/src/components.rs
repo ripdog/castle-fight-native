@@ -15,10 +15,13 @@ pub(crate) use master_projectiles::{
 };
 pub use master_projectiles::{MasterMoverProfile, MasterProjectileProfile, NativeNovaProfile};
 mod native_summons;
+mod travelling_mana_clap;
 pub(crate) use native_summons::NativeParasiteState;
 pub use native_summons::{
     NativeParasiteProfile, NativeSummonProfile, PurgeProfile, PurgeState, SirenPurgeProfile,
 };
+pub use travelling_mana_clap::TravellingManaClapProfile;
+pub(crate) use travelling_mana_clap::TravellingManaClapState;
 mod native_actions;
 pub(crate) use native_actions::{
     AcidBombMissileState, AuraCarrierState, ConeWaveState, EnsnareMissileState, HailstoneState,
@@ -934,6 +937,9 @@ impl NativeHealProfile {
 /// Intrinsic target classifications, independent of armor type or presentation.
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnitClassifications {
+    /// Native Aloc: excluded from normal unit selection and native area enumeration.
+    #[serde(default)]
+    pub locust: bool,
     /// Native melee-attacker handle classification, independent of the current damage event.
     #[serde(default)]
     pub melee_attacker: bool,
@@ -992,6 +998,7 @@ pub(crate) struct ProductionUnitClassifications(pub UnitClassifications);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PassiveUnitEffect {
+    PermanentImmolation(PermanentImmolationProfile),
     Corruption(CorruptionProfile),
     SourceDamageDispatcher(AbilityId),
     HealthScaledAftershock(HealthScaledAftershockProfile),
@@ -1019,6 +1026,31 @@ pub enum PassiveUnitEffect {
     Pulverize(PulverizeEffectProfile),
     SpikedShell(SpikedShellProfile),
     HardenedSkin(NativeAbilityGrant),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PermanentImmolationProfile {
+    pub ability: AbilityId,
+    pub buff_rawcode: u32,
+    pub radius: i32,
+    pub damage: i32,
+    pub interval_ticks: u16,
+    pub targets: AttackTargetMask,
+    pub organic_only: bool,
+}
+
+impl PermanentImmolationProfile {
+    pub(crate) const fn canonical_words(self) -> [u64; 7] {
+        [
+            self.ability.0 as u64,
+            self.buff_rawcode as u64,
+            self.radius as u64,
+            self.damage as u64,
+            self.interval_ticks as u64,
+            self.targets.bits() as u64,
+            self.organic_only as u64,
+        ]
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1784,6 +1816,8 @@ pub enum AbilityEffect {
         burning_oil: BurningOilEffectProfile,
     },
     SirenPurge(SirenPurgeProfile),
+    TravellingManaClap(TravellingManaClapProfile),
+    ManaBurnVisual,
     NativeSummon(NativeSummonProfile),
     NagaEarthquake(crate::building_mechanics::NagaEarthquakeProfile),
     NagaCharm(crate::building_mechanics::NagaCharmProfile),
@@ -1800,6 +1834,8 @@ impl AbilityEffect {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::TravellingManaClap(_) => 50,
+            Self::ManaBurnVisual => 51,
             Self::SirenPurge(_) => 45,
             Self::NativeSummon(_) => 46,
             Self::NagaEarthquake(_) => 47,

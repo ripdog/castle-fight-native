@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 83;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 84;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -36,9 +36,11 @@ mod building_damage_procs;
 mod enchantments;
 mod naga;
 mod native_building_auras;
+mod native_immolation;
 mod night_elf;
 mod permanent_grants;
 mod starfall;
+mod travelling_mana_clap;
 mod weather;
 mod world_freezer;
 use world_freezer::WorldFreezerState;
@@ -1757,6 +1759,7 @@ impl Simulation {
         self.resolve_support_orders(&mut units);
         self.resolve_world_freezer(&mut units, &mut buildings);
         self.resolve_native_actions(&mut units, &mut buildings);
+        self.resolve_permanent_immolation(&mut units);
         self.apply_passive_auras(&mut units, &buildings);
         self.apply_speed_auras(&mut units);
         self.resolve_damage_charge(&mut units, &mut buildings);
@@ -2959,6 +2962,7 @@ impl Simulation {
         for (source_id, team, position, profile) in sources {
             for target in units.iter_mut() {
                 if target.health <= 0
+                    || target.classifications.locust
                     || target.team != team
                     || (target.attack.delivery == AttackDelivery::Melee && !profile.affects_melee)
                     || (target.attack.delivery != AttackDelivery::Melee && !profile.affects_ranged)
@@ -3057,12 +3061,15 @@ impl Simulation {
             &AttackProfile,
             &mut StatusState,
             &ManaState,
+            Option<&UnitClassifications>,
         )>();
-        for (id, team, position, health, attack, mut status, _) in targets.iter_mut(&mut self.world)
+        for (id, team, position, health, attack, mut status, _, flags) in
+            targets.iter_mut(&mut self.world)
         {
             purge_expired_status_modifiers(&mut status, tick);
             for (source_id, source_team, source_position, profile) in &sources {
                 if health.current <= 0
+                    || flags.is_some_and(|flags| flags.locust)
                     || team != source_team
                     || (profile.radius == 0 && id != source_id)
                     || position.0.distance_sq(*source_position) > square_i32(profile.radius)
@@ -3400,11 +3407,8 @@ impl Simulation {
             bounds_max,
             reservation_capacity,
             units.iter().enumerate().filter_map(|(index, unit)| {
-                (unit.movement_class == MovementClass::Ground).then_some((
-                    index,
-                    unit.position,
-                    unit.collision_radius,
-                ))
+                (unit.movement_class == MovementClass::Ground && !unit.classifications.locust)
+                    .then_some((index, unit.position, unit.collision_radius))
             }),
         );
         let mut air_reservations = SpatialReservationGrid::build_with_radii(
@@ -3413,11 +3417,8 @@ impl Simulation {
             bounds_max,
             reservation_capacity,
             units.iter().enumerate().filter_map(|(index, unit)| {
-                (unit.movement_class == MovementClass::Air).then_some((
-                    index,
-                    unit.position,
-                    unit.collision_radius,
-                ))
+                (unit.movement_class == MovementClass::Air && !unit.classifications.locust)
+                    .then_some((index, unit.position, unit.collision_radius))
             }),
         );
         let mut next_reservation_index = units.len();
@@ -3439,27 +3440,29 @@ impl Simulation {
                         return None;
                     }
                     let position = self.topology.center_of_cell(cell);
-                    let movement_legal = match attempt.movement_class {
-                        MovementClass::Ground => {
-                            let component = self.topology.component_id(cell)?;
-                            attempt.collision_radius.is_none()
-                                || self.topology.circle_is_traversable_in_component(
+                    let movement_legal = attempt.classifications.locust
+                        || match attempt.movement_class {
+                            MovementClass::Ground => {
+                                let component = self.topology.component_id(cell)?;
+                                attempt.collision_radius.is_none()
+                                    || self.topology.circle_is_traversable_in_component(
+                                        position,
+                                        collision_radius,
+                                        component,
+                                    )
+                            }
+                            MovementClass::Air => {
+                                let component = self.air_topology.component_id(cell)?;
+                                self.air_topology.circle_is_traversable_in_component(
                                     position,
                                     collision_radius,
                                     component,
                                 )
-                        }
-                        MovementClass::Air => {
-                            let component = self.air_topology.component_id(cell)?;
-                            self.air_topology.circle_is_traversable_in_component(
-                                position,
-                                collision_radius,
-                                component,
-                            )
-                        }
-                    };
+                            }
+                        };
                     (movement_legal
-                        && reservations.is_clear_with_radius(position, collision_radius))
+                        && (attempt.classifications.locust
+                            || reservations.is_clear_with_radius(position, collision_radius)))
                     .then_some((cell, position))
                 });
 
@@ -3508,6 +3511,35 @@ impl Simulation {
                     );
                     spawned += 1;
                 }
+                if !marked
+                    && attempt.content.is_some_and(|content| {
+                        crate::content::unit_has_ability_for_version(
+                            content.rawcode,
+                            AbilityId(replication.twins_marker),
+                            content.map_version,
+                        )
+                    })
+                {
+                    let content = attempt.content.expect("marked native production");
+                    let bundle = crate::castle_fight_content_bundle(content.map_version)
+                        .expect("supported companion production version");
+                    for rawcode in replication.twins_children {
+                        let child = bundle
+                            .unit_definitions()
+                            .find(|definition| definition.rawcode == rawcode)
+                            .expect(
+                                "promoted training requires both complete companion definitions",
+                            )
+                            .resolved();
+                        self.spawn_resolved_unit_with_provenance(
+                            Some(attempt.owner),
+                            UnitSpawn::from_template(attempt.team, position, child.template),
+                            child,
+                            Some(attempt.id),
+                        );
+                        spawned += 1;
+                    }
+                }
                 let legendary = attempt.content.is_some_and(|content| {
                     crate::content::unit_has_ability_for_version(
                         content.rawcode,
@@ -3547,8 +3579,14 @@ impl Simulation {
                         }
                     }
                 }
-                reservations.insert_with_radius(next_reservation_index, position, collision_radius);
-                next_reservation_index += 1;
+                if !attempt.classifications.locust {
+                    reservations.insert_with_radius(
+                        next_reservation_index,
+                        position,
+                        collision_radius,
+                    );
+                    next_reservation_index += 1;
+                }
             } else {
                 failed += 1;
             }
@@ -3952,10 +3990,11 @@ impl UnitSnapshot {
     }
 
     fn visible_to(&self, team: Team, tick: u64) -> bool {
-        self.team == team
-            || self.status.is_revealed_to(team, tick)
-            || self.detection_teams & (1 << team.0) != 0
-            || (!self.is_invisible(tick) && self.visible_teams & (1 << team.0) != 0)
+        !self.classifications.locust
+            && (self.team == team
+                || self.status.is_revealed_to(team, tick)
+                || self.detection_teams & (1 << team.0) != 0
+                || (!self.is_invisible(tick) && self.visible_teams & (1 << team.0) != 0))
     }
 
     fn attack_for_unit_target(
@@ -4614,13 +4653,13 @@ fn validate_attack_profile(attack: AttackProfile) {
     match attack.delivery {
         AttackDelivery::Melee | AttackDelivery::RangedInstant => {}
         AttackDelivery::RangedGuaranteedHit { speed_per_tick } => {
-            assert!(speed_per_tick > 0);
+            assert!(speed_per_tick >= 0);
         }
         AttackDelivery::RangedBallistic {
             speed_per_tick,
             impact_radius,
         } => {
-            assert!(speed_per_tick > 0);
+            assert!(speed_per_tick >= 0);
             assert!(impact_radius >= 0);
         }
         AttackDelivery::Line {
@@ -4803,7 +4842,7 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                 AbilityTargetPolicy::NativeBuildingSpellTrigger
             );
         }
-        AbilityEffect::NativeWeatherVisual { .. } => {
+        AbilityEffect::NativeWeatherVisual { .. } | AbilityEffect::ManaBurnVisual => {
             panic!("weather art is a presentation event, not a cast profile")
         }
         AbilityEffect::BuildingWeather(p) => {
@@ -4860,6 +4899,10 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
         AbilityEffect::SirenPurge(p) => {
             assert!(p.child.range > 0 && p.child.duration_ticks > 0);
+        }
+        AbilityEffect::TravellingManaClap(p) => {
+            assert!(p.callback_speed_per_second > 0 && p.mover_duration_ticks > 0);
+            assert!(p.maximum_mana_burn >= 0 && p.burn_radius >= 0);
         }
         AbilityEffect::NativeSummon(p) => {
             assert!(p.count > 0 && p.duration_ticks > 0);
@@ -5239,6 +5282,48 @@ fn corpse_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<Cor
 }
 
 fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<ProjectileView> {
+    if let Some(crate::components::NativeAction::Parasite(state)) =
+        entity.get::<crate::components::NativeAction>()
+        && state.buff_until_tick.is_none()
+    {
+        let ability = state.ability?;
+        return Some(ProjectileView {
+            id: *entity.get::<SimId>()?,
+            source: state.source,
+            ability: Some(ability),
+            launch_position: state.position,
+            launch_tick: state.position_tick,
+            impact_tick: state.position_tick + 1,
+            kind: ProjectileViewKind::NativeCarrierBolt {
+                target: state.target,
+                ability,
+            },
+        });
+    }
+
+    if let Some(crate::components::NativeAction::TravellingManaClap(state)) =
+        entity.get::<crate::components::NativeAction>()
+        && state.profile.mover_has_visible_model
+        && state.position_tick < state.created_tick + u64::from(state.profile.mover_duration_ticks)
+    {
+        let dx = state.destination.x - state.origin.x;
+        let dy = state.destination.y - state.origin.y;
+        return Some(ProjectileView {
+            id: *entity.get::<SimId>()?,
+            source: state.source,
+            ability: Some(state.profile.clap.ability),
+            launch_position: state.position,
+            launch_tick: state.position_tick,
+            impact_tick: state.position_tick + 1,
+            kind: ProjectileViewKind::NativeMover {
+                rawcode: state.profile.mover_rawcode,
+                owner: state.owner,
+                facing_degrees: (dy as f32).atan2(dx as f32).to_degrees() as i16,
+                height_world_units: state.profile.mover_height_world_units,
+            },
+        });
+    }
+
     if let Some(crate::native_carriers::NativeCarrierState::Bolt(bolt)) =
         entity.get::<crate::native_carriers::NativeCarrierState>()
     {

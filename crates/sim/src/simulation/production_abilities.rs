@@ -249,6 +249,209 @@ fn assert_spawned_definitions(sim: &Simulation, expected: &[AutomaticAbilityProf
     }
 }
 
+fn companion_carrier() -> crate::CastleFightUnitDefinition {
+    let version = crate::MapVersion::CASTLE_FIGHT_9_27;
+    let p = crate::building_mechanics::production_replication_for_version(version);
+    crate::castle_fight_content_bundle(version)
+        .unwrap()
+        .unit_definitions()
+        .find(|unit| {
+            crate::content::unit_has_ability_for_version(
+                unit.rawcode,
+                AbilityId(p.twins_marker),
+                version,
+            ) && !crate::content::unit_has_ability_for_version(
+                unit.rawcode,
+                AbilityId(p.legendary_exclusion),
+                version,
+            )
+        })
+        .expect("source-marked training carrier")
+}
+
+#[test]
+fn source_training_companions_receive_fresh_definitions_and_one_producer_cycle_across_wire() {
+    let body = companion_carrier();
+    let p = crate::building_mechanics::production_replication_for_version(body.map_version);
+    let (spawn, mut properties) = factory(&[ability(10)]);
+    properties.production_unit.content = body.gameplay_properties().content;
+    let mut first = simulation(1);
+    let producer = first.spawn_building_with_properties(spawn, properties);
+    first.step();
+    first.step();
+    let mut second = restored(&first, 4);
+    for _ in 0..3 {
+        assert_eq!(first.step().checksum, second.step().checksum);
+    }
+    assert_eq!(first.units().len(), 1 + p.twins_children.len());
+    let bundle = crate::castle_fight_content_bundle(body.map_version).unwrap();
+    for rawcode in p.twins_children {
+        let cold = bundle
+            .unit_definitions()
+            .find(|unit| unit.rawcode == rawcode)
+            .unwrap();
+        let child = first
+            .units()
+            .into_iter()
+            .find(|u| u.content.is_some_and(|c| c.rawcode == rawcode))
+            .unwrap();
+        let e = entity(&first, child.id);
+        assert_eq!(child.health, cold.health);
+        assert_eq!(child.owner, PlayerId(0));
+        assert_eq!(child.status.spawn_building, Some(producer));
+        assert!(child.status.native_grants.iter().next().is_none());
+        assert_eq!(
+            first.world.get::<ResurrectionProfile>(e).unwrap().0,
+            cold.resolved()
+        );
+        assert_eq!(
+            first.world.get::<ManaState>(e).map(|m| m.current),
+            cold.spellcasting.map(|s| s.mana.starting)
+        );
+    }
+    let carrier = first
+        .units()
+        .into_iter()
+        .find(|u| u.content.is_some_and(|c| c.rawcode == body.rawcode))
+        .unwrap();
+    assert_eq!(carrier.health, 1000);
+    assert_eq!(carrier.mana_current, Some(100));
+    assert_eq!(
+        first
+            .world
+            .get::<ProductionState>(entity(&first, producer))
+            .unwrap()
+            .next_spawn_tick,
+        8
+    );
+}
+
+#[test]
+fn shrine_clones_of_training_carriers_do_not_reenter_native_training_or_create_companions() {
+    let body = companion_carrier();
+    let p = crate::building_mechanics::production_replication_for_version(body.map_version);
+    let shrine = crate::CastleFightTowerKind::HeroicShrine
+        .definition_for_version(body.map_version)
+        .unwrap();
+    let mut outcomes = [false; 2];
+    for seed in 0..128 {
+        let mut sim = Simulation::new_with_gameplay_bundle_and_players(
+            SimulationConfig {
+                match_seed: seed,
+                ..Default::default()
+            },
+            1,
+            CombatRules::default(),
+            crate::castle_fight_content_bundle(body.map_version)
+                .unwrap()
+                .identity
+                .into(),
+            &[
+                PlayerConfig {
+                    id: PlayerId(0),
+                    team: Team(0),
+                },
+                PlayerConfig {
+                    id: PlayerId(1),
+                    team: Team(0),
+                },
+            ],
+        );
+        sim.spawn_building_for_player_with_properties(
+            PlayerId(1),
+            shrine.spawn(Team(0), BuildingFootprint::new(20, 0, 4, 4)),
+            shrine.gameplay_properties(),
+        );
+        let (mut spawn, mut properties) = factory(&[]);
+        properties.production_unit.content = body.gameplay_properties().content;
+        spawn.production.as_mut().unwrap().initial_delay_ticks = 0;
+        sim.spawn_building_for_player_with_properties(PlayerId(0), spawn, properties);
+        let count = sim.step().units_spawned;
+        let local = 1 + p.twins_children.len();
+        let clones = count - local;
+        assert!(clones <= 1);
+        outcomes[clones] = true;
+        assert_eq!(
+            sim.units()
+                .iter()
+                .filter(|u| u.owner == PlayerId(1))
+                .count(),
+            clones
+        );
+        for rawcode in p.twins_children {
+            assert_eq!(
+                sim.units()
+                    .iter()
+                    .filter(|u| u.content.is_some_and(|c| c.rawcode == rawcode))
+                    .count(),
+                1
+            );
+        }
+        if outcomes.into_iter().all(|seen| seen) {
+            break;
+        }
+    }
+    assert!(outcomes.into_iter().all(|seen| seen));
+}
+
+#[test]
+fn failed_training_search_creates_no_carrier_or_companions_and_advances_one_cycle() {
+    let body = companion_carrier();
+    let mut sim = simulation(1);
+    let (mut spawn, mut properties) = factory(&[]);
+    properties.production_unit.content = body.gameplay_properties().content;
+    let p = spawn.production.as_mut().unwrap();
+    p.search_radius_cells = 0;
+    p.initial_delay_ticks = 0;
+    let blocked = preferred_spawn_cell(spawn.team, spawn.footprint);
+    sim.spawn_building(BuildingSpawn {
+        team: Team(1),
+        footprint: BuildingFootprint::new(blocked.x, blocked.y, 1, 1),
+        health: 1000,
+        production: None,
+        attack: None,
+        spellcasting: None,
+    });
+    let producer = sim.spawn_building_with_properties(spawn, properties);
+    let result = sim.step();
+    assert_eq!(result.units_spawned, 0);
+    assert!(sim.units().is_empty());
+    assert_eq!(
+        sim.world
+            .get::<ProductionState>(entity(&sim, producer))
+            .unwrap()
+            .next_spawn_tick,
+        4
+    );
+}
+
+#[test]
+fn native_locust_training_carriers_ignore_unit_occupancy() {
+    let body = companion_carrier();
+    let mut sim = simulation(1);
+    let (mut spawn, mut properties) = factory(&[]);
+    spawn.footprint = BuildingFootprint::new(40, 20, 1, 1);
+    properties.production_unit.content = body.gameplay_properties().content;
+    properties.production_unit.classifications.locust = true;
+    properties.production_unit.collision_radius = Some(CollisionRadius(0));
+    properties.production_unit.movement_class = MovementClass::Air;
+    let p = spawn.production.as_mut().unwrap();
+    p.search_radius_cells = 0;
+    p.initial_delay_ticks = 0;
+    let preferred = preferred_spawn_cell(spawn.team, spawn.footprint);
+    let template = spawn.production.unwrap().unit;
+    sim.spawn_unit_with_properties(
+        UnitSpawn::from_template(Team(1), sim.topology.center_of_cell(preferred), template),
+        UnitGameplayProperties {
+            movement_class: MovementClass::Air,
+            collision_radius: Some(CollisionRadius(16 * SUBUNITS_PER_WORLD_UNIT)),
+            ..Default::default()
+        },
+    );
+    sim.spawn_building_with_properties(spawn, properties);
+    assert_eq!(sim.step().units_spawned, 3);
+}
+
 #[test]
 fn unspawned_production_definitions_survive_wire_restore_and_initialize_every_child() {
     let additional = [ability(10), ability(20)];

@@ -9,6 +9,20 @@ import build_runtime_catalog as catalog
 
 
 class NativeTuningProjectionTest(unittest.TestCase):
+    def test_permanent_immolation_retains_native_interval_and_organic_mask(self):
+        recipe = {'kind': 'permanent-immolation', 'source_kind': 'unit-ability',
+            'source_key': 'BURN', 'unit_rawcode': 'UNIT'}
+        fields = {'cost1': '0', 'cool1': '0', 'dataa1': '17', 'datab1': '0', 'datac1': '0',
+            'dur1': '0.5', 'area1': '13', 'buffid1': 'BUFF',
+            'targs1': 'air,ground,enemies,neutral,organic'}
+        p = native.project_effect(recipe, fields, None, {}, {'native_base': 'ANpi'})['profile']
+        self.assertEqual((p['damage'], p['interval_ticks'], p['radius']), (17, 15, 13 * 1024))
+        self.assertTrue(p['organic_only'])
+        for changed in ({'dur1': '0'}, {'datab1': '1'}, {'datac1': '1'}, {'cost1': '3'},
+            {'targs1': 'air,ground,enemies,neutral'}, {'dataa1': '-1'}):
+            with self.subTest(changed=changed), self.assertRaises(ValueError):
+                native.project_effect(recipe, {**fields, **changed}, None, {}, {'native_base': 'ANpi'})
+
     def test_hardened_skin_requires_native_attack_flags_and_projects_independent_fields(self):
         recipe={'kind':'hardened-skin','source_kind':'unit-ability','source_key':'SKIN','unit_rawcode':'UNIT'}
         fields={'dataa1':'23','datab1':'2','datac1':'7','datad1':'1','datae1':'1','targs1':'enemy,ally'}

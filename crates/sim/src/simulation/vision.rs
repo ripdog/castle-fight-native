@@ -189,6 +189,29 @@ impl Simulation {
             }
         }
         for entity in self.world.iter_entities() {
+            if let Some(crate::components::NativeAction::TravellingManaClap(state)) =
+                entity.get::<crate::components::NativeAction>()
+                && self.next_tick
+                    < state.created_tick + u64::from(state.profile.mover_duration_ticks)
+            {
+                let sight = crate::castle_fight_sight_for_version(
+                    state.profile.parent.map_version,
+                    state.profile.mover_rawcode,
+                )
+                .expect("native clap mover sight");
+                sources.push((
+                    *entity.get::<SimId>().expect("native action identity"),
+                    state.team,
+                    state.position,
+                    sight.radius(rules.is_night(self.next_tick)),
+                    true,
+                    0,
+                    None,
+                    None,
+                    Some(state.owner),
+                    None,
+                ));
+            }
             let Some(crate::components::NativeAction::MasterProjectiles(state)) =
                 entity.get::<crate::components::NativeAction>()
             else {

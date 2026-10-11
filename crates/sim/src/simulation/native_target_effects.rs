@@ -19,6 +19,7 @@ mod damage_threshold;
 mod ensnare;
 mod heal;
 mod homing_splash;
+mod immolation;
 mod kill_berserk;
 mod lava_spawn;
 mod lightning;
@@ -33,6 +34,7 @@ mod spiked_shell;
 mod stasis;
 mod stat_buffs;
 mod thorns;
+mod travelling_mana_clap;
 mod wilderness;
 
 fn unit(team: u8, x: i32, damage: i32, delivery: AttackDelivery) -> UnitSpawn {

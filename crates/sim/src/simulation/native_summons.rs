@@ -345,6 +345,8 @@ impl Simulation {
         self.world.spawn((
             id,
             NativeAction::Parasite(crate::components::NativeParasiteState {
+                ability: source.spellcasting.map(|p| p.ability.id),
+                position_tick: self.next_tick,
                 source: source.id,
                 owner,
                 team: source.team,
@@ -431,6 +433,7 @@ impl Simulation {
                 });
             }
         }
+        p.position_tick = self.next_tick;
         self.world
             .entity_mut(entity)
             .insert(NativeAction::Parasite(p));

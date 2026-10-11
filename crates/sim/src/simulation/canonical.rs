@@ -460,6 +460,23 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(10);
                 hash.write_u64(id.0);
                 match action {
+                    NativeAction::TravellingManaClap(state) => {
+                        hash.write_u8(22);
+                        hash.write_u64(state.source.0);
+                        hash.write_u8(state.owner.0);
+                        hash.write_u8(state.team.0);
+                        for point in [state.origin, state.destination, state.position] {
+                            hash.write_i32(point.x);
+                            hash.write_i32(point.y);
+                        }
+                        for tick in [state.created_tick, state.due_tick, state.position_tick] {
+                            hash.write_u64(tick);
+                        }
+                        hash.write_u8(u8::from(state.impacted));
+                        for word in state.profile.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                    }
                     NativeAction::Starfall(state) => {
                         hash.write_u8(16);
                         for word in state.canonical_words() {
@@ -474,6 +491,9 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                     }
                     NativeAction::Parasite(p) => {
                         hash.write_u8(19);
+                        hash.write_u8(u8::from(p.ability.is_some()));
+                        hash.write_u32(p.ability.map_or(0, |ability| ability.0));
+                        hash.write_u64(p.position_tick);
                         for word in p.profile.canonical_words() {
                             hash.write_u64(word);
                         }
@@ -2432,6 +2452,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                     hash.write_u64(word);
                 }
             }
+            PassiveUnitEffect::PermanentImmolation(profile) => {
+                hash.write_u8(27);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
             PassiveUnitEffect::HardenedSkin(profile) => {
                 hash.write_u8(26);
                 for word in profile.canonical_words() {
@@ -2599,6 +2625,7 @@ fn hash_splash_falloff_profile(hash: &mut Fnv64, profile: crate::components::Spl
 }
 
 fn hash_unit_classifications(hash: &mut Fnv64, flags: UnitClassifications) {
+    hash.write_u8(u8::from(flags.locust));
     hash.write_u8(u8::from(flags.hero));
     hash.write_u8(u8::from(flags.resistant_skin));
     hash.write_u8(u8::from(flags.neutral_hostile_creep_level.is_some()));
@@ -2825,6 +2852,11 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             }
         }
         AbilityEffect::SirenPurge(p) => p.visit_canonical_words(|word| hash.write_u64(word)),
+        AbilityEffect::TravellingManaClap(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         AbilityEffect::NativeSummon(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);
@@ -2836,6 +2868,7 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
                 hash.write_u64(word);
             }
         }
+        AbilityEffect::ManaBurnVisual => {}
         AbilityEffect::NativeWeatherVisual { duration_ticks } => hash.write_u16(duration_ticks),
         AbilityEffect::BuildingWeather(p) => {
             for word in p.canonical_words() {

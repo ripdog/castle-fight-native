@@ -131,7 +131,7 @@ impl Simulation {
                 Recipient {
                     team: *team,
                     position: position.0,
-                    alive: health.current > 0,
+                    alive: health.current > 0 && !flags.is_some_and(|f| f.locust),
                     building: false,
                     movement: *movement,
                     invulnerable: flags.is_some_and(|f| f.invulnerable),
@@ -177,7 +177,7 @@ impl Simulation {
                 Recipient {
                     team: u.team,
                     position: u.position,
-                    alive: u.health > 0,
+                    alive: u.health > 0 && !u.classifications.locust,
                     building: false,
                     movement,
                     invulnerable: u.classifications.invulnerable,

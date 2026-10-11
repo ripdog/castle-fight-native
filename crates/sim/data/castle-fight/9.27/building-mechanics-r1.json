@@ -10177,7 +10177,12 @@
     "local_extra_copies": 1,
     "marker": 1093679432,
     "maximum_shrines": 2,
-    "shrine_rawcode": 1747989831
+    "shrine_rawcode": 1747989831,
+    "twins_children": [
+      1848652363,
+      1848652364
+    ],
+    "twins_marker": 1093682767
   },
   "protected": [
     {

@@ -220,6 +220,7 @@ impl PresentationSnapshot {
         let units: BTreeMap<_, _> = simulation
             .units()
             .into_iter()
+            .filter(|unit| !unit.classifications.locust)
             .map(|unit| {
                 (
                     unit.id,

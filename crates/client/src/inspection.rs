@@ -2391,6 +2391,16 @@ fn active_effect_badges(
         {
             continue;
         }
+        if changes.is_empty() {
+            changes.push(
+                if modifier.aura_membership {
+                    "Aura"
+                } else {
+                    "Buff"
+                }
+                .to_owned(),
+            );
+        }
         let label = format!(
             "{} ({}s)",
             changes.join(", "),
@@ -2402,9 +2412,12 @@ fn active_effect_badges(
                 role: UiStatusIconRole::Primary,
             },
             description: label,
-            beneficial: modifier.armor_bonus_per_100 >= 0
-                && modifier.damage_bonus_per_10k >= 0
-                && modifier.damage_taken_bonus_per_10k <= 0,
+            beneficial: modifier.native_buff.map_or(
+                modifier.armor_bonus_per_100 >= 0
+                    && modifier.damage_bonus_per_10k >= 0
+                    && modifier.damage_taken_bonus_per_10k <= 0,
+                |buff| buff.positive,
+            ),
         });
     }
     append_damage_over_time_badges(&mut effects, &unit.status, tick);

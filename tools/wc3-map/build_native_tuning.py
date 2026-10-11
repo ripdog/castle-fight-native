@@ -117,6 +117,18 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         return scaled(fields[field.lower()], scale)
 
     kind = recipe["kind"]
+    if kind == "permanent-immolation":
+        if (mechanics['native_base'] not in {'ANpi', 'ACpi'}
+            or set(fields['targs1'].split(',')) != {'air', 'ground', 'enemies', 'neutral', 'organic'}
+            or any(number(key) != 0 for key in ['Cost1', 'Cool1', 'DataB1', 'DataC1'])
+            or number('Dur1', 30) <= 0 or number('DataA1') < 0):
+            raise ValueError('permanent immolation requires the passive free organic native pulse')
+        return {**recipe, 'profile': {
+            'ability': int.from_bytes(recipe['source_key'].encode(), 'big'),
+            'buff_rawcode': buff_identity(fields, positive=False)['rawcode'],
+            'radius': number('Area1', 1024), 'damage': number('DataA1'),
+            'interval_ticks': number('Dur1', 30), 'targets': 3, 'organic_only': True},
+            'provenance': {'source': 'resolved/object-fields.tsv', 'native_base': mechanics['native_base']}}
     if kind == "death-spawn":
         if mechanics["native_base"] != "Aspy" or any(number(key) != 0 for key in ("Cost1", "Cool1", "Dur1", "HeroDur1")):
             raise ValueError("death spawn requires the passive permanent native Aspy inventory")
@@ -163,6 +175,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         return project(recipe, fields, unit, protected, mechanics)
     if kind in {"siren-purge", "feral-spirit"}:
         from project_naga_unit import project
+        return project(recipe, fields, unit, protected, mechanics)
+    if kind == "travelling-mana-clap":
+        from project_travelling_mana_clap import project
         return project(recipe, fields, unit, protected, mechanics)
     if kind == "scripted-roots":
         from project_scripted_roots import project
@@ -700,6 +715,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         if row["category"] == "units" and row["source_field"]:
             unit_fields.setdefault(row["rawcode"], {})[row["source_field"].lower()] = scalar(row["recovered_value_json"])
     units = {row["rawcode"]: row for row in rows(retained("resolved/units.tsv"))}
+    unit_stats = {row['rawcode']: row for row in rows(retained('resolved/protected-unit-stats.tsv'))}
     ability_ui = {}
     for row in rows(retained("resolved/object-fields.tsv")):
         if row["category"] == "abilities" and row["field_id"] in {"abpx", "abpy", "ahky"}:
@@ -768,6 +784,8 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         if recipe["kind"] in {"inner-fire", "spell-steal"} and default_autocast.get(recipe.get("unit_rawcode")) != source:
             raise ValueError("native buff source must retain default-active autocast")
         spell = spell_mechanics.get("A02U" if recipe["kind"] == "siren-purge" else source)
+        if recipe['kind'] == 'travelling-mana-clap':
+            spell = next(row for row in spell_mechanics.values() if row['unit_rawcode'] == recipe['unit_rawcode'])
         if spell is None and recipe["kind"] in {"healing-wave", "solar-strike", "war-stomp", "howl-of-terror", "frost-nova", "ensnare"}:
             matches = [row for row in spell_mechanics.values() if row["unit_rawcode"] == recipe.get("unit_rawcode")
                 and source in spell_semantics[row["ability_rawcode"]]["effect_rawcodes"].split(",")]
@@ -775,6 +793,11 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
                 raise ValueError(f"proxy child {source} needs one semantic parent for its source unit")
             spell = matches[0]
         detail = dict(mechanics.get(recipe.get("unit_rawcode", ""), {}))
+        if recipe['kind'] == 'travelling-mana-clap':
+            detail.update(all_fields=abilities, all_bases=ability_bases, all_units=units,
+                all_unit_fields=unit_fields, all_unit_stats=unit_stats,
+                all_protected=protected, functions=functions, git_tree=tree,
+                map_version=dict(zip(['major', 'minor'], map(int, release['map_version'].split('.')))))
         if recipe["kind"] in {"siren-purge", "feral-spirit"}:
             parent = "A02U"
             spell = spell_mechanics[parent]

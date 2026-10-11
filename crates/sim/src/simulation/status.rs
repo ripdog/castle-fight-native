@@ -56,7 +56,7 @@ pub(super) fn apply_ability_effect_to_unit(
     completed_tick: u64,
     damage_rules: DamageRules,
 ) -> bool {
-    if target.health <= 0 {
+    if target.health <= 0 || target.classifications.locust {
         return false;
     }
     match effect {
@@ -432,6 +432,7 @@ pub(super) fn apply_ability_effect_to_unit(
         }
         AbilityEffect::NativeSummon(_)
         | AbilityEffect::SirenPurge(_)
+        | AbilityEffect::TravellingManaClap(_)
         | AbilityEffect::WindWalk(_)
         | AbilityEffect::MasterProjectiles(_)
         | AbilityEffect::ScriptedRoots(_)
@@ -441,6 +442,7 @@ pub(super) fn apply_ability_effect_to_unit(
         | AbilityEffect::BuildingAura(_)
         | AbilityEffect::BuildingStasis(_)
         | AbilityEffect::NativeWeatherVisual { .. }
+        | AbilityEffect::ManaBurnVisual
         | AbilityEffect::BuildingWeather(_)
         | AbilityEffect::BuildingEnchantment(_)
         | AbilityEffect::BuildingPermanentGrant(_)

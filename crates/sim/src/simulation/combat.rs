@@ -539,6 +539,13 @@ impl Simulation {
                     // Release effects can kill or protect the victim before the hit.
                     // Preserve the completed attack cycle without applying hit effects.
                     AttackDelivery::Melee | AttackDelivery::RangedInstant => {}
+                    AttackDelivery::RangedGuaranteedHit { speed_per_tick: 0 }
+                    | AttackDelivery::RangedBallistic {
+                        speed_per_tick: 0, ..
+                    }
+                    | AttackDelivery::Bounce {
+                        speed_per_tick: 0, ..
+                    } => {}
                     AttackDelivery::RangedGuaranteedHit { speed_per_tick } => {
                         let travel_ticks =
                             projectile_travel_ticks(intent.distance_sq, speed_per_tick);
@@ -1014,7 +1021,8 @@ impl Simulation {
                 | PassiveUnitEffect::Aura(_)
                 | PassiveUnitEffect::SpellResistance(_)
                 | PassiveUnitEffect::SpikedShell(_)
-                | PassiveUnitEffect::HardenedSkin(_) => {}
+                | PassiveUnitEffect::HardenedSkin(_)
+                | PassiveUnitEffect::PermanentImmolation(_) => {}
             }
         }
         // Native Demolish modifies weapon damage without becoming Critical Strike or

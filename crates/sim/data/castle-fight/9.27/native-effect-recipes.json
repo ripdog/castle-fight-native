@@ -1,6 +1,12 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"ability-effect","source_key":"A0FS","unit_rawcode":"n02L","kind":"travelling-mana-clap"},
+    {"source_kind":"unit-ability","source_key":"A0FU","unit_rawcode":"n02L","kind":"travelling-mana-clap"},
+    {"source_kind":"unit-ability","source_key":"A0FR","unit_rawcode":"n02K","kind":"permanent-immolation"},
+    {"source_kind":"unit-ability","source_key":"A0FQ","unit_rawcode":"n02K","kind":"cleave"},
+    {"source_kind":"unit-ability","source_key":"A0FP","unit_rawcode":"n02L","kind":"critical-strike"},
+    {"source_kind":"unit-ability","source_key":"A0AI","unit_rawcode":"n02L","kind":"spell-resistance"},
     {"source_kind":"unit-ability","source_key":"A05V","unit_rawcode":"z000","kind":"native-aura"},
     {"source_kind":"unit-ability","source_key":"A0Z1","unit_rawcode":"h0Z5","kind":"native-aura"},
     {"source_kind":"unit-ability","source_key":"A02Q","unit_rawcode":"n00W","kind":"hardened-skin"},

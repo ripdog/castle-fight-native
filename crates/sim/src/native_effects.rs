@@ -28,6 +28,7 @@ const TUNING_9_27_JSON: &str = include_str!("../data/castle-fight/9.27/native-ef
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum NativeEffectImplementationId {
+    WarcraftPermanentImmolationV1,
     WarcraftSpikedShellV1,
     WarcraftHardenedSkinV1,
     WarcraftDeathSpawnV1,
@@ -98,6 +99,7 @@ impl NativeEffectImplementationId {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::WarcraftPermanentImmolationV1 => 96,
             Self::WarcraftNagaEarthquakeV1 => 92,
             Self::WarcraftNagaCharmV1 => 93,
             Self::WarcraftNativeBuildingAurasV1 => 94,
@@ -585,6 +587,12 @@ fn native_buff_from_tuning(tuning: &TuningFile, source: u32) -> Option<crate::Na
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum TuningEffect {
+    PermanentImmolation {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        profile: crate::components::PermanentImmolationProfile,
+    },
     NativeWeatherWave {
         source_kind: String,
         source_key: String,
@@ -1021,6 +1029,7 @@ impl TuningEffect {
             | Self::Corruption { source_kind, .. }
             | Self::SpikedShell { source_kind, .. }
             | Self::HardenedSkin { source_kind, .. }
+            | Self::PermanentImmolation { source_kind, .. }
             | Self::Sphere { source_kind, .. }
             | Self::SpeedAura { source_kind, .. }
             | Self::NativeAura { source_kind, .. }
@@ -1067,6 +1076,7 @@ impl TuningEffect {
             | Self::Corruption { source_key, .. }
             | Self::SpikedShell { source_key, .. }
             | Self::HardenedSkin { source_key, .. }
+            | Self::PermanentImmolation { source_key, .. }
             | Self::Sphere { source_key, .. }
             | Self::SpeedAura { source_key, .. }
             | Self::NativeAura { source_key, .. }
@@ -1106,6 +1116,7 @@ impl TuningEffect {
             | Self::Corruption { unit_rawcode, .. }
             | Self::SpikedShell { unit_rawcode, .. }
             | Self::HardenedSkin { unit_rawcode, .. }
+            | Self::PermanentImmolation { unit_rawcode, .. }
             | Self::Sphere { unit_rawcode, .. }
             | Self::SpeedAura { unit_rawcode, .. }
             | Self::NativeAura { unit_rawcode, .. }
@@ -1166,6 +1177,9 @@ impl TuningEffect {
             Self::Corruption { .. } => NativeEffectImplementationId::WarcraftCorruptionV1,
             Self::SpikedShell { .. } => NativeEffectImplementationId::WarcraftSpikedShellV1,
             Self::HardenedSkin { .. } => NativeEffectImplementationId::WarcraftHardenedSkinV1,
+            Self::PermanentImmolation { .. } => {
+                NativeEffectImplementationId::WarcraftPermanentImmolationV1
+            }
             Self::Sphere { .. } => NativeEffectImplementationId::WarcraftSphereV1,
             Self::BuildingImprovement { .. } | Self::BuildingManaRegeneration { .. } => {
                 NativeEffectImplementationId::WarcraftBuildingImprovementV1
@@ -1218,6 +1232,7 @@ impl TuningEffect {
             Self::Corruption { .. } => "corruption",
             Self::SpikedShell { .. } => "spiked-shell",
             Self::HardenedSkin { .. } => "hardened-skin",
+            Self::PermanentImmolation { .. } => "permanent-immolation",
             Self::Sphere { .. } => "sphere",
             Self::BuildingImprovement { .. } => "building-improvement",
             Self::BuildingManaRegeneration { .. } => "building-mana-regeneration",
@@ -1459,6 +1474,7 @@ fn native_unit_mechanics_from_tuning(
                 | TuningEffect::Corruption { .. }
                 | TuningEffect::SpikedShell { .. }
                 | TuningEffect::HardenedSkin { .. }
+                | TuningEffect::PermanentImmolation { .. }
                 | TuningEffect::Sphere { .. }
                 | TuningEffect::SpeedAura { .. }
                 | TuningEffect::NativeAura { .. }
@@ -1706,6 +1722,10 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
         TuningEffect::Corruption { profile, .. } => PassiveUnitEffect::Corruption(*profile),
         TuningEffect::SpikedShell { profile, .. } => PassiveUnitEffect::SpikedShell(*profile),
         TuningEffect::HardenedSkin { profile, .. } => PassiveUnitEffect::HardenedSkin(*profile),
+        TuningEffect::PermanentImmolation { profile, .. } => {
+            assert!(profile.interval_ticks > 0 && profile.damage >= 0 && profile.radius >= 0);
+            PassiveUnitEffect::PermanentImmolation(*profile)
+        }
         TuningEffect::Sphere { profile, .. } => {
             assert!((1..=3).contains(&profile.attachment_count) && profile.speed_per_tick > 0);
             PassiveUnitEffect::Sphere(*profile)

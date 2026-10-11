@@ -886,7 +886,9 @@ impl Simulation {
             .iter()
             .enumerate()
             .filter(|(index, _)| {
-                unit_health[*index] > 0 && !units[*index].status.wind_walk_active(self.next_tick)
+                unit_health[*index] > 0
+                    && !units[*index].status.wind_walk_active(self.next_tick)
+                    && !units[*index].classifications.locust
             })
             .map(|(_, unit)| unit.collision_radius)
             .max()
@@ -905,6 +907,7 @@ impl Simulation {
                 .filter(|(index, _)| {
                     unit_health[*index] > 0
                         && !units[*index].status.wind_walk_active(self.next_tick)
+                        && !units[*index].classifications.locust
                 })
                 .map(|(index, position)| {
                     (
@@ -921,6 +924,7 @@ impl Simulation {
                 .map(|(index, unit)| {
                     if unit_health[index] <= 0
                         || unit.status.wind_walk_active(self.next_tick)
+                        || unit.classifications.locust
                         || unit.status.ensnare.is_some()
                         || unit.status.is_performing_action(self.next_tick)
                     {
@@ -1052,7 +1056,9 @@ impl Simulation {
             .iter()
             .enumerate()
             .filter(|(index, _)| {
-                unit_health[*index] > 0 && !units[*index].status.wind_walk_active(self.next_tick)
+                unit_health[*index] > 0
+                    && !units[*index].status.wind_walk_active(self.next_tick)
+                    && !units[*index].classifications.locust
             })
             .map(|(_, unit)| unit.collision_radius)
             .max()
@@ -1072,6 +1078,7 @@ impl Simulation {
             units.iter().enumerate().filter_map(|(index, unit)| {
                 (unit_health[index] > 0
                     && !unit.status.wind_walk_active(self.next_tick)
+                    && !unit.classifications.locust
                     && unit.movement_class == MovementClass::Ground)
                     .then_some((index, separated_positions[index], unit.collision_radius))
             }),
@@ -1084,6 +1091,7 @@ impl Simulation {
             units.iter().enumerate().filter_map(|(index, unit)| {
                 (unit_health[index] > 0
                     && !unit.status.wind_walk_active(self.next_tick)
+                    && !unit.classifications.locust
                     && unit.movement_class == MovementClass::Air)
                     .then_some((index, separated_positions[index], unit.collision_radius))
             }),
@@ -1102,7 +1110,7 @@ impl Simulation {
             if unit_health[index] <= 0 || unit.status.is_performing_action(self.next_tick) {
                 continue;
             }
-            if unit.status.wind_walk_active(self.next_tick) {
+            if unit.status.wind_walk_active(self.next_tick) || unit.classifications.locust {
                 result[index] = desired_positions[index];
                 continue;
             }

@@ -163,6 +163,7 @@ pub(crate) struct HailstoneState {
 
 #[derive(Component, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum NativeAction {
+    TravellingManaClap(super::TravellingManaClapState),
     Starfall(crate::building_mechanics::StarfallState),
     SilverGlade(crate::building_mechanics::SilverGladeState),
     ResumeAttack {

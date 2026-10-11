@@ -3452,6 +3452,8 @@ fn prewarm_timed_wc3_effects(
                 let automatic = definition.automatic_abilities().map(|ability| {
                     let status = match ability.effect {
                         AbilityEffect::Heal(_)
+                        | AbilityEffect::TravellingManaClap(_)
+                        | AbilityEffect::ManaBurnVisual
                         | AbilityEffect::SilverGlade(_)
                         | AbilityEffect::Wilderness(_)
                         | AbilityEffect::Starfall(_) => None,
@@ -4482,6 +4484,9 @@ fn sync_render_entities(
                     .and_then(|building| building.content.map(|content| content.rawcode))
             });
         for visual in wc3_visuals.ability_for_source(cast.ability.0, source_rawcode) {
+            if visual.mana_burn != matches!(cast.effect, AbilityEffect::ManaBurnVisual) {
+                continue;
+            }
             if matches!(cast.effect, AbilityEffect::NativeWeatherVisual { .. })
                 && visual.source_unit_rawcode.is_some()
             {
@@ -4497,7 +4502,10 @@ fn sync_render_entities(
             }
             let position = match visual.anchor {
                 Wc3AbilityVisualAnchor::Source
-                    if matches!(cast.effect, AbilityEffect::NagaEarthquake(_)) =>
+                    if matches!(
+                        cast.effect,
+                        AbilityEffect::NagaEarthquake(_) | AbilityEffect::TravellingManaClap(_)
+                    ) =>
                 {
                     target_position
                 }
@@ -4511,6 +4519,7 @@ fn sync_render_entities(
                 AbilityEffect::BuildingPermanentGrant(profile) => Some(castle_fight_sim::building_mechanics::permanent_grant_target_attachment_for_version(profile.map_version)),
                 AbilityEffect::BuildingEnchantment(profile) => Some(castle_fight_sim::building_mechanics::enchantment_target_attachment_for_version(profile.map_version)),
                 AbilityEffect::Wilderness(profile) => Some(castle_fight_sim::building_mechanics::wilderness_target_attachment_for_version(profile.map_version)),
+                AbilityEffect::ManaBurnVisual => Some("origin"),
                 _ => None,
             };
             let attachment = if let Some(point) = target_attachment
