@@ -30,7 +30,7 @@
       "runtime_content": {
         "status": "supported-development-subset",
         "content_revision": "cf-native-dev-slice-r140",
-        "source_revision": "55560926fcd5dfc5370650df9b6b00001234114f",
+        "source_revision": "dfc0e381e9d2cfd3dc2bcc516bbe09bcfdad68da",
         "path": "crates/sim/data/castle-fight/9.27",
         "native_effect_tuning_sha256": "20c44215e58fbf7ade94eaeae75d2ce9dd9d70dd287669171df3894288b31d74",
         "binding_registry_path": "crates/sim/data/castle-fight/native-effect-bindings.json",
