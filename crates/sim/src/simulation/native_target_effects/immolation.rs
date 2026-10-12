@@ -96,6 +96,42 @@ fn permanent_immolation_samples_native_membership_and_pulses_across_wire_without
 }
 
 #[test]
+fn permanent_immolation_without_organic_constraint_admits_mechanical_but_keeps_spell_immunity() {
+    let mut sim = simulation(1);
+    let mut pulse = profile();
+    pulse.organic_only = false;
+    sim.spawn_unit_with_properties(
+        unit(0, 20, 0, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::PermanentImmolation(
+                pulse,
+            )),
+            ..Default::default()
+        },
+    );
+    let mut victims = Vec::new();
+    for (x, immune) in [(30, false), (40, true)] {
+        victims.push(sim.spawn_unit_with_properties(
+            unit(1, x, 0, AttackDelivery::Melee),
+            UnitGameplayProperties {
+                mechanical: true,
+                build_time_ticks: Some(1),
+                classifications: UnitClassifications {
+                    spell_immune: immune,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+        ));
+    }
+    for _ in 0..=pulse.interval_ticks {
+        sim.step();
+    }
+    assert!(sim.unit(victims[0]).unwrap().health < 1000);
+    assert_eq!(sim.unit(victims[1]).unwrap().health, 1000);
+}
+
+#[test]
 fn locust_handles_do_not_become_weapon_targets_or_ordinary_aura_recipients() {
     let mut sim = simulation(1);
     let attacker = sim.spawn_unit(unit(0, 20, 100, AttackDelivery::Melee));
