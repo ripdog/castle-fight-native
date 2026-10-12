@@ -3,6 +3,45 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "native-target-debuff",
+      "source_kind": "ability-effect",
+      "source_key": "A04Q",
+      "profile": {
+        "ability": 1093678161,
+        "buff": 1110454354,
+        "targets": 3,
+        "organic_only": false,
+        "duration_ticks": 600,
+        "hero_duration_ticks": 150,
+        "movement_percent_delta": 0,
+        "attack_speed_percent_delta": 0,
+        "damage_bonus_per_10k": -2700,
+        "ethereal": null
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "ACcr",
+        "targets": "air,enemies,ground,neutral,ward",
+        "protected_resources": {
+          "cooldown": "0.0",
+          "mana_cost": "0"
+        }
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A04P",
+      "unit_rawcode": "n01I",
+      "kind": "orb-spell-proc",
+      "chance_per_10k": 10000,
+      "effect_ability_rawcode": "A04Q",
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A04P",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
       "source_key": "ACsw",
@@ -29,6 +68,7 @@
               "hero_duration_ticks": 300,
               "movement_percent_delta": -60,
               "attack_speed_percent_delta": -25,
+              "damage_bonus_per_10k": 0,
               "ethereal": null
             }
           }

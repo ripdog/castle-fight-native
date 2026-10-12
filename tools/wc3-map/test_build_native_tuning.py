@@ -452,6 +452,21 @@ class NativeTuningProjectionTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             native.project_effect(recipe, fields, None, {}, {})
 
+    def test_orb_does_not_invent_a_weapon_for_an_unusable_enabled_slot(self):
+        recipe = {'kind': 'orb-spell-proc', 'source_key': 'ORBB', 'source_kind': 'unit-ability'}
+        fields = {'dataa1': '0', 'datab1': '100', 'datac1': '100', 'datad1': '100',
+                  'datae1': '2', 'unitid1': 'CHLD', 'targs1': 'air,ground'}
+        unit = {'attack2_enabled': 'False', 'attack2_weapon_type': '_'}
+        result = native.project_effect(recipe, fields, unit, {}, {})
+        self.assertEqual(result['effect_ability_rawcode'], 'CHLD')
+        for changed in [{'dataa1': '1'}, {'datae1': '3'}]:
+            with self.subTest(changed=changed), self.assertRaises(ValueError):
+                native.project_effect(recipe, {**fields, **changed}, unit, {}, {})
+        with self.assertRaises(ValueError):
+            native.project_effect(recipe, fields, {**unit, 'attack2_weapon_type': 'missile'}, {}, {})
+        with self.assertRaises(ValueError):
+            native.project_effect(recipe, fields, None, {}, {})
+
     def test_feedback_projects_native_fields_and_rejects_unequal_class_tuning(self) -> None:
         recipe = {"kind": "feedback", "source_key": "TEST", "source_kind": "unit-ability"}
         fields = {"dataa1": "7", "datab1": "0.5", "datac1": "7", "datad1": "0.5", "datae1": "3", "targs1": "air,ground,enemy"}

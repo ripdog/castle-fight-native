@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 93;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 94;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -6337,6 +6337,7 @@ struct PendingAttackEffectResult {
     cone_wave: Option<crate::components::ConeWaveState>,
     poison: Option<crate::PoisonProfile>,
     fork_events: Vec<ChainLightningEvent>,
+    native_debuff_casts: [Option<AbilityCastEvent>; 2],
     chain_event: Option<ChainLightningEvent>,
     chain_state: Option<ChainLightningState>,
 }
@@ -6503,6 +6504,28 @@ fn apply_pending_attack_effects(
     }
     if let Some(effect) = effects.triggered_spell {
         match effect {
+            TriggeredAttackEffect::NativeDebuff { parent, profile } => {
+                let cast = AbilityCastEvent {
+                    source: source.id,
+                    ability: parent,
+                    target: AbilityCastTarget::Unit(units[index].id),
+                    target_position: Some(units[index].position),
+                    effect: AbilityEffect::NativeDebuff(profile),
+                };
+                result.native_debuff_casts[0] = Some(cast);
+                if apply_ability_effect_to_unit(
+                    &mut units[index],
+                    AbilityEffect::NativeDebuff(profile),
+                    source.team,
+                    completed_tick,
+                    damage_rules,
+                ) {
+                    result.native_debuff_casts[1] = Some(AbilityCastEvent {
+                        ability: profile.ability,
+                        ..cast
+                    });
+                }
+            }
             TriggeredAttackEffect::ForkedLightning(profile) => {
                 result.fork_events = forked_lightning::resolve(
                     target,

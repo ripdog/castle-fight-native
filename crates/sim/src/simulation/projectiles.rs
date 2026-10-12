@@ -391,6 +391,8 @@ impl Simulation {
                                 );
                             }
                             self.last_chain_lightnings.extend(pending.fork_events);
+                            self.last_ability_casts
+                                .extend(pending.native_debuff_casts.into_iter().flatten());
                             if let Some(event) = pending.chain_event {
                                 self.last_chain_lightnings.push(event);
                             }

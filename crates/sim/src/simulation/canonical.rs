@@ -2621,6 +2621,13 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
 
 fn hash_triggered_attack_effect(hash: &mut Fnv64, effect: TriggeredAttackEffect) {
     match effect {
+        TriggeredAttackEffect::NativeDebuff { parent, profile } => {
+            hash.write_u8(4);
+            hash.write_u32(parent.0);
+            for word in profile.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         TriggeredAttackEffect::ForkedLightning(profile) => {
             hash.write_u8(3);
             for word in profile.canonical_words() {

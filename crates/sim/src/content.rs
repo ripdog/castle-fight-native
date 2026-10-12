@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r134";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r135";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 77;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 78;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -364,6 +364,7 @@ impl CastleFightContentBundle {
                         CastleFightBuilderRace::Naga,
                         CastleFightBuilderRace::Critter,
                         CastleFightBuilderRace::Chaos,
+                        CastleFightBuilderRace::Corrupted,
                     ]
                 } else {
                     &[CastleFightBuilderRace::Human]
@@ -1903,6 +1904,12 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::AbilityEffect, v) if v == u32::from_be_bytes(*b"A04Q") => {
+            0x4000_01a4
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A04P") => {
+            0x4000_01a3
+        }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A029") => {
             0x4000_01a2
         }
@@ -3535,6 +3542,13 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
 
 fn hash_triggered_effect(hash: &mut ContentHash64, effect: TriggeredAttackEffect) {
     match effect {
+        TriggeredAttackEffect::NativeDebuff { parent, profile } => {
+            hash.write_u8(4);
+            hash.write_u32(parent.0);
+            for word in profile.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         TriggeredAttackEffect::ForkedLightning(profile) => {
             hash.write_u8(3);
             for word in profile.canonical_words() {

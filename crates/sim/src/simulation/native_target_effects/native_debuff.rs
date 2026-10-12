@@ -1,5 +1,5 @@
 use super::*;
-use crate::{EtherealEffectProfile, NativeDebuffProfile};
+use crate::{EtherealEffectProfile, NativeDebuffProfile, TriggeredSpellProcProfile};
 
 fn profile(ethereal: bool) -> NativeDebuffProfile {
     NativeDebuffProfile {
@@ -11,6 +11,7 @@ fn profile(ethereal: bool) -> NativeDebuffProfile {
         hero_duration_ticks: 3,
         movement_percent_delta: -40,
         attack_speed_percent_delta: -20,
+        damage_bonus_per_10k: 0,
         ethereal: ethereal.then_some(EtherealEffectProfile {
             magic_damage_per_10k: 20_000,
             healing_per_10k: 15_000,
@@ -33,6 +34,234 @@ fn apply(sim: &mut Simulation, target: SimId, p: NativeDebuffProfile) -> bool {
         .get_mut::<StatusState>()
         .unwrap() = units[i].status;
     result
+}
+
+fn cripple() -> NativeDebuffProfile {
+    NativeDebuffProfile {
+        damage_bonus_per_10k: -5000,
+        movement_percent_delta: 0,
+        attack_speed_percent_delta: 0,
+        ..profile(false)
+    }
+}
+
+fn orb(p: NativeDebuffProfile, targets: AttackTargetMask) -> PassiveUnitEffects {
+    PassiveUnitEffects::from_slice(&[PassiveUnitEffect::TriggeredSpellProc(
+        TriggeredSpellProcProfile {
+            ability: AbilityId(973),
+            chance_per_10k: 10_000,
+            targets,
+            effect: TriggeredAttackEffect::NativeDebuff {
+                parent: AbilityId(973),
+                profile: p,
+            },
+        },
+    )])
+}
+
+#[test]
+fn cripple_reduces_weapon_damage_and_refreshes_its_family_without_affecting_spells() {
+    let mut sim = simulation(1);
+    let mut spawn = unit(1, 40, 20, AttackDelivery::RangedInstant);
+    spawn.attack.cooldown_ticks = 1;
+    let attacker = sim.spawn_unit_with_spellcasting(
+        spawn,
+        SpellcastingProfile {
+            mana: ManaProfile::per_second(0, 0, 0),
+            ability: AutomaticAbilityProfile {
+                id: AbilityId(975),
+                mana_cost: 0,
+                cooldown_ticks: 1000,
+                range: 200 * SUBUNITS_PER_WORLD_UNIT,
+                target_policy: AbilityTargetPolicy::RandomEnemyUnit,
+                effect: AbilityEffect::Damage { amount: 7 },
+            },
+        },
+    );
+    let target = sim.spawn_unit(unit(0, 20, 0, AttackDelivery::Melee));
+    let mut p = cripple();
+    p.duration_ticks = 3;
+    assert!(apply(&mut sim, attacker, p));
+    p.ability = AbilityId(974); // Another native ability uses the same buff family.
+    assert!(apply(&mut sim, attacker, p));
+    assert_eq!(sim.unit(attacker).unwrap().status.armor_modifier_count, 1);
+    sim.step();
+    assert_eq!(sim.unit(target).unwrap().health, 993);
+    for expected in [983, 973, 953] {
+        sim.step();
+        assert_eq!(sim.unit(target).unwrap().health, expected);
+    }
+    assert!(
+        !sim.unit(attacker)
+            .unwrap()
+            .status
+            .attacks_disabled(sim.next_tick)
+    );
+}
+
+#[test]
+fn zero_damage_landed_orb_applies_only_when_parent_and_child_both_admit_the_target() {
+    for (parent, child, immune, evades, fatal, expected) in [
+        (
+            AttackTargetMask::AIR_AND_GROUND,
+            AttackTargetMask::AIR_AND_GROUND,
+            false,
+            false,
+            false,
+            true,
+        ),
+        (
+            AttackTargetMask::AIR_UNITS,
+            AttackTargetMask::AIR_AND_GROUND,
+            false,
+            false,
+            false,
+            false,
+        ),
+        (
+            AttackTargetMask::AIR_AND_GROUND,
+            AttackTargetMask::AIR_UNITS,
+            false,
+            false,
+            false,
+            false,
+        ),
+        (
+            AttackTargetMask::AIR_AND_GROUND,
+            AttackTargetMask::AIR_AND_GROUND,
+            true,
+            false,
+            false,
+            false,
+        ),
+        (
+            AttackTargetMask::AIR_AND_GROUND,
+            AttackTargetMask::AIR_AND_GROUND,
+            false,
+            true,
+            false,
+            false,
+        ),
+        (
+            AttackTargetMask::AIR_AND_GROUND,
+            AttackTargetMask::AIR_AND_GROUND,
+            false,
+            false,
+            true,
+            false,
+        ),
+    ] {
+        let mut sim = simulation(1);
+        let mut p = cripple();
+        p.targets = child;
+        sim.spawn_unit_with_properties(
+            unit(0, 20, if fatal { 1001 } else { 0 }, AttackDelivery::Melee),
+            UnitGameplayProperties {
+                passive_effects: orb(p, parent),
+                ..Default::default()
+            },
+        );
+        let target = sim.spawn_unit_with_properties(
+            unit(1, 40, 0, AttackDelivery::Melee),
+            UnitGameplayProperties {
+                classifications: UnitClassifications {
+                    spell_immune: immune,
+                    ..Default::default()
+                },
+                passive_effects: if evades {
+                    PassiveUnitEffects::from_slice(&[PassiveUnitEffect::Evasion(
+                        EvasionEffectProfile {
+                            ability: AbilityId(976),
+                            chance_per_10k: 10_000,
+                        },
+                    )])
+                } else {
+                    PassiveUnitEffects::default()
+                },
+                ..Default::default()
+            },
+        );
+        sim.step();
+        sim.step();
+        assert_eq!(
+            sim.unit(target)
+                .is_some_and(|u| u.status.armor_modifier_count > 0),
+            expected
+        );
+        if expected {
+            let casts = sim.ability_casts_last_tick();
+            assert_eq!(casts.len(), 2);
+            assert_eq!(casts[0].ability, AbilityId(973));
+            assert_eq!(casts[1].ability, p.ability);
+            assert!(
+                casts
+                    .iter()
+                    .all(|cast| cast.target == AbilityCastTarget::Unit(target))
+            );
+        }
+    }
+}
+
+#[test]
+fn native_debuff_orb_payload_survives_source_death_and_wire_restore_until_impact() {
+    let mut sim = simulation(1);
+    let source = sim.spawn_unit_with_properties(
+        unit(
+            0,
+            20,
+            0,
+            AttackDelivery::RangedGuaranteedHit {
+                speed_per_tick: 2 * SUBUNITS_PER_WORLD_UNIT,
+            },
+        ),
+        UnitGameplayProperties {
+            passive_effects: orb(cripple(), AttackTargetMask::AIR_AND_GROUND),
+            ..Default::default()
+        },
+    );
+    let target = sim.spawn_unit(unit(1, 40, 0, AttackDelivery::Melee));
+    sim.step();
+    sim.step();
+    assert_eq!(sim.unit(target).unwrap().status.armor_modifier_count, 0);
+    sim.world
+        .get_mut::<Health>(entity(&sim, source))
+        .unwrap()
+        .current = 0;
+    let mut other = wire_restored(&sim, 4);
+    for _ in 0..14 {
+        assert_eq!(sim.step().checksum, other.step().checksum);
+    }
+    assert_eq!(
+        sim.unit(target).unwrap().status.armor_modifiers[0].damage_bonus_per_10k,
+        -5000
+    );
+}
+
+#[test]
+fn complete_cripple_damage_suppression_keeps_landed_attack_procs_enabled() {
+    let mut sim = simulation(1);
+    let attacker = sim.spawn_unit_with_properties(
+        unit(1, 40, 17, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            passive_effects: orb(cripple(), AttackTargetMask::AIR_AND_GROUND),
+            ..Default::default()
+        },
+    );
+    let target = sim.spawn_unit(unit(0, 20, 0, AttackDelivery::Melee));
+    let mut suppression = cripple();
+    suppression.damage_bonus_per_10k = -10_000;
+    assert!(apply(&mut sim, attacker, suppression));
+    sim.step();
+    sim.step();
+    let view = sim.unit(target).unwrap();
+    assert_eq!(view.health, 1000);
+    assert_eq!(view.status.armor_modifiers[0].damage_bonus_per_10k, -5000);
+    assert!(
+        !sim.unit(attacker)
+            .unwrap()
+            .status
+            .attacks_disabled(sim.next_tick)
+    );
 }
 
 #[test]

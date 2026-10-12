@@ -84,6 +84,7 @@ pub enum NativeEffectImplementationId {
     WarcraftElvenAutomaticV1,
     WarcraftBuildingHexV1,
     WarcraftSnowveilV1,
+    WarcraftNativeTargetDebuffV1,
     WarcraftEraserV1,
     WarcraftMagicRuinV1,
     WarcraftFlameStrikeV1,
@@ -161,6 +162,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftElvenAutomaticV1 => 17,
             Self::WarcraftBuildingHexV1 => 24,
             Self::WarcraftSnowveilV1 => 25,
+            Self::WarcraftNativeTargetDebuffV1 => 101,
             Self::WarcraftEraserV1 => 100,
             Self::WarcraftMagicRuinV1 => 99,
             Self::WarcraftFlameStrikeV1 => 98,
@@ -885,6 +887,13 @@ enum TuningEffect {
         #[allow(dead_code)]
         provenance: serde_json::Value,
     },
+    NativeTargetDebuff {
+        source_kind: String,
+        source_key: String,
+        profile: crate::NativeDebuffProfile,
+        #[allow(dead_code)]
+        provenance: serde_json::Value,
+    },
     OrbSpellProc {
         source_kind: String,
         source_key: String,
@@ -1020,7 +1029,8 @@ impl TuningEffect {
 
     fn source_kind(&self) -> &str {
         match self {
-            Self::NativeWeatherWave { source_kind, .. }
+            Self::NativeTargetDebuff { source_kind, .. }
+            | Self::NativeWeatherWave { source_kind, .. }
             | Self::SourceDamageDispatcher { source_kind, .. }
             | Self::NativeEnchantmentGrant { source_kind, .. }
             | Self::BuildingImprovement { source_kind, .. }
@@ -1067,7 +1077,8 @@ impl TuningEffect {
 
     fn source_key(&self) -> &str {
         match self {
-            Self::NativeWeatherWave { source_key, .. }
+            Self::NativeTargetDebuff { source_key, .. }
+            | Self::NativeWeatherWave { source_key, .. }
             | Self::SourceDamageDispatcher { source_key, .. }
             | Self::NativeEnchantmentGrant { source_key, .. }
             | Self::BuildingImprovement { source_key, .. }
@@ -1147,7 +1158,8 @@ impl TuningEffect {
             | Self::OrbSpellProc { unit_rawcode, .. }
             | Self::BurningOil { unit_rawcode, .. }
             | Self::FrostArmor { unit_rawcode, .. } => Some(unit_rawcode),
-            Self::NativeWeatherWave { .. }
+            Self::NativeTargetDebuff { .. }
+            | Self::NativeWeatherWave { .. }
             | Self::NativeEnchantmentGrant { .. }
             | Self::BuildingManaRegeneration { .. }
             | Self::RetaliationProjectile { .. }
@@ -1161,6 +1173,9 @@ impl TuningEffect {
 
     const fn expected_implementation(&self) -> NativeEffectImplementationId {
         match self {
+            Self::NativeTargetDebuff { .. } => {
+                NativeEffectImplementationId::WarcraftNativeTargetDebuffV1
+            }
             Self::NativeWeatherWave { .. } => NativeEffectImplementationId::WarcraftWeatherWaveV1,
             Self::NativeEnchantmentGrant { .. } => {
                 NativeEffectImplementationId::WarcraftPermanentAbilityGrantsV1
@@ -1222,6 +1237,7 @@ impl TuningEffect {
 
     const fn kind_name(&self) -> &'static str {
         match self {
+            Self::NativeTargetDebuff { .. } => "native-target-debuff",
             Self::NativeWeatherWave { .. } => "native-weather-wave",
             Self::NativeEnchantmentGrant { .. } => "native-enchantment-grant",
             Self::SourceDamageDispatcher { .. } => "source-damage-dispatcher",
@@ -1567,7 +1583,7 @@ fn native_unit_mechanics_from_tuning(
                         passive = Some(candidate);
                     }
                 }
-                TuningEffect::NativeWeatherWave { .. } | TuningEffect::NativeEnchantmentGrant { .. } | TuningEffect::BuildingManaRegeneration { .. } | TuningEffect::RetaliationProjectile { .. } | TuningEffect::ForkedLightning { .. }
+                TuningEffect::NativeTargetDebuff { .. } | TuningEffect::NativeWeatherWave { .. } | TuningEffect::NativeEnchantmentGrant { .. } | TuningEffect::BuildingManaRegeneration { .. } | TuningEffect::RetaliationProjectile { .. } | TuningEffect::ForkedLightning { .. }
                 | TuningEffect::SelfDestruct { .. }
                 | TuningEffect::DamageThreshold { .. }
                 | TuningEffect::ConeWave { .. }
@@ -2041,7 +2057,10 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
                 ability: AbilityId(rawcode(source_key).expect("validated orb rawcode")),
                 chance_per_10k: *chance_per_10k,
                 targets: target_mask(targets),
-                effect: build_triggered_effect(child),
+                effect: build_triggered_effect(
+                    child,
+                    AbilityId(rawcode(source_key).expect("validated orb rawcode")),
+                ),
             })
         }
         TuningEffect::BurningOil {
@@ -2068,7 +2087,8 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             target_ground_units: *target_ground_units,
             target_buildings: *target_buildings,
         }),
-        TuningEffect::NativeWeatherWave { .. }
+        TuningEffect::NativeTargetDebuff { .. }
+        | TuningEffect::NativeWeatherWave { .. }
         | TuningEffect::NativeEnchantmentGrant { .. }
         | TuningEffect::BuildingImprovement { .. }
         | TuningEffect::BuildingManaRegeneration { .. }
@@ -2087,8 +2107,12 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
     }
 }
 
-fn build_triggered_effect(effect: &TuningEffect) -> TriggeredAttackEffect {
+fn build_triggered_effect(effect: &TuningEffect, parent: AbilityId) -> TriggeredAttackEffect {
     match effect {
+        TuningEffect::NativeTargetDebuff { profile, .. } => TriggeredAttackEffect::NativeDebuff {
+            parent,
+            profile: *profile,
+        },
         TuningEffect::ForkedLightning { profile, .. } => {
             TriggeredAttackEffect::ForkedLightning(*profile)
         }

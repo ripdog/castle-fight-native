@@ -89,6 +89,7 @@ pub(super) fn apply_ability_effect_to_unit(
                         stealable: true,
                         organic_only: p.organic_only,
                     }),
+                    damage_bonus_per_10k: p.damage_bonus_per_10k,
                     ethereal: p.ethereal,
                     expires_tick,
                     ..Default::default()

@@ -17,11 +17,12 @@ pub struct NativeDebuffProfile {
     pub hero_duration_ticks: u16,
     pub movement_percent_delta: i16,
     pub attack_speed_percent_delta: i16,
+    pub damage_bonus_per_10k: i16,
     pub ethereal: Option<EtherealEffectProfile>,
 }
 
 impl NativeDebuffProfile {
-    pub(crate) fn canonical_words(self) -> [u64; 12] {
+    pub(crate) fn canonical_words(self) -> [u64; 13] {
         [
             u64::from(self.ability.0),
             u64::from(self.buff),
@@ -31,6 +32,7 @@ impl NativeDebuffProfile {
             u64::from(self.hero_duration_ticks),
             self.movement_percent_delta as u64,
             self.attack_speed_percent_delta as u64,
+            self.damage_bonus_per_10k as u64,
             u64::from(self.ethereal.is_some()),
             u64::from(self.ethereal.map_or(0, |e| e.magic_damage_per_10k)),
             u64::from(self.ethereal.map_or(0, |e| e.healing_per_10k)),

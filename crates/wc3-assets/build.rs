@@ -473,7 +473,7 @@ fn load_unit_assets(
                 .filter_map(|ability_rawcode| {
                     (ability_base
                         .get(&ability_rawcode)
-                        .is_some_and(|base| base == "Aasl")
+                        .is_some_and(|base| matches!(base.as_str(), "Aasl" | "AIll"))
                         && ability_target_art.contains(&ability_rawcode))
                     .then(|| AttachedVisualSpec {
                         attachment_point: ability_attachment
@@ -815,6 +815,7 @@ fn load_visual_assets(
             ("abilities", "amat") => Some("missile"),
             ("abilities", "acat") => Some("caster"),
             ("abilities", "aeat") => Some("effect"),
+            ("abilities", "atat") if base_rawcode == "AIll" => Some("orb-attachment"),
             ("abilities", "atat") => Some("target"),
             ("abilities", "asat") => Some("special"),
             ("buffs", "feat") => Some("effect"),
@@ -1098,7 +1099,9 @@ fn load_visual_assets(
             "ACf2" => &["armor", "movement"],
             // Inner Fire, Prayer, and Devotion Aura use a persistent target buff model.
             "Ainf" | "AIrr" | "AHad" | "ACav" | "AIdb" | "AIar" | "ACff" | "Afae" | "AEah"
-            | "ANpi" | "ACpi" | "ACro" | "Acrs" | "ACvp" => &["armor"],
+            | "ANpi" | "ACpi" | "ACro" | "Acrs" | "ACvp" | "Acri" | "ACcr" | "Aslo" | "AHbn" => {
+                &["armor"]
+            }
             // Persistent native fire/carrier buffs use their authoritative DOT entry.
             "Apxf" => &["damage_over_time"],
             // Native poison can author separate poison/slow buffs or one combined override.

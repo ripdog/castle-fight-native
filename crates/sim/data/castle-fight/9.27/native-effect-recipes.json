@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"ability-effect","source_key":"A04Q","unit_rawcode":"n01I","kind":"native-target-debuff"},
+    {"source_kind":"unit-ability","source_key":"A04P","unit_rawcode":"n01I","kind":"orb-spell-proc"},
     {"source_kind":"unit-ability","source_key":"ACsw","unit_rawcode":"n01S","kind":"native-debuff"},
     {"source_kind":"unit-ability","source_key":"A01F","unit_rawcode":"h03B","kind":"cleave"},
     {"source_kind":"unit-ability","source_key":"A07L","unit_rawcode":"n00L","kind":"feedback"},

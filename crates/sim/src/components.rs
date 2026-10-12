@@ -511,6 +511,10 @@ impl ScriptedRootsProfile {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TriggeredAttackEffect {
+    NativeDebuff {
+        parent: AbilityId,
+        profile: NativeDebuffProfile,
+    },
     ForkedLightning(ForkedLightningProfile),
     ConeWave(ConeWaveProfile),
     ChainLightning(ChainLightningEffectProfile),

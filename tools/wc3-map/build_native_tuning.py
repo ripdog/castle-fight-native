@@ -185,6 +185,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
                 'effect': {'Demolish': {'chance_per_10k': number('DataA1', 100),
                     'multiplier_per_10k': number('DataB1', 10000), 'targets': 4}}}, 'dependencies': [],
             'provenance': {'source': 'resolved/object-fields.tsv', 'native_base': mechanics['native_base']}}
+    if kind == "native-target-debuff":
+        from project_cripple import project
+        return project(recipe, fields, protected, mechanics)
     if kind == "native-debuff":
         from project_native_debuff import project
         return project(recipe, fields, unit, protected, mechanics)
@@ -506,6 +509,18 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         chances = [number(field, 100) for field in ("DataB1", "DataC1", "DataD1")]
         if len(set(chances)) != 1:
             raise ValueError("class-specific orb chances require a richer native primitive")
+        if number("DataA1") != 0:
+            raise ValueError("orb weapon damage bonus requires an explicit native modifier")
+        enabled = number("DataE1")
+        if enabled not in {0, 1, 2}:
+            raise ValueError("unsupported orb enabled attack index")
+        if enabled:
+            if unit is None:
+                raise ValueError("orb attack enablement requires its source weapon inventory")
+            slot = str(enabled)
+            if (unit["attack" + slot + "_enabled"] != "True"
+                    and unit["attack" + slot + "_weapon_type"] not in {"_", "-", ""}):
+                raise ValueError("orb enables a usable disabled weapon requiring native attack projection")
         effect.update(chance_per_10k=chances[0], effect_ability_rawcode=fields["unitid1"],
                       targets=unit_targets(fields["targs1"], allow_structures=True))
     elif kind == "chain-lightning":

@@ -199,6 +199,7 @@ pub enum Wc3AbilityVisualAnchor {
 
 #[derive(Clone)]
 pub struct Wc3AbilityVisual {
+    pub attachment_only: bool,
     pub mana_burn: bool,
     pub model: Wc3VisualModel,
     pub anchor: Wc3AbilityVisualAnchor,
@@ -6039,12 +6040,14 @@ fn load_manifest(path: &Path, asset_server: &AssetServer) -> Result<Wc3VisualSet
             }
             (
                 "abilities",
-                role @ ("target" | "effect" | "special" | "caster" | "mana-burn-target"),
+                role @ ("target" | "effect" | "special" | "caster" | "mana-burn-target"
+                | "orb-attachment"),
             ) => {
                 ability_by_rawcode
                     .entry(parse_rawcode(&binding.owner_rawcode)?)
                     .or_default()
                     .push(Wc3AbilityVisual {
+                        attachment_only: role == "orb-attachment",
                         mana_burn: role == "mana-burn-target",
                         model: visual,
                         anchor: ability_visual_anchor(role),
@@ -6326,7 +6329,9 @@ fn resolve_status_visual_model(
 fn ability_visual_anchor(role: &str) -> Wc3AbilityVisualAnchor {
     match role {
         "caster" => Wc3AbilityVisualAnchor::Source,
-        "target" | "effect" | "special" | "mana-burn-target" => Wc3AbilityVisualAnchor::Target,
+        "target" | "effect" | "special" | "mana-burn-target" | "orb-attachment" => {
+            Wc3AbilityVisualAnchor::Target
+        }
         _ => unreachable!("only supported stationary ability visual roles are classified"),
     }
 }
@@ -8225,7 +8230,7 @@ mod tests {
             ability_visual_anchor("caster"),
             Wc3AbilityVisualAnchor::Source
         );
-        for role in ["target", "effect", "special"] {
+        for role in ["target", "effect", "special", "orb-attachment"] {
             assert_eq!(ability_visual_anchor(role), Wc3AbilityVisualAnchor::Target);
         }
     }

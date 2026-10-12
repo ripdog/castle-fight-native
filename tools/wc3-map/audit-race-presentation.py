@@ -201,6 +201,7 @@ def audit_native_status_visuals(projection, fields, abilities, manifest):
     recipes = {"Aenr": ("movement",), "AEer": ("movement",), "AOwk": ("movement",), "ACf2": ("armor", "movement"),
                "Ainf": ("armor",), "AIrr": ("armor",), "AHad": ("armor",), "ACav": ("armor",), "AIar": ("armor",),
                "AIcb": ("armor",), "ACff": ("armor",), "Afae": ("armor",), "AEah": ("armor",), "ANpi": ("armor",), "ACpi": ("armor",), "ACro": ("armor",), "Acrs": ("armor",), "ACvp": ("armor",), "Ablo": ("attack_speed",),
+               "Acri": ("armor",), "ACcr": ("armor",), "Aslo": ("armor",), "AHbn": ("armor",),
                "Apxf": ("damage_over_time",), "Aven": ("damage_over_time",), "ACvs": ("damage_over_time",),
                "Abof": ("damage_over_time",), "ANab": ("damage_over_time",),
                "Afrz": ("freeze",), "Aoar": ("regeneration",), "SCae": ("movement",), "AOae": ("movement",), "AHtc": ("movement",), "Asta": ("stun",), "AHtb": ("stun",), "ACtb": ("stun",)}
@@ -260,6 +261,7 @@ def audit(evidence, assets, builder, lightning_projection=None, buff_projection=
             or buff_projection["source_revision"] != lightning_projection["release_revision"]):
         raise ValueError("native buff projection does not match the selected object evidence/version")
     objects = {}
+    bases = {(row["category"], row["rawcode"]): row["base_rawcode"] for row in fields}
     for row in fields:
         objects.setdefault((row["category"], row["rawcode"]), {})[row["field_id"]] = json.loads(
             row["recovered_value_json"])
@@ -392,6 +394,8 @@ def audit(evidence, assets, builder, lightning_projection=None, buff_projection=
     for category, codes in (("units", owners), ("abilities", abilities), ("buffs", buffs)):
         for code in codes:
             for field, role in roles.items():
+                if category == "abilities" and field == "atat" and bases.get((category, code)) == "AIll":
+                    role = "orb-attachment"
                 for path in str(objects.get((category, code), {}).get(field, "")).split(","):
                     if renderable(path) and not any(entry["owner_rawcode"] == code
                             and entry["role"] == role and model_identity(entry["source_model"]) == model_identity(path)

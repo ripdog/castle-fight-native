@@ -112,7 +112,7 @@ def project(row, fields, units, abilities, protected, traces, reference, version
         'banish': {'ability': raw(banish_code), 'buff': raw(banish['abuf:1']), 'targets': 3, 'organic_only': False,
             'duration_ticks': tick(banish['adur:1']), 'hero_duration_ticks': tick(banish['ahdu:1']),
             'movement_percent_delta': -number(banish['Hbn1:1'], 100), 'attack_speed_percent_delta': -number(banish['Hbn2:1'], 100),
-            'ethereal': {'magic_damage_per_10k': number(magic[3], 10000), 'healing_per_10k': number(ethereal['EtherealHealBonus'], 10000),
+            'damage_bonus_per_10k': 0, 'ethereal': {'magic_damage_per_10k': number(magic[3], 10000), 'healing_per_10k': number(ethereal['EtherealHealBonus'], 10000),
                 'allied_damage_per_10k': number(ethereal['EtherealDamageBonusAlly'], 10000)}},
         'banish_range': number(banish['aran:1'], 1024),
         'bolt': {'ability': raw(bolt_code), 'damage': number(bolt['Htb1:1']), 'stun_ticks': tick(bolt['adur:1']),

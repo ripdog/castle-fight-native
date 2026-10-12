@@ -3199,8 +3199,12 @@ fn spawn_persistent_unit_attachments(
         let Ok(rawcode) = <[u8; 4]>::try_from(attachment.ability_rawcode.as_bytes()) else {
             continue;
         };
-        for visual in visuals.ability(u32::from_be_bytes(rawcode)) {
-            if visual.anchor != Wc3AbilityVisualAnchor::Target {
+        let ability_visuals = visuals.ability(u32::from_be_bytes(rawcode));
+        let has_orb_attachment = ability_visuals.iter().any(|visual| visual.attachment_only);
+        for visual in ability_visuals {
+            if visual.anchor != Wc3AbilityVisualAnchor::Target
+                || (has_orb_attachment && !visual.attachment_only)
+            {
                 continue;
             }
             let effect = commands
@@ -4491,6 +4495,9 @@ fn sync_render_entities(
                     .and_then(|building| building.content.map(|content| content.rawcode))
             });
         for visual in wc3_visuals.ability_for_source(cast.ability.0, source_rawcode) {
+            if visual.attachment_only {
+                continue;
+            }
             if matches!(cast.effect, AbilityEffect::BuildingEraser(_))
                 && ((visual.anchor == Wc3AbilityVisualAnchor::Source
                     && cast.target_position.is_some())

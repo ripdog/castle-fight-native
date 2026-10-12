@@ -14,7 +14,7 @@ def project(recipe, fields, unit, protected, detail):
         'organic_only': False, 'duration_ticks': number(fields['dur1'], 30),
         'hero_duration_ticks': number(fields['herodur1'], 30),
         'movement_percent_delta': -number(fields['dataa1'], 100),
-        'attack_speed_percent_delta': -number(fields['datab1'], 100), 'ethereal': None}
+        'attack_speed_percent_delta': -number(fields['datab1'], 100), 'damage_bonus_per_10k': 0, 'ethereal': None}
     return {'kind': 'scripted-automatic', 'source_kind': recipe['source_kind'], 'source_key': recipe['source_key'],
         'unit_rawcode': recipe['unit_rawcode'], 'spellcasting': {
             'mana': {'maximum': amount('mana_max'), 'starting': amount('mana_start'), 'regen_per_tick_per_10k': (1 << 31) | rate},

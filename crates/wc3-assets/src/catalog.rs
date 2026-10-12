@@ -290,7 +290,7 @@ pub fn load_production_units(
                 .filter_map(|ability_rawcode| {
                     (ability_base
                         .get(&ability_rawcode)
-                        .is_some_and(|base| base == "Aasl")
+                        .is_some_and(|base| matches!(base.as_str(), "Aasl" | "AIll"))
                         && ability_target_art.contains(&ability_rawcode))
                     .then(|| AttachedVisualSpec {
                         attachment_point: ability_attachment
@@ -826,7 +826,7 @@ mod tests {
             }
             let kind = match &row[column("base_rawcode")] {
                 "AIcb" | "ACff" | "Afae" | "AIar" | "AHad" | "ACav" | "AEah" | "ANpi" | "ACpi"
-                | "ACro" | "Acrs" | "ACvp" => "armor",
+                | "ACro" | "Acrs" | "ACvp" | "Acri" | "ACcr" | "Aslo" | "AHbn" => "armor",
                 "Apxf" | "Aven" | "ACvs" | "Abof" | "ANab" => "damage_over_time",
                 "Afrz" => "freeze",
                 "Aoar" => "regeneration",
