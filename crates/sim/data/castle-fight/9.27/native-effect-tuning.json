@@ -4,6 +4,27 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A04T",
+      "unit_rawcode": "n01G",
+      "kind": "speed-aura",
+      "profile": {
+        "ability": 1093678164,
+        "buff_rawcode": 1110454352,
+        "radius": 921600,
+        "targets": 3,
+        "hostile": false,
+        "organic_only": false,
+        "affects_invulnerable": true,
+        "movement_percent_delta": 0,
+        "attack_speed_percent_delta": 18
+      },
+      "provenance": {
+        "ability": "A04T",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A053",
       "unit_rawcode": "n01B",
       "kind": "sphere",

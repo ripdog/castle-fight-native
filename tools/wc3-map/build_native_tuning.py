@@ -436,8 +436,10 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
             "speed_per_tick": int(Decimal(fields["missilespeed"]) * 1024 / 30)})
     elif kind == "speed-aura":
         tokens = set(fields["targs1"].split(","))
-        if mechanics["native_base"] != "AOae" or tokens != {"air", "enemies", "ward"}:
-            raise ValueError("speed aura needs audited native hostile air semantics")
+        hostile = tokens == {"air", "enemies", "ward"}
+        friendly = tokens == {"ground", "friend", "air", "self", "invulnerable", "vulnerable", "ward"}
+        if mechanics["native_base"] != "AOae" or not (hostile or friendly):
+            raise ValueError("speed aura needs audited native hostile-air or friendly-unit semantics")
         if number("dur1") != 0 or number("herodur1") != 0:
             raise ValueError("speed aura currently supports zero linger only")
         buffs = fields["buffid1"].split(",")
@@ -445,7 +447,7 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
             raise ValueError("speed aura must retain exactly one native buff family")
         effect.update(profile={"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
             "buff_rawcode": int.from_bytes(buffs[0].encode(), "big"), "radius": number("Area1", 1024),
-            "targets": 2, "hostile": True, "organic_only": False, "affects_invulnerable": False,
+            "targets": 2 if hostile else 3, "hostile": hostile, "organic_only": False, "affects_invulnerable": friendly,
             "movement_percent_delta": number("DataA1", 100), "attack_speed_percent_delta": number("DataB1", 100)})
     elif kind == "native-aura":
         base = mechanics["native_base"]

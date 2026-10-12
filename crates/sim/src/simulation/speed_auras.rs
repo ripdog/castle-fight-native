@@ -54,7 +54,8 @@ impl Simulation {
                 let eligible = family
                     .iter()
                     .filter(|(profile, id, team, position, self_only)| {
-                        (!self_only || target.id == *id)
+                        (*self_only || !target.classifications.locust)
+                            && (!self_only || target.id == *id)
                             && (target.team != *team) == profile.hostile
                             && (!profile.organic_only || !target.mechanical)
                             && (!profile.hostile || !target.classifications.spell_immune)

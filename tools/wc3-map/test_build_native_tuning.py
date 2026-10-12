@@ -218,6 +218,18 @@ class NativeTuningProjectionTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 native.project_effect(recipe, {**fields, "targetattachcount":count}, None, {}, {"native_base":"Asph"})
 
+    def test_friendly_speed_aura_keeps_universal_self_invulnerable_and_unit_semantics(self):
+        recipe = {"kind":"speed-aura", "source_kind":"unit-ability", "source_key":"TEST", "unit_rawcode":"UNIT"}
+        fields = {"targs1":"ground,friend,air,self,invulnerable,vulnerable,ward", "area1":"13", "buffid1":"BUFF",
+            "dur1":"0", "herodur1":"0", "dataa1":"0", "datab1":".37"}
+        p = native.project_effect(recipe, fields, None, {}, {"native_base":"AOae"})["profile"]
+        self.assertEqual((p["targets"],p["attack_speed_percent_delta"]),(3,37))
+        self.assertFalse(p["hostile"])
+        self.assertTrue(p["affects_invulnerable"])
+        for change in [{"dur1":".1"},{"targs1":"ground,friend,air,self,organic"}]:
+            with self.assertRaises(ValueError):
+                native.project_effect(recipe,{**fields,**change},None,{}, {"native_base":"AOae"})
+
     def test_speed_aura_projects_signed_native_payload_and_rejects_unsupported_semantics(self):
         recipe = {"kind":"speed-aura", "source_kind":"unit-ability", "source_key":"TEST", "unit_rawcode":"UNIT"}
         fields = {"targs1":"air,enemies,ward", "dur1":"0", "herodur1":"0", "buffid1":"BUFF", "area1":"71", "dataa1":"-0.17", "datab1":"-0.29"}

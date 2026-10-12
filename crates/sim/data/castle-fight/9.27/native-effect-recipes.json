@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A04T","unit_rawcode":"n01G","kind":"speed-aura"},
     {"source_kind":"unit-ability","source_key":"A053","unit_rawcode":"n01B","kind":"sphere"},
     {"source_kind":"unit-ability","source_key":"A069","unit_rawcode":"n01B","kind":"mana-attack-orb"},
     {"source_kind":"unit-ability","source_key":"A04Z","unit_rawcode":"n01D","kind":"mana-attack-orb"},
