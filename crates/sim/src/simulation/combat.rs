@@ -1085,7 +1085,8 @@ impl Simulation {
                     );
                     on_hit.splash_falloff = Some(profile);
                 }
-                PassiveUnitEffect::ManaAttackOrb(_)
+                PassiveUnitEffect::DeathExplosion(_)
+                | PassiveUnitEffect::ManaAttackOrb(_)
                 | PassiveUnitEffect::SourceDamageDispatcher(_)
                 | PassiveUnitEffect::HealthScaledAftershock(_)
                 | PassiveUnitEffect::DamageRetaliation(_)

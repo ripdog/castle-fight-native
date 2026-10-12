@@ -460,6 +460,18 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(10);
                 hash.write_u64(id.0);
                 match action {
+                    NativeAction::DeathExplosion(state) => {
+                        hash.write_u8(29);
+                        hash.write_u64(state.source.0);
+                        hash.write_u8(state.owner.0);
+                        hash.write_u8(state.team.0);
+                        hash.write_i32(state.position.x);
+                        hash.write_i32(state.position.y);
+                        hash.write_u64(state.due_tick);
+                        for word in state.profile.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                    }
                     NativeAction::IncinerateExplosion(state) => {
                         hash.write_u8(28);
                         hash.write_u64(state.source.0);
@@ -2547,6 +2559,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
             }
             PassiveUnitEffect::SpikedShell(profile) => {
                 hash.write_u8(25);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
+            PassiveUnitEffect::DeathExplosion(profile) => {
+                hash.write_u8(32);
                 for word in profile.canonical_words() {
                     hash.write_u64(word);
                 }

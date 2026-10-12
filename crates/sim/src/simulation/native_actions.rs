@@ -189,6 +189,9 @@ impl Simulation {
                 continue;
             }
             match action {
+                NativeAction::DeathExplosion(state) => {
+                    self.advance_native_death_explosion(entity, state, units, buildings);
+                }
                 NativeAction::IncinerateExplosion(state) => {
                     self.advance_incinerate_explosion(entity, state, units);
                 }

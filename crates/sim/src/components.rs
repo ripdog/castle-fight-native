@@ -26,6 +26,9 @@ mod parasite_area_buff;
 pub use parasite_area_buff::ParasiteAreaBuffProfile;
 pub use travelling_mana_clap::TravellingManaClapProfile;
 pub(crate) use travelling_mana_clap::TravellingManaClapState;
+mod death_explosion;
+pub use death_explosion::DeathExplosionProfile;
+pub(crate) use death_explosion::DeathExplosionState;
 mod hostile_armor_aura;
 pub use hostile_armor_aura::HostileArmorAuraProfile;
 mod impale;
@@ -1040,6 +1043,7 @@ pub enum PassiveUnitEffect {
     HostileArmorAura(HostileArmorAuraProfile),
     Incinerate(IncinerateProfile),
     ManaAttackOrb(ManaAttackOrbProfile),
+    DeathExplosion(DeathExplosionProfile),
     PermanentImmolation(PermanentImmolationProfile),
     Corruption(CorruptionProfile),
     SourceDamageDispatcher(AbilityId),

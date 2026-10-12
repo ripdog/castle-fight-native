@@ -117,6 +117,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         return scaled(fields[field.lower()], scale)
 
     kind = recipe["kind"]
+    if kind == "death-explosion":
+        from project_death_explosion import project
+        return project(recipe, fields, mechanics["native_base"])
     if kind == "mana-attack-orb":
         from project_mana_attack_orb import project
         return project(recipe, fields, unit, protected, mechanics)

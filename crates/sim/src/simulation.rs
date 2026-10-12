@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 98;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 99;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -28,6 +28,7 @@ mod abilities;
 mod automatic_abilities;
 mod builder;
 mod building_bolts;
+mod death_explosion;
 mod death_healing;
 mod scripted_roots;
 mod support_orders;
@@ -2049,6 +2050,7 @@ impl Simulation {
             &mut building_health,
         );
         self.release_spheres(&mut units);
+        self.observe_native_death_explosions(&units, &unit_health, &positions);
         self.observe_incinerate_deaths(&units, &unit_health, &positions);
         self.observe_master_parasite_deaths(&units, &unit_health, &positions);
         self.observe_native_parasite_deaths(
