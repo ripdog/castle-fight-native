@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"ability-effect","source_key":"A03R","unit_rawcode":"n00Z","kind":"parasite-area-buff"},
+    {"source_kind":"unit-ability","source_key":"A03S","unit_rawcode":"n00Z","kind":"parasite-area-buff"},
+    {"source_kind":"unit-ability","source_key":"A05Z","unit_rawcode":"n00Z","kind":"cleave"},
+    {"source_kind":"unit-ability","source_key":"A03V","unit_rawcode":"n00Z","kind":"sphere"},
     {"source_kind":"unit-ability","source_key":"A05W","unit_rawcode":"n009","kind":"cleave"},
     {"source_kind":"ability-effect","source_key":"A0FS","unit_rawcode":"n02L","kind":"travelling-mana-clap"},
     {"source_kind":"unit-ability","source_key":"A0FU","unit_rawcode":"n02L","kind":"travelling-mana-clap"},

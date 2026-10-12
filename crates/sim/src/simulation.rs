@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 84;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 85;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -38,6 +38,7 @@ mod naga;
 mod native_building_auras;
 mod native_immolation;
 mod night_elf;
+mod parasite_area_buff;
 mod permanent_grants;
 mod starfall;
 mod travelling_mana_clap;
@@ -4899,6 +4900,9 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
         AbilityEffect::SirenPurge(p) => {
             assert!(p.child.range > 0 && p.child.duration_ticks > 0);
+        }
+        AbilityEffect::ParasiteAreaBuff(p) => {
+            assert!(p.radius >= 0 && p.duration_ticks > 0);
         }
         AbilityEffect::TravellingManaClap(p) => {
             assert!(p.callback_speed_per_second > 0 && p.mover_duration_ticks > 0);

@@ -349,6 +349,7 @@ impl Simulation {
                             | AbilityEffect::ScriptedRoots(_)
                             | AbilityEffect::SirenPurge(_)
                             | AbilityEffect::TravellingManaClap(_)
+                            | AbilityEffect::ParasiteAreaBuff(_)
                     ))
                     && !self.ability_target_is_valid(
                         source,
@@ -550,6 +551,7 @@ impl Simulation {
                     ..
                 } | AbilityEffect::AreaStun { .. }
                     | AbilityEffect::AreaDebuff { .. }
+                    | AbilityEffect::ParasiteAreaBuff(_)
             ) {
                 match source.origin {
                     AbilitySourceOrigin::Unit(position) => Some(position),
@@ -580,7 +582,9 @@ impl Simulation {
             let mut emit_cast_visual = true;
             match intent.target {
                 AbilityIntentTarget::Unit { index, .. } => {
-                    if let AbilityEffect::TravellingManaClap(p) = intent.ability.effect {
+                    if let AbilityEffect::ParasiteAreaBuff(p) = intent.ability.effect {
+                        metrics.effects += self.cast_parasite_area_buff(source, index, p, units);
+                    } else if let AbilityEffect::TravellingManaClap(p) = intent.ability.effect {
                         self.cast_travelling_mana_clap(source, index, p, units);
                         metrics.effects += 1;
                         emit_cast_visual = false;
@@ -1320,6 +1324,7 @@ impl Simulation {
                 self.last_ability_casts.push(AbilityCastEvent {
                     source: intent.source_id,
                     ability: match intent.ability.effect {
+                        AbilityEffect::ParasiteAreaBuff(p) => p.ability,
                         AbilityEffect::SirenPurge(p) => p.child.ability,
                         AbilityEffect::AreaStun { ability, .. }
                         | AbilityEffect::AreaDebuff { ability, .. }
@@ -1829,6 +1834,7 @@ impl Simulation {
                 let candidate = &units[unit_index];
                 if candidate.health <= 0 || candidate.classifications.locust
                     || (matches!(ability.effect, AbilityEffect::SirenPurge(p) if !super::native_summons::purge_primary_eligible(candidate, source.team, p, self.next_tick)))
+                    || (matches!(ability.effect, AbilityEffect::ParasiteAreaBuff(p) if !super::parasite_area_buff::primary_eligible(candidate, source.team, p, self.next_tick)))
                     || (matches!(ability.effect, AbilityEffect::TravellingManaClap(p) if !super::travelling_mana_clap::primary_eligible(candidate, source.team, p, self.next_tick)))
                     || (matches!(ability.effect, AbilityEffect::ScriptedRoots(p) if !super::scripted_roots::primary_eligible(candidate, source.team, p, self.next_tick)))
                     || (matches!(
@@ -2261,6 +2267,7 @@ impl Simulation {
                     && !target.classifications.locust
                     && target.health > 0
                     && !matches!(ability.effect, AbilityEffect::SirenPurge(p) if !super::native_summons::purge_primary_eligible(target, source.team, p, self.next_tick))
+                    && !matches!(ability.effect, AbilityEffect::ParasiteAreaBuff(p) if !super::parasite_area_buff::primary_eligible(target, source.team, p, self.next_tick))
                     && !matches!(ability.effect, AbilityEffect::TravellingManaClap(p) if !super::travelling_mana_clap::primary_eligible(target, source.team, p, self.next_tick))
                     && !matches!(ability.effect, AbilityEffect::ScriptedRoots(p) if !super::scripted_roots::primary_eligible(target, source.team, p, self.next_tick))
                     && match ability.target_policy {

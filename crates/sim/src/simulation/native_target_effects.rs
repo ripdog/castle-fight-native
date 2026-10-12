@@ -25,6 +25,7 @@ mod lava_spawn;
 mod lightning;
 mod master_projectiles;
 mod mirror_image;
+mod parasite_buff;
 mod poison;
 mod resistant_skin;
 mod silver;

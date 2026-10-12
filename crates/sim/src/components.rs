@@ -20,6 +20,8 @@ pub(crate) use native_summons::NativeParasiteState;
 pub use native_summons::{
     NativeParasiteProfile, NativeSummonProfile, PurgeProfile, PurgeState, SirenPurgeProfile,
 };
+mod parasite_area_buff;
+pub use parasite_area_buff::ParasiteAreaBuffProfile;
 pub use travelling_mana_clap::TravellingManaClapProfile;
 pub(crate) use travelling_mana_clap::TravellingManaClapState;
 mod native_actions;
@@ -1817,6 +1819,7 @@ pub enum AbilityEffect {
     },
     SirenPurge(SirenPurgeProfile),
     TravellingManaClap(TravellingManaClapProfile),
+    ParasiteAreaBuff(ParasiteAreaBuffProfile),
     ManaBurnVisual,
     NativeSummon(NativeSummonProfile),
     NagaEarthquake(crate::building_mechanics::NagaEarthquakeProfile),
@@ -1834,6 +1837,7 @@ impl AbilityEffect {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::ParasiteAreaBuff(_) => 52,
             Self::TravellingManaClap(_) => 50,
             Self::ManaBurnVisual => 51,
             Self::SirenPurge(_) => 45,

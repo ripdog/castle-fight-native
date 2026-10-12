@@ -3,6 +3,147 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "scripted-automatic",
+      "source_kind": "ability-effect",
+      "source_key": "A03R",
+      "unit_rawcode": "n00Z",
+      "spellcasting": {
+        "mana": {
+          "maximum": 0,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147483648
+        },
+        "ability": {
+          "id": 1093677906,
+          "mana_cost": 0,
+          "cooldown_ticks": 0,
+          "range": 0,
+          "target_policy": "ScriptedController",
+          "effect": {
+            "StatBuff": {
+              "buff": {
+                "rawcode": 1110454347,
+                "positive": true,
+                "stealable": true,
+                "organic_only": false
+              },
+              "armor_bonus_per_100": 0,
+              "damage_bonus_per_10k": 2500,
+              "regeneration_per_second_per_10k": 0,
+              "duration_ticks": 600,
+              "hero_duration_ticks": 600,
+              "modifier": 1093677906,
+              "autocast_range": 0
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 0,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "functions": [
+          "UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceChaosAbilities_cast_registerUnitSpellWithTargetOrder_RaceChaosAbilities"
+        ]
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A03S",
+      "unit_rawcode": "n00Z",
+      "spellcasting": {
+        "mana": {
+          "maximum": 0,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147483648
+        },
+        "ability": {
+          "id": 1093677907,
+          "mana_cost": 0,
+          "cooldown_ticks": 900,
+          "range": 409600,
+          "target_policy": "RandomGroundEnemyUnit",
+          "effect": {
+            "ParasiteAreaBuff": {
+              "parent": {
+                "buff_rawcode": 1110454585,
+                "map_version": {
+                  "major": 9,
+                  "minor": 27
+                },
+                "speed_per_tick": 64853,
+                "affects_invulnerable": false,
+                "duration_ticks": 1,
+                "hero_duration_ticks": 1,
+                "body_rawcode": 1852203634,
+                "count": 1,
+                "body_duration_ticks": 1
+              },
+              "parent_nonhero_only": true,
+              "ability": 1093677906,
+              "buff": {
+                "rawcode": 1110454347,
+                "positive": true,
+                "stealable": true,
+                "organic_only": false
+              },
+              "radius": 537600,
+              "targets": 3,
+              "armor_bonus_per_100": 0,
+              "damage_bonus_per_10k": 2500,
+              "regeneration_per_second_per_10k": 0,
+              "duration_ticks": 600,
+              "hero_duration_ticks": 600
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 0,
+      "effect_ability_rawcode": "A03R",
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "functions": [
+          "UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceChaosAbilities_cast_registerUnitSpellWithTargetOrder_RaceChaosAbilities"
+        ]
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A05Z",
+      "unit_rawcode": "n00Z",
+      "kind": "cleave",
+      "radius_world": 200,
+      "damage_per_10k": 3500,
+      "targets": 1,
+      "provenance": {
+        "ability": "A05Z",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A03V",
+      "unit_rawcode": "n00Z",
+      "kind": "sphere",
+      "profile": {
+        "ability": 1093677910,
+        "attachment_count": 1,
+        "cooldown_ticks": 30,
+        "speed_per_tick": 47786
+      },
+      "provenance": {
+        "ability": "A03V",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A05W",
       "unit_rawcode": "n009",

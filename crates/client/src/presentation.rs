@@ -3499,6 +3499,7 @@ fn prewarm_timed_wc3_effects(
                         AbilityEffect::NagaEarthquake(p) => Some((p.child.0, p.duration_ticks)),
                         AbilityEffect::NagaCharm(p) => Some((p.child.0, 0)),
                         AbilityEffect::NagaTidalWave(_) => None,
+                        AbilityEffect::ParasiteAreaBuff(p) => Some((p.ability.0, p.duration_ticks)),
                         AbilityEffect::SirenPurge(p) => {
                             Some((p.child.ability.0, p.child.duration_ticks))
                         }
