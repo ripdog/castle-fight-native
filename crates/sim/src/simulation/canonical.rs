@@ -2530,6 +2530,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                     hash.write_u64(word);
                 }
             }
+            PassiveUnitEffect::HostileArmorAura(profile) => {
+                hash.write_u8(29);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
             PassiveUnitEffect::PermanentImmolation(profile) => {
                 hash.write_u8(27);
                 for word in profile.canonical_words() {

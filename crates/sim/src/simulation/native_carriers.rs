@@ -511,6 +511,7 @@ fn cleanse_native_effects(
             PassiveUnitEffect::BurningOil(p) => Some(p.ability),
             PassiveUnitEffect::Cleave(p) => Some(p.ability),
             PassiveUnitEffect::Aura(p) => Some(p.ability),
+            PassiveUnitEffect::HostileArmorAura(p) => Some(p.ability),
             PassiveUnitEffect::SpeedAura(p) => Some(p.ability),
             PassiveUnitEffect::Sphere(p) => Some(p.ability),
             PassiveUnitEffect::SpikedShell(p) => Some(p.ability),

@@ -117,6 +117,15 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         return scaled(fields[field.lower()], scale)
 
     kind = recipe["kind"]
+    if kind == "hostile-armor-aura":
+        if (mechanics["native_base"] != "AHad" or set(fields["targs1"].split(",")) != {"air", "enemies", "ground", "vulnerable"}
+                or number("DataB1") != 0 or number("DataA1", 100) >= 0
+                or number("Dur1", 30) != number("HeroDur1", 30) or len(fields["buffid1"]) != 4):
+            raise ValueError("hostile Devotion requires its native vulnerable unit mask, flat armor and shared family")
+        return {**recipe, "profile": {"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
+            "buff_rawcode": int.from_bytes(fields["buffid1"].encode(), "big"), "radius": number("Area1", 1024),
+            "armor_bonus_per_100": number("DataA1", 100), "targets": 3,
+            "linger_ticks": number("Dur1", 30)}}
     if kind == "permanent-immolation":
         if (mechanics['native_base'] not in {'ANpi', 'ACpi'}
             or set(fields['targs1'].split(',')) not in ({'air', 'ground', 'enemies', 'neutral', 'organic'}, {'air', 'ground', 'enemies', 'neutral'})

@@ -26,6 +26,8 @@ mod parasite_area_buff;
 pub use parasite_area_buff::ParasiteAreaBuffProfile;
 pub use travelling_mana_clap::TravellingManaClapProfile;
 pub(crate) use travelling_mana_clap::TravellingManaClapState;
+mod hostile_armor_aura;
+pub use hostile_armor_aura::HostileArmorAuraProfile;
 mod impale;
 pub use impale::{ImpaleFanProfile, ImpaleProfile, ImpaleStatus};
 pub(crate) use impale::{ImpaleLandingState, ImpaleWaveState};
@@ -1028,6 +1030,7 @@ pub(crate) struct ProductionUnitClassifications(pub UnitClassifications);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PassiveUnitEffect {
+    HostileArmorAura(HostileArmorAuraProfile),
     PermanentImmolation(PermanentImmolationProfile),
     Corruption(CorruptionProfile),
     SourceDamageDispatcher(AbilityId),

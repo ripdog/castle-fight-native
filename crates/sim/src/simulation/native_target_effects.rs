@@ -20,6 +20,7 @@ mod damage_threshold;
 mod ensnare;
 mod heal;
 mod homing_splash;
+mod hostile_armor_aura;
 mod immolation;
 mod impale;
 mod kill_berserk;

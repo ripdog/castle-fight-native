@@ -9,6 +9,17 @@ import build_runtime_catalog as catalog
 
 
 class NativeTuningProjectionTest(unittest.TestCase):
+    def test_hostile_devotion_projects_flat_armor_family_and_rejects_flattened_native_masks(self):
+        recipe = {'kind': 'hostile-armor-aura', 'source_kind': 'unit-ability', 'source_key': 'AURA', 'unit_rawcode': 'UNIT'}
+        fields = {'targs1': 'air,enemies,ground,vulnerable', 'dataa1': '-3', 'datab1': '0',
+            'dur1': '0', 'herodur1': '0', 'buffid1': 'BUFF', 'area1': '13'}
+        p = native.project_effect(recipe, fields, None, {}, {'native_base': 'AHad'})['profile']
+        self.assertEqual((p['armor_bonus_per_100'], p['linger_ticks']), (-300, 0))
+        self.assertEqual(p['buff_rawcode'], int.from_bytes(b'BUFF', 'big'))
+        for changed in [{'targs1': 'air,enemies,ground,structure'}, {'datab1': '1'}, {'dataa1': '3'}, {'herodur1': '1'}]:
+            with self.subTest(changed=changed), self.assertRaises(ValueError):
+                native.project_effect(recipe, {**fields, **changed}, None, {}, {'native_base': 'AHad'})
+
     def test_permanent_immolation_retains_native_interval_and_organic_mask(self):
         recipe = {'kind': 'permanent-immolation', 'source_kind': 'unit-ability',
             'source_key': 'BURN', 'unit_rawcode': 'UNIT'}

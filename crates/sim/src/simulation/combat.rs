@@ -1054,7 +1054,8 @@ impl Simulation {
                 | PassiveUnitEffect::SpellResistance(_)
                 | PassiveUnitEffect::SpikedShell(_)
                 | PassiveUnitEffect::HardenedSkin(_)
-                | PassiveUnitEffect::PermanentImmolation(_) => {}
+                | PassiveUnitEffect::PermanentImmolation(_)
+                | PassiveUnitEffect::HostileArmorAura(_) => {}
             }
         }
         // Native Demolish modifies weapon damage without becoming Critical Strike or

@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 95;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 96;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -34,6 +34,7 @@ mod support_orders;
 pub use death_healing::DeathHealVisualEvent;
 mod building_damage_procs;
 mod enchantments;
+mod hostile_armor_auras;
 mod impale;
 mod naga;
 mod native_building_auras;
@@ -1769,6 +1770,7 @@ impl Simulation {
         self.resolve_permanent_immolation(&mut units);
         self.apply_passive_auras(&mut units, &buildings);
         self.apply_speed_auras(&mut units);
+        self.apply_hostile_armor_auras(&mut units);
         self.resolve_damage_charge(&mut units, &mut buildings);
         self.refresh_native_building_auras(&mut units, &mut buildings);
         let ability_metrics = self.resolve_automatic_abilities(&mut buildings, &mut units, &grid);
