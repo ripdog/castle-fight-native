@@ -75,7 +75,8 @@ impl Simulation {
         let dummy = self.allocate_id();
         self.world.spawn((
             dummy,
-            NativeAction::AttackProxyActor {
+            NativeAction::NativeSpellActor {
+                flying: true,
                 owner,
                 team: source.team,
                 map_version: p.map_version,

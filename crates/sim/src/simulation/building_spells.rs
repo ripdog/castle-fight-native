@@ -135,6 +135,9 @@ pub(super) fn native_building_trigger(
             p.trigger_invulnerable,
             p.trigger_spell_immune,
         )),
+        AbilityEffect::BuildingFlameStrike(p) => {
+            Some((p.trigger_targets, p.parent.affects_invulnerable, false))
+        }
         AbilityEffect::BuildingAttackProxy(p) => Some((
             p.trigger_targets,
             p.parent.affects_invulnerable,
@@ -164,6 +167,7 @@ pub(super) fn native_building_trigger_unit_type(
     mechanical: bool,
 ) -> bool {
     match ability.effect {
+        AbilityEffect::BuildingFlameStrike(p) => !p.trigger_mechanical_only || mechanical,
         AbilityEffect::BuildingAttackProxy(p) => !p.trigger_mechanical_only || mechanical,
         AbilityEffect::NagaCharm(p) => !p.trigger_mechanical_only || mechanical,
         AbilityEffect::NagaEarthquake(p) => !p.trigger_mechanical_only || mechanical,

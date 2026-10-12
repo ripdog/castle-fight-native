@@ -176,8 +176,10 @@ pub(crate) struct BuildingAttackProxyState {
 
 #[derive(Component, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum NativeAction {
+    FlameStrike(crate::building_mechanics::FlameStrikeState),
     BuildingAttackProxy(BuildingAttackProxyState),
-    AttackProxyActor {
+    NativeSpellActor {
+        flying: bool,
         owner: PlayerId,
         team: Team,
         map_version: crate::MapVersion,

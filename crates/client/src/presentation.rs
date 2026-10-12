@@ -3510,6 +3510,7 @@ fn prewarm_timed_wc3_effects(
                         | AbilityEffect::HealingWave(_)
                         | AbilityEffect::SolarStrike { .. }
                         | AbilityEffect::PhoenixFire(_)
+                        | AbilityEffect::BuildingFlameStrike(_)
                         | AbilityEffect::BuildingAttackProxy(_)
                         | AbilityEffect::Hailstone(_)
                         | AbilityEffect::BuildingAura(_)

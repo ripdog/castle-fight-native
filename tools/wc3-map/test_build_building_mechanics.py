@@ -12,6 +12,24 @@ SPEC.loader.exec_module(MODULE)
 
 
 class BuildingMechanicsProjectionTests(unittest.TestCase):
+    def test_flame_strike_rejects_origin_mode_and_recycle_control_drift(self):
+        original = MODULE._retained_file_bytes
+        changes = [
+            (b'unit_getPos(mkr),unit_getPos(mkr),6.', b'unit_getPos(mkr),unit_getPos(kkr),6.'),
+            (b'cBb=1093678408', b'cBb=1093677385'),
+            (b'recycleSpellDummy(IOn.dummy,IOn.abilityId)', b'recycleSpellDummy(IOn.dummy,0)'),
+        ]
+        for before, after in changes:
+            def changed(root, tree, path):
+                data = original(root, tree, path)
+                if path == 'script/war3map.lua':
+                    self.assertIn(before, data)
+                    return data.replace(before, after, 1)
+                return data
+            with self.subTest(before=before), mock.patch.object(MODULE, '_retained_file_bytes', changed):
+                with self.assertRaises(ValueError):
+                    MODULE.build()
+
     def test_attack_proxy_rejects_selector_origin_clock_and_weapon_drift(self):
         original = MODULE._retained_file_bytes
         changes = [

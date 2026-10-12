@@ -285,6 +285,11 @@ def audit(evidence, assets, builder, lightning_projection=None, buff_projection=
             params = json.loads(row["parameters_json"])
             if params.get("dummy_unit_id"):
                 units.add(raw(params["dummy_unit_id"]))
+            if any("dummyCastPointFrom(" in functions[name] for name in row["source_functions"].split(",")):
+                match = re.search(r'Tdb=__wurst_ensureInt\((\d+)\)', functions["QG"])
+                if not match:
+                    raise ValueError("point dummy factory identity is absent")
+                units.add(raw(match[1]))
     owners = buildings | units
     abilities = {ability for owner in owners
                  for ability in str(objects.get(("units", owner), {}).get("uabi", "")).split(",")

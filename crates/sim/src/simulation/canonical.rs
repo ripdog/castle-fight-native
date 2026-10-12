@@ -655,6 +655,12 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u64(state.next_pulse_tick);
                         hash.write_u64(state.expires_tick);
                     }
+                    NativeAction::FlameStrike(state) => {
+                        hash.write_u8(25);
+                        for word in state.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                    }
                     NativeAction::BuildingAttackProxy(state) => {
                         hash.write_u8(23);
                         hash.write_u64(state.source.0);
@@ -671,7 +677,8 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u64(state.launch_tick);
                         hash.write_u64(state.impact_tick);
                     }
-                    NativeAction::AttackProxyActor {
+                    NativeAction::NativeSpellActor {
+                        flying,
                         owner,
                         team,
                         map_version,
@@ -680,6 +687,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         expires_tick,
                     } => {
                         hash.write_u8(24);
+                        hash.write_u8(u8::from(flying));
                         hash.write_u8(owner.0);
                         hash.write_u8(team.0);
                         hash.write_u16(map_version.major);
@@ -2840,6 +2848,11 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             for word in crate::native_effects::master_projectile_profile_for_version(version)
                 .canonical_words()
             {
+                hash.write_u64(word);
+            }
+        }
+        AbilityEffect::BuildingFlameStrike(p) => {
+            for word in p.canonical_words() {
                 hash.write_u64(word);
             }
         }

@@ -50,6 +50,8 @@ def build(map_version='9.27', revision='r1'):
     launcher_codes += ['h00N', 'A09X', 'A00P']
     oracle = next(r for r in building_rows if r['building_rawcode'] == 'h00M')
     launcher_codes += ['h00M', 'A00O', 'A00N']
+    flame_strike = next(r for r in building_rows if r['building_rawcode'] == 'h01F')
+    launcher_codes += ['h01F', 'A01J', 'A01I', 'A05H']
     attack_proxy = next(r for r in building_rows if r['building_rawcode'] == 'h01E')
     launcher_codes += ['h01E', 'h06C', 'A01E', 'A0EU', 'A0FE']
     pyramid = next(r for r in building_rows if r['building_rawcode'] == 'h00I')
@@ -80,7 +82,7 @@ def build(map_version='9.27', revision='r1'):
     selected = {code: {r['field_id'] + ':' + r['level']: json.loads(r['recovered_value_json'])
                        for r in fields if r['rawcode'] == code}
                 for code in ('h00Z', 'A017', 'A018', 'A09L', 'A070', 'BOhx', 'B01H', 'n00F', 'n00G', 'h07W', 'A0HO', 'AM0{', *launcher_codes)}
-    for code in ('A00M', 'A00O', 'A01E', 'A0FE'):
+    for code in ('A00M', 'A00O', 'A01E', 'A01J', 'A0FE'):
         selected[code]['native_base_buff'] = json.loads(next(r['base_value_json'] for r in fields
             if r['rawcode'] == code and r['field_id'] == 'abuf' and r['level'] == '1'))
     markers = {r['rawcode']: r['abilities'].split(',') for r in rows('units.tsv')
@@ -99,7 +101,7 @@ def build(map_version='9.27', revision='r1'):
                      'CallbackSingle_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_ReengageRuntime',
                      'CallbackSingle_doAfter_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_doAfter_ReengageRuntime',
                      *replication['source_functions'].split(','), 'onUnitTrained', 'rollBody', 'EE', 'randomizeBloodFiend', 'replaceUnitWithType', *linker['source_functions'].split(','), 'onBuildingFinished',
-                     *attack_proxy['source_functions'].split(','), 'CallbackSingle_doAfter_RaceChaosAbilities_call_doAfter_RaceChaosAbilities', 'yd', 'completeRoundStart',
+                     *flame_strike['source_functions'].split(','), 'recycleSpellDummy', *attack_proxy['source_functions'].split(','), 'CallbackSingle_doAfter_RaceChaosAbilities_call_doAfter_RaceChaosAbilities', 'yd', 'completeRoundStart',
                      'EventListener_add_BuildingLifecycle_onEvent_add_BuildingLifecycle',
                      'EventListener_add_BuildingLifecycle_onEvent_add_BuildingLifecycle1',
                      *guard['source_functions'].split(','), *snow['source_functions'].split(','), *serpent['source_functions'].split(','), *ceremonial['source_functions'].split(','),
@@ -225,11 +227,13 @@ def build(map_version='9.27', revision='r1'):
     from project_training_variants import project as project_training
     training = project_training({name: value['source'] for name, value in traces.items()}, unit_rows,
         {row['rawcode']: row['base_rawcode'] for row in rows('abilities.tsv')})
+    from project_flame_strike import project as project_flame_strike
+    flame_strike_profile = project_flame_strike(flame_strike, selected, unit_rows, rows('abilities.tsv'), protected, traces, dict(zip(['major', 'minor'], map(int, map_version.split('.')))))
     from project_attack_proxy import project as project_attack_proxy
     attack_proxy_profile = project_attack_proxy(attack_proxy, selected, unit_rows, rows('abilities.tsv'), protected, traces, dict(zip(['major', 'minor'], map(int, map_version.split('.')))))
     attack_proxy_visuals = [{'role':'target', 'path':json.loads('\"'+path+'\"')} for path in re.findall(r'addEffect\(\"(.*?)\",tkr\)', traces['shrineOfDestructionSpell']['source'])]
     from project_production_replication import project as project_replication
-    return {'attack_proxy': attack_proxy, 'attack_proxy_spellcasting': attack_proxy_profile, 'attack_proxy_cast_visuals': attack_proxy_visuals, 'tidal': tidal, 'tidal_spellcasting': tidal_profile, 'coral_auras': coral_profile, 'oracle_owner_rejection_visual': {'model_path': owner_art[0], 'attachment': owner_art[1]}, 'oracle': oracle, 'oracle_spellcasting': oracle_profile, 'pyramid': pyramid, 'pyramid_spellcasting': pyramid_profile,
+    return {'flame_strike': flame_strike, 'flame_strike_spellcasting': flame_strike_profile, 'attack_proxy': attack_proxy, 'attack_proxy_spellcasting': attack_proxy_profile, 'attack_proxy_cast_visuals': attack_proxy_visuals, 'tidal': tidal, 'tidal_spellcasting': tidal_profile, 'coral_auras': coral_profile, 'oracle_owner_rejection_visual': {'model_path': owner_art[0], 'attachment': owner_art[1]}, 'oracle': oracle, 'oracle_spellcasting': oracle_profile, 'pyramid': pyramid, 'pyramid_spellcasting': pyramid_profile,
             'production_training_variants': training,
             'production_replication': project_replication(replication, traces), 'replication_source': replication,
             'map_version': map_version, 'schema_version': 2, 'source_revision': revision,

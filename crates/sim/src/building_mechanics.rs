@@ -7,6 +7,12 @@ use crate::{
     math::SUBUNITS_PER_WORLD_UNIT,
     version::MapVersion,
 };
+mod flame_strike;
+pub use flame_strike::{BuildingFlameStrikeProfile, FlameStrikeProfile};
+pub(crate) use flame_strike::{
+    FlameStrikeState, flame_strike_bindings, flame_strike_source,
+    flame_strike_spellcasting_for_version,
+};
 mod attack_proxy;
 pub use attack_proxy::{BuildingAttackProxyLevel, BuildingAttackProxyProfile};
 pub(crate) use attack_proxy::{

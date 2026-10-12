@@ -240,6 +240,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    Volcano = 0x2100_002a => b"h01F",
     ShrineOfDestruction = 0x2100_0029 => b"h01E",
     CoralSpire = 0x2100_0028 => b"h0Z6",
     TidalCairn = 0x2100_0027 => b"h0Z5",

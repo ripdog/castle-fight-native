@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 88;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 89;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -48,6 +48,7 @@ mod world_freezer;
 use world_freezer::WorldFreezerState;
 mod attack_proxy;
 mod building_spells;
+mod flame_strike;
 mod frost_launcher;
 mod snowveil;
 mod speed_auras;
@@ -4966,6 +4967,16 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                 spellcasting.ability.target_policy,
                 AbilityTargetPolicy::NativeBuildingSpellTrigger
             );
+        }
+        AbilityEffect::BuildingFlameStrike(p) => {
+            for option in p.options {
+                assert!(
+                    option.radius > 0
+                        && option.full_interval_millis > 0
+                        && option.half_interval_millis > 0
+                        && option.maximum_damage > 0
+                );
+            }
         }
         AbilityEffect::BuildingAttackProxy(p) => {
             assert!(p.damage >= 0 && p.speed_per_tick > 0 && p.range > 0 && p.dummy_ticks > 0);

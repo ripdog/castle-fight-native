@@ -626,6 +626,16 @@ impl Simulation {
                             units,
                         ));
                         emit_cast_visual = false;
+                    } else if matches!(intent.ability.effect, AbilityEffect::BuildingFlameStrike(_))
+                    {
+                        metrics.effects += usize::from(self.cast_building_flame_strike(
+                            source,
+                            intent.ability,
+                            units[index].id,
+                            intent.cast_sequence,
+                            units,
+                        ));
+                        emit_cast_visual = false;
                     } else if matches!(intent.ability.effect, AbilityEffect::BuildingAttackProxy(_))
                     {
                         metrics.effects += usize::from(self.cast_building_attack_proxy(
@@ -975,7 +985,17 @@ impl Simulation {
                     }
                 }
                 AbilityIntentTarget::Building { id, position } => {
-                    if matches!(intent.ability.effect, AbilityEffect::BuildingAttackProxy(_)) {
+                    if matches!(intent.ability.effect, AbilityEffect::BuildingFlameStrike(_)) {
+                        metrics.effects += usize::from(self.cast_building_flame_strike(
+                            source,
+                            intent.ability,
+                            id,
+                            intent.cast_sequence,
+                            units,
+                        ));
+                        emit_cast_visual = false;
+                    } else if matches!(intent.ability.effect, AbilityEffect::BuildingAttackProxy(_))
+                    {
                         metrics.effects += usize::from(self.cast_building_attack_proxy(
                             source,
                             intent.ability,

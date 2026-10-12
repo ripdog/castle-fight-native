@@ -189,7 +189,8 @@ impl Simulation {
             }
         }
         for entity in self.world.iter_entities() {
-            if let Some(crate::components::NativeAction::AttackProxyActor {
+            if let Some(crate::components::NativeAction::NativeSpellActor {
+                flying,
                 owner,
                 team,
                 map_version,
@@ -206,7 +207,7 @@ impl Simulation {
                     *team,
                     *position,
                     sight.radius(rules.is_night(self.next_tick)),
-                    true,
+                    *flying,
                     0,
                     None,
                     None,

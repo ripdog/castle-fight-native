@@ -165,6 +165,16 @@ impl Simulation {
                 }
             })
             .collect::<Vec<_>>();
+        let flames = actions
+            .iter()
+            .filter_map(|(id, _, action)| {
+                if let NativeAction::FlameStrike(state) = action {
+                    Some((*id, *state))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
         self.refresh_carrier_auras(units);
         for (_, entity, action) in actions {
             if self.world.get::<NativeAction>(entity).is_none() {
@@ -271,13 +281,16 @@ impl Simulation {
                         self.world.despawn(entity);
                     }
                 }
+                NativeAction::FlameStrike(state) => {
+                    self.advance_flame_strike(entity, state, units, buildings, &flames)
+                }
                 NativeAction::StasisTrap(state) => self.advance_stasis_trap(entity, state, units),
                 NativeAction::AcidBomb(state) => self.advance_acid_bomb(entity, state, units),
                 NativeAction::Poison(state) => self.advance_poison(entity, state, units, buildings),
                 NativeAction::Ensnare(state) => self.advance_ensnare(entity, state, units),
                 // Splash attack proxies resolve in the shared post-movement impact phase.
                 NativeAction::Hailstone(_) | NativeAction::BuildingAttackProxy(_) => {}
-                NativeAction::AttackProxyActor { expires_tick, .. } => {
+                NativeAction::NativeSpellActor { expires_tick, .. } => {
                     if self.next_tick >= expires_tick {
                         self.world.despawn(entity);
                     }

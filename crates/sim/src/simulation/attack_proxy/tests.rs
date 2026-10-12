@@ -377,7 +377,8 @@ fn invisible_native_actor_has_flying_day_night_sight_until_its_exclusive_expiry(
         let id = sim.allocate_id();
         sim.world.spawn((
             id,
-            NativeAction::AttackProxyActor {
+            NativeAction::NativeSpellActor {
+                flying: true,
                 owner: PlayerId(0),
                 team: Team(0),
                 map_version: p.map_version,
