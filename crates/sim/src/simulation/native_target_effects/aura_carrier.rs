@@ -14,7 +14,6 @@ fn profile() -> BuildingAuraProfile {
         trigger_spell_immune: false,
         targets: AttackTargetMask::AIR_AND_GROUND,
         organic_only: true,
-        nonsapper_only: false,
         affects_invulnerable: true,
         radius: 40 * SUBUNITS_PER_WORLD_UNIT,
         regeneration_per_second_per_10k: 450_000,
@@ -597,78 +596,4 @@ fn separate_speed_aura_buff_families_and_signed_payloads_keep_independent_modifi
         super::super::movement::effective_movement_speed(&snapshot),
         13 * SUBUNITS_PER_WORLD_UNIT
     );
-}
-
-#[test]
-fn carrier_regeneration_admits_structures_and_excludes_sappers_independently_of_movement() {
-    let mut sim = simulation(1);
-    let aura = BuildingAuraProfile {
-        targets: AttackTargetMask::ALL,
-        organic_only: false,
-        nonsapper_only: true,
-        radius: 100 * SUBUNITS_PER_WORLD_UNIT,
-        ..profile()
-    };
-    carrier(&mut sim, Team(0), 50, aura);
-    let mut recipients = Vec::new();
-    for movement in [MovementClass::Ground, MovementClass::Air] {
-        for sapper in [false, true] {
-            let id = sim.spawn_unit_with_properties(
-                unit(0, 70, 0, AttackDelivery::Melee),
-                UnitGameplayProperties {
-                    movement_class: movement,
-                    mechanical: true,
-                    build_time_ticks: Some(1),
-                    classifications: UnitClassifications {
-                        combat_sapper: sapper,
-                        invulnerable: true,
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                },
-            );
-            wound(&mut sim, id, 900);
-            recipients.push((id, !sapper));
-        }
-    }
-    let mut structures = Vec::new();
-    for (team, x, eligible) in [(0, 60, true), (1, 65, false), (0, 200, false)] {
-        let id = sim.spawn_building_with_properties(
-            BuildingSpawn {
-                team: Team(team),
-                footprint: BuildingFootprint::new(x, 20, 1, 1),
-                health: 1000,
-                attack: None,
-                production: None,
-                spellcasting: None,
-            },
-            BuildingGameplayProperties {
-                classifications: UnitClassifications {
-                    invulnerable: true,
-                    ..Default::default()
-                },
-                ..Default::default()
-            },
-        );
-        wound(&mut sim, id, 900);
-        structures.push((id, eligible));
-    }
-    sim.step();
-    let mut restored = wire_restored(&sim, 4);
-    while sim.tick() <= u64::from(aura.lifetime_ticks) {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
-    }
-    for (id, eligible) in recipients {
-        assert_eq!(
-            sim.unit(id).unwrap().health,
-            if eligible { 912 } else { 900 }
-        );
-        assert_eq!(sim.unit(id).unwrap().status.armor_modifier_count, 0);
-    }
-    for (id, eligible) in structures {
-        let view = sim.building(id).unwrap();
-        assert_eq!(view.health, if eligible { 912 } else { 900 });
-        assert_eq!(view.status.armor_modifier_count, 0);
-    }
-    assert!(sim.aura_carriers().is_empty());
 }
