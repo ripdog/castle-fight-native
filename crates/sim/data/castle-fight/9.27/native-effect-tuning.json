@@ -4,6 +4,64 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A058",
+      "unit_rawcode": "n01A",
+      "kind": "sphere",
+      "profile": {
+        "ability": 1093678392,
+        "attachment_count": 2,
+        "cooldown_ticks": 30,
+        "speed_per_tick": 47786
+      },
+      "provenance": {
+        "ability": "A058",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A05G",
+      "unit_rawcode": "n01A",
+      "kind": "hostile-armor-aura",
+      "profile": {
+        "ability": 1093678407,
+        "buff_rawcode": 1110454359,
+        "radius": 665600,
+        "armor_bonus_per_100": -400,
+        "targets": 3,
+        "linger_ticks": 0
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0B9",
+      "unit_rawcode": "n01A",
+      "kind": "incinerate",
+      "profile": {
+        "ability": 1093681721,
+        "buff_rawcode": 1112435043,
+        "bonus_per_hit": 0,
+        "maximum_stacks": 3,
+        "duration_ticks": 60,
+        "hero_duration_ticks": 60,
+        "full_damage": 160,
+        "half_damage": 80,
+        "full_radius": 153600,
+        "half_radius": 204800,
+        "delay_ticks": 6,
+        "speed_per_tick": 34133
+      },
+      "provenance": {
+        "native_base": "ANic",
+        "source": "resolved/object-fields.tsv",
+        "native_bonus_field": "7",
+        "native_compatibility": "legacy-original-rawcode-bonus-three-hit-cap-v1",
+        "targets": "enemy,neutral,organic,nonancient",
+        "missile_art": "Abilities\\\\Weapons\\\\VoidWalkerMissile\\\\VoidWalkerMissile.mdl"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A05F",
       "unit_rawcode": "n019",
       "kind": "hostile-armor-aura",

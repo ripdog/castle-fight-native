@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A058","unit_rawcode":"n01A","kind":"sphere"},
+    {"source_kind":"unit-ability","source_key":"A05G","unit_rawcode":"n01A","kind":"hostile-armor-aura"},
+    {"source_kind":"unit-ability","source_key":"A0B9","unit_rawcode":"n01A","kind":"incinerate"},
     {"source_kind":"unit-ability","source_key":"A05F","unit_rawcode":"n019","kind":"hostile-armor-aura"},
     {"source_kind":"unit-ability","source_key":"ANic","unit_rawcode":"n019","kind":"incinerate"},
     {"source_kind":"ability-effect","source_key":"A0AB","unit_rawcode":"n027","kind":"native-target-debuff"},
