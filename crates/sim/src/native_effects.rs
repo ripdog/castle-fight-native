@@ -86,6 +86,7 @@ pub enum NativeEffectImplementationId {
     WarcraftSnowveilV1,
     WarcraftHostileArmorAuraV1,
     WarcraftIncinerateV1,
+    WarcraftManaAttackOrbV1,
     WarcraftNativeImpaleV1,
     WarcraftNativeTargetDebuffV1,
     WarcraftEraserV1,
@@ -167,6 +168,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftSnowveilV1 => 25,
             Self::WarcraftHostileArmorAuraV1 => 103,
             Self::WarcraftIncinerateV1 => 104,
+            Self::WarcraftManaAttackOrbV1 => 105,
             Self::WarcraftNativeImpaleV1 => 102,
             Self::WarcraftNativeTargetDebuffV1 => 101,
             Self::WarcraftEraserV1 => 100,
@@ -603,6 +605,12 @@ fn native_buff_from_tuning(tuning: &TuningFile, source: u32) -> Option<crate::Na
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 enum TuningEffect {
+    ManaAttackOrb {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        profile: crate::ManaAttackOrbProfile,
+    },
     Incinerate {
         source_kind: String,
         source_key: String,
@@ -1054,7 +1062,8 @@ impl TuningEffect {
 
     fn source_kind(&self) -> &str {
         match self {
-            Self::Incinerate { source_kind, .. }
+            Self::ManaAttackOrb { source_kind, .. }
+            | Self::Incinerate { source_kind, .. }
             | Self::HostileArmorAura { source_kind, .. }
             | Self::NativeImpale { source_kind, .. }
             | Self::NativeTargetDebuff { source_kind, .. }
@@ -1105,7 +1114,8 @@ impl TuningEffect {
 
     fn source_key(&self) -> &str {
         match self {
-            Self::Incinerate { source_key, .. }
+            Self::ManaAttackOrb { source_key, .. }
+            | Self::Incinerate { source_key, .. }
             | Self::HostileArmorAura { source_key, .. }
             | Self::NativeImpale { source_key, .. }
             | Self::NativeTargetDebuff { source_key, .. }
@@ -1156,7 +1166,8 @@ impl TuningEffect {
 
     fn unit_rawcode(&self) -> Option<&str> {
         match self {
-            Self::Incinerate { unit_rawcode, .. }
+            Self::ManaAttackOrb { unit_rawcode, .. }
+            | Self::Incinerate { unit_rawcode, .. }
             | Self::HostileArmorAura { unit_rawcode, .. }
             | Self::SourceDamageDispatcher { unit_rawcode, .. }
             | Self::BuildingImprovement { unit_rawcode, .. }
@@ -1207,6 +1218,7 @@ impl TuningEffect {
 
     const fn expected_implementation(&self) -> NativeEffectImplementationId {
         match self {
+            Self::ManaAttackOrb { .. } => NativeEffectImplementationId::WarcraftManaAttackOrbV1,
             Self::Incinerate { .. } => NativeEffectImplementationId::WarcraftIncinerateV1,
             Self::HostileArmorAura { .. } => {
                 NativeEffectImplementationId::WarcraftHostileArmorAuraV1
@@ -1276,6 +1288,7 @@ impl TuningEffect {
 
     const fn kind_name(&self) -> &'static str {
         match self {
+            Self::ManaAttackOrb { .. } => "mana-attack-orb",
             Self::Incinerate { .. } => "incinerate",
             Self::HostileArmorAura { .. } => "hostile-armor-aura",
             Self::NativeImpale { .. } => "native-impale",
@@ -1597,6 +1610,7 @@ fn native_unit_mechanics_from_tuning(
                 | TuningEffect::Corruption { .. }
                 | TuningEffect::SpikedShell { .. }
                 | TuningEffect::HardenedSkin { .. }
+                | TuningEffect::ManaAttackOrb { .. }
                 | TuningEffect::Incinerate { .. }
                 | TuningEffect::HostileArmorAura { .. }
                 | TuningEffect::PermanentImmolation { .. }
@@ -1761,6 +1775,7 @@ pub fn native_effect_implementation_for(
 
 fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUnitEffect {
     match effect {
+        TuningEffect::ManaAttackOrb { profile, .. } => PassiveUnitEffect::ManaAttackOrb(*profile),
         TuningEffect::Incinerate { profile, .. } => PassiveUnitEffect::Incinerate(*profile),
         TuningEffect::HostileArmorAura { profile, .. } => {
             PassiveUnitEffect::HostileArmorAura(*profile)

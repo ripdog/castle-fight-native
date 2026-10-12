@@ -251,6 +251,45 @@ impl Simulation {
                 order.backstab_pending = 0;
             }
 
+            // Native attack-orb resources commit at release, even when the shot later misses.
+            let mut mana_orb = None;
+            if let AttackSourceIndex::Unit(source) = intent.source
+                && !units[source].abilities_disabled
+            {
+                for effect in intent.passive_effects.iter() {
+                    let PassiveUnitEffect::ManaAttackOrb(p) = effect else {
+                        continue;
+                    };
+                    let eligible = match intent.target {
+                        TargetIndex::Unit(i) => {
+                            unit_health[i] > 0
+                                && units[i].team != intent.source_team
+                                && !units[i].classifications.invulnerable
+                                && !units[i].classifications.spell_immune
+                                && !units[i].classifications.locust
+                                && p.primary_targets
+                                    .can_target_unit(units[i].target_movement_class())
+                        }
+                        TargetIndex::Building(_) => p.primary_targets.can_target_buildings(),
+                    };
+                    if eligible
+                        && let Some(mana) = units[source].mana_current.as_mut()
+                        && *mana >= p.mana_cost
+                    {
+                        assert!(mana_orb.replace(p).is_none(), "multiple native attack orbs");
+                        *mana -= p.mana_cost;
+                        intent.attack.damage = intent
+                            .attack
+                            .damage
+                            .checked_add(p.bonus_damage)
+                            .expect("native orb damage overflow");
+                        intent.attack.delivery = AttackDelivery::RangedGuaranteedHit {
+                            speed_per_tick: p.speed_per_tick,
+                        };
+                    }
+                }
+            }
+
             for effect in intent.passive_effects.iter() {
                 let PassiveUnitEffect::Pulverize(profile) = effect else {
                     continue;
@@ -347,9 +386,13 @@ impl Simulation {
                 || self.attack_is_evaded(&intent, units, completed_tick);
             let mut critical = false;
             if !missed {
-                let (bonus_damage, on_hit, critical_strike) =
+                let (bonus_damage, mut on_hit, critical_strike) =
                     self.resolve_passive_attack_effects(&intent, units, completed_tick);
                 critical = critical_strike;
+                if let Some(p) = mana_orb {
+                    on_hit.splash_falloff = Some(p.splash);
+                    on_hit.missile_ability = Some(p.ability);
+                }
                 let damage = intent
                     .attack
                     .damage
@@ -1042,7 +1085,8 @@ impl Simulation {
                     );
                     on_hit.splash_falloff = Some(profile);
                 }
-                PassiveUnitEffect::SourceDamageDispatcher(_)
+                PassiveUnitEffect::ManaAttackOrb(_)
+                | PassiveUnitEffect::SourceDamageDispatcher(_)
                 | PassiveUnitEffect::HealthScaledAftershock(_)
                 | PassiveUnitEffect::DamageRetaliation(_)
                 | PassiveUnitEffect::LavaSpawn(_)

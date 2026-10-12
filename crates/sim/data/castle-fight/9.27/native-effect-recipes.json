@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A04Z","unit_rawcode":"n01D","kind":"mana-attack-orb"},
     {"source_kind":"unit-ability","source_key":"A058","unit_rawcode":"n01A","kind":"sphere"},
     {"source_kind":"unit-ability","source_key":"A05G","unit_rawcode":"n01A","kind":"hostile-armor-aura"},
     {"source_kind":"unit-ability","source_key":"A0B9","unit_rawcode":"n01A","kind":"incinerate"},

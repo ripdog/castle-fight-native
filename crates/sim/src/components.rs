@@ -30,10 +30,12 @@ mod hostile_armor_aura;
 pub use hostile_armor_aura::HostileArmorAuraProfile;
 mod impale;
 mod incinerate;
+mod mana_attack_orb;
 pub use impale::{ImpaleFanProfile, ImpaleProfile, ImpaleStatus};
 pub(crate) use impale::{ImpaleLandingState, ImpaleWaveState};
 pub(crate) use incinerate::IncinerateExplosion;
 pub use incinerate::{IncinerateProfile, IncinerateStatus};
+pub use mana_attack_orb::ManaAttackOrbProfile;
 mod native_debuff;
 pub use native_debuff::{EtherealEffectProfile, NativeDebuffProfile};
 mod native_actions;
@@ -240,6 +242,7 @@ pub struct SecondaryAttackProfile {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct PendingAttackEffects {
     pub incinerate: Option<IncinerateProfile>,
+    pub missile_ability: Option<AbilityId>,
     pub corruption: Option<CorruptionProfile>,
     pub poison: Option<PoisonProfile>,
     pub stun_duration_ticks: u16,
@@ -1036,6 +1039,7 @@ pub(crate) struct ProductionUnitClassifications(pub UnitClassifications);
 pub enum PassiveUnitEffect {
     HostileArmorAura(HostileArmorAuraProfile),
     Incinerate(IncinerateProfile),
+    ManaAttackOrb(ManaAttackOrbProfile),
     PermanentImmolation(PermanentImmolationProfile),
     Corruption(CorruptionProfile),
     SourceDamageDispatcher(AbilityId),

@@ -28,6 +28,7 @@ mod kill_berserk;
 mod lava_spawn;
 mod life_steal;
 mod lightning;
+mod mana_attack_orb;
 mod master_projectiles;
 mod mirror_image;
 mod native_debuff;

@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    NetherDrake = 0x1000_0071 => b"n01D",
     VoidKeeper = 0x1000_0070 => b"n01A",
     VoidWalker = 0x1000_006f => b"n019",
     CorruptedAnnihilator = 0x1000_006e => b"n027",
@@ -148,6 +149,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    NetherAncient = 0x2000_0071 => b"h04O",
     PortalOfTheAbyss = 0x2000_0070 => b"h04N",
     VoidPortal = 0x2000_006f => b"h04L",
     CorruptedAncientOfAnnihilation = 0x2000_006e => b"h09Y",

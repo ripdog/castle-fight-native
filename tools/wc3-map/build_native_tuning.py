@@ -117,6 +117,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         return scaled(fields[field.lower()], scale)
 
     kind = recipe["kind"]
+    if kind == "mana-attack-orb":
+        from project_mana_attack_orb import project
+        return project(recipe, fields, unit, protected, mechanics)
     if kind == "incinerate":
         from project_incinerate import project
         return project(recipe, fields, mechanics["native_base"])
@@ -934,7 +937,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
                 raise ValueError('native Slow default-active alias differs from its source class')
             detail.update(reference_source_sha256=reference['source_sha256'], default_active_alias=default)
         detail["native_base"] = ability_bases[source]
-        if recipe["kind"] in {"impale-fan", "native-impale"}:
+        if recipe["kind"] in {"impale-fan", "native-impale", "mana-attack-orb"}:
             detail["default_active_alias"] = default_autocast[recipe["unit_rawcode"]]
         if spell is not None and recipe["kind"] != "master-projectiles":
             semantics = spell_semantics[spell["ability_rawcode"]]

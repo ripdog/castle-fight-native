@@ -2551,6 +2551,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                     hash.write_u64(word);
                 }
             }
+            PassiveUnitEffect::ManaAttackOrb(profile) => {
+                hash.write_u8(31);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
             PassiveUnitEffect::Incinerate(profile) => {
                 hash.write_u8(30);
                 for word in profile.canonical_words() {
@@ -2797,6 +2803,10 @@ fn hash_frost_profile_option(
 }
 
 fn hash_pending_attack_effects(hash: &mut Fnv64, effects: PendingAttackEffects) {
+    hash.write_u8(u8::from(effects.missile_ability.is_some()));
+    if let Some(a) = effects.missile_ability {
+        hash.write_u32(a.0);
+    }
     hash.write_u8(u8::from(effects.incinerate.is_some()));
     if let Some(p) = effects.incinerate {
         for word in p.canonical_words() {

@@ -4,6 +4,39 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A04Z",
+      "unit_rawcode": "n01D",
+      "kind": "mana-attack-orb",
+      "profile": {
+        "primary_targets": 3,
+        "ability": 1093678170,
+        "mana_cost": 20,
+        "bonus_damage": 15,
+        "speed_per_tick": 51200,
+        "splash": {
+          "full_radius": 76800,
+          "medium_radius": 179200,
+          "outer_radius": 256000,
+          "medium_damage_per_10k": 5000,
+          "outer_damage_per_10k": 2500,
+          "targets": 7
+        }
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "Afak",
+        "default_active_alias": "A04Z",
+        "targets": "air,enemies,ground",
+        "unit_splash_targets": "enemies",
+        "protected_resources": {
+          "mana_cost": "20"
+        },
+        "native_cast_range": "900",
+        "missile_art": "Abilities\\\\Spells\\\\Undead\\\\OrbOfDeath\\\\AnnihilationMissile.mdl"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A058",
       "unit_rawcode": "n01A",
       "kind": "sphere",
