@@ -4,6 +4,66 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A04Y",
+      "unit_rawcode": "n01E",
+      "kind": "death-explosion",
+      "profile": {
+        "ability": 1093678169,
+        "full_radius": 153600,
+        "full_damage": 150,
+        "partial_radius": 281600,
+        "partial_damage": 75,
+        "delay_ticks": 9,
+        "targets": 5
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "Amnx",
+        "targets": "ground,enemies,structure,debris,ward",
+        "delay_field": "Dur1",
+        "native_damage_policy": "universal-spell-armor-type-v1"
+      }
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A04X",
+      "unit_rawcode": "n01E",
+      "kind": "cone-wave",
+      "profile": {
+        "ability": 1093678168,
+        "damage": 60,
+        "maximum_damage": 99999,
+        "distance": 716800,
+        "initial_radius": 102400,
+        "final_radius": 102400,
+        "speed_per_tick": 23893,
+        "targets": 5
+      },
+      "provenance": {
+        "native_base": "AUcs",
+        "protected_resources": {
+          "cooldown": "0.01",
+          "mana_cost": "0"
+        },
+        "source": "resolved/object-fields.tsv",
+        "native_child_cooldown_ticks": 1
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A04W",
+      "unit_rawcode": "n01E",
+      "kind": "orb-spell-proc",
+      "chance_per_10k": 10000,
+      "effect_ability_rawcode": "A04X",
+      "targets": "ground-units-and-buildings",
+      "provenance": {
+        "ability": "A04W",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A04V",
       "unit_rawcode": "n01F",
       "kind": "death-explosion",
@@ -3140,6 +3200,15 @@
         "final_radius": 409600,
         "speed_per_tick": 35840,
         "targets": 3
+      },
+      "provenance": {
+        "native_base": "ACbc",
+        "protected_resources": {
+          "cooldown": "0.01",
+          "mana_cost": "0"
+        },
+        "source": "resolved/object-fields.tsv",
+        "native_child_cooldown_ticks": 1
       }
     },
     {

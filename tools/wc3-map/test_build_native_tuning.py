@@ -218,6 +218,18 @@ class NativeTuningProjectionTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 native.project_effect(recipe, {**fields, "targetattachcount":count}, None, {}, {"native_base":"Asph"})
 
+    def test_native_carrion_wave_preserves_structure_mask_geometry_and_child_cooldown(self):
+        recipe={"kind":"cone-wave","source_kind":"ability-effect","source_key":"TEST"}
+        fields={"dataa1":"31","datab1":"81","datac1":"99","datad1":"7","area1":"7",
+            "missilespeed":"333","targs1":"enemies,ground,structure"}
+        detail={"native_base":"AUcs"}
+        row=native.project_effect(recipe,fields,None,{"mana_cost":"0","cooldown":".01"},detail)
+        self.assertEqual(row["profile"]["targets"],5)
+        self.assertEqual(row["profile"]["damage"],31)
+        self.assertEqual(row["profile"]["initial_radius"],row["profile"]["final_radius"])
+        for change in [{"mana_cost":"1","cooldown":".01"},{"mana_cost":"0","cooldown":".1"}]:
+            with self.assertRaises(ValueError): native.project_effect(recipe,fields,None,change,detail)
+
     def test_friendly_speed_aura_keeps_universal_self_invulnerable_and_unit_semantics(self):
         recipe = {"kind":"speed-aura", "source_kind":"unit-ability", "source_key":"TEST", "unit_rawcode":"UNIT"}
         fields = {"targs1":"ground,friend,air,self,invulnerable,vulnerable,ward", "area1":"13", "buffid1":"BUFF",

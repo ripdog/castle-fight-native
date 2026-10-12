@@ -64,11 +64,24 @@ pub(in crate::simulation) fn hit_distance(
 }
 
 impl Simulation {
+    /// Every admitted orb wave has a one-tick native child cooldown. The saved wave's
+    /// launch identity supplies that clock, including repeated impacts in one phase.
+    pub(in crate::simulation) fn launch_attack_cone_wave(&mut self, state: ConeWaveState) {
+        if self.world.iter_entities().any(|e| matches!(e.get::<NativeAction>(),
+            Some(NativeAction::ConeWave(existing)) if existing.source == state.source
+                && existing.profile.ability == state.profile.ability && existing.launch_tick == state.launch_tick)) {
+            return;
+        }
+        let id = self.allocate_id();
+        self.world.spawn((id, NativeAction::ConeWave(state)));
+    }
+
     pub(in crate::simulation) fn advance_cone_wave(
         &mut self,
         entity: Entity,
         mut state: ConeWaveState,
         units: &mut [UnitSnapshot],
+        buildings: &mut [BuildingSnapshot],
     ) {
         let traveled = i32::try_from(
             (self.next_tick.saturating_sub(state.launch_tick)
@@ -82,6 +95,7 @@ impl Simulation {
             .filter_map(|(index, unit)| {
                 (unit.health > 0
                     && unit.team != state.team
+                    && !unit.classifications.locust
                     && !unit.classifications.spell_immune
                     && !unit.classifications.invulnerable
                     && state
@@ -91,46 +105,92 @@ impl Simulation {
                     && !state.hit_targets.contains(&unit.id))
                 .then(|| {
                     hit_distance(&state, unit.position, state.traveled, traveled)
-                        .map(|distance| (distance, unit.id, index))
+                        .map(|distance| (distance, unit.id, TargetIndex::Unit(index)))
                 })
                 .flatten()
             })
             .collect();
+        if state.profile.targets.can_target_buildings() && !self.debug_buildings_invulnerable {
+            hits.extend(
+                buildings
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, building)| {
+                        if building.health <= 0
+                            || building.team == state.team
+                            || building.classifications.invulnerable
+                            || building.classifications.spell_immune
+                            || state.hit_targets.contains(&building.id)
+                        {
+                            return None;
+                        }
+                        let center = footprint_center_point(
+                            building.footprint,
+                            self.config.navigation_cell_size,
+                        );
+                        hit_distance(&state, center, state.traveled, traveled)
+                            .map(|distance| (distance, building.id, TargetIndex::Building(index)))
+                    }),
+            );
+        }
         hits.sort_unstable_by_key(|(distance, id, _)| (*distance, *id));
-        for (_, id, index) in hits {
+        for (_, id, target) in hits {
             if state.remaining_damage <= 0 {
                 break;
             }
             let raw = state.profile.damage.min(state.remaining_damage);
             state.remaining_damage -= raw;
-            let damage = self
-                .combat_rules
-                .damage_rules
-                .apply_spell(raw, units[index].armor.armor_type);
-            let damage = spell_damage_after_defend(units[index], damage, self.next_tick);
-            super::super::source_damage_runtime::dispatch_inline(
-                state.source,
-                index,
-                damage,
-                units,
-                self.combat_rules.damage_rules,
-                self.next_tick,
-                &self.retired_damage_sources,
-            );
-            let health = units[index].health;
-            damage_thresholds::observe_damage_event(&mut units[index], health, damage);
-            super::super::death_healing::commit_health_from(
-                units,
-                index,
-                health.saturating_sub(damage),
-                Some(state.source),
-            );
+            let position = match target {
+                TargetIndex::Unit(index) => {
+                    let damage = self
+                        .combat_rules
+                        .damage_rules
+                        .apply_spell(raw, units[index].armor.armor_type);
+                    let damage = spell_damage_after_defend(units[index], damage, self.next_tick);
+                    super::super::source_damage_runtime::dispatch_inline(
+                        state.source,
+                        index,
+                        damage,
+                        units,
+                        self.combat_rules.damage_rules,
+                        self.next_tick,
+                        &self.retired_damage_sources,
+                    );
+                    let health = units[index].health;
+                    damage_thresholds::observe_damage_event(&mut units[index], health, damage);
+                    super::super::death_healing::commit_health_from(
+                        units,
+                        index,
+                        health.saturating_sub(damage),
+                        Some(state.source),
+                    );
+                    units[index].position
+                }
+                TargetIndex::Building(index) => {
+                    let building = &mut buildings[index];
+                    let damage = self
+                        .combat_rules
+                        .damage_rules
+                        .apply_spell(raw, building.armor.armor_type);
+                    building.health = building
+                        .health
+                        .checked_sub(scale_damage_per_10k(
+                            damage,
+                            building.snow_damage_taken_per_10k,
+                        ))
+                        .expect("native wave building health overflow");
+                    footprint_center_point(building.footprint, self.config.navigation_cell_size)
+                }
+            };
+            if matches!(target, TargetIndex::Building(_)) {
+                super::super::death_healing::refresh_support(units, buildings, None);
+            }
             state.hit_targets.push(id);
             self.last_ability_casts.push(AbilityCastEvent {
                 source: state.source,
                 ability: state.profile.ability,
                 target: AbilityCastTarget::Unit(id),
-                target_position: Some(units[index].position),
+                target_position: Some(position),
                 effect: AbilityEffect::Damage { amount: raw },
             });
         }

@@ -561,9 +561,7 @@ impl Simulation {
                             self.last_chain_lightnings.push(event);
                         }
                         if let Some(state) = pending.cone_wave {
-                            let id = self.allocate_id();
-                            self.world
-                                .spawn((id, crate::components::NativeAction::ConeWave(state)));
+                            self.launch_attack_cone_wave(state);
                         }
                         if let Some(state) = pending.chain_state {
                             chain_lightning_launches.push(state);

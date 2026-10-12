@@ -6386,6 +6386,27 @@ fn apply_pending_attack_effects(
         retired_sources,
     } = state;
     lava_spawns::observe_landed_attack(source.id, target, completed_tick, units, buildings);
+    let mut result = PendingAttackEffectResult::default();
+    if let Some(TriggeredAttackEffect::ConeWave(profile)) = effects.triggered_spell {
+        let origin = units
+            .iter()
+            .find(|u| u.id == source.id)
+            .map_or(source.position, |u| u.death_position);
+        let destination = match target {
+            TargetIndex::Unit(i) => units[i].death_position,
+            TargetIndex::Building(i) => {
+                footprint_center_point(buildings[i].footprint, navigation_cell_size)
+            }
+        };
+        result.cone_wave = Some(native_actions::cone_wave::new_state(
+            source.id,
+            source.team,
+            origin,
+            destination,
+            profile,
+            completed_tick,
+        ));
+    }
     let TargetIndex::Unit(index) = target else {
         let TargetIndex::Building(index) = target else {
             unreachable!()
@@ -6427,23 +6448,8 @@ fn apply_pending_attack_effects(
                 false,
             );
         }
-        return PendingAttackEffectResult::default();
+        return result;
     };
-    let mut result = PendingAttackEffectResult::default();
-    if let Some(TriggeredAttackEffect::ConeWave(profile)) = effects.triggered_spell {
-        let origin = units
-            .iter()
-            .find(|unit| unit.id == source.id)
-            .map_or(source.position, |unit| unit.position);
-        result.cone_wave = Some(native_actions::cone_wave::new_state(
-            source.id,
-            source.team,
-            origin,
-            units[index].position,
-            profile,
-            completed_tick,
-        ));
-    }
     if let Some(p) = effects.incinerate {
         incinerate::landed_hit(
             index,

@@ -243,17 +243,21 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
             raise ValueError("lava-spawn attack-count target constraints changed")
         return effect
     if kind == "cone-wave":
-        if mechanics["native_base"] != "ACbc" or number("DataE1") != 0 or scaled(protected["mana_cost"]) != 0:
-            raise ValueError("cone-wave requires audited free native Breath of Fire with no ignition damage")
+        base = mechanics["native_base"]
+        if base not in {"ACbc", "AUcs"} or (base == "ACbc" and number("DataE1") != 0) or scaled(protected["mana_cost"]) != 0:
+            raise ValueError("cone-wave requires audited free native Breath of Fire or Carrion Swarm")
         if int((Decimal(protected["cooldown"]) * 30).to_integral_value(rounding="ROUND_CEILING")) != 1:
             raise ValueError("orb cone-wave child needs at most one tick of native cooldown")
         effect.update(profile={"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
             "damage": number("DataA1"), "maximum_damage": number("DataB1"), "distance": number("DataC1", 1024),
             "initial_radius": number("Area1", 1024), "final_radius": number("DataD1", 1024),
             "speed_per_tick": int(Decimal(fields["missilespeed"]) * 1024 / 30),
-            "targets": 3})
-        if set(fields["targs1"].split(",")) != {"air", "enemies", "ground"}:
+            "targets": 3 if base == "ACbc" else 5})
+        expected = {"air", "enemies", "ground"} if base == "ACbc" else {"enemies", "ground", "structure"}
+        if set(fields["targs1"].split(",")) != expected:
             raise ValueError("cone-wave target constraints changed")
+        effect["provenance"] = {"native_base":base, "protected_resources":protected,
+            "source":"resolved/object-fields.tsv", "native_child_cooldown_ticks":1}
         return effect
     if kind == "mirror-image":
         trace = mechanics["mirror_image"]

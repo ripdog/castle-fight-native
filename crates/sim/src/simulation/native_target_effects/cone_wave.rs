@@ -97,3 +97,127 @@ fn cone_proc_uses_caster_origin_and_preserves_wave_when_trigger_victim_dies() {
     }
     assert_eq!(sim.unit(behind_target).unwrap().health, 970);
 }
+
+#[test]
+fn native_ground_wave_reaches_structures_with_shared_budget_and_preserves_primary_building_proc_origin()
+ {
+    let mut sim = simulation(1);
+    let mut p = profile();
+    p.targets = AttackTargetMask::GROUND_AND_BUILDINGS;
+    p.maximum_damage = 55;
+    let source = sim.spawn_unit_with_properties(
+        unit(0, 10, 0, AttackDelivery::RangedInstant),
+        UnitGameplayProperties {
+            passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::TriggeredSpellProc(
+                crate::TriggeredSpellProcProfile {
+                    ability: AbilityId(99),
+                    chance_per_10k: 10000,
+                    targets: AttackTargetMask::GROUND_AND_BUILDINGS,
+                    effect: TriggeredAttackEffect::ConeWave(p),
+                },
+            )),
+            ..Default::default()
+        },
+    );
+    let building = sim.spawn_building(BuildingSpawn {
+        team: Team(1),
+        footprint: BuildingFootprint::new(40, 20, 1, 1),
+        health: 1000,
+        attack: None,
+        production: None,
+        spellcasting: None,
+    });
+    sim.world
+        .get_mut::<TargetState>(entity(&sim, source))
+        .unwrap()
+        .current = Some(building);
+    let farther = victim(&mut sim, 1, 60, 20, false, false);
+    let air = victim(&mut sim, 1, 30, 20, true, false);
+    sim.step();
+    sim.step();
+    let wave = sim
+        .world
+        .iter_entities()
+        .find_map(|e| match e.get::<NativeAction>() {
+            Some(NativeAction::ConeWave(w)) => Some(w.clone()),
+            _ => None,
+        })
+        .expect("building primary launches native child");
+    assert_eq!(wave.origin, point(10, 20));
+    let mut other = wire_restored(&sim, 4);
+    for _ in 0..10 {
+        assert_eq!(sim.step().checksum, other.step().checksum);
+    }
+    assert!(sim.building(building).unwrap().health < 1000);
+    assert_eq!(sim.unit(farther).unwrap().health, 975);
+    assert_eq!(sim.unit(air).unwrap().health, 1000);
+}
+
+#[test]
+fn native_orb_wave_launch_state_enforces_shared_one_tick_child_cooldown_and_recovers_on_next_boundary()
+ {
+    let mut sim = simulation(1);
+    let first = super::super::native_actions::cone_wave::new_state(
+        SimId(777),
+        Team(0),
+        point(10, 20),
+        point(60, 20),
+        profile(),
+        0,
+    );
+    sim.launch_attack_cone_wave(first.clone());
+    sim.launch_attack_cone_wave(first);
+    assert_eq!(sim.projectile_count(), 1);
+    let mut other = wire_restored(&sim, 4);
+    assert_eq!(sim.step().checksum, other.step().checksum);
+    let second = super::super::native_actions::cone_wave::new_state(
+        SimId(777),
+        Team(0),
+        point(10, 20),
+        point(60, 20),
+        profile(),
+        1,
+    );
+    sim.launch_attack_cone_wave(second.clone());
+    other.launch_attack_cone_wave(second);
+    assert_eq!(sim.projectile_count(), 2);
+    assert_eq!(sim.step().checksum, other.step().checksum);
+}
+
+#[test]
+fn cone_orb_origin_and_aim_use_post_movement_combat_positions() {
+    let mut sim = simulation(1);
+    let source = sim.spawn_unit(unit(0, 10, 0, AttackDelivery::Melee));
+    let target = sim.spawn_unit(unit(1, 50, 0, AttackDelivery::Melee));
+    let mut units = sim.snapshot_units();
+    let source_index = find_unit_index(&units, source).unwrap();
+    let target_index = find_unit_index(&units, target).unwrap();
+    units[source_index].death_position = point(20, 20);
+    units[target_index].death_position = point(70, 40);
+    let mut health = units.iter().map(|u| u.health).collect::<Vec<_>>();
+    let result = apply_pending_attack_effects(
+        TargetIndex::Unit(target_index),
+        PendingAttackEffects {
+            triggered_spell: Some(TriggeredAttackEffect::ConeWave(profile())),
+            ..Default::default()
+        },
+        PendingAttackEffectSource {
+            id: source,
+            position: point(10, 20),
+            team: Team(0),
+        },
+        PendingAttackEffectState {
+            navigation_cell_size: sim.config.navigation_cell_size,
+            completed_tick: 1,
+            units: &mut units,
+            unit_health: &mut health,
+            buildings: &mut [],
+            building_health: &mut [],
+            retired_sources: &BTreeMap::new(),
+            damage_rules: sim.combat_rules.damage_rules,
+        },
+    );
+    let state = result.cone_wave.unwrap();
+    assert_eq!(state.origin, point(20, 20));
+    assert!(state.destination.y > point(70, 40).y);
+}

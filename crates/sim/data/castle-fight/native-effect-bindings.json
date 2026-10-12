@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A04Y","implementation":"warcraft-death-explosion-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"ability-effect","source_key":"A04X","implementation":"warcraft-cone-wave-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A04W","implementation":"warcraft-orb-spell-proc-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A04V","implementation":"warcraft-death-explosion-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A04T","implementation":"warcraft-speed-aura-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A051","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27"},

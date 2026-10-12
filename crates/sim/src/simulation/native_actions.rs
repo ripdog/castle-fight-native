@@ -289,7 +289,7 @@ impl Simulation {
                     self.advance_impale_landing(entity, state, units);
                 }
                 NativeAction::ConeWave(state) => {
-                    self.advance_cone_wave(entity, state, units);
+                    self.advance_cone_wave(entity, state, units, buildings);
                 }
                 NativeAction::SphereFlight(state) => {
                     if self.next_tick >= state.impact_tick {

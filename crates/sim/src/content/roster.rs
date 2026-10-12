@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    InfernalTank = 0x1000_0075 => b"n01E",
     InfernalMachine = 0x1000_0074 => b"n01F",
     Felhound = 0x1000_0073 => b"n01G",
     ShadowDrake = 0x1000_0072 => b"n01B",
@@ -152,6 +153,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    HellsPortal = 0x2000_0075 => b"h04P",
     HellsGate = 0x2000_0074 => b"h04Q",
     FelhoundShrine = 0x2000_0073 => b"h04S",
     ShadowAncient = 0x2000_0072 => b"h04M",
