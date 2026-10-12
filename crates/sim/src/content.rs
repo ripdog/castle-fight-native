@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r132";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r133";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -1395,10 +1395,12 @@ impl CastleFightTowerKind {
         let expected_name = extracted_content_927().buildings[&rawcode].name;
         let mut definition = extracted_tower_definition_927(rawcode, expected_name);
         definition.spellcasting = match self {
-            Self::Eraser => Some(crate::building_mechanics::eraser_spellcasting_for_version(
-                MapVersion::CASTLE_FIGHT_9_27,
-                rawcode,
-            )),
+            Self::Eraser | Self::EraserLevelTwo => {
+                Some(crate::building_mechanics::eraser_spellcasting_for_version(
+                    MapVersion::CASTLE_FIGHT_9_27,
+                    rawcode,
+                ))
+            }
             Self::MagicRuin => Some(
                 crate::building_mechanics::magic_ruin_spellcasting_for_version(
                     MapVersion::CASTLE_FIGHT_9_27,
