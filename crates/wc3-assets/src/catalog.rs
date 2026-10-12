@@ -831,7 +831,7 @@ mod tests {
                 "Afrz" => "freeze",
                 "Aoar" => "regeneration",
                 "AOae" | "SCae" | "AHtc" | "ACpa" => "movement",
-                "Asta" | "AHtb" | "ACtb" => "stun",
+                "Asta" | "AHtb" | "ACtb" | "ACmp" | "AUim" => "stun",
                 _ => continue,
             };
             let mut references: String =

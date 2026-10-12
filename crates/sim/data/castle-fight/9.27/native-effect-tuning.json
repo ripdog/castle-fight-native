@@ -5,6 +5,166 @@
     {
       "kind": "native-target-debuff",
       "source_kind": "ability-effect",
+      "source_key": "A0AB",
+      "profile": {
+        "ability": 1093681474,
+        "buff": 1110454354,
+        "targets": 3,
+        "organic_only": false,
+        "duration_ticks": 600,
+        "hero_duration_ticks": 150,
+        "movement_percent_delta": 0,
+        "attack_speed_percent_delta": 0,
+        "damage_bonus_per_10k": -10000,
+        "ethereal": null
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "Acri",
+        "targets": "air,enemies,ground,neutral,ward",
+        "protected_resources": {
+          "cooldown": "0.0",
+          "mana_cost": "0"
+        }
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0AC",
+      "unit_rawcode": "n027",
+      "kind": "orb-spell-proc",
+      "chance_per_10k": 10000,
+      "effect_ability_rawcode": "A0AB",
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A0AC",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0AD",
+      "unit_rawcode": "n027",
+      "kind": "cleave",
+      "radius_world": 225,
+      "damage_per_10k": 4000,
+      "targets": 1,
+      "provenance": {
+        "ability": "A0AD",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "kind": "native-impale",
+      "source_kind": "ability-effect",
+      "source_key": "A0AF",
+      "profile": {
+        "ability": 1093681478,
+        "damage": 250,
+        "distance": 819200,
+        "radius": 204800,
+        "wave_ticks": 9,
+        "air_ticks": 3,
+        "stun_ticks": 105,
+        "hero_stun_ticks": 53,
+        "targets": 1
+      },
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/object-fields.tsv",
+        "script": "resolved/unit-spell-semantics.tsv",
+        "functions": [
+          "UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceCorruptedAbilities_cast_registerUnitSpellWithTargetOrder_RaceCorruptedAbilities",
+          "annihilatorSpell",
+          "dummyCastPointFrom",
+          "recycleSpellDummy",
+          "QG"
+        ],
+        "native_child_cooldown": "11",
+        "native_base": "ACmp",
+        "dummy_ability_removed_before_recycling": true
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0AE",
+      "unit_rawcode": "n027",
+      "spellcasting": {
+        "mana": {
+          "maximum": 125,
+          "starting": 100,
+          "regen_per_tick_per_10k": 2147503648
+        },
+        "ability": {
+          "id": 1093681477,
+          "mana_cost": 40,
+          "cooldown_ticks": 450,
+          "range": 409600,
+          "target_policy": "RandomGroundEnemyUnit",
+          "effect": {
+            "ImpaleFan": {
+              "parent": {
+                "buff_rawcode": 1110454612,
+                "map_version": {
+                  "major": 9,
+                  "minor": 27
+                },
+                "speed_per_tick": 64853,
+                "affects_invulnerable": false,
+                "duration_ticks": 1,
+                "hero_duration_ticks": 1,
+                "body_rawcode": 1852203634,
+                "count": 1,
+                "body_duration_ticks": 1
+              },
+              "cast_animation": "CastDeath",
+              "child": {
+                "ability": 1093681478,
+                "damage": 250,
+                "distance": 819200,
+                "radius": 204800,
+                "wave_ticks": 9,
+                "air_ticks": 3,
+                "stun_ticks": 105,
+                "hero_stun_ticks": 53,
+                "targets": 1
+              },
+              "relative_angles_millidegrees": [
+                -20000,
+                -10000,
+                0,
+                10000
+              ],
+              "cast_point_distance": 10240,
+              "dummy_lifetime_ticks": 60,
+              "dummy_rawcode": 2016423985,
+              "dummy_flying": false
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 20000,
+      "effect_ability_rawcode": "A0AF",
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/object-fields.tsv",
+        "script": "resolved/unit-spell-semantics.tsv",
+        "functions": [
+          "UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceCorruptedAbilities_cast_registerUnitSpellWithTargetOrder_RaceCorruptedAbilities",
+          "annihilatorSpell",
+          "dummyCastPointFrom",
+          "recycleSpellDummy",
+          "QG"
+        ],
+        "native_child_cooldown": "11",
+        "native_base": "ACmp",
+        "dummy_ability_removed_before_recycling": true
+      }
+    },
+    {
+      "kind": "native-target-debuff",
+      "source_kind": "ability-effect",
       "source_key": "A055",
       "profile": {
         "ability": 1093678389,

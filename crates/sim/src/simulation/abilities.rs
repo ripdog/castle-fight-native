@@ -352,6 +352,7 @@ impl Simulation {
                             | AbilityEffect::SirenPurge(_)
                             | AbilityEffect::TravellingManaClap(_)
                             | AbilityEffect::ParasiteAreaBuff(_)
+                            | AbilityEffect::ImpaleFan(_)
                     ))
                     && !self.ability_target_is_valid(
                         source,
@@ -384,7 +385,10 @@ impl Simulation {
                     let cast_ticks = units[index].action_timing.cast_ticks;
                     debug_assert!(cast_point_ticks <= cast_ticks);
                     units[index].status.begin_action_animation(
-                        ActionAnimationKind::Cast,
+                        match intent.ability.effect {
+                            AbilityEffect::ImpaleFan(p) => p.cast_animation,
+                            _ => ActionAnimationKind::Cast,
+                        },
                         self.next_tick,
                         cast_ticks,
                     );
@@ -584,7 +588,10 @@ impl Simulation {
             let mut emit_cast_visual = true;
             match intent.target {
                 AbilityIntentTarget::Unit { index, .. } => {
-                    if let AbilityEffect::ParasiteAreaBuff(p) = intent.ability.effect {
+                    if let AbilityEffect::ImpaleFan(p) = intent.ability.effect {
+                        metrics.effects += self.cast_impale_fan(source, index, p, units);
+                        emit_cast_visual = false;
+                    } else if let AbilityEffect::ParasiteAreaBuff(p) = intent.ability.effect {
                         metrics.effects += self.cast_parasite_area_buff(source, index, p, units);
                     } else if let AbilityEffect::TravellingManaClap(p) = intent.ability.effect {
                         self.cast_travelling_mana_clap(source, index, p, units);
@@ -1918,6 +1925,7 @@ impl Simulation {
                 let candidate = &units[unit_index];
                 if candidate.health <= 0 || candidate.classifications.locust
                     || (matches!(ability.effect, AbilityEffect::SirenPurge(p) if !super::native_summons::purge_primary_eligible(candidate, source.team, p, self.next_tick)))
+                    || (matches!(ability.effect, AbilityEffect::ImpaleFan(_)) && !super::impale::primary_eligible(candidate, source.team, self.next_tick))
                     || (matches!(ability.effect, AbilityEffect::ParasiteAreaBuff(p) if !super::parasite_area_buff::primary_eligible(candidate, source.team, p, self.next_tick)))
                     || (matches!(ability.effect, AbilityEffect::TravellingManaClap(p) if !super::travelling_mana_clap::primary_eligible(candidate, source.team, p, self.next_tick)))
                     || (matches!(ability.effect, AbilityEffect::ScriptedRoots(p) if !super::scripted_roots::primary_eligible(candidate, source.team, p, self.next_tick)))
@@ -2392,6 +2400,8 @@ impl Simulation {
                     && !target.classifications.locust
                     && target.health > 0
                     && !matches!(ability.effect, AbilityEffect::SirenPurge(p) if !super::native_summons::purge_primary_eligible(target, source.team, p, self.next_tick))
+                    && !(matches!(ability.effect, AbilityEffect::ImpaleFan(_))
+                        && !super::impale::primary_eligible(target, source.team, self.next_tick))
                     && !matches!(ability.effect, AbilityEffect::ParasiteAreaBuff(p) if !super::parasite_area_buff::primary_eligible(target, source.team, p, self.next_tick))
                     && !matches!(ability.effect, AbilityEffect::TravellingManaClap(p) if !super::travelling_mana_clap::primary_eligible(target, source.team, p, self.next_tick))
                     && !matches!(ability.effect, AbilityEffect::ScriptedRoots(p) if !super::scripted_roots::primary_eligible(target, source.team, p, self.next_tick))

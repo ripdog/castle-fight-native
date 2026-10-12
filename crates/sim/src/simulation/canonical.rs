@@ -460,6 +460,33 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(10);
                 hash.write_u64(id.0);
                 match action {
+                    NativeAction::ImpaleWave(state) => {
+                        hash.write_u8(26);
+                        hash.write_u64(state.source.0);
+                        hash.write_u8(state.team.0);
+                        for word in state.profile.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                        for p in [state.origin, state.destination] {
+                            hash.write_i32(p.x);
+                            hash.write_i32(p.y);
+                        }
+                        hash.write_u64(state.launch_tick);
+                        hash.write_i32(state.traveled);
+                        hash.write_u64(state.hit_targets.len() as u64);
+                        for id in &state.hit_targets {
+                            hash.write_u64(id.0);
+                        }
+                    }
+                    NativeAction::ImpaleLanding(state) => {
+                        hash.write_u8(27);
+                        hash.write_u64(state.source.0);
+                        hash.write_u64(state.target.0);
+                        hash.write_u64(state.due_tick);
+                        for word in state.profile.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                    }
                     NativeAction::TravellingManaClap(state) => {
                         hash.write_u8(22);
                         hash.write_u64(state.source.0);
@@ -2174,14 +2201,15 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     }
     hash.write_u8(u8::from(status.action_animation.is_some()));
     if let Some(action) = status.action_animation {
-        hash.write_u8(match action.kind {
-            ActionAnimationKind::Attack => 0,
-            ActionAnimationKind::Cast => 1,
-            ActionAnimationKind::CastSlam => 2,
-            ActionAnimationKind::CastThrow => 3,
-        });
+        hash.write_u8(action.kind.canonical_tag());
         hash.write_u64(action.started_tick);
         hash.write_u64(action.until_tick);
+    }
+    hash.write_u8(u8::from(status.impale.is_some()));
+    if let Some(p) = status.impale {
+        hash.write_u32(p.ability.0);
+        hash.write_u64(p.landed_tick);
+        hash.write_u64(p.expires_tick);
     }
     hash.write_u64(status.stunned_until_tick);
     hash.write_u64(status.native_stun_until_tick);
@@ -2936,6 +2964,9 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             for word in p.canonical_words() {
                 hash.write_u64(word);
             }
+        }
+        AbilityEffect::ImpaleFan(p) => {
+            p.visit_canonical_words(|word| hash.write_u64(word));
         }
         AbilityEffect::ParasiteAreaBuff(p) => {
             for word in p.canonical_words() {

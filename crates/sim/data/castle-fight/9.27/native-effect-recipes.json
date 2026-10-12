@@ -1,6 +1,11 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"ability-effect","source_key":"A0AB","unit_rawcode":"n027","kind":"native-target-debuff"},
+    {"source_kind":"unit-ability","source_key":"A0AC","unit_rawcode":"n027","kind":"orb-spell-proc"},
+    {"source_kind":"unit-ability","source_key":"A0AD","unit_rawcode":"n027","kind":"cleave"},
+    {"source_kind":"ability-effect","source_key":"A0AF","unit_rawcode":"n027","kind":"native-impale"},
+    {"source_kind":"unit-ability","source_key":"A0AE","unit_rawcode":"n027","kind":"impale-fan"},
     {"source_kind":"ability-effect","source_key":"A055","unit_rawcode":"n01H","kind":"native-target-debuff"},
     {"source_kind":"unit-ability","source_key":"A054","unit_rawcode":"n01H","kind":"orb-spell-proc"},
     {"source_kind":"unit-ability","source_key":"A067","unit_rawcode":"n01H","kind":"cleave"},

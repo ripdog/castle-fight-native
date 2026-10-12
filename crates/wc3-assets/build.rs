@@ -1094,7 +1094,7 @@ fn load_visual_assets(
             "Afrz" => &["freeze"],
             "Aoar" => &["regeneration"],
             "AOae" | "SCae" | "AHtc" | "ACpa" => &["movement"],
-            "Asta" | "AHtb" | "ACtb" => &["stun"],
+            "Asta" | "AHtb" | "ACtb" | "ACmp" | "AUim" => &["stun"],
             // Frost Armor applies one persistent shield buff and one reactive slow buff.
             "ACf2" => &["armor", "movement"],
             // Inner Fire, Prayer, and Devotion Aura use a persistent target buff model.

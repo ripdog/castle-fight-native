@@ -276,6 +276,12 @@ impl Simulation {
                 NativeAction::MasterProjectiles(state) => {
                     self.advance_master_projectiles(entity, state, units);
                 }
+                NativeAction::ImpaleWave(state) => {
+                    self.advance_impale_wave(entity, state, units);
+                }
+                NativeAction::ImpaleLanding(state) => {
+                    self.advance_impale_landing(entity, state, units);
+                }
                 NativeAction::ConeWave(state) => {
                     self.advance_cone_wave(entity, state, units);
                 }

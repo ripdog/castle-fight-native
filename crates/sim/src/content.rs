@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r136";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r137";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 78;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 79;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1028,12 +1028,6 @@ impl CastleFightUnitKind {
                 }
             }
             Self::HolyWarrior => {
-                effects.push(PassiveUnitEffect::Cleave(CleaveEffectProfile {
-                    ability: AbilityId(u32::from_be_bytes(*b"A0AD")),
-                    radius: world(225),
-                    damage_per_10k: 4_000,
-                    targets: AttackTargetMask::GROUND_UNITS,
-                }));
                 effects.push(PassiveUnitEffect::SpellResistance(
                     SpellResistanceEffectProfile {
                         ability: AbilityId(u32::from_be_bytes(*b"A0AH")),
@@ -1904,6 +1898,18 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::AbilityEffect, v) if v == u32::from_be_bytes(*b"A0AB") => {
+            0x4000_01ac
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0AC") => {
+            0x4000_01ab
+        }
+        (NativeEffectSourceKind::AbilityEffect, v) if v == u32::from_be_bytes(*b"A0AF") => {
+            0x4000_01aa
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0AE") => {
+            0x4000_01a9
+        }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A04M") => {
             0x4000_01a8
         }
@@ -3716,6 +3722,9 @@ fn hash_automatic_ability_profile(hash: &mut ContentHash64, ability: AutomaticAb
             for word in p.canonical_words() {
                 hash.write_u64(word);
             }
+        }
+        AbilityEffect::ImpaleFan(p) => {
+            p.visit_canonical_words(|word| hash.write_u64(word));
         }
         AbilityEffect::ParasiteAreaBuff(p) => {
             for word in p.canonical_words() {

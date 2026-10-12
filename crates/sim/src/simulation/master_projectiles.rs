@@ -24,7 +24,7 @@ fn normalize(p: SimPoint) -> SimPoint {
     )
 }
 /// Integer CORDIC: millidegree fan RNG never introduces platform floating point.
-fn rotate(p: SimPoint, angle: i32) -> SimPoint {
+pub(in crate::simulation) fn rotate(p: SimPoint, angle: i32) -> SimPoint {
     const ATAN: [i32; 20] = [
         45_000_000, 26_565_051, 14_036_243, 7_125_016, 3_576_334, 1_789_911, 895_174, 447_614,
         223_811, 111_906, 55_953, 27_976, 13_988, 6_994, 3_497, 1_749, 874, 437, 219, 109,

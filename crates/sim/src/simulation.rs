@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 94;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 95;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -34,6 +34,7 @@ mod support_orders;
 pub use death_healing::DeathHealVisualEvent;
 mod building_damage_procs;
 mod enchantments;
+mod impale;
 mod naga;
 mod native_building_auras;
 mod native_immolation;
@@ -3830,6 +3831,10 @@ impl Simulation {
         units.sort_unstable_by_key(|unit| unit.id);
         for unit in &mut units {
             self.project_building_spell_control(unit);
+            unit.classifications.invulnerable |= unit
+                .status
+                .impale
+                .is_some_and(|p| self.next_tick < p.landed_tick);
         }
         units
     }
@@ -4944,6 +4949,19 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         AbilityEffect::SirenPurge(p) => {
             assert!(p.child.range > 0 && p.child.duration_ticks > 0);
         }
+        AbilityEffect::ImpaleFan(p) => {
+            assert!(
+                p.child.wave_ticks > 0
+                    && p.child.distance > 0
+                    && p.child.radius >= 0
+                    && p.child.damage >= 0
+            );
+            assert!(p.dummy_lifetime_ticks >= p.child.wave_ticks && p.cast_point_distance > 0);
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::RandomGroundEnemyUnit
+            );
+        }
         AbilityEffect::NativeDebuff(p) => {
             assert!(p.duration_ticks > 0 && p.hero_duration_ticks > 0);
         }
@@ -5727,6 +5745,7 @@ fn unit_view_from_entity(
                 .copied()
                 .unwrap_or_default();
             flags.invisible |= status.wind_walk_invisible(current_tick);
+            flags.invulnerable |= status.impale.is_some_and(|p| current_tick < p.landed_tick);
             flags
         },
         health: entity.get::<Health>()?.current,

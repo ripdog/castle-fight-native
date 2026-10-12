@@ -26,6 +26,9 @@ mod parasite_area_buff;
 pub use parasite_area_buff::ParasiteAreaBuffProfile;
 pub use travelling_mana_clap::TravellingManaClapProfile;
 pub(crate) use travelling_mana_clap::TravellingManaClapState;
+mod impale;
+pub use impale::{ImpaleFanProfile, ImpaleProfile, ImpaleStatus};
+pub(crate) use impale::{ImpaleLandingState, ImpaleWaveState};
 mod native_debuff;
 pub use native_debuff::{EtherealEffectProfile, NativeDebuffProfile};
 mod native_actions;
@@ -147,13 +150,26 @@ pub struct ActionTimingProfile {
     pub cast_point_ticks: u16,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ActionAnimationKind {
     Attack,
     Cast,
     CastSlam,
     CastThrow,
+    CastDeath,
 }
+impl ActionAnimationKind {
+    pub(crate) const fn canonical_tag(self) -> u8 {
+        match self {
+            Self::Attack => 0,
+            Self::Cast => 1,
+            Self::CastSlam => 2,
+            Self::CastThrow => 3,
+            Self::CastDeath => 4,
+        }
+    }
+}
+
 impl ActionAnimationKind {
     #[must_use]
     pub const fn is_cast(self) -> bool {
@@ -1682,6 +1698,7 @@ pub enum AreaDamageOrigin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AbilityEffect {
+    ImpaleFan(ImpaleFanProfile),
     NativeDebuff(NativeDebuffProfile),
     Wilderness(crate::building_mechanics::WildernessProfile),
     SilverGlade(crate::building_mechanics::SilverGladeProfile),
@@ -1909,6 +1926,7 @@ impl AbilityEffect {
             Self::MasterProjectiles(_) => 35,
             Self::FrostNova { .. } => 17,
             Self::Snowfall { .. } => 18,
+            Self::ImpaleFan(_) => 59,
             Self::NativeDebuff(_) => 56,
             Self::BuildingEraser(_) => 58,
             Self::BuildingMagicRuin(_) => 57,
@@ -2108,6 +2126,7 @@ pub struct StatusState {
     pub poison: Option<PoisonStatus>,
     pub damage_threshold: DamageThresholdState,
     pub ensnare: Option<EnsnareState>,
+    pub impale: Option<ImpaleStatus>,
     pub action_animation: Option<ActionAnimationState>,
     pub pending_attack: Option<PendingAttackState>,
     pub pending_cast: Option<PendingCastState>,

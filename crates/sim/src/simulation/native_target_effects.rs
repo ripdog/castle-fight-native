@@ -21,6 +21,7 @@ mod ensnare;
 mod heal;
 mod homing_splash;
 mod immolation;
+mod impale;
 mod kill_berserk;
 mod lava_spawn;
 mod life_steal;

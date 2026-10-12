@@ -858,6 +858,7 @@ enum ImportedUnitAnimationState {
     Cast,
     CastSlam,
     CastThrow,
+    CastDeath,
     Death,
     DecayFlesh,
     DecayBone,
@@ -2223,7 +2224,9 @@ fn unit_animation_sequence_name(
         ImportedUnitAnimationState::CastThrow => {
             names.cast_throw.as_deref().or(names.cast.as_deref())
         }
-        ImportedUnitAnimationState::Death => names.death.as_deref(),
+        ImportedUnitAnimationState::CastDeath | ImportedUnitAnimationState::Death => {
+            names.death.as_deref()
+        }
         ImportedUnitAnimationState::DecayFlesh => names
             .decay_flesh
             .as_deref()
@@ -2484,6 +2487,9 @@ fn update_live_imported_unit_animation(
                     controller.attack
                 },
             ),
+            ActionAnimationKind::CastDeath => {
+                (ImportedUnitAnimationState::CastDeath, controller.death)
+            }
             ActionAnimationKind::Cast => (ImportedUnitAnimationState::Cast, controller.cast),
             ActionAnimationKind::CastSlam => (
                 ImportedUnitAnimationState::CastSlam,
@@ -2541,6 +2547,7 @@ fn update_live_imported_unit_animation(
         | ImportedUnitAnimationState::Cast
         | ImportedUnitAnimationState::CastSlam
         | ImportedUnitAnimationState::CastThrow
+        | ImportedUnitAnimationState::CastDeath
         | ImportedUnitAnimationState::Death
         | ImportedUnitAnimationState::DecayFlesh
         | ImportedUnitAnimationState::DecayBone => {
@@ -2554,6 +2561,7 @@ fn update_live_imported_unit_animation(
                 | ImportedUnitAnimationState::Cast
                 | ImportedUnitAnimationState::CastSlam
                 | ImportedUnitAnimationState::CastThrow
+                | ImportedUnitAnimationState::CastDeath
         ) {
             player.stop_all();
             Duration::ZERO
@@ -3503,6 +3511,9 @@ fn prewarm_timed_wc3_effects(
                         AbilityEffect::NagaEarthquake(p) => Some((p.child.0, p.duration_ticks)),
                         AbilityEffect::NagaCharm(p) => Some((p.child.0, 0)),
                         AbilityEffect::NagaTidalWave(_) => None,
+                        AbilityEffect::ImpaleFan(p) => {
+                            Some((p.child.ability.0, p.child.stun_ticks))
+                        }
                         AbilityEffect::NativeDebuff(p) => Some((p.ability.0, p.duration_ticks)),
                         AbilityEffect::Curse(p) => Some((p.ability.0, p.duration_ticks)),
                         AbilityEffect::ParasiteAreaBuff(p) => Some((p.ability.0, p.duration_ticks)),
@@ -8114,6 +8125,10 @@ mod tests {
             node: AnimationNodeIndex::new(2),
             duration_seconds: 3.0,
         };
+        let cast_death = UnitAnimationClip {
+            node: AnimationNodeIndex::new(4),
+            duration_seconds: 4.0,
+        };
         let walk = AnimationNodeIndex::new(3);
         let mut controller = ImportedUnitAnimationController {
             sim_id: id,
@@ -8131,7 +8146,7 @@ mod tests {
             cast: Some(cast),
             cast_slam: None,
             cast_throw: None,
-            death: None,
+            death: Some(cast_death),
             decay_flesh: None,
             decay_bone: None,
             state: ImportedUnitAnimationState::Stand,
@@ -8147,6 +8162,7 @@ mod tests {
         for (kind, clip) in [
             (ActionAnimationKind::Attack, attack),
             (ActionAnimationKind::Cast, cast),
+            (ActionAnimationKind::CastDeath, cast_death),
         ] {
             let mut current = samples.current.units[&id];
             current.status.action_animation = Some(ActionAnimationState {

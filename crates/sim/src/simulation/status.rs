@@ -56,7 +56,13 @@ pub(super) fn apply_ability_effect_to_unit(
     completed_tick: u64,
     damage_rules: DamageRules,
 ) -> bool {
-    if target.health <= 0 || target.classifications.locust {
+    if target.health <= 0
+        || target.classifications.locust
+        || target
+            .status
+            .impale
+            .is_some_and(|p| completed_tick < p.landed_tick)
+    {
         return false;
     }
     match effect {
@@ -111,7 +117,8 @@ pub(super) fn apply_ability_effect_to_unit(
                 target.status.pending_attack = None;
             }
         }
-        AbilityEffect::NagaTidalWave(_)
+        AbilityEffect::ImpaleFan(_)
+        | AbilityEffect::NagaTidalWave(_)
         | AbilityEffect::NagaCharm(_)
         | AbilityEffect::NagaEarthquake(_)
         | AbilityEffect::SilverGlade(_)
@@ -547,6 +554,9 @@ pub(super) fn apply_ability_effect_to_unit(
 
 pub(super) fn purge_expired_status_modifiers(status: &mut StatusState, tick: u64) {
     super::native_summons::advance_purge(status, tick);
+    if status.impale.is_some_and(|p| tick >= p.expires_tick) {
+        status.impale = None;
+    }
     if status
         .acid_bomb
         .is_some_and(|acid| tick >= acid.expires_tick)
