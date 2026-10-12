@@ -4,6 +4,48 @@
   "effects": [
     {
       "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A01G",
+      "unit_rawcode": "n008",
+      "spellcasting": {
+        "mana": {
+          "maximum": 150,
+          "starting": 90,
+          "regen_per_tick_per_10k": 2147498648
+        },
+        "ability": {
+          "id": 1093677383,
+          "mana_cost": 20,
+          "cooldown_ticks": 195,
+          "range": 819200,
+          "target_policy": "NearestEnemyInCombat",
+          "effect": {
+            "Curse": {
+              "ability": 1093677383,
+              "buff": {
+                "rawcode": 1113813619,
+                "positive": false,
+                "stealable": true,
+                "organic_only": false
+              },
+              "chance_to_miss_per_10k": 3500,
+              "targets": 3,
+              "duration_ticks": 1350,
+              "hero_duration_ticks": 338
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 15000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
       "source_kind": "ability-effect",
       "source_key": "A03R",
       "unit_rawcode": "n00Z",

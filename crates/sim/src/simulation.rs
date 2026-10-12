@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 85;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 86;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -2975,6 +2975,7 @@ impl Simulation {
                 apply_timed_armor_modifier(
                     &mut target.status,
                     TimedArmorModifier {
+                        attack_miss_chance_per_10k: 0,
                         melee_damage_return_per_10k: profile.melee_damage_return_per_10k,
                         undispellable: false,
                         aura_membership: true,
@@ -4900,6 +4901,13 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
         AbilityEffect::SirenPurge(p) => {
             assert!(p.child.range > 0 && p.child.duration_ticks > 0);
+        }
+        AbilityEffect::Curse(p) => {
+            assert!(p.chance_to_miss_per_10k <= 10_000 && p.duration_ticks > 0);
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::NearestEnemyInCombat
+            );
         }
         AbilityEffect::ParasiteAreaBuff(p) => {
             assert!(p.radius >= 0 && p.duration_ticks > 0);

@@ -176,6 +176,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     if kind in {"siren-purge", "feral-spirit"}:
         from project_naga_unit import project
         return project(recipe, fields, unit, protected, mechanics)
+    if kind == "native-curse":
+        from project_curse import project
+        return project(recipe, fields, unit, protected, mechanics)
     if kind == "parasite-area-buff":
         from project_parasite_area_buff import project
         return project(recipe, fields, unit, protected, mechanics)
@@ -784,7 +787,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             if unit is None or recipe["source_key"] not in unit["abilities"].split(","):
                 raise ValueError(f"recipe {key} is not in its source unit's extracted ability inventory")
         source = recipe["source_key"]
-        if recipe["kind"] in {"inner-fire", "spell-steal"} and default_autocast.get(recipe.get("unit_rawcode")) != source:
+        if recipe["kind"] in {"inner-fire", "spell-steal", "native-curse"} and default_autocast.get(recipe.get("unit_rawcode")) != source:
             raise ValueError("native buff source must retain default-active autocast")
         spell = spell_mechanics.get("A02U" if recipe["kind"] == "siren-purge" else source)
         if recipe['kind'] in {'travelling-mana-clap', 'parasite-area-buff'}:

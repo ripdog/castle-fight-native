@@ -344,6 +344,7 @@ impl Simulation {
                     || matches!(
                         intent.ability.effect,
                         AbilityEffect::StatBuff { .. }
+                            | AbilityEffect::Curse(_)
                             | AbilityEffect::SpellSteal { .. }
                             | AbilityEffect::Ensnare { .. }
                             | AbilityEffect::ScriptedRoots(_)
@@ -1622,7 +1623,13 @@ impl Simulation {
                 &mut candidate_checks,
             ),
             AbilityTargetPolicy::NearestEnemyInCombat => self
-                .nearest_enemy_in_combat(source, spellcasting.ability, units, &mut candidate_checks)
+                .nearest_enemy_in_combat(
+                    source,
+                    spellcasting.ability,
+                    units,
+                    buildings,
+                    &mut candidate_checks,
+                )
                 .map(|index| AbilityIntentTarget::Unit {
                     index,
                     id: units[index].id,
@@ -1852,7 +1859,7 @@ impl Simulation {
                         && candidate.target_movement_class() != MovementClass::Ground)
                     || self.ability_source_distance_sq(source.origin, candidate.position) > range_sq
                     || (ability.target_policy == AbilityTargetPolicy::RandomEnemyDebuff
-                        && !self.faerie_fire_target_is_valid(source, ability, candidate, units))
+                        && !self.enemy_debuff_target_is_valid(source, ability, candidate, units, &[]))
                 {
                     return;
                 }
@@ -2067,30 +2074,59 @@ impl Simulation {
                 && candidate.retaliation.attacker.is_some()
     }
 
-    fn faerie_fire_target_is_valid(
+    fn enemy_debuff_target_is_valid(
         &self,
         source: AbilitySourceSnapshot,
         ability: AutomaticAbilityProfile,
         target: &UnitSnapshot,
         units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
     ) -> bool {
-        let AbilityEffect::FaerieFire { modifier, .. } = ability.effect else {
-            return false;
+        let (modifier, organic_only, family) = match ability.effect {
+            AbilityEffect::FaerieFire { modifier, .. } => (modifier, true, None),
+            AbilityEffect::Curse(p) => (ModifierId(p.ability.0), p.buff.organic_only, Some(p.buff)),
+            _ => return false,
         };
         target.health > 0
             && target.team != source.team
             && !target.classifications.locust
-            && !target.mechanical
+            && !(organic_only && target.mechanical)
+            && !target.classifications.invulnerable
             && (ability.target_policy == AbilityTargetPolicy::RandomEnemyDebuff
                 || target.visible_to(source.team, self.next_tick))
             && !target.classifications.spell_immune
             && self.ability_source_distance_sq(source.origin, target.position)
                 <= square_i32(ability.range)
             && (ability.target_policy == AbilityTargetPolicy::RandomEnemyDebuff
-                || (target.attack.damage > 0 && self.enemy_is_in_combat(target, units)))
+                || (target.attack.damage > 0
+                    && (self.enemy_is_in_combat(target, units)
+                        || (matches!(ability.effect, AbilityEffect::Curse(_))
+                            && target
+                                .target
+                                .and_then(|id| find_building_index(buildings, id))
+                                .is_some_and(|index| {
+                                    let building = &buildings[index];
+                                    building.health > 0
+                                        && building.team != target.team
+                                        && target.attack_for_building().is_some_and(
+                                            |(attack, _, _)| {
+                                                point_to_footprint_distance_sq(
+                                                    target.position,
+                                                    building.footprint,
+                                                    self.config.navigation_cell_size,
+                                                ) <= square_i32(attack.range)
+                                            },
+                                        )
+                                })))))
             && !target.status.armor_modifiers[..usize::from(target.status.armor_modifier_count)]
                 .iter()
-                .any(|active| active.id == modifier && self.next_tick < active.expires_tick)
+                .any(|active| {
+                    (active.id == modifier
+                        || family
+                            .zip(active.native_buff)
+                            .is_some_and(|(a, b)| a.rawcode == b.rawcode))
+                        && self.next_tick < active.expires_tick
+                })
     }
 
     fn nearest_enemy_in_combat(
@@ -2098,6 +2134,7 @@ impl Simulation {
         source: AbilitySourceSnapshot,
         ability: AutomaticAbilityProfile,
         units: &[UnitSnapshot],
+        buildings: &[BuildingSnapshot],
         candidate_checks: &mut usize,
     ) -> Option<usize> {
         units
@@ -2105,7 +2142,7 @@ impl Simulation {
             .enumerate()
             .filter_map(|(index, candidate)| {
                 *candidate_checks += 1;
-                self.faerie_fire_target_is_valid(source, ability, candidate, units)
+                self.enemy_debuff_target_is_valid(source, ability, candidate, units, buildings)
                     .then_some((
                         self.ability_source_distance_sq(source.origin, candidate.position),
                         candidate.id,
@@ -2331,9 +2368,10 @@ impl Simulation {
                                     <= square_i32(ability.range)
                         }
                         AbilityTargetPolicy::NearestEnemyInCombat
-                        | AbilityTargetPolicy::RandomEnemyDebuff => {
-                            self.faerie_fire_target_is_valid(source, ability, target, units)
-                        }
+                        | AbilityTargetPolicy::RandomEnemyDebuff => self
+                            .enemy_debuff_target_is_valid(
+                                source, ability, target, units, buildings,
+                            ),
                         AbilityTargetPolicy::RandomEnemyUnitGlobal => {
                             target.team != source.team
                                 && match ability.effect {

@@ -139,6 +139,7 @@ fn native_buff_family_revalidates_competing_casters_and_replaces_the_whole_bundl
     apply_timed_armor_modifier(
         &mut status,
         TimedArmorModifier {
+            attack_miss_chance_per_10k: 0,
             melee_damage_return_per_10k: 0,
             undispellable: false,
             aura_membership: false,

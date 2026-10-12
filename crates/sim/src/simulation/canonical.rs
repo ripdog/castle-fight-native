@@ -2224,6 +2224,7 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         } else {
             hash.write_u8(0);
         }
+        hash.write_u16(modifier.attack_miss_chance_per_10k);
         hash.write_u32(modifier.melee_damage_return_per_10k);
         hash.write_i32(i32::from(modifier.armor_bonus_per_100));
         hash.write_u64(u64::from(modifier.regeneration_per_second_per_10k));
@@ -2852,6 +2853,11 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             }
         }
         AbilityEffect::SirenPurge(p) => p.visit_canonical_words(|word| hash.write_u64(word)),
+        AbilityEffect::Curse(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         AbilityEffect::ParasiteAreaBuff(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);

@@ -825,9 +825,8 @@ mod tests {
                 continue;
             }
             let kind = match &row[column("base_rawcode")] {
-                "AIcb" | "ACff" | "Afae" | "AIar" | "AHad" | "ACav" | "AEah" | "ANpi" | "ACpi" => {
-                    "armor"
-                }
+                "AIcb" | "ACff" | "Afae" | "AIar" | "AHad" | "ACav" | "AEah" | "ANpi" | "ACpi"
+                | "ACro" | "Acrs" => "armor",
                 "Apxf" | "Aven" | "ACvs" | "Abof" | "ANab" => "damage_over_time",
                 "Afrz" => "freeze",
                 "Aoar" => "regeneration",

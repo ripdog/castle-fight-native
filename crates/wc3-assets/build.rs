@@ -1056,7 +1056,7 @@ fn load_visual_assets(
             "ACf2" => &["armor", "movement"],
             // Inner Fire, Prayer, and Devotion Aura use a persistent target buff model.
             "Ainf" | "AIrr" | "AHad" | "ACav" | "AIdb" | "AIar" | "ACff" | "Afae" | "AEah"
-            | "ANpi" | "ACpi" => &["armor"],
+            | "ANpi" | "ACpi" | "ACro" | "Acrs" => &["armor"],
             // Persistent native fire/carrier buffs use their authoritative DOT entry.
             "Apxf" => &["damage_over_time"],
             // Native poison can author separate poison/slow buffs or one combined override.

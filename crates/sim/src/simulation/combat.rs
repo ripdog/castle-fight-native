@@ -342,6 +342,7 @@ impl Simulation {
                 });
             }
             let missed = self.uphill_attack_misses(&intent, target_position, completed_tick, units)
+                || self.cursed_attack_misses(&intent, units, completed_tick)
                 || self.attack_is_evaded(&intent, units, completed_tick);
             let mut critical = false;
             if !missed {
@@ -815,6 +816,34 @@ impl Simulation {
             intent.attack_sequence,
         ) % u64::from(UPHILL_MISS_CHANCE_SCALE)
             < u64::from(chance)
+    }
+
+    fn cursed_attack_misses(
+        &self,
+        intent: &AttackIntent,
+        units: &[UnitSnapshot],
+        tick: u64,
+    ) -> bool {
+        let AttackSourceIndex::Unit(index) = intent.source else {
+            return false;
+        };
+        let source = &units[index];
+        let Some(modifier) = source.status.armor_modifiers
+            [..usize::from(source.status.armor_modifier_count)]
+            .iter()
+            .filter(|m| tick < m.expires_tick && m.attack_miss_chance_per_10k > 0)
+            .max_by_key(|m| (m.attack_miss_chance_per_10k, std::cmp::Reverse(m.id)))
+        else {
+            return false;
+        };
+        deterministic_random(
+            self.config.match_seed,
+            tick,
+            source.id,
+            RANDOM_PURPOSE_ATTACK_PROC ^ 0x4355_5253_4500_0000 ^ u64::from(modifier.id.0),
+            intent.attack_sequence,
+        ) % u64::from(ATTACK_PROC_CHANCE_SCALE)
+            < u64::from(modifier.attack_miss_chance_per_10k)
     }
 
     pub(super) fn attack_is_evaded(

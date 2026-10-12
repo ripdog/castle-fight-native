@@ -20,6 +20,8 @@ pub(crate) use native_summons::NativeParasiteState;
 pub use native_summons::{
     NativeParasiteProfile, NativeSummonProfile, PurgeProfile, PurgeState, SirenPurgeProfile,
 };
+mod curse;
+pub use curse::CurseProfile;
 mod parasite_area_buff;
 pub use parasite_area_buff::ParasiteAreaBuffProfile;
 pub use travelling_mana_clap::TravellingManaClapProfile;
@@ -1820,6 +1822,7 @@ pub enum AbilityEffect {
     SirenPurge(SirenPurgeProfile),
     TravellingManaClap(TravellingManaClapProfile),
     ParasiteAreaBuff(ParasiteAreaBuffProfile),
+    Curse(CurseProfile),
     ManaBurnVisual,
     NativeSummon(NativeSummonProfile),
     NagaEarthquake(crate::building_mechanics::NagaEarthquakeProfile),
@@ -1837,6 +1840,7 @@ impl AbilityEffect {
     #[must_use]
     pub const fn stable_tag(self) -> u8 {
         match self {
+            Self::Curse(_) => 53,
             Self::ParasiteAreaBuff(_) => 52,
             Self::TravellingManaClap(_) => 50,
             Self::ManaBurnVisual => 51,
@@ -1945,6 +1949,7 @@ pub struct TimedAttackSpeedModifier {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimedArmorModifier {
+    pub attack_miss_chance_per_10k: u16,
     pub melee_damage_return_per_10k: u32,
     pub undispellable: bool,
     /// Last completed tick’s intrinsic aura membership, visible until the next resample.

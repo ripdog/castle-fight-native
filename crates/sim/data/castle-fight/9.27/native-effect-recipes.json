@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A01G","unit_rawcode":"n008","kind":"native-curse"},
     {"source_kind":"ability-effect","source_key":"A03R","unit_rawcode":"n00Z","kind":"parasite-area-buff"},
     {"source_kind":"unit-ability","source_key":"A03S","unit_rawcode":"n00Z","kind":"parasite-area-buff"},
     {"source_kind":"unit-ability","source_key":"A05Z","unit_rawcode":"n00Z","kind":"cleave"},

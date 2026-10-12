@@ -14,6 +14,7 @@ mod burning_oil;
 mod cone_wave;
 mod contact;
 mod corruption;
+mod curse;
 mod damage_charge;
 mod damage_threshold;
 mod ensnare;

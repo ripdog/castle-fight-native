@@ -21,6 +21,7 @@ fn buff(positive: bool) -> TimedArmorModifier {
     TimedArmorModifier {
         undispellable: false,
         aura_membership: false,
+        attack_miss_chance_per_10k: if positive { 0 } else { 1700 },
         id: ModifierId(82),
         native_buff: Some(NativeBuffIdentity {
             rawcode: 83,

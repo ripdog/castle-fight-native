@@ -40,7 +40,7 @@ pub use components::{
     AutomaticAbilityProfile, BashEffectProfile, BuilderConfiguration, BuilderLocomotion,
     BuilderProfile, BuilderSpawn, BuildingFootprint, BuildingGameplayProperties, BuildingSpawn,
     BurningOilEffectProfile, ChainLightningEffectProfile, CollisionRadius, ConeWaveProfile,
-    ContentIdentity, CorpseDefinitionId, CorpseProfile, CriticalStrikeEffectProfile,
+    ContentIdentity, CorpseDefinitionId, CorpseProfile, CriticalStrikeEffectProfile, CurseProfile,
     DamageChargeProfile, DamageChargeState, DamageRetaliationProfile, DamageThreshold,
     DamageThresholdProfile, DamageThresholdState, DefendEffectProfile, EnsnareProfile,
     EnsnareState, EntanglingRootsEffectProfile, EvasionEffectProfile, FeedbackEffectProfile,

@@ -81,6 +81,30 @@ pub(super) fn apply_ability_effect_to_unit(
                 .saturating_add(p.amount)
                 .min(target.health_max);
         }
+        AbilityEffect::Curse(p) => {
+            if target.team == source_team
+                || target.classifications.invulnerable
+                || target.classifications.spell_immune
+                || !p.targets.can_target_unit(target.target_movement_class())
+            {
+                return false;
+            }
+            let duration = if target.classifications.uses_hero_spell_rules() {
+                p.hero_duration_ticks
+            } else {
+                p.duration_ticks
+            };
+            apply_timed_armor_modifier(
+                &mut target.status,
+                TimedArmorModifier {
+                    attack_miss_chance_per_10k: p.chance_to_miss_per_10k,
+                    id: ModifierId(p.ability.0),
+                    native_buff: Some(p.buff),
+                    expires_tick: completed_tick + u64::from(duration),
+                    ..TimedArmorModifier::default()
+                },
+            );
+        }
         AbilityEffect::StatBuff {
             modifier,
             buff,
@@ -314,6 +338,7 @@ pub(super) fn apply_ability_effect_to_unit(
             apply_timed_armor_modifier(
                 &mut target.status,
                 TimedArmorModifier {
+                    attack_miss_chance_per_10k: 0,
                     melee_damage_return_per_10k: 0,
                     undispellable: false,
                     aura_membership: false,
@@ -370,6 +395,7 @@ pub(super) fn apply_ability_effect_to_unit(
             apply_timed_armor_modifier(
                 &mut target.status,
                 TimedArmorModifier {
+                    attack_miss_chance_per_10k: 0,
                     melee_damage_return_per_10k: 0,
                     undispellable: false,
                     aura_membership: false,
@@ -411,6 +437,7 @@ pub(super) fn apply_ability_effect_to_unit(
             apply_timed_armor_modifier(
                 &mut target.status,
                 TimedArmorModifier {
+                    attack_miss_chance_per_10k: 0,
                     melee_damage_return_per_10k: 0,
                     undispellable: false,
                     aura_membership: false,

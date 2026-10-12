@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    Succubus = 0x1000_0061 => b"n008",
     ChaosChampion = 0x1000_0060 => b"n00Z",
     ChaosWarrior = 0x1000_005f => b"n009",
     TwinSmiley = 0x1000_005e => b"n02L",
@@ -132,6 +133,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    AltarOfGreed = 0x2000_0061 => b"h01C",
     GreaterChaosCitadel = 0x2000_0060 => b"h03G",
     ChaosCitadel = 0x2000_005f => b"h01D",
     Serenity = 0x2000_005c => b"h06O",
