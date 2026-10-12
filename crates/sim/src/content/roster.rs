@@ -241,6 +241,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    EraserLevelThree = 0x2100_002e => b"h01X",
     EraserLevelTwo = 0x2100_002d => b"h01W",
     Eraser = 0x2100_002c => b"h01M",
     MagicRuin = 0x2100_002b => b"h05I",
