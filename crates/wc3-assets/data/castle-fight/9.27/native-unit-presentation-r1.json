@@ -6,7 +6,10 @@
     "path": "resolved/object-fields.tsv",
     "script": "script/war3map.lua",
     "vertex_handler": "onUnitEnteredMap",
-    "vertex_predicate_ability": "A0E5"
+    "vertex_predicate_ability": "A0E5",
+    "vertex_type_overrides": [
+      "n01B"
+    ]
   },
   "units": [
     {
@@ -548,6 +551,12 @@
             "hand,left"
           ]
         }
+      ],
+      "vertex_rgba": [
+        82,
+        0,
+        135,
+        102
       ]
     },
     {

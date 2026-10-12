@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A051","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A053","implementation":"warcraft-sphere-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A069","implementation":"warcraft-mana-attack-orb-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A04Z","implementation":"warcraft-mana-attack-orb-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A058","implementation":"warcraft-sphere-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A05G","implementation":"warcraft-hostile-armor-aura-v1","valid_from":"9.27","valid_through":"9.27"},

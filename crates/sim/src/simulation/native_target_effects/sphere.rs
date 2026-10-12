@@ -85,3 +85,36 @@ fn native_sphere_cycles_independent_slots_on_attack_and_spell_without_target_pay
     assert_eq!(state.hidden_until, [6, 4, 5]);
     assert!(sim.projectiles().is_empty());
 }
+
+#[test]
+fn zero_speed_native_sphere_preserves_attachment_recovery_without_inventing_a_flight() {
+    let mut sim = simulation(1);
+    let source = sim.spawn_unit_with_properties(
+        unit(0, 20, 7, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Sphere(SphereProfile {
+                ability: AbilityId(107),
+                attachment_count: 2,
+                cooldown_ticks: 3,
+                speed_per_tick: 0,
+            })),
+            ..Default::default()
+        },
+    );
+    let target = sim.spawn_unit(unit(1, 50, 0, AttackDelivery::Melee));
+    sim.step();
+    sim.step();
+    assert_eq!(sim.unit(target).unwrap().health, 993);
+    assert_eq!(
+        sim.unit(source).unwrap().status.spheres[0]
+            .unwrap()
+            .hidden_until,
+        [4, 0, 0]
+    );
+    assert!(sim.projectiles().is_empty());
+    let mut other = wire_restored(&sim, 4);
+    for _ in 0..3 {
+        assert_eq!(sim.step().checksum, other.step().checksum);
+    }
+    assert_eq!(sim.next_id, target.0 + 1);
+}

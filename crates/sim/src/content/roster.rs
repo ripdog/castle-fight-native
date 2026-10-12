@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    ShadowDrake = 0x1000_0072 => b"n01B",
     NetherDrake = 0x1000_0071 => b"n01D",
     VoidKeeper = 0x1000_0070 => b"n01A",
     VoidWalker = 0x1000_006f => b"n019",
@@ -149,6 +150,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    ShadowAncient = 0x2000_0072 => b"h04M",
     NetherAncient = 0x2000_0071 => b"h04O",
     PortalOfTheAbyss = 0x2000_0070 => b"h04N",
     VoidPortal = 0x2000_006f => b"h04L",

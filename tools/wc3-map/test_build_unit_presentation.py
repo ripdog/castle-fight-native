@@ -11,3 +11,15 @@ class UnitPresentationTest(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class EntryTypeColorTests(unittest.TestCase):
+    def script(self, target='actor', predicate='kind'):
+        code=int.from_bytes(b'TEST','big')
+        return f'function onUnitEnteredMap()actor=GetTriggerUnit()kind=unit_getTypeId(actor)if({predicate}=={code})then __wurst_safe_SetUnitVertexColor({target},11,22,33,44)end end function next()end'
+    def test_direct_type_override_retains_native_rgba_without_copying_source_values(self):
+        self.assertEqual(projection.entry_type_colors(self.script()), {'TEST':[11,22,33,44]})
+    def test_foreign_actor_and_predicate_fail_closed(self):
+        for target,predicate in [('other','kind'),('actor','other')]:
+            with self.subTest(target=target,predicate=predicate),self.assertRaises(ValueError):
+                projection.entry_type_colors(self.script(target,predicate))

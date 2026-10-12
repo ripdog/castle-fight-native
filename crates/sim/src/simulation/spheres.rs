@@ -75,6 +75,11 @@ impl Simulation {
                     state.hidden_until[usize::from(state.next_slot)] =
                         self.next_tick + u64::from(profile.cooldown_ticks);
                     state.next_slot = (state.next_slot + 1) % profile.attachment_count;
+                    // A native zero-speed Sphere has no travelling missile. Its own
+                    // attachment recovery still follows the authored cooldown.
+                    if profile.speed_per_tick == 0 {
+                        continue;
+                    }
                     let Some(destination) = destination else {
                         continue;
                     };

@@ -1883,7 +1883,7 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             PassiveUnitEffect::PermanentImmolation(*profile)
         }
         TuningEffect::Sphere { profile, .. } => {
-            assert!((1..=3).contains(&profile.attachment_count) && profile.speed_per_tick > 0);
+            assert!((1..=3).contains(&profile.attachment_count) && profile.speed_per_tick >= 0);
             PassiveUnitEffect::Sphere(*profile)
         }
         TuningEffect::SpeedAura { profile, .. } => {
