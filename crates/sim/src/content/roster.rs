@@ -241,6 +241,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    Eraser = 0x2100_002c => b"h01M",
     MagicRuin = 0x2100_002b => b"h05I",
     Volcano = 0x2100_002a => b"h01F",
     ShrineOfDestruction = 0x2100_0029 => b"h01E",

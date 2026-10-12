@@ -7,6 +7,9 @@ use crate::{
     math::SUBUNITS_PER_WORLD_UNIT,
     version::MapVersion,
 };
+mod eraser;
+pub use eraser::{BuildingEraserProfile, eraser_target_attachment_for_version};
+pub(crate) use eraser::{eraser_binding, eraser_source, eraser_spellcasting_for_version};
 mod magic_ruin;
 pub use magic_ruin::{BuildingMagicRuinProfile, magic_ruin_target_attachment_for_version};
 pub(crate) use magic_ruin::{

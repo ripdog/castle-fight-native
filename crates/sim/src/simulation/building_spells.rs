@@ -135,6 +135,9 @@ pub(super) fn native_building_trigger(
             p.trigger_invulnerable,
             p.trigger_spell_immune,
         )),
+        AbilityEffect::BuildingEraser(p) => {
+            Some((p.trigger_targets, p.parent.affects_invulnerable, false))
+        }
         AbilityEffect::BuildingMagicRuin(p) => {
             Some((p.trigger_targets, p.parent.affects_invulnerable, false))
         }
@@ -170,6 +173,7 @@ pub(super) fn native_building_trigger_unit_type(
     mechanical: bool,
 ) -> bool {
     match ability.effect {
+        AbilityEffect::BuildingEraser(p) => !p.trigger_mechanical_only || mechanical,
         AbilityEffect::BuildingMagicRuin(p) => !p.trigger_mechanical_only || mechanical,
         AbilityEffect::BuildingFlameStrike(p) => !p.trigger_mechanical_only || mechanical,
         AbilityEffect::BuildingAttackProxy(p) => !p.trigger_mechanical_only || mechanical,
@@ -182,6 +186,52 @@ pub(super) fn native_building_trigger_unit_type(
     }
 }
 impl Simulation {
+    pub(super) fn has_negative_building_protection(&self, target: SimId) -> bool {
+        self.world.iter_entities().any(|e| {
+            e.get::<BuildingSpellTargetState>()
+                .is_some_and(|state| state.target == target && state.anti_negative)
+        })
+    }
+
+    /// Eraser calls Od/nd, which removes a strong shield without Vd's full heal.
+    pub(super) fn erase_strong_building_shield(
+        &mut self,
+        target: &mut UnitSnapshot,
+        version: MapVersion,
+        minimum: u8,
+    ) -> bool {
+        let Some(entity) = self.world.iter_entities().find_map(|e| {
+            e.get::<BuildingSpellTargetState>()
+                .filter(|state| state.target == target.id && state.shield_level >= minimum)
+                .map(|_| e.id())
+        }) else {
+            return false;
+        };
+        {
+            let mut state = self
+                .world
+                .get_mut::<BuildingSpellTargetState>(entity)
+                .unwrap();
+            assert_eq!(state.version, version);
+            state.shield_level = 0;
+            state.shield_expires_tick = None;
+        }
+        for kind in [
+            BuildingSpellVisualKind::ShieldConsumed,
+            BuildingSpellVisualKind::ShieldBlocked,
+        ] {
+            self.last_building_spell_visuals
+                .push(BuildingSpellVisualEvent {
+                    target: target.id,
+                    position: target.position,
+                    kind,
+                });
+        }
+        refresh_building_spell_controls(&mut self.world, self.next_tick);
+        self.project_building_spell_control(target);
+        true
+    }
+
     pub(super) fn native_building_trigger_allowed(
         &self,
         source: AbilitySourceSnapshot,

@@ -1347,6 +1347,23 @@ fn append_building_script_visuals(
             });
         }
     }
+    for row in data["erasers"].as_array().ok_or("Eraser source tiers")? {
+        let parent = row["ability_rawcode"].as_str().ok_or("Eraser ability")?;
+        let building = row["building_rawcode"].as_str().ok_or("Eraser building")?;
+        for visual in data["eraser_cast_visuals"]
+            .as_array()
+            .ok_or("Eraser cast art")?
+        {
+            visuals.assets.push(VisualAssetSpec {
+                owner_kind: "abilities".to_owned(),
+                owner_rawcode: parent.to_owned(),
+                source_unit_rawcode: Some(building.to_owned()),
+                role: visual["role"].as_str().ok_or("Eraser art role")?.to_owned(),
+                model_path: visual["path"].as_str().ok_or("Eraser art path")?.to_owned(),
+                missile_arc: None,
+            });
+        }
+    }
     for (row, visual_key) in [
         ("magic_ruin", "magic_ruin_cast_visuals"),
         ("attack_proxy", "attack_proxy_cast_visuals"),

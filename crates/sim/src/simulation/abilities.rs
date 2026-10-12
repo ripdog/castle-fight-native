@@ -627,6 +627,15 @@ impl Simulation {
                             units,
                         ));
                         emit_cast_visual = false;
+                    } else if matches!(intent.ability.effect, AbilityEffect::BuildingEraser(_)) {
+                        metrics.effects += self.cast_building_eraser(
+                            source,
+                            intent.ability,
+                            units[index].id,
+                            intent.cast_sequence,
+                            units,
+                        );
+                        emit_cast_visual = false;
                     } else if matches!(intent.ability.effect, AbilityEffect::BuildingMagicRuin(_)) {
                         metrics.effects += self.cast_building_magic_ruin(
                             source,
@@ -995,7 +1004,16 @@ impl Simulation {
                     }
                 }
                 AbilityIntentTarget::Building { id, position } => {
-                    if matches!(intent.ability.effect, AbilityEffect::BuildingMagicRuin(_)) {
+                    if matches!(intent.ability.effect, AbilityEffect::BuildingEraser(_)) {
+                        metrics.effects += self.cast_building_eraser(
+                            source,
+                            intent.ability,
+                            id,
+                            intent.cast_sequence,
+                            units,
+                        );
+                        emit_cast_visual = false;
+                    } else if matches!(intent.ability.effect, AbilityEffect::BuildingMagicRuin(_)) {
                         metrics.effects += self.cast_building_magic_ruin(
                             source,
                             intent.ability,

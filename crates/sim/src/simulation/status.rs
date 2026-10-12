@@ -530,6 +530,7 @@ pub(super) fn apply_ability_effect_to_unit(
         | AbilityEffect::BuildingPermanentGrant(_)
         | AbilityEffect::BuildingAcidBomb(_)
         | AbilityEffect::BuildingBolt(_)
+        | AbilityEffect::BuildingEraser(_)
         | AbilityEffect::BuildingMagicRuin(_)
         | AbilityEffect::BuildingFlameStrike(_)
         | AbilityEffect::BuildingAttackProxy(_)

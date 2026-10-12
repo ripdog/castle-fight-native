@@ -84,6 +84,7 @@ pub enum NativeEffectImplementationId {
     WarcraftElvenAutomaticV1,
     WarcraftBuildingHexV1,
     WarcraftSnowveilV1,
+    WarcraftEraserV1,
     WarcraftMagicRuinV1,
     WarcraftFlameStrikeV1,
     WarcraftBuildingAttackProxyV1,
@@ -160,6 +161,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftElvenAutomaticV1 => 17,
             Self::WarcraftBuildingHexV1 => 24,
             Self::WarcraftSnowveilV1 => 25,
+            Self::WarcraftEraserV1 => 100,
             Self::WarcraftMagicRuinV1 => 99,
             Self::WarcraftFlameStrikeV1 => 98,
             Self::WarcraftBuildingAttackProxyV1 => 97,
@@ -1275,6 +1277,10 @@ pub fn resolve_native_effect_requirements(
     version: MapVersion,
     roots: &[NativeEffectSource],
 ) -> Result<Vec<ResolvedNativeEffectBinding>, NativeEffectResolveError> {
+    let (eraser_roots, roots): (Vec<_>, Vec<_>) = roots
+        .iter()
+        .copied()
+        .partition(|s| crate::building_mechanics::eraser_source(version, *s));
     let (ruin_roots, roots): (Vec<_>, Vec<_>) = roots
         .iter()
         .copied()
@@ -1345,6 +1351,9 @@ pub fn resolve_native_effect_requirements(
         .copied()
         .partition(|source| crate::building_mechanics::hex_source_for_version(*source, version));
     let mut resolved = catalog().resolve_requirements(version, &ordinary_roots)?;
+    if !eraser_roots.is_empty() {
+        resolved.push(crate::building_mechanics::eraser_binding(version));
+    }
     if !ruin_roots.is_empty() {
         resolved.extend(crate::building_mechanics::magic_ruin_bindings(version));
     }
@@ -1606,6 +1615,9 @@ pub fn native_effect_implementation_for(
     let source = NativeEffectSourceKind::parse(source_kind)
         .zip(rawcode(source_key).ok())
         .map(|(kind, key)| NativeEffectSource::new(kind, key));
+    if source.is_some_and(|s| crate::building_mechanics::eraser_source(version, s)) {
+        return Some(NativeEffectImplementationId::WarcraftEraserV1);
+    }
     if source.is_some_and(|s| crate::building_mechanics::magic_ruin_source(version, s)) {
         return Some(NativeEffectImplementationId::WarcraftMagicRuinV1);
     }

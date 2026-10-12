@@ -12,6 +12,45 @@ SPEC.loader.exec_module(MODULE)
 
 
 class BuildingMechanicsProjectionTests(unittest.TestCase):
+    def test_zero_payload_self_aura_markers_reject_new_gameplay_effects(self):
+        import csv
+        import io
+        original = MODULE._retained_file_bytes
+        def changed(root, tree, path):
+            data = original(root, tree, path)
+            if path != 'resolved/object-fields.tsv':
+                return data
+            reader = csv.DictReader(io.StringIO(data.decode()), delimiter='\t')
+            rows = list(reader)
+            row = next(r for r in rows if r['rawcode'] == 'A028' and r['field_id'] == 'Slo1' and r['level'] == '1')
+            row['recovered_value_json'] = json.dumps(json.loads(row['recovered_value_json']) + 1)
+            output = io.StringIO()
+            writer = csv.DictWriter(output, fieldnames=reader.fieldnames, delimiter='\t')
+            writer.writeheader()
+            writer.writerows(rows)
+            return output.getvalue().encode()
+        with mock.patch.object(MODULE, '_retained_file_bytes', changed):
+            with self.assertRaisesRegex(ValueError, 'gameplay payload'):
+                MODULE.build()
+
+    def test_eraser_rejects_type_shield_and_damage_control_drift(self):
+        original = MODULE._retained_file_bytes
+        changes = [
+            (b'ckr=unit_getTypeId(bkr)', b'ckr=unit_getTypeId(Zjr)'),
+            (b'(not Id(nkn))', b'(not checkForShield(nkn))'),
+            (b'rkn=ATTACK_TYPE_CHAOS skn=DAMAGE_TYPE_DEATH', b'rkn=ATTACK_TYPE_NORMAL skn=DAMAGE_TYPE_DEATH'),
+        ]
+        for before, after in changes:
+            def changed(root, tree, path):
+                data = original(root, tree, path)
+                if path == 'script/war3map.lua':
+                    self.assertIn(before, data)
+                    return data.replace(before, after, 1)
+                return data
+            with self.subTest(before=before), mock.patch.object(MODULE, '_retained_file_bytes', changed):
+                with self.assertRaises(ValueError):
+                    MODULE.build()
+
     def test_magic_ruin_rejects_outcome_order_identity_and_control_drift(self):
         original = MODULE._retained_file_bytes
         changes = [
