@@ -5,6 +5,58 @@
     {
       "kind": "native-target-debuff",
       "source_kind": "ability-effect",
+      "source_key": "A055",
+      "profile": {
+        "ability": 1093678389,
+        "buff": 1110454354,
+        "targets": 3,
+        "organic_only": false,
+        "duration_ticks": 600,
+        "hero_duration_ticks": 150,
+        "movement_percent_delta": 0,
+        "attack_speed_percent_delta": 0,
+        "damage_bonus_per_10k": -5500,
+        "ethereal": null
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "Acri",
+        "targets": "air,enemies,ground,neutral,ward",
+        "protected_resources": {
+          "cooldown": "0.0",
+          "mana_cost": "0"
+        }
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A054",
+      "unit_rawcode": "n01H",
+      "kind": "orb-spell-proc",
+      "chance_per_10k": 10000,
+      "effect_ability_rawcode": "A055",
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A054",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A067",
+      "unit_rawcode": "n01H",
+      "kind": "cleave",
+      "radius_world": 175,
+      "damage_per_10k": 2500,
+      "targets": 1,
+      "provenance": {
+        "ability": "A067",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "kind": "native-target-debuff",
+      "source_kind": "ability-effect",
       "source_key": "A04Q",
       "profile": {
         "ability": 1093678161,

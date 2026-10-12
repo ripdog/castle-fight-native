@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    CorruptedTreant = 0x1000_006d => b"n01H",
     CorruptedEnt = 0x1000_006c => b"n01I",
     Mutation = 0x1000_006b => b"n01S",
     Infernal = 0x1000_006a => b"n000",
@@ -144,6 +145,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    CorruptedAncientOfWar = 0x2000_006d => b"h04W",
     AncientOfBattle = 0x2000_006c => b"h04V",
     DemonGate = 0x2000_006a => b"h007",
     DragonNest = 0x2000_0069 => b"h009",
