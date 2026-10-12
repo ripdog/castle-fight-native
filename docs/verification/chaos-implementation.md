@@ -120,3 +120,13 @@ Validation: eight focused attack-proxy checks, nine impacted poison checks, 13 i
 - Verification: synthetic fixtures distinguish caster/target origin, cast delay, target movement versus a new occupant, dummy/source removal, fractional phase deadlines and the final expiry pulse, cap behavior and native recipient negatives, both mode masks/multipliers, independent parent commitment, same-/different-buff overlap and wire/worker continuation. Source mutation checks reject changed point origin, mode identity and recycle cleanup.
 
 Validation: six focused Flame Strike checks, eight impacted attack-proxy/actor checks, 35 catalog/import checks, 12 asset-catalog checks and eleven building projection checks; strict workspace/all-target Clippy, effects export, formatting/diff checks and Chaos source presentation audit. Full-suite execution remains deferred until Chaos is complete. Logs: `.local-tools/orc-validation/volcano-*` and `chaos-presentation.json`.
+
+
+## Magic Ruin prerequisites — in progress
+
+Magic Ruin is not promoted yet. Its source `A06R` parent, pre-selection random roll, shield path and all outcomes are being reconciled. In particular, roll four adds `A008`, whose resolved base is passive `ACnr` Life Regeneration Aura, then issues the incompatible Hex order. The aura addition and unconditional reengagement callbacks must survive that failed order; this branch must not turn into a successful Hex.
+
+Shared native Slow/Banish infrastructure now carries transferable timed families, mechanical/hero eligibility, ethereal attack suppression and physical immunity, native magic/healing factors and authoritative expiry. Mutation's unchanged `ACsw` uses native class `Aslo`, matching its `udaa` default-active class alias. Base ability and gameplay inputs are hash-verified against `resolved/base-data-manifest.json`; map overrides retain precedence and generated projections retain source identity. Focused synthetic checks cover protection/ally negatives, hero expiry, physical versus magic packets, native healing, in-flight missiles, automatic resource/family behavior, buff transfer and worker/wire restoration. This is shared infrastructure, not a sign-off for the unfinished building or Mutation body.
+
+
+Shared prerequisite validation (r129): seven focused native debuff checks, four buff-transfer checks, five impacted Curse checks, four native healing-wave checks, 34 impacted healing checks, 35 content checks and four focused native-reference/debuff projection checks passed. Eleven building projection checks, strict workspace/all-target Clippy, formatting and diff checks passed. No full suite was run. Magic Ruin and its Mutation body still require full outcome/control/aura integration before promotion.

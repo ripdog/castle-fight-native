@@ -21,6 +21,11 @@ fn buff(positive: bool) -> TimedArmorModifier {
     TimedArmorModifier {
         undispellable: false,
         aura_membership: false,
+        ethereal: (!positive).then_some(crate::EtherealEffectProfile {
+            magic_damage_per_10k: 18_000,
+            healing_per_10k: 13_000,
+            allied_damage_per_10k: 10_000,
+        }),
         attack_miss_chance_per_10k: if positive { 0 } else { 1700 },
         id: ModifierId(82),
         native_buff: Some(NativeBuffIdentity {

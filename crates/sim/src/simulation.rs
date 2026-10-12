@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 89;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 90;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -2987,6 +2987,7 @@ impl Simulation {
                 apply_timed_armor_modifier(
                     &mut target.status,
                     TimedArmorModifier {
+                        ethereal: None,
                         melee_life_steal_per_10k: profile.melee_life_steal_per_10k,
                         attack_miss_chance_per_10k: 0,
                         melee_damage_return_per_10k: profile.melee_damage_return_per_10k,
@@ -4931,6 +4932,9 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         AbilityEffect::SirenPurge(p) => {
             assert!(p.child.range > 0 && p.child.duration_ticks > 0);
         }
+        AbilityEffect::NativeDebuff(p) => {
+            assert!(p.duration_ticks > 0 && p.hero_duration_ticks > 0);
+        }
         AbilityEffect::Curse(p) => {
             assert!(p.chance_to_miss_per_10k <= 10_000 && p.duration_ticks > 0);
             assert_eq!(
@@ -5956,7 +5960,16 @@ fn resolve_directed_projectile_defense(
     }
 }
 
+fn native_healing_amount(status: &StatusState, amount: i32, tick: u64) -> i32 {
+    status
+        .ethereal_at(tick)
+        .map_or(amount, |e| scale_damage_per_10k(amount, e.healing_per_10k))
+}
+
 fn spell_damage_after_defend(unit: UnitSnapshot, damage: i32, completed_tick: u64) -> i32 {
+    let damage = unit.status.ethereal_at(completed_tick).map_or(damage, |e| {
+        scale_damage_per_10k(damage, e.magic_damage_per_10k)
+    });
     let damage = active_defend_profile(unit.passive_effects, unit.spawn_tick, completed_tick)
         .map_or(damage, |profile| {
             scale_damage_per_10k(damage, profile.spell_damage_taken_per_10k)
@@ -6038,6 +6051,20 @@ impl Simulation {
                 {
                     return None;
                 }
+                let damage = if matches!(
+                    kind,
+                    WeaponDamageKind::Melee | WeaponDamageKind::Ranged | WeaponDamageKind::Cleave
+                ) && let Some(ethereal) =
+                    state.units[index].status.ethereal_at(completed_tick)
+                {
+                    if damage_type == DamageType::Magic {
+                        scale_damage_per_10k(damage, ethereal.magic_damage_per_10k)
+                    } else {
+                        0
+                    }
+                } else {
+                    damage
+                };
                 let adjusted_damage = state.damage_rules.apply_attack_with_armor_per_100(
                     damage,
                     damage_type,

@@ -185,6 +185,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
                 'effect': {'Demolish': {'chance_per_10k': number('DataA1', 100),
                     'multiplier_per_10k': number('DataB1', 10000), 'targets': 4}}}, 'dependencies': [],
             'provenance': {'source': 'resolved/object-fields.tsv', 'native_base': mechanics['native_base']}}
+    if kind == "native-debuff":
+        from project_native_debuff import project
+        return project(recipe, fields, unit, protected, mechanics)
     if kind == "native-curse":
         from project_curse import project
         return project(recipe, fields, unit, protected, mechanics)
@@ -731,6 +734,12 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             field = row["source_field"].lower()
             if field:
                 abilities.setdefault(row["rawcode"], {})[field] = scalar(row["recovered_value_json"])
+    from project_native_reference import project as project_reference
+    reference = project_reference(repo_root, retained)
+    for code, fields in reference['abilities'].items():
+        abilities.setdefault(code, {key: str(value) for key, value in fields.items()})
+        ability_levels.setdefault(code, {key: str(value) for key, value in fields.items()})
+        ability_bases.setdefault(code, fields['code'])
     unit_fields = {}
     for row in rows(retained("resolved/object-fields.tsv")):
         if row["category"] == "units" and row["source_field"]:
@@ -889,6 +898,11 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             detail.update(all_bases=ability_bases, functions=functions, git_tree=tree,
                 map_version=dict(zip(["major", "minor"], map(int, release["map_version"].split(".")))))
         detail["misc"] = misc
+        if recipe['kind'] == 'native-debuff':
+            default = default_autocast.get(recipe['unit_rawcode'])
+            if default not in (source, ability_bases[source]):
+                raise ValueError('native Slow default-active alias differs from its source class')
+            detail.update(reference_source_sha256=reference['source_sha256'], default_active_alias=default)
         detail["native_base"] = ability_bases[source]
         if spell is not None and recipe["kind"] != "master-projectiles":
             semantics = spell_semantics[spell["ability_rawcode"]]
@@ -902,7 +916,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         for key, base in sorted(ability_bases.items()) if base in {"Ainf", "ACf2", "ACff", "AIrr", "AEer", "Aenr"}]
     return {"schema_version": 3, "map_version": release["map_version"], "effects": effects,
         "unit_death_rules": death_rules, "unit_death_rules_source": {"git_tree": tree, "path": "resolved/production-unit-special-mechanics.tsv", "function": "fJ"},
-        "buff_families": families, "buff_family_source": {"git_tree": tree, "path": "resolved/object-fields.tsv"}}
+        "native_reference_source_sha256": reference["source_sha256"], "buff_families": families, "buff_family_source": {"git_tree": tree, "path": "resolved/object-fields.tsv"}}
 
 
 def main() -> None:

@@ -27,6 +27,7 @@ mod life_steal;
 mod lightning;
 mod master_projectiles;
 mod mirror_image;
+mod native_debuff;
 mod parasite_buff;
 mod poison;
 mod resistant_skin;

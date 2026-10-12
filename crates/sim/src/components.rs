@@ -26,6 +26,8 @@ mod parasite_area_buff;
 pub use parasite_area_buff::ParasiteAreaBuffProfile;
 pub use travelling_mana_clap::TravellingManaClapProfile;
 pub(crate) use travelling_mana_clap::TravellingManaClapState;
+mod native_debuff;
+pub use native_debuff::{EtherealEffectProfile, NativeDebuffProfile};
 mod native_actions;
 pub(crate) use native_actions::{
     AcidBombMissileState, AuraCarrierState, BuildingAttackProxyState, ConeWaveState,
@@ -1676,6 +1678,7 @@ pub enum AreaDamageOrigin {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum AbilityEffect {
+    NativeDebuff(NativeDebuffProfile),
     Wilderness(crate::building_mechanics::WildernessProfile),
     SilverGlade(crate::building_mechanics::SilverGladeProfile),
     Heal(NativeHealProfile),
@@ -1900,6 +1903,7 @@ impl AbilityEffect {
             Self::MasterProjectiles(_) => 35,
             Self::FrostNova { .. } => 17,
             Self::Snowfall { .. } => 18,
+            Self::NativeDebuff(_) => 56,
             Self::BuildingFlameStrike(_) => 55,
             Self::BuildingAttackProxy(_) => 54,
             Self::Hailstone(_) => 19,
@@ -1966,6 +1970,7 @@ pub struct TimedAttackSpeedModifier {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimedArmorModifier {
+    pub ethereal: Option<EtherealEffectProfile>,
     pub melee_life_steal_per_10k: u32,
     pub attack_miss_chance_per_10k: u16,
     pub melee_damage_return_per_10k: u32,
@@ -2172,7 +2177,25 @@ impl StatusState {
 
     #[must_use]
     pub const fn attacks_disabled(self, tick: u64) -> bool {
-        tick < self.action_pause_until_tick() || tick < self.rooted_until_tick
+        if tick < self.action_pause_until_tick() || tick < self.rooted_until_tick {
+            return true;
+        }
+        let mut index = 0;
+        while index < self.armor_modifier_count as usize {
+            let modifier = self.armor_modifiers[index];
+            if tick < modifier.expires_tick && modifier.ethereal.is_some() {
+                return true;
+            }
+            index += 1;
+        }
+        false
+    }
+
+    pub fn ethereal_at(&self, tick: u64) -> Option<EtherealEffectProfile> {
+        self.armor_modifiers[..usize::from(self.armor_modifier_count)]
+            .iter()
+            .filter(|m| tick < m.expires_tick)
+            .find_map(|m| m.ethereal)
     }
 
     #[must_use]

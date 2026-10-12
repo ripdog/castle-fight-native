@@ -227,13 +227,15 @@ def build(map_version='9.27', revision='r1'):
     from project_training_variants import project as project_training
     training = project_training({name: value['source'] for name, value in traces.items()}, unit_rows,
         {row['rawcode']: row['base_rawcode'] for row in rows('abilities.tsv')})
+    from project_native_reference import project as project_native_reference
+    native_reference = project_native_reference(ROOT, lambda path: _retained_file_bytes(ROOT, tree, path))
     from project_flame_strike import project as project_flame_strike
     flame_strike_profile = project_flame_strike(flame_strike, selected, unit_rows, rows('abilities.tsv'), protected, traces, dict(zip(['major', 'minor'], map(int, map_version.split('.')))))
     from project_attack_proxy import project as project_attack_proxy
     attack_proxy_profile = project_attack_proxy(attack_proxy, selected, unit_rows, rows('abilities.tsv'), protected, traces, dict(zip(['major', 'minor'], map(int, map_version.split('.')))))
     attack_proxy_visuals = [{'role':'target', 'path':json.loads('\"'+path+'\"')} for path in re.findall(r'addEffect\(\"(.*?)\",tkr\)', traces['shrineOfDestructionSpell']['source'])]
     from project_production_replication import project as project_replication
-    return {'flame_strike': flame_strike, 'flame_strike_spellcasting': flame_strike_profile, 'attack_proxy': attack_proxy, 'attack_proxy_spellcasting': attack_proxy_profile, 'attack_proxy_cast_visuals': attack_proxy_visuals, 'tidal': tidal, 'tidal_spellcasting': tidal_profile, 'coral_auras': coral_profile, 'oracle_owner_rejection_visual': {'model_path': owner_art[0], 'attachment': owner_art[1]}, 'oracle': oracle, 'oracle_spellcasting': oracle_profile, 'pyramid': pyramid, 'pyramid_spellcasting': pyramid_profile,
+    return {'native_reference': native_reference, 'flame_strike': flame_strike, 'flame_strike_spellcasting': flame_strike_profile, 'attack_proxy': attack_proxy, 'attack_proxy_spellcasting': attack_proxy_profile, 'attack_proxy_cast_visuals': attack_proxy_visuals, 'tidal': tidal, 'tidal_spellcasting': tidal_profile, 'coral_auras': coral_profile, 'oracle_owner_rejection_visual': {'model_path': owner_art[0], 'attachment': owner_art[1]}, 'oracle': oracle, 'oracle_spellcasting': oracle_profile, 'pyramid': pyramid, 'pyramid_spellcasting': pyramid_profile,
             'production_training_variants': training,
             'production_replication': project_replication(replication, traces), 'replication_source': replication,
             'map_version': map_version, 'schema_version': 2, 'source_revision': revision,

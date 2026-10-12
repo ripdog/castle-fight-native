@@ -32,8 +32,16 @@ impl Simulation {
         let target = &mut units[target_index];
         target.health = target
             .health
-            .saturating_add(profile.healing)
-            .saturating_add(profile.trigger_healing)
+            .saturating_add(native_healing_amount(
+                &target.status,
+                profile.healing,
+                self.next_tick,
+            ))
+            .saturating_add(native_healing_amount(
+                &target.status,
+                profile.trigger_healing,
+                self.next_tick,
+            ))
             .min(target.health_max);
         self.emit_healing_wave_hop(source, profile.ability, 0, origin, target.position);
         if profile.maximum_targets > 1 {
@@ -479,7 +487,11 @@ impl Simulation {
                     };
                     units[next].health = units[next]
                         .health
-                        .saturating_add(state.next_healing)
+                        .saturating_add(native_healing_amount(
+                            &units[next].status,
+                            state.next_healing,
+                            self.next_tick,
+                        ))
                         .min(units[next].health_max);
                     self.emit_healing_wave_hop(
                         state.source,

@@ -4529,6 +4529,10 @@
     "path": "resolved/production-unit-special-mechanics.tsv",
     "function": "fJ"
   },
+  "native_reference_source_sha256": {
+    "custom_v1/units/abilitydata.slk": "052195ebf094e49ded0a0ebc281cada420e30a46a0a40ca83f52748daac8c9d3",
+    "custom_v1/units/miscgame.txt": "4f948777038b7dd3e5b251e758c45622cb9d5b3244ed0f867ed0bc53e2cbb44e"
+  },
   "buff_families": [
     {
       "source_key": "A00W",

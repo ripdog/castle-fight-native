@@ -2266,6 +2266,12 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         } else {
             hash.write_u8(0);
         }
+        hash.write_u8(u8::from(modifier.ethereal.is_some()));
+        if let Some(e) = modifier.ethereal {
+            hash.write_u16(e.magic_damage_per_10k);
+            hash.write_u16(e.healing_per_10k);
+            hash.write_u16(e.allied_damage_per_10k);
+        }
         hash.write_u32(modifier.melee_life_steal_per_10k);
         hash.write_u16(modifier.attack_miss_chance_per_10k);
         hash.write_u32(modifier.melee_damage_return_per_10k);
@@ -2906,6 +2912,11 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             }
         }
         AbilityEffect::SirenPurge(p) => p.visit_canonical_words(|word| hash.write_u64(word)),
+        AbilityEffect::NativeDebuff(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         AbilityEffect::Curse(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);

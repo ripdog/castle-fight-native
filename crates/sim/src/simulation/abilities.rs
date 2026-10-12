@@ -344,6 +344,7 @@ impl Simulation {
                     || matches!(
                         intent.ability.effect,
                         AbilityEffect::StatBuff { .. }
+                            | AbilityEffect::NativeDebuff(_)
                             | AbilityEffect::Curse(_)
                             | AbilityEffect::SpellSteal { .. }
                             | AbilityEffect::Ensnare { .. }
@@ -2123,12 +2124,23 @@ impl Simulation {
     ) -> bool {
         let (modifier, organic_only, family) = match ability.effect {
             AbilityEffect::FaerieFire { modifier, .. } => (modifier, true, None),
+            AbilityEffect::NativeDebuff(p) => (
+                ModifierId(p.ability.0),
+                p.organic_only,
+                Some(crate::NativeBuffIdentity {
+                    rawcode: p.buff,
+                    positive: false,
+                    stealable: true,
+                    organic_only: p.organic_only,
+                }),
+            ),
             AbilityEffect::Curse(p) => (ModifierId(p.ability.0), p.buff.organic_only, Some(p.buff)),
             _ => return false,
         };
         target.health > 0
             && target.team != source.team
             && !target.classifications.locust
+            && (!matches!(ability.effect, AbilityEffect::NativeDebuff(p) if !p.targets.can_target_unit(target.target_movement_class())))
             && !(organic_only && target.mechanical)
             && !target.classifications.invulnerable
             && (ability.target_policy == AbilityTargetPolicy::RandomEnemyDebuff
@@ -2139,24 +2151,24 @@ impl Simulation {
             && (ability.target_policy == AbilityTargetPolicy::RandomEnemyDebuff
                 || (target.attack.damage > 0
                     && (self.enemy_is_in_combat(target, units)
-                        || (matches!(ability.effect, AbilityEffect::Curse(_))
-                            && target
-                                .target
-                                .and_then(|id| find_building_index(buildings, id))
-                                .is_some_and(|index| {
-                                    let building = &buildings[index];
-                                    building.health > 0
-                                        && building.team != target.team
-                                        && target.attack_for_building().is_some_and(
-                                            |(attack, _, _)| {
-                                                point_to_footprint_distance_sq(
-                                                    target.position,
-                                                    building.footprint,
-                                                    self.config.navigation_cell_size,
-                                                ) <= square_i32(attack.range)
-                                            },
-                                        )
-                                })))))
+                        || (matches!(
+                            ability.effect,
+                            AbilityEffect::Curse(_) | AbilityEffect::NativeDebuff(_)
+                        ) && target
+                            .target
+                            .and_then(|id| find_building_index(buildings, id))
+                            .is_some_and(|index| {
+                                let building = &buildings[index];
+                                building.health > 0
+                                    && building.team != target.team
+                                    && target.attack_for_building().is_some_and(|(attack, _, _)| {
+                                        point_to_footprint_distance_sq(
+                                            target.position,
+                                            building.footprint,
+                                            self.config.navigation_cell_size,
+                                        ) <= square_i32(attack.range)
+                                    })
+                            })))))
             && !target.status.armor_modifiers[..usize::from(target.status.armor_modifier_count)]
                 .iter()
                 .any(|active| {

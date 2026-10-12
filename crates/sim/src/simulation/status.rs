@@ -60,6 +60,56 @@ pub(super) fn apply_ability_effect_to_unit(
         return false;
     }
     match effect {
+        AbilityEffect::NativeDebuff(p) => {
+            if target.team == source_team
+                || target.classifications.invulnerable
+                || target.classifications.spell_immune
+                || (p.organic_only && target.mechanical)
+                || !p.targets.can_target_unit(target.target_movement_class())
+            {
+                return false;
+            }
+            let duration = if target.classifications.uses_hero_spell_rules() {
+                p.hero_duration_ticks
+            } else {
+                p.duration_ticks
+            };
+            if duration == 0 {
+                return false;
+            }
+            let expires_tick = completed_tick + u64::from(duration);
+            let id = ModifierId(p.ability.0);
+            apply_timed_armor_modifier(
+                &mut target.status,
+                TimedArmorModifier {
+                    id,
+                    native_buff: Some(crate::NativeBuffIdentity {
+                        rawcode: p.buff,
+                        positive: false,
+                        stealable: true,
+                        organic_only: p.organic_only,
+                    }),
+                    ethereal: p.ethereal,
+                    expires_tick,
+                    ..Default::default()
+                },
+            );
+            apply_timed_movement_modifier(
+                &mut target.status,
+                id,
+                p.movement_percent_delta,
+                expires_tick,
+            );
+            apply_timed_attack_speed_modifier(
+                &mut target.status,
+                id,
+                p.attack_speed_percent_delta,
+                expires_tick,
+            );
+            if p.ethereal.is_some() {
+                target.status.pending_attack = None;
+            }
+        }
         AbilityEffect::NagaTidalWave(_)
         | AbilityEffect::NagaCharm(_)
         | AbilityEffect::NagaEarthquake(_)
@@ -76,10 +126,8 @@ pub(super) fn apply_ability_effect_to_unit(
             {
                 return false;
             }
-            target.health = target
-                .health
-                .saturating_add(p.amount)
-                .min(target.health_max);
+            let healing = native_healing_amount(&target.status, p.amount, completed_tick);
+            target.health = target.health.saturating_add(healing).min(target.health_max);
         }
         AbilityEffect::Curse(p) => {
             if target.team == source_team
@@ -338,6 +386,7 @@ pub(super) fn apply_ability_effect_to_unit(
             apply_timed_armor_modifier(
                 &mut target.status,
                 TimedArmorModifier {
+                    ethereal: None,
                     melee_life_steal_per_10k: 0,
                     attack_miss_chance_per_10k: 0,
                     melee_damage_return_per_10k: 0,
@@ -396,6 +445,7 @@ pub(super) fn apply_ability_effect_to_unit(
             apply_timed_armor_modifier(
                 &mut target.status,
                 TimedArmorModifier {
+                    ethereal: None,
                     melee_life_steal_per_10k: 0,
                     attack_miss_chance_per_10k: 0,
                     melee_damage_return_per_10k: 0,
@@ -439,6 +489,7 @@ pub(super) fn apply_ability_effect_to_unit(
             apply_timed_armor_modifier(
                 &mut target.status,
                 TimedArmorModifier {
+                    ethereal: None,
                     melee_life_steal_per_10k: 0,
                     attack_miss_chance_per_10k: 0,
                     melee_damage_return_per_10k: 0,
@@ -783,6 +834,10 @@ pub(super) fn resolve_periodic_unit_statuses(
                 .map(|profile| profile.spell_damage_taken_per_10k);
         let incoming_factor =
             super::native_kill_effects::native_incoming_damage_factor(&unit.status, completed_tick);
+        let ethereal_factor = unit
+            .status
+            .ethereal_at(completed_tick)
+            .map_or(10_000, |e| e.magic_damage_per_10k);
         for index in 0..count {
             let mut effect = units[unit_index].status.damage_over_time[index];
             while completed_tick >= effect.next_pulse_tick
@@ -792,16 +847,19 @@ pub(super) fn resolve_periodic_unit_statuses(
                 && units[unit_index].health > 0
             {
                 let unit = &units[unit_index];
-                let adjusted = if unit.classifications.spell_immune
-                    || unit.classifications.invulnerable
-                {
-                    0
-                } else {
-                    scale_damage_per_10k(
-                        damage_rules.apply_spell(effect.damage_per_pulse, unit.armor.armor_type),
-                        resistance,
-                    )
-                };
+                let adjusted =
+                    if unit.classifications.spell_immune || unit.classifications.invulnerable {
+                        0
+                    } else {
+                        scale_damage_per_10k(
+                            scale_damage_per_10k(
+                                damage_rules
+                                    .apply_spell(effect.damage_per_pulse, unit.armor.armor_type),
+                                ethereal_factor,
+                            ),
+                            resistance,
+                        )
+                    };
                 let adjusted = spell_damage_taken_per_10k
                     .map_or(adjusted, |factor| scale_damage_per_10k(adjusted, factor));
                 let event_damage = scale_damage_per_10k(

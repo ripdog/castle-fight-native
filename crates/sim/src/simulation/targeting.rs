@@ -824,9 +824,12 @@ impl Simulation {
         {
             return false;
         }
-        let Some((attack, _, _)) = source.attack_for_unit_target(target) else {
+        let Some((attack, _, damage_type)) = source.attack_for_unit_target(target) else {
             return false;
         };
+        if damage_type != DamageType::Magic && target.status.ethereal_at(self.next_tick).is_some() {
+            return false;
+        }
         let in_attack_range = attack.in_range(distance_sq);
         if matches!(attack.delivery, AttackDelivery::Line { minimum_range, .. } if distance_sq < square_i32(minimum_range))
         {
