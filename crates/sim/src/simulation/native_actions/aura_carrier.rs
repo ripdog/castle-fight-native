@@ -8,7 +8,8 @@ struct Recipient {
     team: Team,
     position: SimPoint,
     health: i32,
-    movement: MovementClass,
+    movement: Option<MovementClass>,
+    combat_sapper: bool,
     mechanical: bool,
     invulnerable: bool,
 }
@@ -24,7 +25,11 @@ fn eligible(state: AuraCarrierState, recipient: Recipient, tick: u64, for_timers
         && recipient.team == state.team
         && (!state.profile.organic_only || !recipient.mechanical)
         && (state.profile.affects_invulnerable || !recipient.invulnerable)
-        && state.profile.targets.can_target_unit(recipient.movement)
+        && (!state.profile.nonsapper_only || !recipient.combat_sapper)
+        && recipient.movement.map_or_else(
+            || state.profile.targets.can_target_buildings(),
+            |m| state.profile.targets.can_target_unit(m),
+        )
         && state.position.distance_sq(recipient.position) <= square_i32(state.profile.radius)
 }
 
@@ -204,7 +209,8 @@ impl Simulation {
                     team: *team,
                     position: position.0,
                     health: health.current,
-                    movement: *movement,
+                    movement: Some(*movement),
+                    combat_sapper: classifications.is_some_and(|flags| flags.combat_sapper),
                     mechanical: mechanical.is_some(),
                     invulnerable: classifications.is_some_and(|flags| flags.invulnerable),
                 },
@@ -213,9 +219,37 @@ impl Simulation {
                 true,
             );
         }
+        let mut buildings = self.world.query::<(
+            &Team,
+            &BuildingFootprint,
+            &Health,
+            Option<&UnitClassifications>,
+            &mut StatusState,
+        )>();
+        for (team, footprint, health, flags, mut status) in buildings.iter_mut(&mut self.world) {
+            refresh_status(
+                &mut status,
+                Recipient {
+                    team: *team,
+                    position: footprint_center_point(*footprint, self.config.navigation_cell_size),
+                    health: health.current,
+                    movement: None,
+                    combat_sapper: false,
+                    mechanical: true,
+                    invulnerable: flags.is_some_and(|f| f.invulnerable),
+                },
+                &sources,
+                self.next_tick,
+                true,
+            );
+        }
     }
 
-    pub(super) fn refresh_carrier_auras(&self, units: &mut [UnitSnapshot]) {
+    pub(super) fn refresh_carrier_auras(
+        &self,
+        units: &mut [UnitSnapshot],
+        buildings: &mut [BuildingSnapshot],
+    ) {
         let sources = self.carrier_aura_sources();
         if sources.is_empty() {
             return;
@@ -225,11 +259,33 @@ impl Simulation {
                 team: unit.team,
                 position: unit.position,
                 health: unit.health,
-                movement: unit.target_movement_class(),
+                movement: Some(unit.target_movement_class()),
+                combat_sapper: unit.classifications.combat_sapper,
                 mechanical: unit.mechanical,
                 invulnerable: unit.classifications.invulnerable,
             };
             refresh_status(&mut unit.status, recipient, &sources, self.next_tick, false);
+        }
+        for building in buildings {
+            let recipient = Recipient {
+                team: building.team,
+                position: footprint_center_point(
+                    building.footprint,
+                    self.config.navigation_cell_size,
+                ),
+                health: building.health,
+                movement: None,
+                combat_sapper: false,
+                mechanical: true,
+                invulnerable: building.classifications.invulnerable,
+            };
+            refresh_status(
+                building.status.get_or_insert_default(),
+                recipient,
+                &sources,
+                self.next_tick,
+                false,
+            );
         }
     }
 
@@ -258,7 +314,7 @@ impl Simulation {
                 expires_tick: self.next_tick + u64::from(profile.lifetime_ticks),
             }),
         ));
-        self.refresh_carrier_auras(units);
+        self.refresh_carrier_auras(units, buildings);
         if let Some(building) = buildings
             .iter_mut()
             .find(|building| building.id == source.id)

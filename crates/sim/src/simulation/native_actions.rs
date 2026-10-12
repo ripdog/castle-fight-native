@@ -183,7 +183,7 @@ impl Simulation {
                 }
             })
             .collect::<Vec<_>>();
-        self.refresh_carrier_auras(units);
+        self.refresh_carrier_auras(units, buildings);
         for (_, entity, action) in actions {
             if self.world.get::<NativeAction>(entity).is_none() {
                 continue;

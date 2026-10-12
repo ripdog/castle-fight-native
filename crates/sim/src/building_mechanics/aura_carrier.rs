@@ -15,6 +15,7 @@ pub struct BuildingAuraProfile {
     pub trigger_spell_immune: bool,
     pub targets: AttackTargetMask,
     pub organic_only: bool,
+    pub nonsapper_only: bool,
     pub affects_invulnerable: bool,
     pub radius: i32,
     pub regeneration_per_second_per_10k: u32,
@@ -25,7 +26,7 @@ pub struct BuildingAuraProfile {
 }
 
 impl BuildingAuraProfile {
-    pub(crate) fn canonical_words(self) -> [u64; 16] {
+    pub(crate) fn canonical_words(self) -> [u64; 17] {
         [
             self.map_version.major.into(),
             self.map_version.minor.into(),
@@ -36,6 +37,7 @@ impl BuildingAuraProfile {
             self.trigger_spell_immune.into(),
             self.targets.bits().into(),
             self.organic_only.into(),
+            self.nonsapper_only.into(),
             self.affects_invulnerable.into(),
             self.radius as u64,
             self.regeneration_per_second_per_10k.into(),
@@ -132,6 +134,7 @@ fn aura_spellcasting(version: MapVersion, name: &str) -> SpellcastingProfile {
                 trigger_spell_immune: parent_tokens.contains(&"magicimmune"),
                 targets: source_mask(child["atar:1"].as_str().unwrap()),
                 organic_only: tokens.contains(&"organic"),
+                nonsapper_only: tokens.contains(&"nonsapper"),
                 affects_invulnerable: tokens.contains(&"invu") || !tokens.contains(&"vuln"),
                 radius: (number(child, "aare:1") * f64::from(SUBUNITS_PER_WORLD_UNIT)).round()
                     as i32,
