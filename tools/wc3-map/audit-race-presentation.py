@@ -200,7 +200,7 @@ def audit_native_status_visuals(projection, fields, abilities, manifest):
     """Require source-linked persistent buff models, including native stock art and empty overrides."""
     recipes = {"Aenr": ("movement",), "AEer": ("movement",), "AOwk": ("movement",), "ACf2": ("armor", "movement"),
                "Ainf": ("armor",), "AIrr": ("armor",), "AHad": ("armor",), "ACav": ("armor",), "AIar": ("armor",),
-               "AIcb": ("armor",), "ACff": ("armor",), "Afae": ("armor",), "AEah": ("armor",), "ANpi": ("armor",), "ACpi": ("armor",), "Ablo": ("attack_speed",),
+               "AIcb": ("armor",), "ACff": ("armor",), "Afae": ("armor",), "AEah": ("armor",), "ANpi": ("armor",), "ACpi": ("armor",), "ACro": ("armor",), "Acrs": ("armor",), "ACvp": ("armor",), "Ablo": ("attack_speed",),
                "Apxf": ("damage_over_time",), "Aven": ("damage_over_time",), "ACvs": ("damage_over_time",),
                "Abof": ("damage_over_time",), "ANab": ("damage_over_time",),
                "Afrz": ("freeze",), "Aoar": ("regeneration",), "SCae": ("movement",), "AOae": ("movement",), "AHtc": ("movement",), "Asta": ("stun",), "AHtb": ("stun",), "ACtb": ("stun",)}
@@ -263,10 +263,24 @@ def audit(evidence, assets, builder, lightning_projection=None, buff_projection=
     roots = objects[("units", builder)]["ubui"].split(",")
     buildings = {row["building_rawcode"] for row in roster} | set(roots)
     units = {row["unit_rawcode"] for row in roster if row["unit_rawcode"]} | {builder}
+    script = (evidence / "script/war3map.lua").read_bytes()
+    functions = {row['name']: script[int(row['start_byte_offset']):int(row['end_byte_offset'])].decode()
+        for row in table(evidence / 'script/function-spans.tsv')}
+    from project_training_variants import project as project_training
+    training = project_training(functions, {row['rawcode']: row for row in table(evidence / 'resolved/units.tsv')},
+        {row['rawcode']: row['base_rawcode'] for row in table(evidence / 'resolved/abilities.tsv')})
+    raw = lambda code: int(code).to_bytes(4, 'big').decode()
+    dynamic_inventory = {}
+    if units & {raw(code) for code in training['roots']}:
+        bodies = {raw(choice['body']) for choice in training['rare_bodies']} | {raw(code) for code in training['common_bodies']}
+        units.update(bodies)
+        grants = {raw(entry['key']) for entry in training['grant_sources']}
+        dynamic_inventory = {owner: grants for owner in bodies | {raw(code) for code in training['roots']}}
     owners = buildings | units
     abilities = {ability for owner in owners
                  for ability in str(objects.get(("units", owner), {}).get("uabi", "")).split(",")
                  if ability}
+    abilities.update(ability for inventory in dynamic_inventory.values() for ability in inventory)
     proxy_links = []
     for row in table(evidence / "resolved/unit-spell-semantics.tsv"):
         if row["unit_rawcode"] in units:
@@ -381,7 +395,7 @@ def audit(evidence, assets, builder, lightning_projection=None, buff_projection=
                                         {code for category, code in objects if category == "units"}))
     inventories = {owner: ability_dependency_closure(fields, {
         code for code in str(objects.get(("units", owner), {}).get("uabi", "")).split(",")
-        if code}) for owner in owners}
+        if code} | dynamic_inventory.get(owner, set())) for owner in owners}
     findings.extend(audit_native_inventory_ownership(inventories, relevant, native_abilities))
     status_findings, statuses = audit_native_status_visuals(buff_projection, fields, abilities, manifests["effects"])
     findings.extend(status_findings)

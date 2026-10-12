@@ -116,6 +116,8 @@ fn locust_handles_do_not_become_weapon_targets_or_ordinary_aura_recipients() {
             collision_radius: Some(CollisionRadius(0)),
             passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Aura(
                 crate::components::AuraEffectProfile {
+                    self_only: false,
+                    melee_life_steal_per_10k: 0,
                     ability: AbilityId(792),
                     radius: 55 * SUBUNITS_PER_WORLD_UNIT,
                     armor_bonus_per_100: 700,

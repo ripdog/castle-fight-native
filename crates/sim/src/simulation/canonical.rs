@@ -2224,6 +2224,7 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         } else {
             hash.write_u8(0);
         }
+        hash.write_u32(modifier.melee_life_steal_per_10k);
         hash.write_u16(modifier.attack_miss_chance_per_10k);
         hash.write_u32(modifier.melee_damage_return_per_10k);
         hash.write_i32(i32::from(modifier.armor_bonus_per_100));
@@ -2525,6 +2526,8 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                 hash.write_i32(i32::from(profile.attack_speed_percent_delta));
             }
             PassiveUnitEffect::Aura(profile) => {
+                hash.write_u8(u8::from(profile.self_only));
+                hash.write_u32(profile.melee_life_steal_per_10k);
                 hash.write_u32(profile.melee_damage_return_per_10k);
                 hash.write_i32(i32::from(profile.damage_bonus_per_10k));
                 hash.write_u8(u8::from(profile.affects_melee));

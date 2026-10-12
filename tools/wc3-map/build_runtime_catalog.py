@@ -441,6 +441,12 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
     # metadata as native summons, without acquiring a summoned classification.
     for rawcode in json.loads(replication['parameters_json'])['twins_replacement_unit_ids']:
         native_summon_bodies.add(int(rawcode).to_bytes(4, 'big').decode())
+    from project_training_variants import project as project_training
+    training = project_training(functions,
+        {row['rawcode']: row for row in csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree, 'resolved/units.tsv').decode()), delimiter='\t')},
+        {row['rawcode']: row['base_rawcode'] for row in csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree, 'resolved/abilities.tsv').decode()), delimiter='\t')})
+    for code in [*[choice['body'] for choice in training['rare_bodies']], *training['common_bodies']]:
+        native_summon_bodies.add(int(code).to_bytes(4, 'big').decode())
     return {
         "schema_version": 10,
         "air_attack_bonuses": air_bonuses,

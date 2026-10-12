@@ -5065,6 +5065,20 @@ fn sync_render_entities(
                         "wc3/buildings",
                     ));
             }
+            if let Some(content) = building.content
+                && let Some(presentation) = crate::unit_models::native_unit_presentation_for_version(
+                    content.map_version,
+                    rawcode,
+                )
+            {
+                spawn_unit_spheres(
+                    &mut commands,
+                    building.id,
+                    model_root,
+                    presentation,
+                    &wc3_visuals,
+                );
+            }
             commands.entity(entity).add_child(model_root);
             (Some(model_root), Some(rawcode))
         } else {

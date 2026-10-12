@@ -111,7 +111,8 @@ impl Simulation {
                     .attack
                     .damage
                     .saturating_add(source.status.damage_threshold.attack_bonus)
-                    .saturating_add(source.status.native_grants.attack_damage());
+                    .saturating_add(source.status.native_grants.attack_damage())
+                    .saturating_add(source.passive_effects.native_attack_damage_bonus());
                 intent.attack.damage = base
                     .saturating_add(
                         i32::try_from(i64::from(base) * i64::from(percent) / 10_000)

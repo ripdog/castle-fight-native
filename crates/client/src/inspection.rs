@@ -2368,6 +2368,12 @@ fn active_effect_badges(
                 f64::from(modifier.damage_bonus_per_10k) / 100.0
             ));
         }
+        if modifier.melee_life_steal_per_10k > 0 {
+            changes.push(format!(
+                "Melee life stolen {}%",
+                f64::from(modifier.melee_life_steal_per_10k) / 100.0
+            ));
+        }
         if modifier.attack_miss_chance_per_10k > 0 {
             changes.push(format!(
                 "Attacks miss {}%",

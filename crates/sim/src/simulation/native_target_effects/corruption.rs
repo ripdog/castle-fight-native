@@ -3,6 +3,7 @@ use crate::components::CorruptionProfile;
 
 fn profile(ability: u32, reduction: i16) -> CorruptionProfile {
     CorruptionProfile {
+        damage_bonus: 0,
         ability: AbilityId(ability),
         buff: crate::NativeBuffIdentity {
             rawcode: 77,
@@ -118,4 +119,37 @@ fn passive_orb_hit_art_does_not_launch_an_extra_native_sphere() {
             .next_slot,
         1
     );
+}
+
+#[test]
+fn native_orb_flat_damage_is_in_the_weapon_before_critical_strike_and_unit_inspection() {
+    let mut sim = simulation(1);
+    let mut orb = profile(935, 0);
+    orb.damage_bonus = 7;
+    let source = sim.spawn_unit_with_properties(
+        unit(0, 20, 11, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            passive_effects: PassiveUnitEffects::from_slice(&[
+                PassiveUnitEffect::Corruption(orb),
+                PassiveUnitEffect::CriticalStrike(crate::CriticalStrikeEffectProfile {
+                    ability: AbilityId(936),
+                    chance_per_10k: 10000,
+                    damage_multiplier_per_10k: 20000,
+                    targets: AttackTargetMask::AIR_AND_GROUND,
+                }),
+            ]),
+            ..Default::default()
+        },
+    );
+    let target = sim.spawn_unit_with_properties(
+        unit(1, 30, 0, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            armor: ArmorProfile::new(ArmorType::Large, 0),
+            ..Default::default()
+        },
+    );
+    sim.step();
+    sim.step();
+    assert_eq!(sim.unit(source).unwrap().attack.damage, 18);
+    assert_eq!(sim.unit(target).unwrap().health, 1000 - 36);
 }

@@ -1,6 +1,16 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A01F","unit_rawcode":"h03B","kind":"cleave"},
+    {"source_kind":"unit-ability","source_key":"A07L","unit_rawcode":"n00L","kind":"feedback"},
+    {"source_kind":"unit-ability","source_key":"A02B","unit_rawcode":"n00L","kind":"corruption"},
+    {"source_kind":"unit-ability","source_key":"A02A","unit_rawcode":"h025","kind":"sphere"},
+    {"source_kind":"unit-ability","source_key":"A05J","unit_rawcode":"n00L","kind":"evasion"},
+    {"source_kind":"unit-ability","source_key":"A01U","unit_rawcode":"n00L","kind":"bash"},
+    {"source_kind":"unit-ability","source_key":"A012","unit_rawcode":"n00L","kind":"permanent-immolation"},
+    {"source_kind":"unit-ability","source_key":"A006","unit_rawcode":"n00L","kind":"pulverize"},
+    {"source_kind":"ability-effect","source_key":"A01R","unit_rawcode":"n00L","kind":"native-training-grant"},
+    {"source_kind":"unit-ability","source_key":"A01P","unit_rawcode":"n00L","kind":"native-aura"},
     {"source_kind":"unit-ability","source_key":"A01G","unit_rawcode":"n008","kind":"native-curse"},
     {"source_kind":"ability-effect","source_key":"A03R","unit_rawcode":"n00Z","kind":"parasite-area-buff"},
     {"source_kind":"unit-ability","source_key":"A03S","unit_rawcode":"n00Z","kind":"parasite-area-buff"},

@@ -1,6 +1,16 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A07L","implementation":"warcraft-feedback-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A07J","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A02B","implementation":"warcraft-corruption-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A02A","implementation":"warcraft-sphere-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A05J","implementation":"warcraft-evasion-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A01U","implementation":"warcraft-bash-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A012","implementation":"warcraft-permanent-immolation-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A006","implementation":"warcraft-pulverize-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"ability-effect","source_key":"A01R","implementation":"warcraft-permanent-ability-grants-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A01P","implementation":"warcraft-native-aura-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A01G","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"ability-effect","source_key":"A03R","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A03S","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
@@ -422,7 +432,7 @@
     {
       "source_kind": "unit-ability",
       "source_key": "A01F",
-      "implementation": "warcraft-human-passive-v1",
+      "implementation": "warcraft-cleave-v1",
       "valid_from": "9.27",
       "valid_through": "9.27",
       "notes": "Version-scoped Castle Fight 9.27 passive profile on the produced Human unit."

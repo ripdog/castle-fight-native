@@ -3,6 +3,8 @@ use crate::components::AuraEffectProfile;
 
 fn aura() -> PassiveUnitEffects {
     PassiveUnitEffects::single(PassiveUnitEffect::Aura(AuraEffectProfile {
+        self_only: false,
+        melee_life_steal_per_10k: 0,
         ability: AbilityId(619),
         radius: 55 * SUBUNITS_PER_WORLD_UNIT,
         melee_damage_return_per_10k: 2700,

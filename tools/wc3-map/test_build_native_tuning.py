@@ -18,8 +18,10 @@ class NativeTuningProjectionTest(unittest.TestCase):
         p = native.project_effect(recipe, fields, None, {}, {'native_base': 'ANpi'})['profile']
         self.assertEqual((p['damage'], p['interval_ticks'], p['radius']), (17, 15, 13 * 1024))
         self.assertTrue(p['organic_only'])
+        mixed = native.project_effect(recipe, {**fields, 'targs1': 'air,ground,enemies,neutral'}, None, {}, {'native_base': 'ANpi'})['profile']
+        self.assertFalse(mixed['organic_only'])
         for changed in ({'dur1': '0'}, {'datab1': '1'}, {'datac1': '1'}, {'cost1': '3'},
-            {'targs1': 'air,ground,enemies,neutral'}, {'dataa1': '-1'}):
+            {'targs1': 'air,ground,enemies,neutral,structure'}, {'dataa1': '-1'}):
             with self.subTest(changed=changed), self.assertRaises(ValueError):
                 native.project_effect(recipe, {**fields, **changed}, None, {}, {'native_base': 'ANpi'})
 
@@ -69,7 +71,9 @@ class NativeTuningProjectionTest(unittest.TestCase):
         p = native.project_effect(recipe, fields, None, {}, {"native_base":"AIcb"})["profile"]
         self.assertEqual((p["armor_reduction_per_100"], p["duration_ticks"], p["hero_duration_ticks"]), (300,9,3))
         self.assertFalse(p["buff"]["organic_only"])
-        for changed in [{"dataa1":"1"}, {"datae1":"2"}, {"targs1":"air,ground,nonhero"}]:
+        bonus = native.project_effect(recipe, {**fields, "dataa1":"7"}, None, {}, {"native_base":"AIcb"})["profile"]
+        self.assertEqual(bonus["damage_bonus"], 7)
+        for changed in [{"dataa1":"-1"}, {"datae1":"2"}, {"targs1":"air,ground,nonhero"}]:
             with self.assertRaises(ValueError):
                 native.project_effect(recipe, {**fields, **changed}, None, {}, {"native_base":"AIcb"})
 

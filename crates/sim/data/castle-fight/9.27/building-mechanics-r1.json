@@ -10184,6 +10184,223 @@
     ],
     "twins_marker": 1093682767
   },
+  "production_training_variants": {
+    "body_maximum": 99,
+    "body_minimum": 0,
+    "common_bodies": [
+      1848651857,
+      1848651854,
+      1848651855,
+      1848651856
+    ],
+    "common_maximum": 3,
+    "common_minimum": 0,
+    "grant_groups": [
+      {
+        "choices": [
+          {
+            "ability": 1093677113,
+            "threshold_exclusive": 20
+          },
+          {
+            "ability": 1093677382,
+            "threshold_exclusive": 55
+          }
+        ],
+        "maximum": 99,
+        "minimum": 0
+      },
+      {
+        "choices": [
+          {
+            "ability": 1093677634,
+            "threshold_exclusive": 18
+          },
+          {
+            "ability": 1093677378,
+            "threshold_exclusive": 30
+          },
+          {
+            "ability": 1093677146,
+            "threshold_exclusive": 33
+          },
+          {
+            "ability": 1093678924,
+            "threshold_exclusive": 43
+          }
+        ],
+        "maximum": 99,
+        "minimum": 0
+      },
+      {
+        "choices": [
+          {
+            "ability": 1093677141,
+            "threshold_exclusive": 10
+          },
+          {
+            "ability": 1093677140,
+            "threshold_exclusive": 32
+          },
+          {
+            "ability": 1093678410,
+            "threshold_exclusive": 35
+          }
+        ],
+        "maximum": 99,
+        "minimum": 0
+      },
+      {
+        "choices": [
+          {
+            "ability": 1093677377,
+            "threshold_exclusive": 25
+          }
+        ],
+        "maximum": 99,
+        "minimum": 0
+      },
+      {
+        "choices": [
+          {
+            "ability": 1093677142,
+            "threshold_exclusive": 15
+          },
+          {
+            "ability": 1093677124,
+            "threshold_exclusive": 40
+          }
+        ],
+        "maximum": 99,
+        "minimum": 0
+      },
+      {
+        "choices": [
+          {
+            "ability": 1093677397,
+            "threshold_exclusive": 8
+          },
+          {
+            "ability": 1093677360,
+            "threshold_exclusive": 16
+          },
+          {
+            "ability": 1093677392,
+            "threshold_exclusive": 24
+          },
+          {
+            "ability": 1093677110,
+            "threshold_exclusive": 34
+          },
+          {
+            "ability": 1093677394,
+            "threshold_exclusive": 44
+          },
+          {
+            "ability": 1093677362,
+            "threshold_exclusive": 47
+          }
+        ],
+        "maximum": 99,
+        "minimum": 0
+      }
+    ],
+    "grant_sources": [
+      {
+        "key": 1093677110,
+        "kind": "unit-ability"
+      },
+      {
+        "key": 1093677113,
+        "kind": "unit-ability"
+      },
+      {
+        "key": 1093677124,
+        "kind": "unit-ability"
+      },
+      {
+        "key": 1093677140,
+        "kind": "unit-ability"
+      },
+      {
+        "key": 1093677141,
+        "kind": "unit-ability"
+      },
+      {
+        "key": 1093677142,
+        "kind": "unit-ability"
+      },
+      {
+        "key": 1093677146,
+        "kind": "unit-ability"
+      },
+      {
+        "key": 1093677360,
+        "kind": "unit-ability"
+      },
+      {
+        "key": 1093677362,
+        "kind": "unit-ability"
+      },
+      {
+        "key": 1093677377,
+        "kind": "unit-ability"
+      },
+      {
+        "key": 1093677378,
+        "kind": "unit-ability"
+      },
+      {
+        "key": 1093677382,
+        "kind": "unit-ability"
+      },
+      {
+        "key": 1093677392,
+        "kind": "unit-ability"
+      },
+      {
+        "key": 1093677394,
+        "kind": "ability-effect"
+      },
+      {
+        "key": 1093677397,
+        "kind": "unit-ability"
+      },
+      {
+        "key": 1093677634,
+        "kind": "unit-ability"
+      },
+      {
+        "key": 1093678410,
+        "kind": "unit-ability"
+      },
+      {
+        "key": 1093678924,
+        "kind": "unit-ability"
+      }
+    ],
+    "marker": 1093678922,
+    "rare_bodies": [
+      {
+        "body": 1848651853,
+        "threshold_exclusive": 5
+      },
+      {
+        "body": 1848651858,
+        "threshold_exclusive": 14
+      }
+    ],
+    "roots": [
+      1848651852
+    ],
+    "source_functions": [
+      "onUnitTrained",
+      "rollBody",
+      "EE",
+      "randomizeBloodFiend",
+      "replaceUnitWithType"
+    ]
+  },
   "protected": [
     {
       "byte_offset": "2011053",
@@ -11292,6 +11509,10 @@
       "byte_offset": 3144549,
       "source": "function DummyRecycler_get(fwq,gwq)local hwq=nil local iwq=nil local jwq=nil local kwq=nil local lwq={0.;0.}local mwq=nil local nwq=nil local owq=nil local pwq=nil local qwq=nil local rwq=nil local swq=nil hwq=__wurst_modInt(real_round((__wurst_modReal(angle_degrees(gwq),360.)/Qdb)),Rdb)if(LinkedList_LinkedList_size(Odb[hwq])>0)then iwq=__wurst_objectFromIndex(__wurst_ensureInt(LinkedList_LinkedList_dequeue(Odb[hwq])))kwq=iwq lwq=tupleCopy1(fwq)mwq=kwq owq=mwq pwq=lwq[1]__wurst_safe_SetUnitX(owq,pwq)nwq=mwq qwq=nwq rwq=lwq[2]__wurst_safe_SetUnitY(qwq,rwq)jwq=iwq swq=jwq __wurst_safe_PauseUnit(swq,false)return jwq else return createDummy(fwq,gwq)end end "
     },
+    "EE": {
+      "byte_offset": 2303544,
+      "source": "function EE()qAb=1848651853 pAb=1848651858 oAb[0]=1848651857 oAb[1]=1848651854 oAb[2]=1848651855 oAb[3]=1848651856 end _I[_T(575521,\"3ac92ff2a2278c198a6c911f513689\")]=EE "
+    },
     "Ed": {
       "byte_offset": 1721190,
       "source": "function Ed(Zfo)local ago=nil ago=(__wurst_safe_GetUnitAbilityLevel(Zfo,1093679427)+1)if(ago>=6)then return end __wurst_safe_SetUnitAbilityLevel(Zfo,1093679427,ago)__wurst_safe_SetUnitAbilityLevel(Zfo,1093679426,ago)__wurst_safe_SetUnitAbilityLevel(Zfo,1093677130,ago)safeDestroyEffect(__wurst_safe_AddSpecialEffectTarget(\"Abilities\\\\Spells\\\\Human\\\\Avatar\\\\AvatarCaster.mdl\",Zfo,\"origin\"))end "
@@ -11644,13 +11865,25 @@
       "byte_offset": 3632110,
       "source": "function randomNorthernBuildingTarget(Uxr)local Vxr=nil local Wxr=nil local Xxr=nil local Yxr=nil local Zxr=nil local ayr=nil local byr=nil local cyr=nil local dyr=nil Vxr=CreateGroup()Yxr=uIb Wxr=Ow:create956()Wxr.p=Uxr Wxr.g=Vxr Zxr=Yxr ayr=Wxr byr=ayr cyr=Hib Nib[cyr]=byr Lib[cyr]=Fib Hib=(Hib+1)__wurst_safe_GroupEnumUnitsInRect(Oib,Zxr,Gib)popCallback(true)Xxr=group_getRandom(Vxr)dyr=Vxr __wurst_safe_DestroyGroup(dyr)return Xxr end "
     },
+    "randomizeBloodFiend": {
+      "byte_offset": 2304255,
+      "source": "function randomizeBloodFiend(B_o)local C_o=nil local D_o=nil local E_o=nil local F_o=nil local G_o=nil local H_o=nil local I_o=nil local J_o=nil local K_o=nil local L_o=nil local M_o=nil local N_o=nil local O_o=nil local P_o=nil local Q_o=nil local R_o=nil local S_o=nil local T_o=nil local U_o=nil local V_o=nil local W_o=nil local X_o=nil local Y_o=nil local Z_o=nil C_o=rollBody(B_o)D_o=GetRandomInt(0,99)if(D_o<20)then I_o=C_o addProtectedAbility(I_o,1093677113)elseif(D_o<55)then J_o=C_o addProtectedAbility(J_o,1093677382)end E_o=GetRandomInt(0,99)if(E_o<18)then K_o=C_o addProtectedAbility(K_o,1093677634)elseif(E_o<30)then L_o=C_o addProtectedAbility(L_o,1093677378)elseif(E_o<33)then M_o=C_o addProtectedAbility(M_o,1093677146)elseif(E_o<43)then N_o=C_o addProtectedAbility(N_o,1093678924)end F_o=GetRandomInt(0,99)if(F_o<10)then O_o=C_o addProtectedAbility(O_o,1093677141)elseif(F_o<32)then P_o=C_o addProtectedAbility(P_o,1093677140)elseif(F_o<35)then Q_o=C_o addProtectedAbility(Q_o,1093678410)end if(GetRandomInt(0,99)<25)then R_o=C_o addProtectedAbility(R_o,1093677377)end G_o=GetRandomInt(0,99)if(G_o<15)then S_o=C_o addProtectedAbility(S_o,1093677142)elseif(G_o<40)then T_o=C_o addProtectedAbility(T_o,1093677124)end H_o=GetRandomInt(0,99)if(H_o<8)then U_o=C_o addProtectedAbility(U_o,1093677397)elseif(H_o<16)then V_o=C_o addProtectedAbility(V_o,1093677360)elseif(H_o<24)then W_o=C_o addProtectedAbility(W_o,1093677392)elseif(H_o<34)then X_o=C_o addProtectedAbility(X_o,1093677110)elseif(H_o<44)then Y_o=C_o addProtectedAbility(Y_o,1093677394)elseif(H_o<47)then Z_o=C_o addProtectedAbility(Z_o,1093677362)end return C_o end "
+    },
     "recycleSpellDummy": {
       "byte_offset": 3753818,
       "source": "function recycleSpellDummy(tSr,uSr)if((tSr==nil)or(unit_getTypeId(tSr)==0))then return end unit_removeAbility(tSr,uSr)DummyRecycler_recycle(tSr)end "
     },
+    "replaceUnitWithType": {
+      "byte_offset": 2303714,
+      "source": "function replaceUnitWithType(u_o,v_o)local w_o=nil local x_o=nil local y_o=nil x_o=u_o __wurst_safe_ShowUnit(x_o,false)pFb=u_o w_o=__wurst_safe_CreateUnit(unit_getOwner(u_o),v_o,unit_getX(u_o),unit_getY(u_o),angle_degrees(unit_getFacingAngle(u_o)))y_o=u_o __wurst_safe_RemoveUnit(y_o)return w_o end "
+    },
     "resetSilverGladeCounterForTeam": {
       "byte_offset": 3617173,
       "source": "function resetSilverGladeCounterForTeam(Wvr)if((Wvr>=0)and(Wvr<=1))then R0[Wvr]=0 end end "
+    },
+    "rollBody": {
+      "byte_offset": 2304013,
+      "source": "function rollBody(z_o)local A_o=nil A_o=GetRandomInt(0,99)if(A_o<5)then return replaceUnitWithType(z_o,qAb)elseif(A_o<14)then return replaceUnitWithType(z_o,pAb)end return replaceUnitWithType(z_o,__wurst_ensureInt(oAb[GetRandomInt(0,3)]))end "
     },
     "serpentRockShoot": {
       "byte_offset": 3645615,

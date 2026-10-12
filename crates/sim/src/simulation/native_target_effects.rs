@@ -23,6 +23,7 @@ mod homing_splash;
 mod immolation;
 mod kill_berserk;
 mod lava_spawn;
+mod life_steal;
 mod lightning;
 mod master_projectiles;
 mod mirror_image;
@@ -1655,6 +1656,8 @@ fn native_mana_aura_retains_fractional_regeneration_and_continues_during_cast_co
             collision_radius: Some(CollisionRadius(0)),
             passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Aura(
                 crate::components::AuraEffectProfile {
+                    self_only: false,
+                    melee_life_steal_per_10k: 0,
                     melee_damage_return_per_10k: 0,
                     damage_bonus_per_10k: 0,
                     affects_melee: true,
@@ -1718,6 +1721,8 @@ fn native_mana_aura_retains_fractional_regeneration_and_continues_during_cast_co
 fn native_damage_aura_filters_weapon_class_and_does_not_stack_duplicate_sources() {
     let mut sim = simulation(1);
     let aura = crate::components::AuraEffectProfile {
+        self_only: false,
+        melee_life_steal_per_10k: 0,
         melee_damage_return_per_10k: 0,
         ability: AbilityId(98),
         radius: 100 * SUBUNITS_PER_WORLD_UNIT,
@@ -1795,6 +1800,8 @@ fn native_aura_keeps_its_authored_linger_after_source_removal_across_recovery() 
         UnitGameplayProperties {
             passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Aura(
                 crate::components::AuraEffectProfile {
+                    self_only: false,
+                    melee_life_steal_per_10k: 0,
                     melee_damage_return_per_10k: 0,
                     ability: AbilityId(99),
                     radius: 100 * SUBUNITS_PER_WORLD_UNIT,

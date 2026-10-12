@@ -741,6 +741,10 @@ enum TuningEffect {
         affects_melee: bool,
         affects_ranged: bool,
         linger_ticks: u16,
+        #[serde(default)]
+        self_only: bool,
+        #[serde(default)]
+        melee_life_steal_per_10k: u32,
         source_kind: String,
         source_key: String,
         unit_rawcode: String,
@@ -1390,6 +1394,27 @@ pub fn resolve_native_effect_requirements(
     Ok(resolved)
 }
 
+pub(crate) fn permanent_grant_for_version(
+    version: MapVersion,
+    ability: u32,
+) -> Option<crate::NativeAbilityGrant> {
+    catalog()
+        .tuning(version)?
+        .effects
+        .iter()
+        .find_map(|effect| match effect {
+            TuningEffect::NativeEnchantmentGrant {
+                source_key, grant, ..
+            } if rawcode(source_key).ok() == Some(ability) => Some(*grant),
+            _ => None,
+        })
+}
+
+pub(crate) fn canonical_projection_for_version(version: MapVersion) -> &'static [u8] {
+    assert_eq!(version, MapVersion::CASTLE_FIGHT_9_27);
+    TUNING_9_27_JSON.as_bytes()
+}
+
 pub(crate) fn script_granted_ability_sources_for(
     version: MapVersion,
     unit_rawcode: u32,
@@ -1408,6 +1433,10 @@ pub(crate) fn script_granted_ability_sources_for(
                 .map(|effect| effect.source().expect("validated script-granted source"))
         })
         .chain(crate::building_mechanics::damage_proc_granted_sources(
+            version,
+            unit_rawcode,
+        ))
+        .chain(crate::building_mechanics::training_granted_sources(
             version,
             unit_rawcode,
         ))
@@ -1741,11 +1770,15 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             affects_melee,
             affects_ranged,
             linger_ticks,
+            self_only,
+            melee_life_steal_per_10k,
             source_key,
             radius_world,
             mana_regeneration_per_second_per_10k,
             ..
         } => PassiveUnitEffect::Aura(crate::components::AuraEffectProfile {
+            self_only: *self_only,
+            melee_life_steal_per_10k: *melee_life_steal_per_10k,
             melee_damage_return_per_10k: *melee_damage_return_per_10k,
             damage_bonus_per_10k: *damage_bonus_per_10k,
             affects_melee: *affects_melee,

@@ -35,6 +35,42 @@
       "lifetime_ticks": 905
     },
     {
+      "rawcode": "n00M",
+      "does_decay": true,
+      "decay_start_ticks": 48,
+      "lifetime_ticks": 858
+    },
+    {
+      "rawcode": "n00N",
+      "does_decay": true,
+      "decay_start_ticks": 48,
+      "lifetime_ticks": 858
+    },
+    {
+      "rawcode": "n00O",
+      "does_decay": true,
+      "decay_start_ticks": 48,
+      "lifetime_ticks": 858
+    },
+    {
+      "rawcode": "n00P",
+      "does_decay": true,
+      "decay_start_ticks": 48,
+      "lifetime_ticks": 858
+    },
+    {
+      "rawcode": "n00Q",
+      "does_decay": true,
+      "decay_start_ticks": 48,
+      "lifetime_ticks": 858
+    },
+    {
+      "rawcode": "n00R",
+      "does_decay": true,
+      "decay_start_ticks": 48,
+      "lifetime_ticks": 858
+    },
+    {
       "rawcode": "n00T",
       "does_decay": true,
       "decay_start_ticks": 90,

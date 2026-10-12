@@ -85,6 +85,128 @@ fn restored(source: &Simulation, workers: usize) -> Simulation {
 }
 
 #[test]
+fn registered_training_variants_replace_handles_with_fresh_bodies_and_clone_without_random_grants()
+{
+    let version = crate::MapVersion::CASTLE_FIGHT_9_27;
+    let bundle = crate::castle_fight_content_bundle(version).unwrap();
+    let profile = crate::building_mechanics::training_variants_for_version(version);
+    let shrine = crate::CastleFightTowerKind::HeroicShrine
+        .definition_for_version(version)
+        .unwrap();
+    for root in &profile.roots {
+        let original = bundle
+            .unit_definitions()
+            .find(|unit| unit.rawcode == *root)
+            .unwrap();
+        let mut saw_clone = false;
+        let mut saw_grants = false;
+        for seed in 0..48 {
+            let mut sim = Simulation::new_with_gameplay_bundle_and_players(
+                SimulationConfig {
+                    match_seed: seed,
+                    ..Default::default()
+                },
+                1,
+                CombatRules::default(),
+                bundle.identity.into(),
+                &[
+                    PlayerConfig {
+                        id: PlayerId(0),
+                        team: Team(0),
+                    },
+                    PlayerConfig {
+                        id: PlayerId(1),
+                        team: Team(0),
+                    },
+                ],
+            );
+            sim.spawn_building_for_player_with_properties(
+                PlayerId(1),
+                shrine.spawn(Team(0), BuildingFootprint::new(20, 0, 4, 4)),
+                shrine.gameplay_properties(),
+            );
+            let (mut spawn, mut properties) = factory(&[ability(10)]);
+            properties.production_unit.content = original.gameplay_properties().content;
+            spawn.production.as_mut().unwrap().initial_delay_ticks = 0;
+            let producer =
+                sim.spawn_building_for_player_with_properties(PlayerId(0), spawn, properties);
+            sim.step();
+            let units = sim.units();
+            assert!(
+                !units
+                    .iter()
+                    .any(|unit| unit.content.is_some_and(|content| content.rawcode == *root))
+            );
+            let trained = units.iter().find(|unit| unit.owner == PlayerId(0)).unwrap();
+            let rawcode = trained.content.unwrap().rawcode;
+            assert!(profile.bodies().any(|body| body == rawcode));
+            let cold = bundle
+                .unit_definitions()
+                .find(|body| body.rawcode == rawcode)
+                .unwrap();
+            assert_eq!(trained.health, cold.health);
+            assert_eq!(trained.status.spawn_building, Some(producer));
+            assert!(trained.id.0 > producer.0 + 1);
+            let trained_entity = entity(&sim, trained.id);
+            let passives = sim.world.get::<PassiveUnitEffects>(trained_entity).unwrap();
+            saw_grants |= passives.iter().next().is_some()
+                || trained.status.native_grants.iter().next().is_some();
+            for clone in units.iter().filter(|unit| unit.owner == PlayerId(1)) {
+                saw_clone = true;
+                assert_eq!(clone.content.unwrap().rawcode, rawcode);
+                assert_eq!(clone.health, cold.health);
+                assert_eq!(
+                    *sim.world
+                        .get::<PassiveUnitEffects>(entity(&sim, clone.id))
+                        .unwrap(),
+                    cold.passive_effects
+                );
+                assert_eq!(
+                    sim.world
+                        .get::<SpellcastingProfile>(entity(&sim, clone.id))
+                        .copied(),
+                    cold.spellcasting
+                );
+                assert!(clone.status.native_grants.iter().next().is_none());
+                assert_eq!(clone.status.spawn_building, Some(producer));
+            }
+            let snapshot = SimulationSnapshot::decode_wire(
+                &sim.capture_snapshot().encode_wire().unwrap(),
+                bundle,
+            )
+            .unwrap();
+            let mut other = Simulation::new_with_gameplay_bundle_and_players(
+                SimulationConfig {
+                    match_seed: seed,
+                    ..Default::default()
+                },
+                4,
+                CombatRules::default(),
+                bundle.identity.into(),
+                &[
+                    PlayerConfig {
+                        id: PlayerId(0),
+                        team: Team(0),
+                    },
+                    PlayerConfig {
+                        id: PlayerId(1),
+                        team: Team(0),
+                    },
+                ],
+            );
+            other.restore_snapshot(&snapshot).unwrap();
+            for _ in 0..2 {
+                assert_eq!(sim.step().checksum, other.step().checksum);
+            }
+            if saw_clone && saw_grants {
+                break;
+            }
+        }
+        assert!(saw_clone && saw_grants);
+    }
+}
+
+#[test]
 fn source_marked_training_copies_initialize_complete_children_and_restore_across_workers() {
     let version = crate::MapVersion::CASTLE_FIGHT_9_27;
     let replication = crate::building_mechanics::production_replication_for_version(version);

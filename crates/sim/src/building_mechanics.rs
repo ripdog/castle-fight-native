@@ -33,6 +33,8 @@ pub(crate) use naga::{
 };
 pub(crate) use naga::{oracle_bindings, oracle_source, oracle_spellcasting_for_version};
 pub(crate) use naga::{pyramid_bindings, pyramid_source, pyramid_spellcasting_for_version};
+mod training_variants;
+pub(crate) use training_variants::{training_granted_sources, training_variants_for_version};
 mod production_replication;
 pub use night_elf::{SilverGladeProfile, StarfallProfile, StarfallWaveProfile, WildernessProfile};
 pub(crate) use night_elf::{

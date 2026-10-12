@@ -3,6 +3,8 @@ use crate::components::AuraEffectProfile;
 
 fn aura(radius: i32) -> AuraEffectProfile {
     AuraEffectProfile {
+        self_only: false,
+        melee_life_steal_per_10k: 0,
         melee_damage_return_per_10k: 0,
         ability: AbilityId(89),
         radius: radius * SUBUNITS_PER_WORLD_UNIT,

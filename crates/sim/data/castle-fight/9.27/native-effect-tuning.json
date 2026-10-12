@@ -3,6 +3,174 @@
   "map_version": "9.27",
   "effects": [
     {
+      "source_kind": "unit-ability",
+      "source_key": "A01F",
+      "unit_rawcode": "h03B",
+      "kind": "cleave",
+      "radius_world": 175,
+      "damage_per_10k": 2500,
+      "targets": 1,
+      "provenance": {
+        "ability": "A01F",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A07L",
+      "unit_rawcode": "n00L",
+      "kind": "feedback",
+      "maximum_mana_drained": 25,
+      "damage_per_mana_per_10k": 10000,
+      "summoned_damage": 10,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A07L",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A02B",
+      "unit_rawcode": "n00L",
+      "kind": "corruption",
+      "profile": {
+        "ability": 1093677634,
+        "damage_bonus": 5,
+        "buff": {
+          "rawcode": 1112105826,
+          "positive": false,
+          "stealable": false,
+          "organic_only": false
+        },
+        "armor_reduction_per_100": 1000,
+        "duration_ticks": 150,
+        "hero_duration_ticks": 150,
+        "targets": 3
+      },
+      "provenance": {
+        "ability": "A02B",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A02A",
+      "unit_rawcode": "h025",
+      "kind": "sphere",
+      "profile": {
+        "ability": 1093677633,
+        "attachment_count": 3,
+        "cooldown_ticks": 30,
+        "speed_per_tick": 40960
+      },
+      "provenance": {
+        "ability": "A02A",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A05J",
+      "unit_rawcode": "n00L",
+      "kind": "evasion",
+      "chance_per_10k": 3500,
+      "provenance": {
+        "ability": "A05J",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A01U",
+      "unit_rawcode": "n00L",
+      "kind": "bash",
+      "chance_per_10k": 500,
+      "bonus_damage": 999999,
+      "stun_duration_millis": 10,
+      "hero_stun_duration_millis": 10,
+      "targets": "ground-units",
+      "provenance": {
+        "ability": "A01U",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A012",
+      "unit_rawcode": "n00L",
+      "kind": "permanent-immolation",
+      "profile": {
+        "ability": 1093677362,
+        "buff_rawcode": 1112436841,
+        "radius": 307200,
+        "damage": 33,
+        "interval_ticks": 30,
+        "targets": 3,
+        "organic_only": false
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "ANpi"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A006",
+      "unit_rawcode": "n00L",
+      "kind": "pulverize",
+      "chance_per_10k": 3000,
+      "damage": 100,
+      "full_radius_world": 150,
+      "half_radius_world": 250,
+      "targets": "ground-units",
+      "provenance": {
+        "ability": "A006",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A01R",
+      "unit_rawcode": "n00L",
+      "kind": "native-enchantment-grant",
+      "grant": {
+        "ability": 1093677394,
+        "effect": {
+          "Demolish": {
+            "chance_per_10k": 10000,
+            "multiplier_per_10k": 15000,
+            "targets": 4
+          }
+        }
+      },
+      "dependencies": [],
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "ANde"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A01P",
+      "unit_rawcode": "n00L",
+      "kind": "native-aura",
+      "radius_world": 900,
+      "damage_bonus_per_10k": 0,
+      "armor_bonus_per_100": 0,
+      "self_only": true,
+      "melee_life_steal_per_10k": 4000,
+      "melee_damage_return_per_10k": 0,
+      "mana_regeneration_per_second_per_10k": 0,
+      "affects_melee": true,
+      "affects_ranged": false,
+      "linger_ticks": 0,
+      "provenance": {
+        "ability": "A01P",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
       "source_key": "A01G",
@@ -388,6 +556,8 @@
       "radius_world": 350,
       "damage_bonus_per_10k": 0,
       "armor_bonus_per_100": 0,
+      "self_only": false,
+      "melee_life_steal_per_10k": 0,
       "melee_damage_return_per_10k": 3500,
       "mana_regeneration_per_second_per_10k": 0,
       "affects_melee": true,
@@ -406,6 +576,8 @@
       "radius_world": 500,
       "damage_bonus_per_10k": 0,
       "armor_bonus_per_100": 400,
+      "self_only": false,
+      "melee_life_steal_per_10k": 0,
       "melee_damage_return_per_10k": 0,
       "mana_regeneration_per_second_per_10k": 0,
       "affects_melee": true,
@@ -934,6 +1106,7 @@
       "kind": "corruption",
       "profile": {
         "ability": 1093678916,
+        "damage_bonus": 0,
         "buff": {
           "rawcode": 1110454609,
           "positive": false,
@@ -984,6 +1157,7 @@
       "kind": "corruption",
       "profile": {
         "ability": 1093678915,
+        "damage_bonus": 0,
         "buff": {
           "rawcode": 1110454609,
           "positive": false,
@@ -2674,6 +2848,8 @@
       "radius_world": 900,
       "damage_bonus_per_10k": 0,
       "armor_bonus_per_100": 400,
+      "self_only": false,
+      "melee_life_steal_per_10k": 0,
       "melee_damage_return_per_10k": 0,
       "mana_regeneration_per_second_per_10k": 0,
       "affects_melee": true,
@@ -2692,6 +2868,8 @@
       "radius_world": 900,
       "damage_bonus_per_10k": 3000,
       "armor_bonus_per_100": 0,
+      "self_only": false,
+      "melee_life_steal_per_10k": 0,
       "melee_damage_return_per_10k": 0,
       "mana_regeneration_per_second_per_10k": 0,
       "affects_melee": true,
@@ -3858,6 +4036,8 @@
       "radius_world": 800,
       "damage_bonus_per_10k": 0,
       "armor_bonus_per_100": 0,
+      "self_only": false,
+      "melee_life_steal_per_10k": 0,
       "melee_damage_return_per_10k": 0,
       "mana_regeneration_per_second_per_10k": 5000,
       "affects_melee": true,

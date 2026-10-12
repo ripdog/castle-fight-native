@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r123";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r124";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 70;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 71;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1011,6 +1011,8 @@ impl CastleFightUnitKind {
                 }));
                 if self == Self::Paladin {
                     effects.push(PassiveUnitEffect::Aura(AuraEffectProfile {
+                        self_only: false,
+                        melee_life_steal_per_10k: 0,
                         melee_damage_return_per_10k: 0,
                         damage_bonus_per_10k: 0,
                         affects_melee: true,
@@ -1038,6 +1040,8 @@ impl CastleFightUnitKind {
                     },
                 ));
                 effects.push(PassiveUnitEffect::Aura(AuraEffectProfile {
+                    self_only: false,
+                    melee_life_steal_per_10k: 0,
                     melee_damage_return_per_10k: 0,
                     damage_bonus_per_10k: 0,
                     affects_melee: true,
@@ -1051,6 +1055,8 @@ impl CastleFightUnitKind {
                 }));
             }
             Self::Warlock => effects.push(PassiveUnitEffect::Aura(AuraEffectProfile {
+                self_only: false,
+                melee_life_steal_per_10k: 0,
                 melee_damage_return_per_10k: 0,
                 damage_bonus_per_10k: 0,
                 affects_melee: true,
@@ -1876,6 +1882,36 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A07L") => {
+            0x4000_0193
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A07J") => {
+            0x4000_0192
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A02B") => {
+            0x4000_0191
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A02A") => {
+            0x4000_0190
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A05J") => {
+            0x4000_018f
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A01U") => {
+            0x4000_018e
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A012") => {
+            0x4000_018d
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A006") => {
+            0x4000_018c
+        }
+        (NativeEffectSourceKind::AbilityEffect, v) if v == u32::from_be_bytes(*b"A01R") => {
+            0x4000_018b
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A01P") => {
+            0x4000_018a
+        }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A01G") => {
             0x4000_0189
         }
@@ -2805,6 +2841,9 @@ fn canonical_content_bundle_hash(bundle: &CastleFightContentBundle) -> u64 {
     hash.write_bytes(crate::building_mechanics::canonical_projection_for_version(
         bundle.map_version,
     ));
+    hash.write_bytes(crate::native_effects::canonical_projection_for_version(
+        bundle.map_version,
+    ));
     for rule in crate::native_effects::unit_death_rules_for_version(bundle.map_version) {
         hash.write_u32(rule.rawcode);
         hash.write_u16(rule.heal_percent);
@@ -3379,6 +3418,8 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
                 hash.write_i32(i32::from(profile.attack_speed_percent_delta));
             }
             PassiveUnitEffect::Aura(profile) => {
+                hash.write_u8(u8::from(profile.self_only));
+                hash.write_u32(profile.melee_life_steal_per_10k);
                 hash.write_u32(profile.melee_damage_return_per_10k);
                 hash.write_i32(i32::from(profile.damage_bonus_per_10k));
                 hash.write_u8(u8::from(profile.affects_melee));

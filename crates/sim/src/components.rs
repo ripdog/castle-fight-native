@@ -723,6 +723,8 @@ pub struct CleaveEffectProfile {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuraEffectProfile {
+    pub self_only: bool,
+    pub melee_life_steal_per_10k: u32,
     pub melee_damage_return_per_10k: u32,
     pub damage_bonus_per_10k: i16,
     pub affects_melee: bool,
@@ -893,6 +895,7 @@ pub struct FeedbackEffectProfile {
 /// Native AIcb on-hit armor family, independent of spell damage/immunity.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CorruptionProfile {
+    pub damage_bonus: i32,
     pub ability: AbilityId,
     pub buff: NativeBuffIdentity,
     pub armor_reduction_per_100: i16,
@@ -901,8 +904,9 @@ pub struct CorruptionProfile {
     pub targets: AttackTargetMask,
 }
 impl CorruptionProfile {
-    pub(crate) fn canonical_words(self) -> [u64; 9] {
+    pub(crate) fn canonical_words(self) -> [u64; 10] {
         [
+            self.damage_bonus as u64,
             u64::from(self.ability.0),
             u64::from(self.buff.rawcode),
             self.buff.positive as u64,
@@ -1177,6 +1181,15 @@ impl PassiveUnitEffects {
             effects: stored,
             count: u8::try_from(effects.len()).expect("passive effect count fits u8"),
         }
+    }
+
+    pub(crate) fn native_attack_damage_bonus(&self) -> i32 {
+        self.iter()
+            .filter_map(|effect| match effect {
+                PassiveUnitEffect::Corruption(profile) => Some(profile.damage_bonus),
+                _ => None,
+            })
+            .sum()
     }
 
     pub fn iter(&self) -> impl DoubleEndedIterator<Item = PassiveUnitEffect> + '_ {
@@ -1949,6 +1962,7 @@ pub struct TimedAttackSpeedModifier {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TimedArmorModifier {
+    pub melee_life_steal_per_10k: u32,
     pub attack_miss_chance_per_10k: u16,
     pub melee_damage_return_per_10k: u32,
     pub undispellable: bool,

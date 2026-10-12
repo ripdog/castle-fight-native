@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 86;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 87;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -41,6 +41,7 @@ mod night_elf;
 mod parasite_area_buff;
 mod permanent_grants;
 mod starfall;
+mod training_variants;
 mod travelling_mana_clap;
 mod weather;
 mod world_freezer;
@@ -2921,7 +2922,8 @@ impl Simulation {
                     let PassiveUnitEffect::Aura(profile) = effect else {
                         return None;
                     };
-                    if profile.melee_damage_return_per_10k > 0
+                    if (profile.melee_damage_return_per_10k > 0
+                        || profile.melee_life_steal_per_10k > 0)
                         && (unit.abilities_disabled || unit.classifications.invisible)
                     {
                         return None;
@@ -2967,7 +2969,7 @@ impl Simulation {
                     || target.team != team
                     || (target.attack.delivery == AttackDelivery::Melee && !profile.affects_melee)
                     || (target.attack.delivery != AttackDelivery::Melee && !profile.affects_ranged)
-                    || (profile.radius == 0 && target.id != source_id)
+                    || ((profile.self_only || profile.radius == 0) && target.id != source_id)
                     || position.distance_sq(target.position) > square_i32(profile.radius)
                 {
                     continue;
@@ -2975,6 +2977,7 @@ impl Simulation {
                 apply_timed_armor_modifier(
                     &mut target.status,
                     TimedArmorModifier {
+                        melee_life_steal_per_10k: profile.melee_life_steal_per_10k,
                         attack_miss_chance_per_10k: 0,
                         melee_damage_return_per_10k: profile.melee_damage_return_per_10k,
                         undispellable: false,
@@ -3504,13 +3507,29 @@ impl Simulation {
                         content.map_version,
                     )
                 });
+                let mut shrine_definition = definition;
                 for _ in 0..replication.local_copies(marked) {
-                    self.spawn_resolved_unit_with_provenance(
+                    let original = self.spawn_resolved_unit_with_provenance(
                         Some(attempt.owner),
                         UnitSpawn::from_template(attempt.team, position, attempt.profile.unit),
                         definition,
                         Some(attempt.id),
                     );
+                    if let Some(content) = attempt.content
+                        && let Some(cold) = self.apply_training_variant(
+                            original,
+                            training_variants::TrainingVariantSpawn {
+                                owner: attempt.owner,
+                                team: attempt.team,
+                                position,
+                                producer: attempt.id,
+                                version: content.map_version,
+                                root_rawcode: content.rawcode,
+                            },
+                        )
+                    {
+                        shrine_definition = cold;
+                    }
                     spawned += 1;
                 }
                 if !marked
@@ -3572,9 +3591,9 @@ impl Simulation {
                                 UnitSpawn::from_template(
                                     attempt.team,
                                     position,
-                                    attempt.profile.unit,
+                                    shrine_definition.template,
                                 ),
-                                definition,
+                                shrine_definition,
                                 Some(attempt.id),
                             );
                             spawned += 1;
@@ -5620,7 +5639,8 @@ fn unit_view_from_entity(
     attack.damage = attack
         .damage
         .saturating_add(status.damage_threshold.attack_bonus)
-        .saturating_add(status.native_grants.attack_damage());
+        .saturating_add(status.native_grants.attack_damage())
+        .saturating_add(passive_effects.native_attack_damage_bonus());
     Some(UnitView {
         id: *entity.get::<SimId>()?,
         content: entity.get::<ContentIdentity>().copied(),
@@ -5656,7 +5676,8 @@ fn unit_view_from_entity(
                     .attack
                     .damage
                     .saturating_add(status.damage_threshold.attack_bonus)
-                    .saturating_add(status.native_grants.attack_damage());
+                    .saturating_add(status.native_grants.attack_damage())
+                    .saturating_add(passive_effects.native_attack_damage_bonus());
                 secondary
             }),
         attack_delivery: attack.delivery,
@@ -6146,6 +6167,27 @@ impl Simulation {
                             },
                         );
                     }
+                }
+                if kind == WeaponDamageKind::Melee
+                    && !state.units[index].classifications.spell_immune
+                    && let Some(source_index) = source_index
+                    && state.unit_health[source_index] > 0
+                {
+                    let factor = state.units[source_index].status.armor_modifiers
+                        [..usize::from(state.units[source_index].status.armor_modifier_count)]
+                        .iter()
+                        .filter(|m| completed_tick < m.expires_tick)
+                        .map(|m| m.melee_life_steal_per_10k)
+                        .max()
+                        .unwrap_or(0);
+                    let healing = (i64::from(event_damage.max(0)) * i64::from(factor) / 10_000)
+                        .min(i64::from(
+                            state.units[source_index].health_max - state.unit_health[source_index],
+                        ));
+                    let health = state.unit_health[source_index]
+                        + i32::try_from(healing).expect("life stolen fits missing health");
+                    state.unit_health[source_index] = health;
+                    state.units[source_index].health = health;
                 }
                 Some(state.unit_positions[index])
             }

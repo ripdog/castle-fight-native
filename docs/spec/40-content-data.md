@@ -438,3 +438,5 @@ Where original behavior is uncertain, tests/content should label the choice as:
 - intentional divergence.
 
 This will prevent accidental changes while reverse-engineering game feel.
+
+Version-scoped generated native tuning participates in the bundle gameplay hash, including conditionally granted effects which are absent from cold unit inventories. A training replacement consumes the selected body's cold definition and native mana pool; ability recipes for other owners cannot supply a replacement body's mana. Direct scripted copies consume a fresh cold definition and do not inherit transient health, cooldowns or script-granted abilities unless the source callback explicitly copies them.

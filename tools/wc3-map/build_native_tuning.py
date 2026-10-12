@@ -119,15 +119,15 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     kind = recipe["kind"]
     if kind == "permanent-immolation":
         if (mechanics['native_base'] not in {'ANpi', 'ACpi'}
-            or set(fields['targs1'].split(',')) != {'air', 'ground', 'enemies', 'neutral', 'organic'}
+            or set(fields['targs1'].split(',')) not in ({'air', 'ground', 'enemies', 'neutral', 'organic'}, {'air', 'ground', 'enemies', 'neutral'})
             or any(number(key) != 0 for key in ['Cost1', 'Cool1', 'DataB1', 'DataC1'])
             or number('Dur1', 30) <= 0 or number('DataA1') < 0):
-            raise ValueError('permanent immolation requires the passive free organic native pulse')
+            raise ValueError('permanent immolation requires the passive free native pulse')
         return {**recipe, 'profile': {
             'ability': int.from_bytes(recipe['source_key'].encode(), 'big'),
             'buff_rawcode': buff_identity(fields, positive=False)['rawcode'],
             'radius': number('Area1', 1024), 'damage': number('DataA1'),
-            'interval_ticks': number('Dur1', 30), 'targets': 3, 'organic_only': True},
+            'interval_ticks': number('Dur1', 30), 'targets': 3, 'organic_only': 'organic' in fields['targs1'].split(',')},
             'provenance': {'source': 'resolved/object-fields.tsv', 'native_base': mechanics['native_base']}}
     if kind == "death-spawn":
         if mechanics["native_base"] != "Aspy" or any(number(key) != 0 for key in ("Cost1", "Cool1", "Dur1", "HeroDur1")):
@@ -176,6 +176,15 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     if kind in {"siren-purge", "feral-spirit"}:
         from project_naga_unit import project
         return project(recipe, fields, unit, protected, mechanics)
+    if kind == "native-training-grant":
+        if (mechanics['native_base'] != 'ANde' or fields['targs1'] != 'enemy,structure'
+            or any(number(key) != 0 for key in ['DataC1', 'DataD1', 'Cost1', 'Cool1'])):
+            raise ValueError('training Demolish requires its passive structure-only native modifier')
+        return {**recipe, 'kind': 'native-enchantment-grant',
+            'grant': {'ability': int.from_bytes(recipe['source_key'].encode(), 'big'),
+                'effect': {'Demolish': {'chance_per_10k': number('DataA1', 100),
+                    'multiplier_per_10k': number('DataB1', 10000), 'targets': 4}}}, 'dependencies': [],
+            'provenance': {'source': 'resolved/object-fields.tsv', 'native_base': mechanics['native_base']}}
     if kind == "native-curse":
         from project_curse import project
         return project(recipe, fields, unit, protected, mechanics)
@@ -384,11 +393,11 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
                       damage_multiplier_per_10k=number("DataB1", 10_000),
                       targets=unit_targets(fields["targs1"], allow_structures=True))
     elif kind == "corruption":
-        if (mechanics["native_base"] != "AIcb" or number("DataA1") != 0
+        if (mechanics["native_base"] != "AIcb" or number("DataA1") < 0
             or number("DataE1") != 1 or set(fields["targs1"].split(",")) != {"ground", "air", "ward"}):
-            raise ValueError("Corruption requires audited zero-bonus native orb and weapon index")
+            raise ValueError("Corruption requires audited native orb damage bonus and weapon index")
         ticks = lambda key: int((Decimal(fields[key]) * 30).to_integral_value(rounding="ROUND_CEILING"))
-        effect.update(profile={"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
+        effect.update(profile={"ability": int.from_bytes(recipe["source_key"].encode(), "big"), "damage_bonus": number("DataA1"),
             "buff": {"rawcode": int.from_bytes(fields["buffid1"].encode(), "big"), "positive": False,
                 "stealable": False, "organic_only": False},
             "armor_reduction_per_100": number("DataB1", 100), "duration_ticks": ticks("dur1"),
@@ -415,9 +424,10 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
             "targets": 2, "hostile": True, "organic_only": False, "affects_invulnerable": False,
             "movement_percent_delta": number("DataA1", 100), "attack_speed_percent_delta": number("DataB1", 100)})
     elif kind == "native-aura":
-        if set(fields["targs1"].split(",")) != {"air", "ground", "friend", "self", "vuln", "invu"}:
-            raise ValueError("native aura requires explicit target semantics")
         base = mechanics["native_base"]
+        self_only = base == 'ACvp' and fields['targs1'] == 'self'
+        if not self_only and set(fields["targs1"].split(",")) != {"air", "ground", "friend", "self", "vuln", "invu"}:
+            raise ValueError("native aura requires explicit target semantics")
         damage, armor, mana, returned, melee, ranged = 0, 0, 0, 0, True, True
         if base == "AIar":
             if number("DataD1") != 0 or number("DataB1") not in {0, 1} or number("DataC1") not in {0, 1}:
@@ -431,6 +441,10 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
             if number("DataB1") != 0:
                 raise ValueError("native mana aura requires flat regeneration")
             mana = number("DataA1", 10_000)
+        elif base == "ACvp":
+            if not self_only or number('DataA1', 10000) < 0:
+                raise ValueError('self Vampiric Aura requires its exact native self mask and positive factor')
+            melee, ranged = True, False
         elif base == "AEah":
             if number("DataB1") != 1 or number("DataA1", 10_000) < 0:
                 raise ValueError("native thorns aura requires nonnegative percent-return damage")
@@ -438,6 +452,7 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         else:
             raise ValueError(f"unsupported native aura base {base}")
         effect.update(radius_world=number("Area1"), damage_bonus_per_10k=damage, armor_bonus_per_100=armor,
+            self_only=self_only, melee_life_steal_per_10k=number("DataA1", 10000) if base == "ACvp" else 0,
             melee_damage_return_per_10k=returned,
             mana_regeneration_per_second_per_10k=mana, affects_melee=melee, affects_ranged=ranged,
             linger_ticks=int((Decimal(fields["dur1"]) * 30).to_integral_value(rounding="ROUND_CEILING")))
@@ -764,6 +779,10 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
     lua = retained("script/war3map.lua")
     functions = {row["name"]: lua[int(row["start_byte_offset"]):int(row["end_byte_offset"])].decode()
         for row in rows(retained("script/function-spans.tsv"))}
+    from project_training_variants import project as project_training
+    training = project_training(functions, units, ability_bases)
+    training_grants = {code.to_bytes(4, 'big').decode() for group in training['grant_groups'] for code in [choice['ability'] for choice in group['choices']]}
+    training_roots = {code.to_bytes(4, 'big').decode() for code in training['roots']}
     building_spells = {row["ability_rawcode"]: row for row in rows(retained("resolved/building-spell-mechanics.tsv"))}
     spell_mechanics = {row["ability_rawcode"]: row for row in rows(retained("resolved/unit-spell-mechanics.tsv"))}
     spell_semantics = {row["ability_rawcode"]: row for row in rows(retained("resolved/unit-spell-semantics.tsv"))}
@@ -784,7 +803,8 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         seen.add(key)
         unit = units.get(recipe.get("unit_rawcode", ""))
         if recipe["source_kind"] == "unit-ability":
-            if unit is None or recipe["source_key"] not in unit["abilities"].split(","):
+            if unit is None or (recipe["source_key"] not in unit["abilities"].split(",")
+                and not (recipe["source_key"] in training_grants and recipe["unit_rawcode"] in training_roots)):
                 raise ValueError(f"recipe {key} is not in its source unit's extracted ability inventory")
         source = recipe["source_key"]
         if recipe["kind"] in {"inner-fire", "spell-steal", "native-curse"} and default_autocast.get(recipe.get("unit_rawcode")) != source:

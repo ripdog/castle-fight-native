@@ -957,6 +957,46 @@ fn load_visual_assets(
         }
     }
 
+    let building_projection: serde_json::Value = serde_json::from_str(include_str!(
+        "../sim/data/castle-fight/9.27/building-mechanics-r1.json"
+    ))?;
+    let training = &building_projection["production_training_variants"];
+    let grant_abilities: Vec<String> = training["grant_sources"]
+        .as_array()
+        .ok_or("training grant identities")?
+        .iter()
+        .map(|entry| {
+            let code =
+                u32::try_from(entry["key"].as_u64().ok_or("training ability")?)?.to_be_bytes();
+            Ok(String::from_utf8(code.to_vec())?)
+        })
+        .collect::<Result<_, Box<dyn Error>>>()?;
+    let owners = training["roots"]
+        .as_array()
+        .ok_or("training roots")?
+        .iter()
+        .chain(
+            training["common_bodies"]
+                .as_array()
+                .ok_or("training common bodies")?
+                .iter(),
+        )
+        .map(|entry| entry.as_u64().ok_or("training body"))
+        .chain(
+            training["rare_bodies"]
+                .as_array()
+                .ok_or("training rare bodies")?
+                .iter()
+                .map(|entry| entry["body"].as_u64().ok_or("training rare body")),
+        );
+    for owner in owners {
+        let code = String::from_utf8(u32::try_from(owner?)?.to_be_bytes().to_vec())?;
+        unit_abilities
+            .entry(code)
+            .or_default()
+            .extend(grant_abilities.iter().cloned());
+    }
+
     // Autonomous missiles and native referenced effects (e.g. orb children) have
     // no dummy-cast semantic row. Follow typed object references transitively and
     // keep missile/native beam-target art owned by every visible inventory user.
@@ -1056,7 +1096,7 @@ fn load_visual_assets(
             "ACf2" => &["armor", "movement"],
             // Inner Fire, Prayer, and Devotion Aura use a persistent target buff model.
             "Ainf" | "AIrr" | "AHad" | "ACav" | "AIdb" | "AIar" | "ACff" | "Afae" | "AEah"
-            | "ANpi" | "ACpi" | "ACro" | "Acrs" => &["armor"],
+            | "ANpi" | "ACpi" | "ACro" | "Acrs" | "ACvp" => &["armor"],
             // Persistent native fire/carrier buffs use their authoritative DOT entry.
             "Apxf" => &["damage_over_time"],
             // Native poison can author separate poison/slow buffs or one combined override.
@@ -1157,9 +1197,6 @@ fn load_visual_assets(
         },
     ));
     // Script-owned World Freezer orbs use the dummy unit model as a persistent mover.
-    let building_projection: serde_json::Value = serde_json::from_str(include_str!(
-        "../sim/data/castle-fight/9.27/building-mechanics-r1.json"
-    ))?;
     let row = &building_projection["freezer"];
     let parameters: serde_json::Value = serde_json::from_str(
         row["parameters_json"]

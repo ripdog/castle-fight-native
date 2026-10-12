@@ -96,7 +96,7 @@ def build(map_version='9.27', revision='r1'):
                      'CallbackSingle_doAfter_ReengageRuntime_call_doAfter_ReengageRuntime',
                      'CallbackSingle_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_ReengageRuntime',
                      'CallbackSingle_doAfter_doAfter_doAfter_ReengageRuntime_call_doAfter_doAfter_doAfter_ReengageRuntime',
-                     *replication['source_functions'].split(','), 'onUnitTrained', *linker['source_functions'].split(','), 'onBuildingFinished',
+                     *replication['source_functions'].split(','), 'onUnitTrained', 'rollBody', 'EE', 'randomizeBloodFiend', 'replaceUnitWithType', *linker['source_functions'].split(','), 'onBuildingFinished',
                      'EventListener_add_BuildingLifecycle_onEvent_add_BuildingLifecycle',
                      'EventListener_add_BuildingLifecycle_onEvent_add_BuildingLifecycle1',
                      *guard['source_functions'].split(','), *snow['source_functions'].split(','), *serpent['source_functions'].split(','), *ceremonial['source_functions'].split(','),
@@ -219,8 +219,12 @@ def build(map_version='9.27', revision='r1'):
         raise ValueError('native owner rejection must retain the shared shield model and attachment')
     tidal_profile = project_tidal(tidal, selected, unit_rows, rows('abilities.tsv'), protected, traces, dict(zip(['major', 'minor'], map(int, map_version.split('.')))))
     coral_profile = project_coral(selected, rows('abilities.tsv'), traces, dict(zip(['major', 'minor'], map(int, map_version.split('.')))))
+    from project_training_variants import project as project_training
+    training = project_training({name: value['source'] for name, value in traces.items()}, unit_rows,
+        {row['rawcode']: row['base_rawcode'] for row in rows('abilities.tsv')})
     from project_production_replication import project as project_replication
     return {'tidal': tidal, 'tidal_spellcasting': tidal_profile, 'coral_auras': coral_profile, 'oracle_owner_rejection_visual': {'model_path': owner_art[0], 'attachment': owner_art[1]}, 'oracle': oracle, 'oracle_spellcasting': oracle_profile, 'pyramid': pyramid, 'pyramid_spellcasting': pyramid_profile,
+            'production_training_variants': training,
             'production_replication': project_replication(replication, traces), 'replication_source': replication,
             'map_version': map_version, 'schema_version': 2, 'source_revision': revision,
             'extraction_git_tree': tree, 'source_sha256': sources,
