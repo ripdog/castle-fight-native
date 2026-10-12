@@ -7,6 +7,11 @@ use crate::{
     math::SUBUNITS_PER_WORLD_UNIT,
     version::MapVersion,
 };
+mod magic_ruin;
+pub use magic_ruin::{BuildingMagicRuinProfile, magic_ruin_target_attachment_for_version};
+pub(crate) use magic_ruin::{
+    magic_ruin_bindings, magic_ruin_source, magic_ruin_spellcasting_for_version,
+};
 mod flame_strike;
 pub use flame_strike::{BuildingFlameStrikeProfile, FlameStrikeProfile};
 pub(crate) use flame_strike::{

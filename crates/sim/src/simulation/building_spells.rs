@@ -135,6 +135,9 @@ pub(super) fn native_building_trigger(
             p.trigger_invulnerable,
             p.trigger_spell_immune,
         )),
+        AbilityEffect::BuildingMagicRuin(p) => {
+            Some((p.trigger_targets, p.parent.affects_invulnerable, false))
+        }
         AbilityEffect::BuildingFlameStrike(p) => {
             Some((p.trigger_targets, p.parent.affects_invulnerable, false))
         }
@@ -167,6 +170,7 @@ pub(super) fn native_building_trigger_unit_type(
     mechanical: bool,
 ) -> bool {
     match ability.effect {
+        AbilityEffect::BuildingMagicRuin(p) => !p.trigger_mechanical_only || mechanical,
         AbilityEffect::BuildingFlameStrike(p) => !p.trigger_mechanical_only || mechanical,
         AbilityEffect::BuildingAttackProxy(p) => !p.trigger_mechanical_only || mechanical,
         AbilityEffect::NagaCharm(p) => !p.trigger_mechanical_only || mechanical,
@@ -561,17 +565,26 @@ impl Simulation {
         caster: SimId,
         cast_sequence: u64,
     ) -> bool {
+        if self.check_negative_building_shield(target, profile.map_version, caster, cast_sequence) {
+            return false;
+        }
+        self.apply_building_hex_after_shield(target, profile)
+    }
+
+    pub(super) fn apply_building_hex_after_shield(
+        &mut self,
+        target: &mut UnitSnapshot,
+        profile: HexEffectProfile,
+    ) -> bool {
         let entity =
             self.building_spell_state_entity(target.id, target.entity, profile.map_version);
-        let blocked =
-            self.check_negative_building_shield(target, profile.map_version, caster, cast_sequence);
         let mut state = self
             .world
             .entity(entity)
             .get::<BuildingSpellTargetState>()
             .unwrap()
             .clone();
-        if !blocked {
+        {
             // Native immunity failure is separate from script selection/shield interception.
             // The recovered level-one target mask has no organic restriction: mechanical units
             // are not rejected just because the unmodified AOhx base mask includes organic.
@@ -618,7 +631,31 @@ impl Simulation {
         self.world.entity_mut(entity).insert(state);
         refresh_building_spell_controls(&mut self.world, self.next_tick);
         self.project_building_spell_control(target);
-        !blocked && !target.classifications.spell_immune
+        !target.classifications.spell_immune
+    }
+
+    /// Only the callback fields are used; this does not apply a native Hex or cancel Defend.
+    pub(super) fn queue_building_reengagement(
+        &mut self,
+        target: &mut UnitSnapshot,
+        profile: HexEffectProfile,
+    ) {
+        let entity =
+            self.building_spell_state_entity(target.id, target.entity, profile.map_version);
+        {
+            let mut state = self
+                .world
+                .get_mut::<BuildingSpellTargetState>(entity)
+                .unwrap();
+            state.callbacks.push(ControlCallback {
+                due_tick: self.next_tick + u64::from(profile.initial_reengage_ticks),
+                action: ControlAction::Attack,
+                profile,
+            });
+            state.callbacks.sort_by_key(|callback| callback.due_tick);
+        }
+        refresh_building_spell_controls(&mut self.world, self.next_tick);
+        self.project_building_spell_control(target);
     }
 
     pub(super) fn advance_building_spell_controls(&mut self) {
@@ -787,7 +824,7 @@ impl Simulation {
             let mut changed = false;
             for index in 0..units.len() {
                 let unit = units[index];
-                if resolved[index] || unit_health[index] > 0 {
+                if resolved[index] || unit_health[index] > 0 || unit.removed_without_death {
                     continue;
                 }
                 resolved[index] = true;

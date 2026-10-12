@@ -3,6 +3,51 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "ACsw",
+      "unit_rawcode": "n01S",
+      "spellcasting": {
+        "mana": {
+          "maximum": 150,
+          "starting": 150,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1094939511,
+          "mana_cost": 50,
+          "cooldown_ticks": 240,
+          "range": 614400,
+          "target_policy": "NearestEnemyInCombat",
+          "effect": {
+            "NativeDebuff": {
+              "ability": 1094939511,
+              "buff": 1114860655,
+              "targets": 3,
+              "organic_only": false,
+              "duration_ticks": 600,
+              "hero_duration_ticks": 300,
+              "movement_percent_delta": -60,
+              "attack_speed_percent_delta": -25,
+              "ethereal": null
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "source": "resolved/base-data-manifest.json",
+        "reference_source_sha256": {
+          "custom_v1/units/abilitydata.slk": "052195ebf094e49ded0a0ebc281cada420e30a46a0a40ca83f52748daac8c9d3",
+          "custom_v1/units/miscgame.txt": "4f948777038b7dd3e5b251e758c45622cb9d5b3244ed0f867ed0bc53e2cbb44e"
+        },
+        "native_base": "Aslo",
+        "unit": "resolved/units.tsv",
+        "default_active_alias": "Aslo"
+      }
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A01F",
       "unit_rawcode": "h03B",

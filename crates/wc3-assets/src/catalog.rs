@@ -930,6 +930,7 @@ mod tests {
         ))
         .unwrap();
         for (key, visuals) in [
+            ("magic_ruin", "magic_ruin_cast_visuals"),
             ("ceremonial", "ceremonial_cast_visuals"),
             ("enchantment", "enchantment_cast_visuals"),
         ] {
@@ -941,7 +942,7 @@ mod tests {
                     .assets
                     .iter()
                     .filter(|asset| {
-                        asset.owner_rawcode == parent
+                        asset.owner_rawcode == visual["ability"].as_str().unwrap_or(parent)
                             && asset.source_unit_rawcode.as_deref() == Some(source)
                             && asset.role == visual["role"].as_str().unwrap()
                             && asset.model_path == visual["path"].as_str().unwrap()

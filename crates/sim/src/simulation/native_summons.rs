@@ -455,7 +455,7 @@ impl Simulation {
                     return None;
                 };
                 let dead_position = find_unit_index(units, p.target)
-                    .filter(|&i| health[i] <= 0)
+                    .filter(|&i| health[i] <= 0 && !units[i].removed_without_death)
                     .map(|i| positions[i])
                     .or_else(|| {
                         find_building_index(buildings, p.target)

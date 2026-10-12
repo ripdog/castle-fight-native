@@ -782,7 +782,9 @@ fn load_visual_assets(
             }
             if field == "abuf" && row.get(level).unwrap_or_default() == "1" {
                 let mut buffs = parse_json_comma_list(row.get(recovered).unwrap_or_default());
-                if matches!(base_rawcode, "ACpa" | "ACvs" | "Aven") && buffs.is_empty() {
+                if matches!(base_rawcode, "ACpa" | "ACvs" | "Aven" | "AHtb" | "ACtb")
+                    && buffs.is_empty()
+                {
                     buffs = parse_json_comma_list(row.get(base_value).unwrap_or_default());
                 }
                 ability_buff_ids.insert(rawcode.to_owned(), buffs);
@@ -1346,6 +1348,7 @@ fn append_building_script_visuals(
         }
     }
     for (row, visual_key) in [
+        ("magic_ruin", "magic_ruin_cast_visuals"),
         ("attack_proxy", "attack_proxy_cast_visuals"),
         ("ceremonial", "ceremonial_cast_visuals"),
         ("silver", "silver_cast_visuals"),
@@ -1363,7 +1366,7 @@ fn append_building_script_visuals(
         for visual in data[visual_key].as_array().ok_or("grant cast art")? {
             visuals.assets.push(VisualAssetSpec {
                 owner_kind: "abilities".to_owned(),
-                owner_rawcode: parent.to_owned(),
+                owner_rawcode: visual["ability"].as_str().unwrap_or(parent).to_owned(),
                 source_unit_rawcode: Some(building.to_owned()),
                 role: visual["role"].as_str().ok_or("grant art role")?.to_owned(),
                 model_path: visual["path"]

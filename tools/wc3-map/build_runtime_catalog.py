@@ -447,6 +447,13 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
         {row['rawcode']: row['base_rawcode'] for row in csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree, 'resolved/abilities.tsv').decode()), delimiter='\t')})
     for code in [*[choice['body'] for choice in training['rare_bodies']], *training['common_bodies']]:
         native_summon_bodies.add(int(code).to_bytes(4, 'big').decode())
+    # Direct script replacements retain a cold body without acquiring summon flags.
+    for row in csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree,
+        'resolved/building-spell-mechanics.tsv').decode()), delimiter='\t'):
+        if row['building_rawcode'] == 'h05I':
+            for branch in json.loads(row['parameters_json'])['branches']:
+                if 'unit_id' in branch:
+                    native_summon_bodies.add(int(branch['unit_id']).to_bytes(4, 'big').decode())
     return {
         "schema_version": 10,
         "air_attack_bonuses": air_bonuses,

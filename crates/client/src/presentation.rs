@@ -3511,6 +3511,7 @@ fn prewarm_timed_wc3_effects(
                         | AbilityEffect::HealingWave(_)
                         | AbilityEffect::SolarStrike { .. }
                         | AbilityEffect::PhoenixFire(_)
+                        | AbilityEffect::BuildingMagicRuin(_)
                         | AbilityEffect::BuildingFlameStrike(_)
                         | AbilityEffect::BuildingAttackProxy(_)
                         | AbilityEffect::Hailstone(_)
@@ -4489,6 +4490,17 @@ fn sync_render_entities(
                     .and_then(|building| building.content.map(|content| content.rawcode))
             });
         for visual in wc3_visuals.ability_for_source(cast.ability.0, source_rawcode) {
+            if matches!(cast.effect, AbilityEffect::BuildingMagicRuin(_))
+                && matches!(cast.target, AbilityCastTarget::Point(_))
+                && ((visual.anchor == Wc3AbilityVisualAnchor::Source
+                    && cast.target_position.is_some())
+                    || (visual.anchor == Wc3AbilityVisualAnchor::Target
+                        && cast.target_position.is_none()))
+            {
+                // Nil callback selection renders only caster art; replacement's second point
+                // effect renders only at the captured position after the old handle disappears.
+                continue;
+            }
             if visual.mana_burn != matches!(cast.effect, AbilityEffect::ManaBurnVisual) {
                 continue;
             }
@@ -4521,6 +4533,7 @@ fn sync_render_entities(
                 continue;
             };
             let target_attachment = match cast.effect {
+                AbilityEffect::BuildingMagicRuin(profile) => Some(castle_fight_sim::building_mechanics::magic_ruin_target_attachment_for_version(profile.map_version)),
                 AbilityEffect::BuildingPermanentGrant(profile) => Some(castle_fight_sim::building_mechanics::permanent_grant_target_attachment_for_version(profile.map_version)),
                 AbilityEffect::BuildingEnchantment(profile) => Some(castle_fight_sim::building_mechanics::enchantment_target_attachment_for_version(profile.map_version)),
                 AbilityEffect::Wilderness(profile) => Some(castle_fight_sim::building_mechanics::wilderness_target_attachment_for_version(profile.map_version)),

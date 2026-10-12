@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 90;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 92;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -50,6 +50,7 @@ mod attack_proxy;
 mod building_spells;
 mod flame_strike;
 mod frost_launcher;
+mod magic_ruin;
 mod snowveil;
 mod speed_auras;
 mod spheres;
@@ -2062,6 +2063,13 @@ impl Simulation {
             self.golden_shrine_support(Team(1)),
         ];
         for (index, unit) in units.iter().enumerate() {
+            if unit.removed_without_death {
+                if let Some(source) = source_damage_runtime::RetiredDamageSource::capture(unit) {
+                    self.retired_damage_sources.insert(unit.id, source);
+                }
+                self.world.despawn(unit.entity);
+                continue;
+            }
             if unit_health[index] <= 0 {
                 let shrine_state = if self
                     .world
@@ -3738,6 +3746,7 @@ impl Simulation {
                         })
                     });
                     UnitSnapshot {
+                        removed_without_death: false,
                         air_attack_bonus_per_10k: content.map_or(0, |c| {
                             crate::content::native_air_attack_bonus_for_version(
                                 c.map_version,
@@ -3956,6 +3965,8 @@ struct UnitSnapshot {
     owner: PlayerId,
     team: Team,
     position: SimPoint,
+    /// Phase-local RemoveUnit directive. Never survives a completed step.
+    removed_without_death: bool,
     health: i32,
     health_max: i32,
     attack: AttackProfile,
@@ -4971,6 +4982,9 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                 spellcasting.ability.target_policy,
                 AbilityTargetPolicy::NativeBuildingSpellTrigger
             );
+        }
+        AbilityEffect::BuildingMagicRuin(p) => {
+            assert!(p.outcome_count == 10 && p.control_dummy_ticks.iter().all(|&t| t > 0));
         }
         AbilityEffect::BuildingFlameStrike(p) => {
             for option in p.options {

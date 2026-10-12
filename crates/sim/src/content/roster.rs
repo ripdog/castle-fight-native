@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    Mutation = 0x1000_006b => b"n01S",
     Infernal = 0x1000_006a => b"n000",
     RedDragon = 0x1000_0069 => b"n001",
     BloodFiendHeroArmor = 0x1000_0068 => b"n00R",
@@ -240,6 +241,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    MagicRuin = 0x2100_002b => b"h05I",
     Volcano = 0x2100_002a => b"h01F",
     ShrineOfDestruction = 0x2100_0029 => b"h01E",
     CoralSpire = 0x2100_0028 => b"h0Z6",

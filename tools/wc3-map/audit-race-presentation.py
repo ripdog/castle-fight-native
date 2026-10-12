@@ -283,9 +283,12 @@ def audit(evidence, assets, builder, lightning_projection=None, buff_projection=
     for row in table(evidence / "resolved/building-spell-mechanics.tsv"):
         if row["building_rawcode"] in buildings:
             params = json.loads(row["parameters_json"])
+            for branch in params.get("branches", []):
+                if branch.get("unit_id"):
+                    units.add(raw(branch["unit_id"]))
             if params.get("dummy_unit_id"):
                 units.add(raw(params["dummy_unit_id"]))
-            if any("dummyCastPointFrom(" in functions[name] for name in row["source_functions"].split(",")):
+            if any(("dummyCastPointFrom(" in functions[name] or "chaosControlDummy(" in functions[name]) for name in row["source_functions"].split(",")):
                 match = re.search(r'Tdb=__wurst_ensureInt\((\d+)\)', functions["QG"])
                 if not match:
                     raise ValueError("point dummy factory identity is absent")

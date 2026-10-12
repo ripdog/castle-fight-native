@@ -545,6 +545,7 @@ impl Simulation {
         for p in std::mem::take(&mut state.parasites) {
             if let Some(index) = find_unit_index(units, p.target)
                 && health[index] <= 0
+                && !units[index].removed_without_death
                 && p.buff_until_tick
                     .is_some_and(|until| self.next_tick < until)
             {

@@ -64,7 +64,7 @@ def project(skin, rows):
     for row in rows:
         if row["category"] == "abilities" and row["field_id"] in {"abuf", "aeff"}:
             value = json.loads(row["recovered_value_json"])
-            if row["field_id"] == "abuf" and row["base_rawcode"] == "ACpa" and not value:
+            if row["field_id"] == "abuf" and row["base_rawcode"] in {"ACpa", "AHtb", "ACtb"} and not value:
                 value = json.loads(row["base_value_json"])
             references.update(string_list(value))
         elif row["category"] == "buffs":

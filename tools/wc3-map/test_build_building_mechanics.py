@@ -12,6 +12,29 @@ SPEC.loader.exec_module(MODULE)
 
 
 class BuildingMechanicsProjectionTests(unittest.TestCase):
+    def test_magic_ruin_rejects_outcome_order_identity_and_control_drift(self):
+        original = MODULE._retained_file_bytes
+        changes = [
+            (b'Ajr=GetRandomInt(0,9)Bjr=', b'Ajr=GetRandomInt(0,8)Bjr='),
+            (b'chaosControlDummy(Bjr,Cjr,1093677368,852502,1.,true)',
+             b'chaosControlDummy(Bjr,Cjr,1093677112,852502,1.,true)'),
+            (b'dummyCastTargetWithVision(rjr,tjr,ujr,sjr,unit_getPos(sjr),vjr)',
+             b'dummyCastTargetWithVision(rjr,tjr,ujr,sjr,unit_getPos(rjr),vjr)'),
+            (b'orderCodeAttack(createUnit(Bjr,1848652115,Gjr,unit_getFacingAngle(Cjr)))',
+             b'orderCodeAttack(createUnit(Bjr,1848652115,Gjr,{0.}))'),
+            (b'doAfter(44.5,qBn)', b'doAfter(44.,qBn)'),
+        ]
+        for before, after in changes:
+            def changed(root, tree, path):
+                data = original(root, tree, path)
+                if path == 'script/war3map.lua':
+                    self.assertIn(before, data)
+                    return data.replace(before, after, 1)
+                return data
+            with self.subTest(before=before), mock.patch.object(MODULE, '_retained_file_bytes', changed):
+                with self.assertRaises(ValueError):
+                    MODULE.build()
+
     def test_flame_strike_rejects_origin_mode_and_recycle_control_drift(self):
         original = MODULE._retained_file_bytes
         changes = [

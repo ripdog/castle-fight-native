@@ -1,6 +1,12 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"ACsw","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"ability-effect","source_key":"A06U","implementation":"warcraft-magic-ruin-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"ability-effect","source_key":"A06T","implementation":"warcraft-magic-ruin-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"ability-effect","source_key":"A06S","implementation":"warcraft-magic-ruin-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"ability-effect","source_key":"A0BL","implementation":"warcraft-magic-ruin-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A06R","implementation":"warcraft-magic-ruin-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A07L","implementation":"warcraft-feedback-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A07J","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A02B","implementation":"warcraft-corruption-v1","valid_from":"9.27","valid_through":"9.27"},
