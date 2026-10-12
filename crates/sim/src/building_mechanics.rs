@@ -7,6 +7,11 @@ use crate::{
     math::SUBUNITS_PER_WORLD_UNIT,
     version::MapVersion,
 };
+mod attack_proxy;
+pub use attack_proxy::{BuildingAttackProxyLevel, BuildingAttackProxyProfile};
+pub(crate) use attack_proxy::{
+    attack_proxy_bindings, attack_proxy_source, attack_proxy_spellcasting_for_version,
+};
 mod aura_carrier;
 pub use aura_carrier::BuildingAuraProfile;
 pub(crate) use aura_carrier::{

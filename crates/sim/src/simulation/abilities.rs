@@ -626,6 +626,16 @@ impl Simulation {
                             units,
                         ));
                         emit_cast_visual = false;
+                    } else if matches!(intent.ability.effect, AbilityEffect::BuildingAttackProxy(_))
+                    {
+                        metrics.effects += usize::from(self.cast_building_attack_proxy(
+                            source,
+                            intent.ability,
+                            units[index].id,
+                            intent.cast_sequence,
+                            buildings,
+                        ));
+                        emit_cast_visual = false;
                     } else if let AbilityEffect::NagaCharm(p) = intent.ability.effect {
                         metrics.effects += usize::from(self.cast_naga_charm(
                             source,
@@ -965,7 +975,16 @@ impl Simulation {
                     }
                 }
                 AbilityIntentTarget::Building { id, position } => {
-                    if let AbilityEffect::NagaCharm(p) = intent.ability.effect {
+                    if matches!(intent.ability.effect, AbilityEffect::BuildingAttackProxy(_)) {
+                        metrics.effects += usize::from(self.cast_building_attack_proxy(
+                            source,
+                            intent.ability,
+                            id,
+                            intent.cast_sequence,
+                            buildings,
+                        ));
+                        emit_cast_visual = false;
+                    } else if let AbilityEffect::NagaCharm(p) = intent.ability.effect {
                         metrics.effects += usize::from(self.cast_naga_charm(
                             source,
                             intent.ability.id,

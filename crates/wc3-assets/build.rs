@@ -782,7 +782,7 @@ fn load_visual_assets(
             }
             if field == "abuf" && row.get(level).unwrap_or_default() == "1" {
                 let mut buffs = parse_json_comma_list(row.get(recovered).unwrap_or_default());
-                if base_rawcode == "ACpa" && buffs.is_empty() {
+                if matches!(base_rawcode, "ACpa" | "ACvs" | "Aven") && buffs.is_empty() {
                     buffs = parse_json_comma_list(row.get(base_value).unwrap_or_default());
                 }
                 ability_buff_ids.insert(rawcode.to_owned(), buffs);
@@ -1346,6 +1346,7 @@ fn append_building_script_visuals(
         }
     }
     for (row, visual_key) in [
+        ("attack_proxy", "attack_proxy_cast_visuals"),
         ("ceremonial", "ceremonial_cast_visuals"),
         ("silver", "silver_cast_visuals"),
         ("starfall", "starfall_cast_visuals"),

@@ -12,6 +12,27 @@ SPEC.loader.exec_module(MODULE)
 
 
 class BuildingMechanicsProjectionTests(unittest.TestCase):
+    def test_attack_proxy_rejects_selector_origin_clock_and_weapon_drift(self):
+        original = MODULE._retained_file_bytes
+        changes = [
+            (b'createUnit(okr,1747990083,unit_getPos(nkr),{0.})',
+             b'createUnit(okr,1747990083,unit_getPos(rkr),{0.})'),
+            (b'player_getId(unit_getOwner(wkn))<bj_MAX_PLAYERS',
+             b'player_getId(unit_getOwner(wkn))<=bj_MAX_PLAYERS'),
+            (b'if(VGb>34)then', b'if(VGb>33)then'),
+            (b'UGb=(UGb+1)if(UGb==60)then', b'UGb=(UGb+2)if(UGb==60)then'),
+        ]
+        for before, after in changes:
+            def changed(root, tree, path):
+                data = original(root, tree, path)
+                if path == 'script/war3map.lua':
+                    self.assertIn(before, data)
+                    return data.replace(before, after, 1)
+                return data
+            with self.subTest(before=before), mock.patch.object(MODULE, '_retained_file_bytes', changed):
+                with self.assertRaises(ValueError):
+                    MODULE.build()
+
     def test_complete_artifact_is_reproducible_from_the_registered_tree(self):
         expected = json.loads(MODULE.OUT.read_text())
         with mock.patch.object(

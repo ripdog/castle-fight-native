@@ -214,6 +214,9 @@ def audit_native_status_visuals(projection, fields, abilities, manifest):
             continue
         codes = [code.strip() for code in json.loads(field["recovered_value_json"]).split(",")
                  if code.strip() not in ("", "_", "-", "0")]
+        if not codes and field["base_rawcode"] in ("ACpa", "ACvs", "Aven"):
+            codes = [code.strip() for code in json.loads(field["base_value_json"]).split(",")
+                     if code.strip() not in ("", "_", "-", "0")]
         if field["base_rawcode"] in ("Aven", "ACvs") and codes:
             codes = [codes[min(int(bool(poison_flags.get(field["rawcode"], 0) & 7)), len(codes) - 1)]]
         for code, kind in zip(codes, recipes[field["base_rawcode"]]):
@@ -276,6 +279,12 @@ def audit(evidence, assets, builder, lightning_projection=None, buff_projection=
         units.update(bodies)
         grants = {raw(entry['key']) for entry in training['grant_sources']}
         dynamic_inventory = {owner: grants for owner in bodies | {raw(code) for code in training['roots']}}
+    # Attack dummies emit their own native weapon art even with no visible actor model.
+    for row in table(evidence / "resolved/building-spell-mechanics.tsv"):
+        if row["building_rawcode"] in buildings:
+            params = json.loads(row["parameters_json"])
+            if params.get("dummy_unit_id"):
+                units.add(raw(params["dummy_unit_id"]))
     owners = buildings | units
     abilities = {ability for owner in owners
                  for ability in str(objects.get(("units", owner), {}).get("uabi", "")).split(",")

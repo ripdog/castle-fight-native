@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 87;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 88;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -46,6 +46,7 @@ mod travelling_mana_clap;
 mod weather;
 mod world_freezer;
 use world_freezer::WorldFreezerState;
+mod attack_proxy;
 mod building_spells;
 mod frost_launcher;
 mod snowveil;
@@ -1986,6 +1987,13 @@ impl Simulation {
             &mut unit_health,
             &mut building_health,
         );
+        let (proxy_impacts, proxy_effects) =
+            self.resolve_due_attack_proxy_impacts(&mut buildings, &mut building_health);
+        projectile_impacts += proxy_impacts;
+        projectile_effects += proxy_effects;
+        if proxy_impacts > 0 {
+            death_healing::refresh_support(&mut units, &buildings, None);
+        }
         projectile_impacts += hailstone_impacts;
         projectile_effects += hailstone_effects;
         projectile_entities_to_remove.extend(ballistic_impacts.projectile_entities_to_remove);
@@ -2502,6 +2510,7 @@ impl Simulation {
                             | crate::components::NativeAction::Bolt(_)
                             | crate::components::NativeAction::ConeWave(_)
                             | crate::components::NativeAction::Ensnare(_)
+                            | crate::components::NativeAction::BuildingAttackProxy(_)
                             | crate::components::NativeAction::Hailstone(_)
                     )
                 ) || entity.get::<GuaranteedHitProjectile>().is_some()
@@ -4958,6 +4967,13 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                 AbilityTargetPolicy::NativeBuildingSpellTrigger
             );
         }
+        AbilityEffect::BuildingAttackProxy(p) => {
+            assert!(p.damage >= 0 && p.speed_per_tick > 0 && p.range > 0 && p.dummy_ticks > 0);
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::NativeBuildingSpellTrigger
+            );
+        }
         AbilityEffect::Hailstone(p) => {
             assert!(p.damage >= 0 && p.speed_per_tick > 0 && p.full_radius >= 0 && p.range > 0);
             assert_eq!(
@@ -5400,6 +5416,23 @@ fn projectile_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option
             kind: ProjectileViewKind::Ballistic {
                 source_rawcode: None,
                 destination,
+                impact_radius: 0,
+            },
+        });
+    }
+    if let Some(crate::components::NativeAction::BuildingAttackProxy(projectile)) =
+        entity.get::<crate::components::NativeAction>()
+    {
+        return Some(ProjectileView {
+            id,
+            source: projectile.source,
+            ability: None,
+            launch_position: projectile.origin,
+            launch_tick: projectile.launch_tick,
+            impact_tick: projectile.impact_tick,
+            kind: ProjectileViewKind::Ballistic {
+                source_rawcode: Some(projectile.profile.dummy_rawcode),
+                destination: projectile.destination,
                 impact_radius: 0,
             },
         });

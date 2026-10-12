@@ -161,8 +161,30 @@ pub(crate) struct HailstoneState {
     pub impact_tick: u64,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct BuildingAttackProxyState {
+    pub source: SimId,
+    pub team: Team,
+    pub target: SimId,
+    pub profile: crate::building_mechanics::BuildingAttackProxyProfile,
+    pub level: u8,
+    pub origin: SimPoint,
+    pub destination: SimPoint,
+    pub launch_tick: u64,
+    pub impact_tick: u64,
+}
+
 #[derive(Component, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum NativeAction {
+    BuildingAttackProxy(BuildingAttackProxyState),
+    AttackProxyActor {
+        owner: PlayerId,
+        team: Team,
+        map_version: crate::MapVersion,
+        rawcode: u32,
+        position: SimPoint,
+        expires_tick: u64,
+    },
     TravellingManaClap(super::TravellingManaClapState),
     Starfall(crate::building_mechanics::StarfallState),
     SilverGlade(crate::building_mechanics::SilverGladeState),

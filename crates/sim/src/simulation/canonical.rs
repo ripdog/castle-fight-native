@@ -655,6 +655,40 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u64(state.next_pulse_tick);
                         hash.write_u64(state.expires_tick);
                     }
+                    NativeAction::BuildingAttackProxy(state) => {
+                        hash.write_u8(23);
+                        hash.write_u64(state.source.0);
+                        hash.write_u8(state.team.0);
+                        hash.write_u64(state.target.0);
+                        state
+                            .profile
+                            .visit_canonical_words(|word| hash.write_u64(word));
+                        hash.write_u8(state.level);
+                        for point in [state.origin, state.destination] {
+                            hash.write_i32(point.x);
+                            hash.write_i32(point.y);
+                        }
+                        hash.write_u64(state.launch_tick);
+                        hash.write_u64(state.impact_tick);
+                    }
+                    NativeAction::AttackProxyActor {
+                        owner,
+                        team,
+                        map_version,
+                        rawcode,
+                        position,
+                        expires_tick,
+                    } => {
+                        hash.write_u8(24);
+                        hash.write_u8(owner.0);
+                        hash.write_u8(team.0);
+                        hash.write_u16(map_version.major);
+                        hash.write_u16(map_version.minor);
+                        hash.write_u32(rawcode);
+                        hash.write_i32(position.x);
+                        hash.write_i32(position.y);
+                        hash.write_u64(expires_tick);
+                    }
                     NativeAction::Hailstone(state) => {
                         hash.write_u8(2);
                         hash.write_u64(state.source.0);
@@ -2808,6 +2842,9 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             {
                 hash.write_u64(word);
             }
+        }
+        AbilityEffect::BuildingAttackProxy(p) => {
+            p.visit_canonical_words(|word| hash.write_u64(word))
         }
         AbilityEffect::Hailstone(profile) => hash_hailstone_profile(hash, profile),
         AbilityEffect::BuildingAura(p) => {

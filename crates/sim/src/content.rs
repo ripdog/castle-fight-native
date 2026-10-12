@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r126";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r127";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 71;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 72;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1395,6 +1395,11 @@ impl CastleFightTowerKind {
         let expected_name = extracted_content_927().buildings[&rawcode].name;
         let mut definition = extracted_tower_definition_927(rawcode, expected_name);
         definition.spellcasting = match self {
+            Self::ShrineOfDestruction => Some(
+                crate::building_mechanics::attack_proxy_spellcasting_for_version(
+                    MapVersion::CASTLE_FIGHT_9_27,
+                ),
+            ),
             Self::TidalGuardian => crate::building_mechanics::tidal_spellcasting_for_version(
                 MapVersion::CASTLE_FIGHT_9_27,
             ),
@@ -1882,6 +1887,15 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A01E") => {
+            0x4000_0194
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0EU") => {
+            0x4000_0195
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0FE") => {
+            0x4000_0196
+        }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A07L") => {
             0x4000_0193
         }
@@ -3691,6 +3705,9 @@ fn hash_automatic_ability_profile(hash: &mut ContentHash64, ability: AutomaticAb
             {
                 hash.write_u64(word);
             }
+        }
+        AbilityEffect::BuildingAttackProxy(p) => {
+            p.visit_canonical_words(|word| hash.write_u64(word))
         }
         AbilityEffect::Hailstone(profile) => hash_hailstone_content(hash, profile),
         AbilityEffect::ManaBurnVisual => {}

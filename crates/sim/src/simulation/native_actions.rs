@@ -273,10 +273,15 @@ impl Simulation {
                 }
                 NativeAction::StasisTrap(state) => self.advance_stasis_trap(entity, state, units),
                 NativeAction::AcidBomb(state) => self.advance_acid_bomb(entity, state, units),
-                NativeAction::Poison(state) => self.advance_poison(entity, state, units),
+                NativeAction::Poison(state) => self.advance_poison(entity, state, units, buildings),
                 NativeAction::Ensnare(state) => self.advance_ensnare(entity, state, units),
                 // Splash attack proxies resolve in the shared post-movement impact phase.
-                NativeAction::Hailstone(_) => {}
+                NativeAction::Hailstone(_) | NativeAction::BuildingAttackProxy(_) => {}
+                NativeAction::AttackProxyActor { expires_tick, .. } => {
+                    if self.next_tick >= expires_tick {
+                        self.world.despawn(entity);
+                    }
+                }
                 NativeAction::Bolt(mut state) => {
                     let destination = find_unit_index(units, state.target)
                         .filter(|&index| units[index].health > 0)

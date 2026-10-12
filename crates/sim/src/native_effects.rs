@@ -84,6 +84,7 @@ pub enum NativeEffectImplementationId {
     WarcraftElvenAutomaticV1,
     WarcraftBuildingHexV1,
     WarcraftSnowveilV1,
+    WarcraftBuildingAttackProxyV1,
     WarcraftHailstoneV1,
     WarcraftBuildingBoltV1,
     WarcraftWorldFreezerV1,
@@ -157,6 +158,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftElvenAutomaticV1 => 17,
             Self::WarcraftBuildingHexV1 => 24,
             Self::WarcraftSnowveilV1 => 25,
+            Self::WarcraftBuildingAttackProxyV1 => 97,
             Self::WarcraftHailstoneV1 => 26,
             Self::WarcraftBuildingBoltV1 => 27,
             Self::WarcraftPermanentAbilityGrantsV1 => 34,
@@ -1269,6 +1271,10 @@ pub fn resolve_native_effect_requirements(
     version: MapVersion,
     roots: &[NativeEffectSource],
 ) -> Result<Vec<ResolvedNativeEffectBinding>, NativeEffectResolveError> {
+    let (proxy_roots, roots): (Vec<_>, Vec<_>) = roots
+        .iter()
+        .copied()
+        .partition(|s| crate::building_mechanics::attack_proxy_source(version, *s));
     let (tidal_roots, roots): (Vec<_>, Vec<_>) = roots
         .iter()
         .copied()
@@ -1327,6 +1333,9 @@ pub fn resolve_native_effect_requirements(
         .copied()
         .partition(|source| crate::building_mechanics::hex_source_for_version(*source, version));
     let mut resolved = catalog().resolve_requirements(version, &ordinary_roots)?;
+    if !proxy_roots.is_empty() {
+        resolved.extend(crate::building_mechanics::attack_proxy_bindings(version));
+    }
     if !tidal_roots.is_empty() {
         resolved.extend(crate::building_mechanics::tidal_bindings(version));
     }
@@ -1579,6 +1588,9 @@ pub fn native_effect_implementation_for(
     let source = NativeEffectSourceKind::parse(source_kind)
         .zip(rawcode(source_key).ok())
         .map(|(kind, key)| NativeEffectSource::new(kind, key));
+    if source.is_some_and(|s| crate::building_mechanics::attack_proxy_source(version, s)) {
+        return Some(NativeEffectImplementationId::WarcraftBuildingAttackProxyV1);
+    }
     if source.is_some_and(|s| crate::building_mechanics::tidal_source(version, s)) {
         return Some(NativeEffectImplementationId::WarcraftNagaTidalWaveV1);
     }

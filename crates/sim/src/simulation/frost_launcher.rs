@@ -303,7 +303,7 @@ impl Simulation {
     }
 }
 
-fn freeze(status: &mut StatusState, tick: u64, duration: u16, ability: AbilityId) {
+pub(super) fn freeze(status: &mut StatusState, tick: u64, duration: u16, ability: AbilityId) {
     let expiry = tick + u64::from(duration);
     if expiry >= status.frozen_until_tick {
         status.frozen_ability = Some(ability);

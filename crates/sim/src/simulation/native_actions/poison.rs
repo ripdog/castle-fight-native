@@ -20,7 +20,26 @@ impl Simulation {
         profile: PoisonProfile,
         tick: u64,
     ) {
-        let duration = if target.classifications.uses_hero_spell_rules() {
+        self.apply_poison_status(
+            source,
+            target.id,
+            &mut target.status,
+            profile,
+            tick,
+            target.classifications.uses_hero_spell_rules(),
+        );
+    }
+
+    pub(in crate::simulation) fn apply_poison_status(
+        &mut self,
+        source: SimId,
+        target: SimId,
+        status: &mut StatusState,
+        profile: PoisonProfile,
+        tick: u64,
+        hero_rules: bool,
+    ) {
+        let duration = if hero_rules {
             profile.hero_duration_ticks
         } else {
             profile.duration_ticks
@@ -33,11 +52,10 @@ impl Simulation {
             let NativeAction::Poison(state) = entity.get::<NativeAction>()? else {
                 return None;
             };
-            (state.target == target.id
+            (state.target == target
                 && state.profile.buff_rawcode == profile.buff_rawcode
                 && (state.source == source || !profile.stack_damage)
-                && target
-                    .status
+                && status
                     .poison
                     .is_some_and(|status| status.generation == state.generation))
             .then_some(entity.id())
@@ -54,7 +72,7 @@ impl Simulation {
             // Refresh the lifetime without postponing the already scheduled pulse.
         } else {
             let id = self.allocate_id();
-            let status = target.status.poison.get_or_insert(PoisonStatus {
+            let status = status.poison.get_or_insert(PoisonStatus {
                 profile,
                 total_damage_per_second: 0,
                 buffs: [None; MAX_NATIVE_POISON_BUFFS],
@@ -70,7 +88,7 @@ impl Simulation {
                 id,
                 NativeAction::Poison(PoisonState {
                     source,
-                    target: target.id,
+                    target,
                     generation: status.generation,
                     profile,
                     next_pulse_tick: tick + CASTLE_FIGHT_SIMULATION_HZ as u64,
@@ -78,12 +96,16 @@ impl Simulation {
                 }),
             ));
         }
-        self.refresh_poison_summary(target);
+        self.refresh_poison_status(target, status);
     }
 
     /// Each attacker/ability owns a damage clock; the family has one nonstacking slow.
     fn refresh_poison_summary(&self, target: &mut UnitSnapshot) {
-        let Some(previous) = target.status.poison else {
+        self.refresh_poison_status(target.id, &mut target.status);
+    }
+
+    fn refresh_poison_status(&self, target: SimId, status: &mut StatusState) {
+        let Some(previous) = status.poison else {
             return;
         };
         let mut representative = None;
@@ -97,7 +119,7 @@ impl Simulation {
             let Some(NativeAction::Poison(state)) = entity.get::<NativeAction>() else {
                 continue;
             };
-            if state.target != target.id || state.generation != previous.generation {
+            if state.target != target || state.generation != previous.generation {
                 continue;
             }
             if representative
@@ -135,17 +157,17 @@ impl Simulation {
         }
         let old_id = ModifierId(previous.profile.ability.0);
         super::super::native_carriers::retain_modifiers(
-            &mut target.status.movement_modifiers,
-            &mut target.status.movement_modifier_count,
+            &mut status.movement_modifiers,
+            &mut status.movement_modifier_count,
             |modifier| modifier.id != old_id,
         );
         super::super::native_carriers::retain_modifiers(
-            &mut target.status.attack_speed_modifiers,
-            &mut target.status.attack_speed_modifier_count,
+            &mut status.attack_speed_modifiers,
+            &mut status.attack_speed_modifier_count,
             |modifier| modifier.id != old_id,
         );
         buffs.sort_unstable_by_key(|buff| buff.map_or(u32::MAX, |buff| buff.buff_rawcode));
-        target.status.poison = representative.map(|profile| PoisonStatus {
+        status.poison = representative.map(|profile| PoisonStatus {
             buffs,
             profile,
             total_damage_per_second: damage,
@@ -155,8 +177,8 @@ impl Simulation {
         });
         if let Some(profile) = representative {
             let id = ModifierId(profile.ability.0);
-            apply_timed_movement_modifier(&mut target.status, id, movement, expiry);
-            apply_timed_attack_speed_modifier(&mut target.status, id, attack_speed, expiry);
+            apply_timed_movement_modifier(status, id, movement, expiry);
+            apply_timed_attack_speed_modifier(status, id, attack_speed, expiry);
         }
     }
 
@@ -165,6 +187,7 @@ impl Simulation {
         entity: Entity,
         mut state: PoisonState,
         units: &mut [UnitSnapshot],
+        buildings: &mut [BuildingSnapshot],
     ) {
         let Some(index) = units.iter().position(|unit| {
             unit.id == state.target
@@ -174,7 +197,7 @@ impl Simulation {
                     .poison
                     .is_some_and(|status| status.generation == state.generation)
         }) else {
-            self.world.despawn(entity);
+            self.advance_building_poison(entity, state, buildings);
             return;
         };
         while self.next_tick >= state.next_pulse_tick && state.next_pulse_tick <= state.expires_tick
@@ -224,6 +247,56 @@ impl Simulation {
         if self.next_tick >= state.expires_tick || units[index].health <= 0 {
             self.world.despawn(entity);
             self.refresh_poison_summary(&mut units[index]);
+        } else {
+            *self
+                .world
+                .entity_mut(entity)
+                .get_mut::<NativeAction>()
+                .unwrap() = NativeAction::Poison(state);
+        }
+    }
+    fn advance_building_poison(
+        &mut self,
+        entity: Entity,
+        mut state: PoisonState,
+        buildings: &mut [BuildingSnapshot],
+    ) {
+        let Some(b) = buildings.iter_mut().find(|b| {
+            b.id == state.target
+                && b.health > 0
+                && b.status
+                    .and_then(|s| s.poison)
+                    .is_some_and(|p| p.generation == state.generation)
+        }) else {
+            self.world.despawn(entity);
+            return;
+        };
+        while self.next_tick >= state.next_pulse_tick && state.next_pulse_tick <= state.expires_tick
+        {
+            if state.profile.targets.can_target_buildings()
+                && !b.classifications.invulnerable
+                && !self.debug_buildings_invulnerable
+            {
+                let damage = self
+                    .combat_rules
+                    .damage_rules
+                    .apply_spell(state.profile.damage_per_second, b.armor.armor_type);
+                b.health = b
+                    .health
+                    .saturating_sub(scale_damage_per_10k(damage, b.snow_damage_taken_per_10k))
+                    .max(i32::from(!state.profile.can_kill));
+            }
+            state.next_pulse_tick = state
+                .next_pulse_tick
+                .checked_add(CASTLE_FIGHT_SIMULATION_HZ as u64)
+                .expect("building poison deadline overflow");
+            if b.health <= 0 {
+                break;
+            }
+        }
+        if self.next_tick >= state.expires_tick || b.health <= 0 {
+            self.world.despawn(entity);
+            self.refresh_poison_status(b.id, b.status.as_mut().unwrap());
         } else {
             *self
                 .world

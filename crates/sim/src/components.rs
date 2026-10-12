@@ -28,9 +28,9 @@ pub use travelling_mana_clap::TravellingManaClapProfile;
 pub(crate) use travelling_mana_clap::TravellingManaClapState;
 mod native_actions;
 pub(crate) use native_actions::{
-    AcidBombMissileState, AuraCarrierState, ConeWaveState, EnsnareMissileState, HailstoneState,
-    HealingWaveState, NativeAction, NativeBoltState, PoisonState, SphereFlightState,
-    StasisTrapState,
+    AcidBombMissileState, AuraCarrierState, BuildingAttackProxyState, ConeWaveState,
+    EnsnareMissileState, HailstoneState, HealingWaveState, NativeAction, NativeBoltState,
+    PoisonState, SphereFlightState, StasisTrapState,
 };
 pub use native_actions::{
     AcidBombProfile, AcidBombStatus, EnsnareProfile, EnsnareState, HealingWaveProfile,
@@ -1112,7 +1112,7 @@ pub struct DamageThresholdState {
     pub vertex_rgba: Option<[u8; 4]>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PoisonProfile {
     pub ability: AbilityId,
     /// Native poison uses its second authored buff when stacking flags are set.
@@ -1809,6 +1809,7 @@ pub enum AbilityEffect {
     },
     PhoenixFire(NativeBoltProfile),
     HealingWave(HealingWaveProfile),
+    BuildingAttackProxy(crate::building_mechanics::BuildingAttackProxyProfile),
     Hailstone(crate::building_mechanics::HailstoneProfile),
     BuildingBolt(crate::building_mechanics::BuildingBoltProfile),
     WorldFreezer(crate::building_mechanics::WorldFreezerProfile),
@@ -1898,6 +1899,7 @@ impl AbilityEffect {
             Self::MasterProjectiles(_) => 35,
             Self::FrostNova { .. } => 17,
             Self::Snowfall { .. } => 18,
+            Self::BuildingAttackProxy(_) => 54,
             Self::Hailstone(_) => 19,
             Self::BuildingBolt(_) => 20,
             Self::WorldFreezer(_) => 21,

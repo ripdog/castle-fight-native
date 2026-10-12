@@ -189,6 +189,31 @@ impl Simulation {
             }
         }
         for entity in self.world.iter_entities() {
+            if let Some(crate::components::NativeAction::AttackProxyActor {
+                owner,
+                team,
+                map_version,
+                rawcode,
+                position,
+                expires_tick,
+            }) = entity.get::<crate::components::NativeAction>()
+                && self.next_tick < *expires_tick
+            {
+                let sight = crate::castle_fight_sight_for_version(*map_version, *rawcode)
+                    .expect("native attack proxy sight");
+                sources.push((
+                    *entity.get::<SimId>().expect("native actor identity"),
+                    *team,
+                    *position,
+                    sight.radius(rules.is_night(self.next_tick)),
+                    true,
+                    0,
+                    None,
+                    None,
+                    Some(*owner),
+                    None,
+                ));
+            }
             if let Some(crate::components::NativeAction::TravellingManaClap(state)) =
                 entity.get::<crate::components::NativeAction>()
                 && self.next_tick
