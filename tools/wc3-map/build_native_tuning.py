@@ -117,6 +117,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         return scaled(fields[field.lower()], scale)
 
     kind = recipe["kind"]
+    if kind == "incinerate":
+        from project_incinerate import project
+        return project(recipe, fields, mechanics["native_base"])
     if kind == "hostile-armor-aura":
         if (mechanics["native_base"] != "AHad" or set(fields["targs1"].split(",")) != {"air", "enemies", "ground", "vulnerable"}
                 or number("DataB1") != 0 or number("DataA1", 100) >= 0

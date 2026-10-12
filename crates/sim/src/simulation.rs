@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 96;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 97;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -36,6 +36,7 @@ mod building_damage_procs;
 mod enchantments;
 mod hostile_armor_auras;
 mod impale;
+mod incinerate;
 mod naga;
 mod native_building_auras;
 mod native_immolation;
@@ -2048,6 +2049,7 @@ impl Simulation {
             &mut building_health,
         );
         self.release_spheres(&mut units);
+        self.observe_incinerate_deaths(&units, &unit_health, &positions);
         self.observe_master_parasite_deaths(&units, &unit_health, &positions);
         self.observe_native_parasite_deaths(
             &units,
@@ -2096,7 +2098,9 @@ impl Simulation {
                         .copied()
                         .unwrap_or_default()
                 };
-                if let Some(profile) = unit.corpse {
+                if let Some(profile) = unit.corpse
+                    && !incinerate::burning(unit, completed_tick)
+                {
                     let resurrection = self
                         .world
                         .get::<ResurrectionProfile>(unit.entity)
@@ -6437,6 +6441,18 @@ fn apply_pending_attack_effects(
             profile,
             completed_tick,
         ));
+    }
+    if let Some(p) = effects.incinerate {
+        incinerate::landed_hit(
+            index,
+            p,
+            source,
+            completed_tick,
+            units,
+            unit_health,
+            damage_rules,
+            retired_sources,
+        );
     }
     if unit_health[index] <= 0 {
         return result;

@@ -358,6 +358,45 @@ mod tests {
     use super::*;
 
     #[test]
+    fn native_incinerate_death_art_is_owned_by_every_source_ability() {
+        let catalog = load_embedded_visuals().unwrap();
+        let mut fields = csv::ReaderBuilder::new().delimiter(b'\t').from_reader(
+            include_str!("../../../docs/original_map/extracted/resolved/object-fields.tsv")
+                .as_bytes(),
+        );
+        let headers = fields.headers().unwrap().clone();
+        let col = |name| headers.iter().position(|h| h == name).unwrap();
+        let rows = fields.records().map(Result::unwrap).collect::<Vec<_>>();
+        let mut checked = 0;
+        for ability in rows.iter().filter(|r| {
+            &r[col("category")] == "abilities"
+                && &r[col("base_rawcode")] == "ANic"
+                && &r[col("field_id")] == "abuf"
+                && &r[col("level")] == "1"
+        }) {
+            let buffs = parse_json_comma_list(&ability[col("recovered_value_json")]);
+            for art in rows.iter().filter(|r| {
+                &r[col("category")] == "buffs"
+                    && &r[col("field_id")] == "fsat"
+                    && buffs.iter().any(|b| b == &r[col("rawcode")])
+            }) {
+                for path in parse_json_comma_list(&art[col("recovered_value_json")]) {
+                    assert!(
+                        catalog.assets.iter().any(|a| a.owner_kind == "abilities"
+                            && a.owner_rawcode == ability[col("rawcode")]
+                            && a.role == "special"
+                            && a.model_path == path),
+                        "native buff death art missing for {}",
+                        &ability[col("rawcode")]
+                    );
+                    checked += 1;
+                }
+            }
+        }
+        assert!(checked > 0);
+    }
+
+    #[test]
     fn native_lightning_binding_roundtrip_preserves_source_color_overrides() {
         let source: serde_json::Value = serde_json::from_str(include_str!(
             "../../../docs/original_map/extracted/resolved/native-lightning-visuals.json"
@@ -826,7 +865,7 @@ mod tests {
             }
             let kind = match &row[column("base_rawcode")] {
                 "AIcb" | "ACff" | "Afae" | "AIar" | "AHad" | "ACav" | "AEah" | "ANpi" | "ACpi"
-                | "ACro" | "Acrs" | "ACvp" | "Acri" | "ACcr" | "Aslo" | "AHbn" => "armor",
+                | "ACro" | "Acrs" | "ACvp" | "Acri" | "ACcr" | "Aslo" | "AHbn" | "ANic" => "armor",
                 "Apxf" | "Aven" | "ACvs" | "Abof" | "ANab" => "damage_over_time",
                 "Afrz" => "freeze",
                 "Aoar" => "regeneration",

@@ -864,6 +864,36 @@ fn load_visual_assets(
         }
     }
 
+    // Incinerate's delayed native death effect is authored by its buff, not by the
+    // attack ability's SpecialArt. Alias that exact source model to the event identity.
+    let source_assets = &assets;
+    let incinerate_death_art = ability_buff_ids
+        .iter()
+        .filter(|(ability, _)| {
+            ability_base_rawcodes
+                .get(*ability)
+                .is_some_and(|base| base == "ANic")
+        })
+        .flat_map(|(ability, buffs)| {
+            buffs.iter().flat_map(move |buff| {
+                source_assets
+                    .iter()
+                    .filter(move |(kind, rawcode, role, _)| {
+                        kind == "buffs" && rawcode == buff && role == "special"
+                    })
+                    .map(move |(_, _, _, path)| {
+                        (
+                            "abilities".to_owned(),
+                            ability.clone(),
+                            "special".to_owned(),
+                            path.clone(),
+                        )
+                    })
+            })
+        })
+        .collect::<Vec<_>>();
+    assets.extend(incinerate_death_art);
+
     // Resolved fields omit native skin-only art for some base objects (notably
     // AChv/AChV). Consume the reproducible SD projection, retaining child rawcodes.
     let lightning_projection_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1020,6 +1050,10 @@ fn load_visual_assets(
                     kind == "abilities"
                         && closure.contains(rawcode.as_str())
                         && (role == "missile"
+                            || (role == "special"
+                                && ability_base_rawcodes
+                                    .get(rawcode)
+                                    .is_some_and(|base| base == "ANic"))
                             || (role == "effect"
                                 && ability_base_rawcodes
                                     .get(rawcode)
@@ -1099,9 +1133,8 @@ fn load_visual_assets(
             "ACf2" => &["armor", "movement"],
             // Inner Fire, Prayer, and Devotion Aura use a persistent target buff model.
             "Ainf" | "AIrr" | "AHad" | "ACav" | "AIdb" | "AIar" | "ACff" | "Afae" | "AEah"
-            | "ANpi" | "ACpi" | "ACro" | "Acrs" | "ACvp" | "Acri" | "ACcr" | "Aslo" | "AHbn" => {
-                &["armor"]
-            }
+            | "ANpi" | "ACpi" | "ACro" | "Acrs" | "ACvp" | "Acri" | "ACcr" | "Aslo" | "AHbn"
+            | "ANic" => &["armor"],
             // Persistent native fire/carrier buffs use their authoritative DOT entry.
             "Apxf" => &["damage_over_time"],
             // Native poison can author separate poison/slow buffs or one combined override.

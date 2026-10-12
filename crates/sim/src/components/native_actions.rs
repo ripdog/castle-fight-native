@@ -176,6 +176,7 @@ pub(crate) struct BuildingAttackProxyState {
 
 #[derive(Component, Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum NativeAction {
+    IncinerateExplosion(super::IncinerateExplosion),
     ImpaleWave(super::ImpaleWaveState),
     ImpaleLanding(super::ImpaleLandingState),
     FlameStrike(crate::building_mechanics::FlameStrikeState),

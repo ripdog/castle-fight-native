@@ -460,6 +460,17 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(10);
                 hash.write_u64(id.0);
                 match action {
+                    NativeAction::IncinerateExplosion(state) => {
+                        hash.write_u8(28);
+                        hash.write_u64(state.source.0);
+                        hash.write_u8(state.team.0);
+                        hash.write_i32(state.position.x);
+                        hash.write_i32(state.position.y);
+                        hash.write_u64(state.due_tick);
+                        for word in state.profile.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                    }
                     NativeAction::ImpaleWave(state) => {
                         hash.write_u8(26);
                         hash.write_u64(state.source.0);
@@ -2205,6 +2216,16 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         hash.write_u64(action.started_tick);
         hash.write_u64(action.until_tick);
     }
+    hash.write_u8(u8::from(status.incinerate.is_some()));
+    if let Some(p) = status.incinerate {
+        hash.write_u64(p.source.0);
+        hash.write_u8(p.team.0);
+        hash.write_u32(p.stacks);
+        hash.write_u64(p.expires_tick);
+        for word in p.profile.canonical_words() {
+            hash.write_u64(word);
+        }
+    }
     hash.write_u8(u8::from(status.impale.is_some()));
     if let Some(p) = status.impale {
         hash.write_u32(p.ability.0);
@@ -2530,6 +2551,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                     hash.write_u64(word);
                 }
             }
+            PassiveUnitEffect::Incinerate(profile) => {
+                hash.write_u8(30);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
             PassiveUnitEffect::HostileArmorAura(profile) => {
                 hash.write_u8(29);
                 for word in profile.canonical_words() {
@@ -2770,6 +2797,12 @@ fn hash_frost_profile_option(
 }
 
 fn hash_pending_attack_effects(hash: &mut Fnv64, effects: PendingAttackEffects) {
+    hash.write_u8(u8::from(effects.incinerate.is_some()));
+    if let Some(p) = effects.incinerate {
+        for word in p.canonical_words() {
+            hash.write_u64(word);
+        }
+    }
     hash.write_u8(u8::from(effects.poison.is_some()));
     if let Some(profile) = effects.poison {
         hash_poison_profile(hash, profile);

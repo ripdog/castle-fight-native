@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    VoidWalker = 0x1000_006f => b"n019",
     CorruptedAnnihilator = 0x1000_006e => b"n027",
     CorruptedTreant = 0x1000_006d => b"n01H",
     CorruptedEnt = 0x1000_006c => b"n01I",
@@ -146,6 +147,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    VoidPortal = 0x2000_006f => b"h04L",
     CorruptedAncientOfAnnihilation = 0x2000_006e => b"h09Y",
     CorruptedAncientOfWar = 0x2000_006d => b"h04W",
     AncientOfBattle = 0x2000_006c => b"h04V",

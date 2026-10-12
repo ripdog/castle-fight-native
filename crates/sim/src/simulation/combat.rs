@@ -551,6 +551,9 @@ impl Simulation {
                         speed_per_tick: 0, ..
                     } => {}
                     AttackDelivery::RangedGuaranteedHit { speed_per_tick } => {
+                        let speed_per_tick = on_hit.incinerate.filter(|_| matches!(intent.target,
+                            TargetIndex::Unit(i) if incinerate::eligible(&units[i], intent.source_team)))
+                            .map_or(speed_per_tick, |p| p.speed_per_tick);
                         let travel_ticks =
                             projectile_travel_ticks(intent.distance_sq, speed_per_tick);
                         let impact_tick = completed_tick
@@ -907,6 +910,9 @@ impl Simulation {
                 .flat_map(|grants| grants.passive_effects()),
         ) {
             match effect {
+                PassiveUnitEffect::Incinerate(profile) => {
+                    assert!(on_hit.incinerate.replace(profile).is_none());
+                }
                 PassiveUnitEffect::Corruption(profile) => {
                     assert!(on_hit.corruption.replace(profile).is_none());
                 }

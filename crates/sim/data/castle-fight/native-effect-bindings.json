@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A05F","implementation":"warcraft-hostile-armor-aura-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"ANic","implementation":"warcraft-incinerate-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"ability-effect","source_key":"A0AB","implementation":"warcraft-native-target-debuff-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0AC","implementation":"warcraft-orb-spell-proc-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"ability-effect","source_key":"A0AF","implementation":"warcraft-native-impale-v1","valid_from":"9.27","valid_through":"9.27"},

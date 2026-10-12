@@ -189,6 +189,9 @@ impl Simulation {
                 continue;
             }
             match action {
+                NativeAction::IncinerateExplosion(state) => {
+                    self.advance_incinerate_explosion(entity, state, units);
+                }
                 NativeAction::TravellingManaClap(state) => {
                     self.advance_travelling_mana_clap(entity, state, units);
                 }

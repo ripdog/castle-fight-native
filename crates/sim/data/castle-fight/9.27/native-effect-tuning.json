@@ -3,6 +3,48 @@
   "map_version": "9.27",
   "effects": [
     {
+      "source_kind": "unit-ability",
+      "source_key": "A05F",
+      "unit_rawcode": "n019",
+      "kind": "hostile-armor-aura",
+      "profile": {
+        "ability": 1093678406,
+        "buff_rawcode": 1110454359,
+        "radius": 409600,
+        "armor_bonus_per_100": -200,
+        "targets": 3,
+        "linger_ticks": 0
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "ANic",
+      "unit_rawcode": "n019",
+      "kind": "incinerate",
+      "profile": {
+        "ability": 1095657827,
+        "buff_rawcode": 1112435043,
+        "bonus_per_hit": 7,
+        "maximum_stacks": 3,
+        "duration_ticks": 60,
+        "hero_duration_ticks": 60,
+        "full_damage": 80,
+        "half_damage": 40,
+        "full_radius": 153600,
+        "half_radius": 204800,
+        "delay_ticks": 6,
+        "speed_per_tick": 34133
+      },
+      "provenance": {
+        "native_base": "ANic",
+        "source": "resolved/object-fields.tsv",
+        "native_bonus_field": "7",
+        "native_compatibility": "legacy-original-rawcode-bonus-three-hit-cap-v1",
+        "targets": "enemy,neutral,organic,nonancient",
+        "missile_art": "Abilities\\\\Weapons\\\\VoidWalkerMissile\\\\VoidWalkerMissile.mdl"
+      }
+    },
+    {
       "kind": "native-target-debuff",
       "source_kind": "ability-effect",
       "source_key": "A0AB",

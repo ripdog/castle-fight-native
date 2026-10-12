@@ -23,6 +23,7 @@ mod homing_splash;
 mod hostile_armor_aura;
 mod immolation;
 mod impale;
+mod incinerate;
 mod kill_berserk;
 mod lava_spawn;
 mod life_steal;

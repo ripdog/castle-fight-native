@@ -554,6 +554,9 @@ pub(super) fn apply_ability_effect_to_unit(
 
 pub(super) fn purge_expired_status_modifiers(status: &mut StatusState, tick: u64) {
     super::native_summons::advance_purge(status, tick);
+    if status.incinerate.is_some_and(|p| tick >= p.expires_tick) {
+        status.incinerate = None;
+    }
     if status.impale.is_some_and(|p| tick >= p.expires_tick) {
         status.impale = None;
     }

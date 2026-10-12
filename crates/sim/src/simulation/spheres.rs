@@ -33,7 +33,7 @@ impl Simulation {
                 .chain(
                     self.last_ability_casts
                         .iter()
-                        .filter(|cast| cast.source == unit.id && !unit.effective_passive_effects().any(|effect| matches!(effect, PassiveUnitEffect::Corruption(p) if p.ability == cast.ability)))
+                        .filter(|cast| cast.source == unit.id && !unit.effective_passive_effects().any(|effect| matches!(effect, PassiveUnitEffect::Corruption(p) if p.ability == cast.ability) || matches!(effect, PassiveUnitEffect::Incinerate(p) if p.ability == cast.ability)))
                         .map(|cast| {
                             (
                                 unit.position,
