@@ -11,6 +11,7 @@ mod aura_carrier;
 mod buff_transfer;
 mod building_aura;
 mod burning_oil;
+mod class_proc;
 mod cone_wave;
 mod contact;
 mod corruption;
@@ -1007,6 +1008,8 @@ fn orb_child_nonhero_restriction_does_not_cancel_primary_hit_and_retains_hero_du
             UnitGameplayProperties {
                 passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::TriggeredSpellProc(
                     crate::TriggeredSpellProcProfile {
+                        hero_chance_per_10k: None,
+                        summoned_chance_per_10k: None,
                         ability: AbilityId(301),
                         chance_per_10k: 10_000,
                         targets: AttackTargetMask::AIR_AND_GROUND,
@@ -1082,6 +1085,8 @@ fn frost_attack_retains_independent_orb_payload_and_live_hero_immunity_after_res
                         targets: AttackTargetMask::AIR_AND_GROUND,
                     }),
                     PassiveUnitEffect::TriggeredSpellProc(TriggeredSpellProcProfile {
+                        hero_chance_per_10k: None,
+                        summoned_chance_per_10k: None,
                         ability: AbilityId(22),
                         chance_per_10k: 10_000,
                         targets: AttackTargetMask::AIR_AND_GROUND,
@@ -1593,6 +1598,8 @@ fn roots_can_disable_structure_weapons_and_dot_without_interrupting_spellcasting
         UnitGameplayProperties {
             passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::TriggeredSpellProc(
                 crate::TriggeredSpellProcProfile {
+                    hero_chance_per_10k: None,
+                    summoned_chance_per_10k: None,
                     ability: AbilityId(81),
                     chance_per_10k: 10_000,
                     targets: AttackTargetMask::ALL,

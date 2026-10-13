@@ -690,6 +690,10 @@ pub struct LavaSpawnState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TriggeredSpellProcProfile {
     pub ability: AbilityId,
+    #[serde(default)]
+    pub hero_chance_per_10k: Option<u16>,
+    #[serde(default)]
+    pub summoned_chance_per_10k: Option<u16>,
     pub chance_per_10k: u16,
     pub targets: AttackTargetMask,
     pub effect: TriggeredAttackEffect,

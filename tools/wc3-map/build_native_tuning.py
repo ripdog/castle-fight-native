@@ -534,8 +534,10 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
                       activation_delay_millis=scaled(mechanics["initial_defend_delay_seconds"], 1000))
     elif kind == "orb-spell-proc":
         chances = [number(field, 100) for field in ("DataB1", "DataC1", "DataD1")]
+        if not all(0 <= chance <= 10000 for chance in chances):
+            raise ValueError("native orb chances must be bounded percentages")
         if len(set(chances)) != 1:
-            raise ValueError("class-specific orb chances require a richer native primitive")
+            effect.update(hero_chance_per_10k=chances[0], summoned_chance_per_10k=chances[1])
         if number("DataA1") != 0:
             raise ValueError("orb weapon damage bonus requires an explicit native modifier")
         enabled = number("DataE1")
@@ -548,7 +550,7 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
             if (unit["attack" + slot + "_enabled"] != "True"
                     and unit["attack" + slot + "_weapon_type"] not in {"_", "-", ""}):
                 raise ValueError("orb enables a usable disabled weapon requiring native attack projection")
-        effect.update(chance_per_10k=chances[0], effect_ability_rawcode=fields["unitid1"],
+        effect.update(chance_per_10k=chances[2], effect_ability_rawcode=fields["unitid1"],
                       targets=unit_targets(fields["targs1"], allow_structures=True))
     elif kind == "chain-lightning":
         effect.update(initial_damage=number("DataA1"), maximum_targets=number("DataB1"),

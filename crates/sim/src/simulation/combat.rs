@@ -1031,7 +1031,16 @@ impl Simulation {
                             .can_target_unit(units[index].target_movement_class()),
                         TargetIndex::Building(_) => profile.targets.can_target_buildings(),
                     };
-                    if !target_matches || profile.chance_per_10k == 0 {
+                    let chance = match intent.target {
+                        TargetIndex::Unit(i) if units[i].classifications.hero => profile
+                            .hero_chance_per_10k
+                            .unwrap_or(profile.chance_per_10k),
+                        TargetIndex::Unit(i) if units[i].classifications.summoned => profile
+                            .summoned_chance_per_10k
+                            .unwrap_or(profile.chance_per_10k),
+                        _ => profile.chance_per_10k,
+                    };
+                    if !target_matches || chance == 0 {
                         continue;
                     }
                     let roll = deterministic_random(
@@ -1041,7 +1050,7 @@ impl Simulation {
                         RANDOM_PURPOSE_ATTACK_PROC ^ u64::from(profile.ability.0),
                         intent.attack_sequence,
                     ) % u64::from(ATTACK_PROC_CHANCE_SCALE);
-                    if roll < u64::from(profile.chance_per_10k) {
+                    if roll < u64::from(chance) {
                         assert!(
                             on_hit.triggered_spell.is_none(),
                             "multiple triggered spell procs on one attack are not yet supported"

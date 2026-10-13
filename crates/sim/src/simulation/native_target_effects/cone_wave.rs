@@ -77,6 +77,8 @@ fn cone_proc_uses_caster_origin_and_preserves_wave_when_trigger_victim_dies() {
         UnitGameplayProperties {
             passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::TriggeredSpellProc(
                 crate::TriggeredSpellProcProfile {
+                    hero_chance_per_10k: None,
+                    summoned_chance_per_10k: None,
                     ability: AbilityId(99),
                     chance_per_10k: 10_000,
                     targets: AttackTargetMask::AIR_AND_GROUND,
@@ -110,6 +112,8 @@ fn native_ground_wave_reaches_structures_with_shared_budget_and_preserves_primar
         UnitGameplayProperties {
             passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::TriggeredSpellProc(
                 crate::TriggeredSpellProcProfile {
+                    hero_chance_per_10k: None,
+                    summoned_chance_per_10k: None,
                     ability: AbilityId(99),
                     chance_per_10k: 10000,
                     targets: AttackTargetMask::GROUND_AND_BUILDINGS,

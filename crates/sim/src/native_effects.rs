@@ -940,6 +940,10 @@ enum TuningEffect {
         source_key: String,
         unit_rawcode: String,
         chance_per_10k: u16,
+        #[serde(default)]
+        hero_chance_per_10k: Option<u16>,
+        #[serde(default)]
+        summoned_chance_per_10k: Option<u16>,
         effect_ability_rawcode: String,
         targets: String,
         #[allow(dead_code)]
@@ -2119,11 +2123,23 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
         TuningEffect::OrbSpellProc {
             source_key,
             chance_per_10k,
+            hero_chance_per_10k,
+            summoned_chance_per_10k,
             effect_ability_rawcode,
             targets,
             ..
         } => {
-            assert!(*chance_per_10k <= 10_000, "orb proc chance exceeds 100%");
+            assert!(
+                [
+                    Some(*chance_per_10k),
+                    *hero_chance_per_10k,
+                    *summoned_chance_per_10k
+                ]
+                .into_iter()
+                .flatten()
+                .all(|chance| chance <= 10_000),
+                "orb proc chance exceeds 100%"
+            );
             let child = tuning
                 .effects
                 .iter()
@@ -2137,6 +2153,8 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             PassiveUnitEffect::TriggeredSpellProc(TriggeredSpellProcProfile {
                 ability: AbilityId(rawcode(source_key).expect("validated orb rawcode")),
                 chance_per_10k: *chance_per_10k,
+                hero_chance_per_10k: *hero_chance_per_10k,
+                summoned_chance_per_10k: *summoned_chance_per_10k,
                 targets: target_mask(targets),
                 effect: build_triggered_effect(
                     child,
@@ -2675,6 +2693,8 @@ mod tests {
                 unit_death_rules: Vec::new(),
                 map_version: "9.27".to_owned(),
                 effects: vec![TuningEffect::OrbSpellProc {
+                    hero_chance_per_10k: None,
+                    summoned_chance_per_10k: None,
                     source_kind: "ability-effect".to_owned(),
                     source_key: "A0ZZ".to_owned(),
                     unit_rawcode: "hfoo".to_owned(),

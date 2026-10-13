@@ -274,6 +274,8 @@ fn mutually_exclusive_orbs_apply_structure_fork_on_weapon_projectile_impact() {
         UnitGameplayProperties {
             passive_effects: PassiveUnitEffects::from_slice(&[
                 PassiveUnitEffect::TriggeredSpellProc(TriggeredSpellProcProfile {
+                    hero_chance_per_10k: None,
+                    summoned_chance_per_10k: None,
                     ability: AbilityId(804),
                     chance_per_10k: 10_000,
                     targets: AttackTargetMask::AIR_AND_GROUND,
@@ -282,6 +284,8 @@ fn mutually_exclusive_orbs_apply_structure_fork_on_weapon_projectile_impact() {
                     )),
                 }),
                 PassiveUnitEffect::TriggeredSpellProc(TriggeredSpellProcProfile {
+                    hero_chance_per_10k: None,
+                    summoned_chance_per_10k: None,
                     ability: AbilityId(805),
                     chance_per_10k: 10_000,
                     targets: AttackTargetMask::BUILDINGS,

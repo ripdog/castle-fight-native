@@ -547,21 +547,22 @@ mod tests {
             PassiveUnitEffect::Bash(profile) if profile.ability == AbilityId(u32::from_be_bytes(*b"A05K"))
         )));
         assert!(effects.iter().any(|effect| matches!(
-            effect,
-            PassiveUnitEffect::TriggeredSpellProc(TriggeredSpellProcProfile {
-                ability: AbilityId(ability),
-                chance_per_10k: 1_000,
-                effect: TriggeredAttackEffect::ChainLightning(ChainLightningEffectProfile {
-                    ability: AbilityId(chain_ability),
-                    initial_damage: 150,
-                    maximum_targets: 5,
-                    damage_reduction_per_10k: 2_500,
-                    ..
-                }),
-                ..
-            }) if *ability == u32::from_be_bytes(*b"A01B")
-                && *chain_ability == u32::from_be_bytes(*b"A05X")
-        )));
+                    effect,
+                    PassiveUnitEffect::TriggeredSpellProc(TriggeredSpellProcProfile {
+        hero_chance_per_10k: None, summoned_chance_per_10k: None,
+                        ability: AbilityId(ability),
+                        chance_per_10k: 1_000,
+                        effect: TriggeredAttackEffect::ChainLightning(ChainLightningEffectProfile {
+                            ability: AbilityId(chain_ability),
+                            initial_damage: 150,
+                            maximum_targets: 5,
+                            damage_reduction_per_10k: 2_500,
+                            ..
+                        }),
+                        ..
+                    }) if *ability == u32::from_be_bytes(*b"A01B")
+                        && *chain_ability == u32::from_be_bytes(*b"A05X")
+                )));
         assert!(
             CastleFightUnitKind::GryphonRider
                 .definition_for_version(MapVersion::new(9, 28))
@@ -1058,6 +1059,8 @@ mod tests {
             UnitGameplayProperties {
                 passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::TriggeredSpellProc(
                     TriggeredSpellProcProfile {
+                        hero_chance_per_10k: None,
+                        summoned_chance_per_10k: None,
                         ability: AbilityId(u32::from_be_bytes(*b"ORBP")),
                         chance_per_10k: 10_000,
                         targets: AttackTargetMask::GROUND_UNITS,
@@ -1122,6 +1125,8 @@ mod tests {
             UnitGameplayProperties {
                 passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::TriggeredSpellProc(
                     TriggeredSpellProcProfile {
+                        hero_chance_per_10k: None,
+                        summoned_chance_per_10k: None,
                         ability: AbilityId(u32::from_be_bytes(*b"ORBP")),
                         chance_per_10k: 10_000,
                         targets: AttackTargetMask::GROUND_UNITS,
@@ -1208,6 +1213,8 @@ mod tests {
                 UnitGameplayProperties {
                     passive_effects: PassiveUnitEffects::single(
                         PassiveUnitEffect::TriggeredSpellProc(TriggeredSpellProcProfile {
+                            hero_chance_per_10k: None,
+                            summoned_chance_per_10k: None,
                             ability: AbilityId(u32::from_be_bytes(*b"ORBP")),
                             chance_per_10k: 10_000,
                             targets: AttackTargetMask::GROUND_UNITS,
@@ -1271,6 +1278,8 @@ mod tests {
             UnitGameplayProperties {
                 passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::TriggeredSpellProc(
                     TriggeredSpellProcProfile {
+                        hero_chance_per_10k: None,
+                        summoned_chance_per_10k: None,
                         ability: AbilityId(u32::from_be_bytes(*b"ORBR")),
                         chance_per_10k: 10_000,
                         targets: AttackTargetMask::GROUND_UNITS,

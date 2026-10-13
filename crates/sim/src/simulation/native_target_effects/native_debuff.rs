@@ -48,6 +48,8 @@ fn cripple() -> NativeDebuffProfile {
 fn orb(p: NativeDebuffProfile, targets: AttackTargetMask) -> PassiveUnitEffects {
     PassiveUnitEffects::from_slice(&[PassiveUnitEffect::TriggeredSpellProc(
         TriggeredSpellProcProfile {
+            hero_chance_per_10k: None,
+            summoned_chance_per_10k: None,
             ability: AbilityId(973),
             chance_per_10k: 10_000,
             targets,

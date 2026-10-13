@@ -2543,6 +2543,8 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                 hash.write_u8(3);
                 hash.write_u64(u64::from(profile.ability.0));
                 hash.write_u16(profile.chance_per_10k);
+                hash.write_u64(profile.hero_chance_per_10k.map_or(u64::MAX, u64::from));
+                hash.write_u64(profile.summoned_chance_per_10k.map_or(u64::MAX, u64::from));
                 hash.write_u8(profile.targets.bits());
                 hash_triggered_attack_effect(hash, profile.effect);
             }
