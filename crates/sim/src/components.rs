@@ -1910,6 +1910,7 @@ pub enum AbilityEffect {
     ManaBurnVisual,
     NativeSummon(NativeSummonProfile),
     NagaEarthquake(crate::building_mechanics::NagaEarthquakeProfile),
+    WellOfPain(crate::building_mechanics::WellOfPainProfile),
     NagaCharm(crate::building_mechanics::NagaCharmProfile),
     NagaTidalWave(crate::building_mechanics::NagaTidalWaveProfile),
 }
@@ -1931,6 +1932,7 @@ impl AbilityEffect {
             Self::SirenPurge(_) => 45,
             Self::NativeSummon(_) => 46,
             Self::NagaEarthquake(_) => 47,
+            Self::WellOfPain(_) => 60,
             Self::NagaCharm(_) => 48,
             Self::NagaTidalWave(_) => 49,
             Self::Heal(_) => 41,

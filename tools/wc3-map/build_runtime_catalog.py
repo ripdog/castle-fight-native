@@ -454,6 +454,8 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
             for branch in json.loads(row['parameters_json'])['branches']:
                 if 'unit_id' in branch:
                     native_summon_bodies.add(int(branch['unit_id']).to_bytes(4, 'big').decode())
+        if row['building_rawcode'] == 'h04K':
+            native_summon_bodies.add(int(json.loads(row['parameters_json'])['on_kill_unit_id']).to_bytes(4, 'big').decode())
     return {
         "schema_version": 10,
         "air_attack_bonuses": air_bonuses,

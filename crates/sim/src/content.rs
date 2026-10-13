@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r149";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r150";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -94,7 +94,7 @@ impl fmt::Display for UnsupportedCastleFightMapVersion {
 
 impl std::error::Error for UnsupportedCastleFightMapVersion {}
 
-pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 86;
+pub const CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION: u32 = 87;
 
 // Version-scoped selection gate; remaining fidelity caveats live in docs/verification.
 const ELVEN_RACE_PROMOTED_927: bool = true;
@@ -1419,6 +1419,9 @@ impl CastleFightTowerKind {
                     MapVersion::CASTLE_FIGHT_9_27,
                 ))
             }
+            Self::WellOfPain => Some(crate::building_mechanics::well_spellcasting_for_version(
+                MapVersion::CASTLE_FIGHT_9_27,
+            )),
             Self::AncientPyramide => {
                 Some(crate::building_mechanics::pyramid_spellcasting_for_version(
                     MapVersion::CASTLE_FIGHT_9_27,
@@ -1898,6 +1901,9 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A057") => {
+            0x4000_01be
+        }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A02C") => {
             0x4000_01bd
         }
@@ -3771,6 +3777,11 @@ fn hash_automatic_ability_profile(hash: &mut ContentHash64, ability: AutomaticAb
             }
         }
         AbilityEffect::NagaEarthquake(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
+        AbilityEffect::WellOfPain(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);
             }

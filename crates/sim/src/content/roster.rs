@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    GhostOfSorrow = 0x1000_0077 => b"n03C",
     Incubus = 0x1000_0076 => b"h04I",
     InfernalTank = 0x1000_0075 => b"n01E",
     InfernalMachine = 0x1000_0074 => b"n01F",
@@ -263,6 +264,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    WellOfPain = 0x2100_0031 => b"h04K",
     EyeOfCorruption = 0x2100_0030 => b"h04T",
     CorruptedProtector = 0x2100_002f => b"n01J",
     EraserLevelThree = 0x2100_002e => b"h01X",

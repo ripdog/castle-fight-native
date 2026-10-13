@@ -41,6 +41,9 @@ pub(crate) use damage_proc::{
     BuildingDamageProcState, damage_proc_bindings, damage_proc_for_version,
     damage_proc_granted_sources, damage_proc_source,
 };
+mod corrupted;
+pub use corrupted::WellOfPainProfile;
+pub(crate) use corrupted::{well_bindings, well_source, well_spellcasting_for_version};
 mod naga;
 mod night_elf;
 pub use naga::{

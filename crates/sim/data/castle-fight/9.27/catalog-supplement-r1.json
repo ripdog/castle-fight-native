@@ -119,6 +119,12 @@
       "lifetime_ticks": 870
     },
     {
+      "rawcode": "n03C",
+      "does_decay": true,
+      "decay_start_ticks": 90,
+      "lifetime_ticks": 900
+    },
+    {
       "rawcode": "nfbr",
       "does_decay": true,
       "decay_start_ticks": 30,

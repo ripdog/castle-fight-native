@@ -59,6 +59,8 @@ def build(map_version='9.27', revision='r1'):
     attack_proxy = next(r for r in building_rows if r['building_rawcode'] == 'h01E')
     launcher_codes += ['h01E', 'h06C', 'A01E', 'A0EU', 'A0FE']
     pyramid = next(r for r in building_rows if r['building_rawcode'] == 'h00I')
+    well = next(r for r in building_rows if r['building_rawcode'] == 'h04K')
+    launcher_codes += ['h04K', 'A057', 'n03C']
     launcher_codes += ['h00I', 'A00M', 'A00B']
     grant_params = json.loads(ceremonial['parameters_json'])
     grant_codes = [value.to_bytes(4, 'big').decode() for value in grant_params['always_ability_ids']
@@ -86,7 +88,7 @@ def build(map_version='9.27', revision='r1'):
     selected = {code: {r['field_id'] + ':' + r['level']: json.loads(r['recovered_value_json'])
                        for r in fields if r['rawcode'] == code}
                 for code in ('h00Z', 'A017', 'A018', 'A09L', 'A070', 'BOhx', 'B01H', 'n00F', 'n00G', 'h07W', 'A0HO', 'AM0{', *launcher_codes)}
-    for code in ('A00M', 'A00O', 'A01E', 'A01J', 'A0FE', 'A06R', 'A01W'):
+    for code in ('A00M', 'A00O', 'A01E', 'A01J', 'A0FE', 'A06R', 'A01W', 'A057'):
         selected[code]['native_base_buff'] = json.loads(next(r['base_value_json'] for r in fields
             if r['rawcode'] == code and r['field_id'] == 'abuf' and r['level'] == '1'))
     markers = {r['rawcode']: r['abilities'].split(',') for r in rows('units.tsv')
@@ -109,7 +111,7 @@ def build(map_version='9.27', revision='r1'):
                      'EventListener_add_BuildingLifecycle_onEvent_add_BuildingLifecycle',
                      'EventListener_add_BuildingLifecycle_onEvent_add_BuildingLifecycle1',
                      *guard['source_functions'].split(','), *snow['source_functions'].split(','), *serpent['source_functions'].split(','), *ceremonial['source_functions'].split(','),
-                     *starfall['source_functions'].split(','), 'QG', 'DummyRecycler_get', 'createDummy', 'dummyCastImmediateFrom1', 'CallbackSingle_doAfter_SpellHelpers_call_doAfter_SpellHelpers2', 'ForGroupCallback_forUnitsInRect_RaceNelfAbilities_callback_forUnitsInRect_RaceNelfAbilities', *wilderness['source_functions'].split(','), *silver['source_functions'].split(','), *pyramid['source_functions'].split(','), *oracle['source_functions'].split(','), *tidal['source_functions'].split(','), 'mJ', 'orderCodeAttackIfAllowed', 'randomAliveEnemyGround', 'ForGroupCallback_forUnitsInRect_SpellHelpers_callback_forUnitsInRect_SpellHelpers1', *stasis['source_functions'].split(','), *enchantment['source_functions'].split(','), 'dummyCastPointFrom',
+                     *starfall['source_functions'].split(','), 'QG', 'DummyRecycler_get', 'createDummy', 'dummyCastImmediateFrom1', 'CallbackSingle_doAfter_SpellHelpers_call_doAfter_SpellHelpers2', 'ForGroupCallback_forUnitsInRect_RaceNelfAbilities_callback_forUnitsInRect_RaceNelfAbilities', *wilderness['source_functions'].split(','), *silver['source_functions'].split(','), *pyramid['source_functions'].split(','), *well['source_functions'].split(','), 'ForGroupCallback_forUnitsInRect_RaceCorruptedAbilities_callback_forUnitsInRect_RaceCorruptedAbilities', *oracle['source_functions'].split(','), *tidal['source_functions'].split(','), 'mJ', 'orderCodeAttackIfAllowed', 'randomAliveEnemyGround', 'ForGroupCallback_forUnitsInRect_SpellHelpers_callback_forUnitsInRect_SpellHelpers1', *stasis['source_functions'].split(','), *enchantment['source_functions'].split(','), 'dummyCastPointFrom',
                      *healing['source_functions'].split(','), *endurance['source_functions'].split(','), 'dummyCarrierWithAbility', 'createSpellCarrier', 'QL', 'iD', 'hD',
                      'CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities1',
                      'CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities2',
@@ -221,6 +223,8 @@ def build(map_version='9.27', revision='r1'):
     from project_naga_building import project_pyramid, project_oracle, project_coral, project_tidal
     pyramid_profile = project_pyramid(pyramid, selected, unit_rows, rows('abilities.tsv'), protected, traces, dict(zip(['major', 'minor'], map(int, map_version.split('.')))))
     oracle_profile = project_oracle(oracle, selected, unit_rows, rows('abilities.tsv'), protected, traces, dict(zip(['major', 'minor'], map(int, map_version.split('.')))))
+    from project_well_of_pain import project as project_well
+    well_profile = project_well(well, selected, unit_rows, rows('abilities.tsv'), protected, traces, dict(zip(['major', 'minor'], map(int, map_version.split('.')))))
     from lua_index import _decode_lua_short_string_contents, _decode_w3p_string_payload
     owner_art = [_decode_w3p_string_payload(_decode_lua_short_string_contents(m[1]), 11351, 1106).decode()
         for m in re.finditer(rb'_(?:T|r)\("((?:\\.|[^"\\])*)"\)', traces['mJ']['source'].encode())]
@@ -254,7 +258,7 @@ def build(map_version='9.27', revision='r1'):
          'path': json.loads('"'+ruin_targets[1][0]+'"'), 'attachment': ruin_targets[1][1]},
     ]
     from project_production_replication import project as project_replication
-    return {'erasers': erasers, 'eraser_spellcasting': eraser_casts, 'eraser_cast_visuals': eraser_visuals, 'magic_ruin': magic_ruin, 'magic_ruin_spellcasting': magic_ruin_profile, 'magic_ruin_cast_visuals': magic_ruin_visuals, 'native_reference': native_reference, 'flame_strike': flame_strike, 'flame_strike_spellcasting': flame_strike_profile, 'attack_proxy': attack_proxy, 'attack_proxy_spellcasting': attack_proxy_profile, 'attack_proxy_cast_visuals': attack_proxy_visuals, 'tidal': tidal, 'tidal_spellcasting': tidal_profile, 'coral_auras': coral_profile, 'oracle_owner_rejection_visual': {'model_path': owner_art[0], 'attachment': owner_art[1]}, 'oracle': oracle, 'oracle_spellcasting': oracle_profile, 'pyramid': pyramid, 'pyramid_spellcasting': pyramid_profile,
+    return {'erasers': erasers, 'eraser_spellcasting': eraser_casts, 'eraser_cast_visuals': eraser_visuals, 'magic_ruin': magic_ruin, 'magic_ruin_spellcasting': magic_ruin_profile, 'magic_ruin_cast_visuals': magic_ruin_visuals, 'native_reference': native_reference, 'flame_strike': flame_strike, 'flame_strike_spellcasting': flame_strike_profile, 'attack_proxy': attack_proxy, 'attack_proxy_spellcasting': attack_proxy_profile, 'attack_proxy_cast_visuals': attack_proxy_visuals, 'tidal': tidal, 'tidal_spellcasting': tidal_profile, 'coral_auras': coral_profile, 'oracle_owner_rejection_visual': {'model_path': owner_art[0], 'attachment': owner_art[1]}, 'oracle': oracle, 'oracle_spellcasting': oracle_profile, 'pyramid': pyramid, 'pyramid_spellcasting': pyramid_profile, 'well': well, 'well_spellcasting': well_profile, 'well_cast_visual': {'model_path': json.loads('"' + re.search(r'addEffect1\("((?:[^"\\]|\\.)*\.mdl)",Qlr,"(\w+)"\)', traces['wellOfPainSpell']['source'])[1] + '"'), 'attachment': re.search(r'addEffect1\("((?:[^"\\]|\\.)*\.mdl)",Qlr,"(\w+)"\)', traces['wellOfPainSpell']['source'])[2]},
             'production_training_variants': training,
             'production_replication': project_replication(replication, traces), 'replication_source': replication,
             'map_version': map_version, 'schema_version': 2, 'source_revision': revision,
