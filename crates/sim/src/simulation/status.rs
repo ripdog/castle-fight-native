@@ -122,6 +122,7 @@ pub(super) fn apply_ability_effect_to_unit(
         | AbilityEffect::NagaCharm(_)
         | AbilityEffect::NagaEarthquake(_)
         | AbilityEffect::WellOfPain(_)
+        | AbilityEffect::ForgottenOne(_)
         | AbilityEffect::SilverGlade(_)
         | AbilityEffect::Wilderness(_)
         | AbilityEffect::Starfall(_) => return false,

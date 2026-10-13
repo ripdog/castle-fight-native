@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A050","implementation":"warcraft-critical-strike-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A08H","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A02C","implementation":"warcraft-hostile-armor-aura-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"ability-effect","source_key":"A04O","implementation":"warcraft-orb-charm-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A04N","implementation":"warcraft-orb-spell-proc-v1","valid_from":"9.27","valid_through":"9.27"},

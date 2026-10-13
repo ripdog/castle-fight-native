@@ -33,6 +33,8 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    RaisedTentacle = 0x1000_0078 => b"n01C",
+    RaisedTentaclePlain = 0x1000_0079 => b"n021",
     GhostOfSorrow = 0x1000_0077 => b"n03C",
     Incubus = 0x1000_0076 => b"h04I",
     InfernalTank = 0x1000_0075 => b"n01E",
@@ -264,6 +266,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    ForgottenOne = 0x2100_0032 => b"h04R",
     WellOfPain = 0x2100_0031 => b"h04K",
     EyeOfCorruption = 0x2100_0030 => b"h04T",
     CorruptedProtector = 0x2100_002f => b"n01J",

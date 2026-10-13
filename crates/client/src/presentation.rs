@@ -3510,7 +3510,9 @@ fn prewarm_timed_wc3_effects(
                         } => Some((modifier.0, duration_ticks)),
                         AbilityEffect::NagaEarthquake(p) => Some((p.child.0, p.duration_ticks)),
                         AbilityEffect::NagaCharm(p) => Some((p.child.0, 0)),
-                        AbilityEffect::NagaTidalWave(_) | AbilityEffect::WellOfPain(_) => None,
+                        AbilityEffect::NagaTidalWave(_)
+                        | AbilityEffect::WellOfPain(_)
+                        | AbilityEffect::ForgottenOne(_) => None,
                         AbilityEffect::ImpaleFan(p) => {
                             Some((p.child.ability.0, p.child.stun_ticks))
                         }

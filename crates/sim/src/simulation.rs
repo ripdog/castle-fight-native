@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 103;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 104;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -35,6 +35,7 @@ mod support_orders;
 pub use death_healing::DeathHealVisualEvent;
 mod building_damage_procs;
 mod enchantments;
+mod forgotten_one;
 mod hostile_armor_auras;
 mod impale;
 mod incinerate;
@@ -4794,6 +4795,19 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                 AbilityTargetPolicy::NativeBuildingSpellTrigger
             );
             assert!(p.child_range > 0 && p.child.0 != 0 && p.parent.buff_rawcode != 0);
+        }
+        AbilityEffect::ForgottenOne(p) => {
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::NativeBuildingSpellTrigger
+            );
+            assert!(
+                p.count > 0
+                    && p.angle_step_degrees == 60
+                    && p.ring_radius > 0
+                    && p.lifetime_ticks > 0
+                    && p.parent.buff_rawcode != 0
+            );
         }
         AbilityEffect::WellOfPain(p) => {
             assert_eq!(

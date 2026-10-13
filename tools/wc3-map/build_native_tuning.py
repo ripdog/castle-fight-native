@@ -408,7 +408,7 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         return project_elven_automatic(recipe, fields, unit, protected, mechanics)
     if kind in {"bash", "critical-strike", "feedback", "faerie-fire"}:
         supported = {"air", "ground", "enemy", "enemies", "neutral"}
-        if kind == "critical-strike": supported.add("structure")
+        if kind == "critical-strike": supported.update({"structure", "ward"})
         if set(fields["targs1"].split(",")) - supported:
             raise ValueError("native directed passive/debuff cannot flatten class restrictions")
     if kind == "evasion":

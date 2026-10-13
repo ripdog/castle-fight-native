@@ -90,6 +90,11 @@ pub(super) fn native_building_trigger(
             p.trigger_invulnerable,
             p.trigger_spell_immune,
         )),
+        AbilityEffect::ForgottenOne(p) => Some((
+            p.trigger_targets,
+            p.trigger_invulnerable,
+            p.trigger_spell_immune,
+        )),
         AbilityEffect::WellOfPain(p) => Some((
             p.trigger_targets,
             p.trigger_invulnerable,
@@ -185,6 +190,7 @@ pub(super) fn native_building_trigger_unit_type(
         AbilityEffect::NagaCharm(p) => !p.trigger_mechanical_only || mechanical,
         AbilityEffect::NagaEarthquake(p) => !p.trigger_mechanical_only || mechanical,
         AbilityEffect::WellOfPain(p) => !p.trigger_mechanical_only || mechanical,
+        AbilityEffect::ForgottenOne(p) => !p.trigger_mechanical_only || mechanical,
         AbilityEffect::SilverGlade(p) => !p.trigger_mechanical_only || mechanical,
         AbilityEffect::Starfall(p) => !p.trigger_mechanical_only || mechanical,
         AbilityEffect::Wilderness(p) => !p.trigger_mechanical_only || mechanical,

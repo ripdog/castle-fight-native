@@ -454,6 +454,10 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
             for branch in json.loads(row['parameters_json'])['branches']:
                 if 'unit_id' in branch:
                     native_summon_bodies.add(int(branch['unit_id']).to_bytes(4, 'big').decode())
+        if row['building_rawcode'] == 'h04R':
+            parameters = json.loads(row['parameters_json'])
+            for key in ('normal_dummy_unit_id', 'alternate_mode_dummy_unit_id'):
+                native_summon_bodies.add(int(parameters[key]).to_bytes(4, 'big').decode())
         if row['building_rawcode'] == 'h04K':
             native_summon_bodies.add(int(json.loads(row['parameters_json'])['on_kill_unit_id']).to_bytes(4, 'big').decode())
     return {

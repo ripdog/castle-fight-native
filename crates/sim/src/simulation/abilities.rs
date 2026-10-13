@@ -682,6 +682,16 @@ impl Simulation {
                             units,
                         ));
                         emit_cast_visual = false;
+                    } else if let AbilityEffect::ForgottenOne(p) = intent.ability.effect {
+                        metrics.effects += usize::from(self.cast_forgotten_one(
+                            source,
+                            intent.ability.id,
+                            units[index].id,
+                            p,
+                            intent.cast_sequence,
+                            units,
+                        ));
+                        emit_cast_visual = false;
                     } else if let AbilityEffect::WellOfPain(p) = intent.ability.effect {
                         metrics.effects += usize::from(self.cast_well_of_pain(
                             source,
@@ -1061,6 +1071,16 @@ impl Simulation {
                         emit_cast_visual = false;
                     } else if let AbilityEffect::NagaCharm(p) = intent.ability.effect {
                         metrics.effects += usize::from(self.cast_naga_charm(
+                            source,
+                            intent.ability.id,
+                            id,
+                            p,
+                            intent.cast_sequence,
+                            units,
+                        ));
+                        emit_cast_visual = false;
+                    } else if let AbilityEffect::ForgottenOne(p) = intent.ability.effect {
+                        metrics.effects += usize::from(self.cast_forgotten_one(
                             source,
                             intent.ability.id,
                             id,

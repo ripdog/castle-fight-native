@@ -102,6 +102,7 @@ pub enum NativeEffectImplementationId {
     WarcraftPersistentCarrierV1,
     WarcraftNagaEarthquakeV1,
     WarcraftWellOfPainV1,
+    WarcraftForgottenOneV1,
     WarcraftNagaCharmV1,
     WarcraftNativeBuildingAurasV1,
     WarcraftNagaTidalWaveV1,
@@ -114,6 +115,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftPermanentImmolationV1 => 96,
             Self::WarcraftNagaEarthquakeV1 => 92,
             Self::WarcraftWellOfPainV1 => 108,
+            Self::WarcraftForgottenOneV1 => 109,
             Self::WarcraftNagaCharmV1 => 93,
             Self::WarcraftNativeBuildingAurasV1 => 94,
             Self::WarcraftNagaTidalWaveV1 => 95,
@@ -1414,6 +1416,9 @@ pub fn resolve_native_effect_requirements(
     let (well_roots, roots): (Vec<_>, Vec<_>) = roots
         .into_iter()
         .partition(|s| crate::building_mechanics::well_source(version, *s));
+    let (forgotten_roots, roots): (Vec<_>, Vec<_>) = roots
+        .into_iter()
+        .partition(|s| crate::building_mechanics::forgotten_source(version, *s));
     let (silver_roots, roots): (Vec<_>, Vec<_>) = roots
         .iter()
         .copied()
@@ -1481,6 +1486,9 @@ pub fn resolve_native_effect_requirements(
     }
     if !pyramid_roots.is_empty() {
         resolved.extend(crate::building_mechanics::pyramid_bindings(version));
+    }
+    if !forgotten_roots.is_empty() {
+        resolved.extend(crate::building_mechanics::forgotten_bindings(version));
     }
     if !well_roots.is_empty() {
         resolved.extend(crate::building_mechanics::well_bindings(version));
@@ -1752,6 +1760,9 @@ pub fn native_effect_implementation_for(
     }
     if source.is_some_and(|s| crate::building_mechanics::pyramid_source(version, s)) {
         return Some(NativeEffectImplementationId::WarcraftNagaEarthquakeV1);
+    }
+    if source.is_some_and(|s| crate::building_mechanics::forgotten_source(version, s)) {
+        return Some(NativeEffectImplementationId::WarcraftForgottenOneV1);
     }
     if source.is_some_and(|s| crate::building_mechanics::well_source(version, s)) {
         return Some(NativeEffectImplementationId::WarcraftWellOfPainV1);

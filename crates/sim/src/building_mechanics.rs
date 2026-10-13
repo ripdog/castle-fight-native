@@ -42,8 +42,11 @@ pub(crate) use damage_proc::{
     damage_proc_granted_sources, damage_proc_source,
 };
 mod corrupted;
-pub use corrupted::WellOfPainProfile;
-pub(crate) use corrupted::{well_bindings, well_source, well_spellcasting_for_version};
+pub use corrupted::{ForgottenOneProfile, WellOfPainProfile};
+pub(crate) use corrupted::{
+    forgotten_bindings, forgotten_source, forgotten_spellcasting_for_version, well_bindings,
+    well_source, well_spellcasting_for_version,
+};
 mod naga;
 mod night_elf;
 pub use naga::{
