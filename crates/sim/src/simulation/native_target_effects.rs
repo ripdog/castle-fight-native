@@ -34,6 +34,7 @@ mod mana_attack_orb;
 mod master_projectiles;
 mod mirror_image;
 mod native_debuff;
+mod orb_charm;
 mod parasite_buff;
 mod poison;
 mod resistant_skin;

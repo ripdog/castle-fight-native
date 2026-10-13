@@ -180,6 +180,28 @@ impl Simulation {
         {
             return false;
         }
+        self.transfer_charmed_unit(owner, source.id, source.team, p, sequence, u);
+        self.last_ability_casts.push(AbilityCastEvent {
+            source: source.id,
+            ability: p.child,
+            target: AbilityCastTarget::Unit(u.id),
+            target_position: Some(u.position),
+            effect: AbilityEffect::NagaCharm(p),
+        });
+        true
+    }
+}
+impl Simulation {
+    /// Native Charm ownership transfer followed by the source ownership listener.
+    pub(super) fn transfer_charmed_unit(
+        &mut self,
+        owner: PlayerId,
+        source_id: SimId,
+        source_team: Team,
+        p: crate::building_mechanics::NagaCharmProfile,
+        sequence: u64,
+        u: &mut UnitSnapshot,
+    ) {
         // Native Charm clears negative effects, including undispellable effects, before the owner event.
         clear_charm_debuffs(&mut u.status);
         self.cleanse_building_spell_controls(u.id, u.position, &[]);
@@ -193,19 +215,22 @@ impl Simulation {
         let old_team = u.team;
         let old_creep = u.classifications.neutral_hostile_creep_level;
         u.owner = owner;
-        u.team = source.team;
+        u.team = source_team;
         u.classifications.neutral_hostile_creep_level = None;
         self.world
             .entity_mut(u.entity)
-            .insert((Owner(owner), source.team, u.classifications));
+            .insert((Owner(owner), source_team, u.classifications));
         // Ownership listener calls hasShield independently; its second random attempt has its own domain.
-        let rejected = self.native_ability_installed(u, p.ownership_rejection)
-            || self.check_negative_building_shield(
-                u,
-                p.map_version,
-                source.id,
-                sequence ^ (1 << 63),
-            );
+        // The source ownership listener only inspects native combat sappers.
+        let listener = u.classifications.combat_sapper;
+        let rejected = listener
+            && (self.native_ability_installed(u, p.ownership_rejection)
+                || self.check_negative_building_shield(
+                    u,
+                    p.map_version,
+                    source_id,
+                    sequence ^ (1 << 63),
+                ));
         if rejected {
             u.owner = old_owner;
             u.team = old_team;
@@ -221,7 +246,7 @@ impl Simulation {
                 });
         } else {
             self.project_building_spell_control(u);
-            if u.rawcode == p.defender_rawcode {
+            if listener && u.rawcode == p.defender_rawcode {
                 let id = self.allocate_id();
                 self.world.spawn((
                     id,
@@ -230,20 +255,63 @@ impl Simulation {
                         due_tick: self.next_tick + u64::from(p.defender_delay_ticks),
                     },
                 ));
-            } else if !self.native_ability_installed(u, p.order_block) {
+            } else if listener && !self.native_ability_installed(u, p.order_block) {
                 resume_charmed_attack(u);
             }
         }
-        self.last_ability_casts.push(AbilityCastEvent {
-            source: source.id,
-            ability: p.child,
-            target: AbilityCastTarget::Unit(u.id),
-            target_position: Some(u.position),
-            effect: AbilityEffect::NagaCharm(p),
-        });
-        true
     }
 }
+
+impl Simulation {
+    /// Applies a landed orb's native Charm to an already eligible recipient.
+    pub(super) fn apply_orb_charm(
+        &mut self,
+        request: super::OrbCharmRequest,
+        u: &mut UnitSnapshot,
+        health: &mut i32,
+        tick: u64,
+    ) {
+        let profile = request.profile;
+        let mut listener =
+            match crate::building_mechanics::oracle_spellcasting_for_version(profile.map_version)
+                .ability
+                .effect
+            {
+                AbilityEffect::NagaCharm(p) => p,
+                _ => unreachable!("retained Charm listener projection"),
+            };
+        listener.child = profile.ability;
+        let owner = self
+            .world
+            .iter_entities()
+            .find(|e| e.get::<SimId>() == Some(&request.source))
+            .and_then(|e| e.get::<Owner>())
+            .map_or(PlayerId(request.source_team.0), |o| o.0);
+        let before = u.health;
+        u.health = *health;
+        let old_owner = u.owner;
+        self.transfer_charmed_unit(
+            owner,
+            request.source,
+            request.source_team,
+            listener,
+            tick,
+            u,
+        );
+        *health = u.health;
+        u.health = before;
+        if u.owner != old_owner {
+            self.last_ability_casts.push(AbilityCastEvent {
+                source: request.source,
+                ability: profile.ability,
+                target: AbilityCastTarget::Unit(u.id),
+                target_position: Some(u.position),
+                effect: AbilityEffect::NagaCharm(listener),
+            });
+        }
+    }
+}
+
 fn resume_charmed_attack(u: &mut UnitSnapshot) {
     u.target = None;
     u.direct_retaliation_lock = false;

@@ -2736,6 +2736,12 @@ fn hash_triggered_attack_effect(hash: &mut Fnv64, effect: TriggeredAttackEffect)
             hash.write_u16(profile.damage_reduction_per_10k);
             hash.write_u8(profile.targets.bits());
         }
+        TriggeredAttackEffect::Charm(profile) => {
+            hash.write_u8(5);
+            for word in profile.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         TriggeredAttackEffect::EntanglingRoots(profile) => {
             hash.write_u8(1);
             hash.write_u64(u64::from(profile.ability.0));

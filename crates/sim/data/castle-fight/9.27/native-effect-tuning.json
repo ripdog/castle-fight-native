@@ -3,6 +3,44 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "orb-charm",
+      "source_kind": "ability-effect",
+      "source_key": "A04O",
+      "profile": {
+        "ability": 1093678159,
+        "map_version": {
+          "major": 9,
+          "minor": 27
+        },
+        "targets": 3,
+        "maximum_creep_level": 10
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "ANch",
+        "targets": "air,enemies,ground,neutral,nonhero,ward",
+        "protected_resources": {
+          "cooldown": "0.0",
+          "mana_cost": "0"
+        }
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A04N",
+      "unit_rawcode": "h04I",
+      "kind": "orb-spell-proc",
+      "hero_chance_per_10k": 0,
+      "summoned_chance_per_10k": 1000,
+      "chance_per_10k": 1000,
+      "effect_ability_rawcode": "A04O",
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A04N",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A04Y",
       "unit_rawcode": "n01E",

@@ -547,6 +547,29 @@ pub enum TriggeredAttackEffect {
     ConeWave(ConeWaveProfile),
     ChainLightning(ChainLightningEffectProfile),
     EntanglingRoots(EntanglingRootsEffectProfile),
+    Charm(OrbCharmProfile),
+}
+
+/// Free native Charm invoked by a landed orb attack. Ownership-event behaviour is the versioned
+/// source listener shared with other Charm casts rather than a second copy of its parameters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct OrbCharmProfile {
+    pub ability: AbilityId,
+    pub map_version: crate::MapVersion,
+    pub targets: AttackTargetMask,
+    pub maximum_creep_level: u16,
+}
+
+impl OrbCharmProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 5] {
+        [
+            u64::from(self.ability.0),
+            u64::from(self.map_version.major),
+            u64::from(self.map_version.minor),
+            u64::from(self.targets.bits()),
+            u64::from(self.maximum_creep_level),
+        ]
+    }
 }
 
 /// Simultaneous native lightning branches in a caster-oriented expanding cone.

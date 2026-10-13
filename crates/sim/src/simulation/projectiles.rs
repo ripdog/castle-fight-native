@@ -396,6 +396,15 @@ impl Simulation {
                             if let Some(event) = pending.chain_event {
                                 self.last_chain_lightnings.push(event);
                             }
+                            if let Some(request) = pending.charm {
+                                let index = request.index;
+                                self.apply_orb_charm(
+                                    request,
+                                    &mut units[index],
+                                    &mut unit_health[index],
+                                    completed_tick,
+                                );
+                            }
                             if let Some(state) = pending.cone_wave {
                                 self.launch_attack_cone_wave(state);
                             }

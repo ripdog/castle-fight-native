@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"ability-effect","source_key":"A04O","unit_rawcode":"h04I","kind":"orb-charm"},
+    {"source_kind":"unit-ability","source_key":"A04N","unit_rawcode":"h04I","kind":"orb-spell-proc"},
     {"source_kind":"unit-ability","source_key":"A04Y","unit_rawcode":"n01E","kind":"death-explosion"},
     {"source_kind":"ability-effect","source_key":"A04X","unit_rawcode":"n01E","kind":"cone-wave"},
     {"source_kind":"unit-ability","source_key":"A04W","unit_rawcode":"n01E","kind":"orb-spell-proc"},

@@ -90,6 +90,7 @@ pub enum NativeEffectImplementationId {
     WarcraftDeathExplosionV1,
     WarcraftNativeImpaleV1,
     WarcraftNativeTargetDebuffV1,
+    WarcraftOrbCharmV1,
     WarcraftEraserV1,
     WarcraftMagicRuinV1,
     WarcraftFlameStrikeV1,
@@ -173,6 +174,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftDeathExplosionV1 => 106,
             Self::WarcraftNativeImpaleV1 => 102,
             Self::WarcraftNativeTargetDebuffV1 => 101,
+            Self::WarcraftOrbCharmV1 => 107,
             Self::WarcraftEraserV1 => 100,
             Self::WarcraftMagicRuinV1 => 99,
             Self::WarcraftFlameStrikeV1 => 98,
@@ -935,6 +937,13 @@ enum TuningEffect {
         #[allow(dead_code)]
         provenance: serde_json::Value,
     },
+    OrbCharm {
+        source_kind: String,
+        source_key: String,
+        profile: crate::OrbCharmProfile,
+        #[allow(dead_code)]
+        provenance: serde_json::Value,
+    },
     OrbSpellProc {
         source_kind: String,
         source_key: String,
@@ -1080,6 +1089,7 @@ impl TuningEffect {
             | Self::HostileArmorAura { source_kind, .. }
             | Self::NativeImpale { source_kind, .. }
             | Self::NativeTargetDebuff { source_kind, .. }
+            | Self::OrbCharm { source_kind, .. }
             | Self::NativeWeatherWave { source_kind, .. }
             | Self::SourceDamageDispatcher { source_kind, .. }
             | Self::NativeEnchantmentGrant { source_kind, .. }
@@ -1133,6 +1143,7 @@ impl TuningEffect {
             | Self::HostileArmorAura { source_key, .. }
             | Self::NativeImpale { source_key, .. }
             | Self::NativeTargetDebuff { source_key, .. }
+            | Self::OrbCharm { source_key, .. }
             | Self::NativeWeatherWave { source_key, .. }
             | Self::SourceDamageDispatcher { source_key, .. }
             | Self::NativeEnchantmentGrant { source_key, .. }
@@ -1219,6 +1230,7 @@ impl TuningEffect {
             | Self::FrostArmor { unit_rawcode, .. } => Some(unit_rawcode),
             Self::NativeImpale { .. }
             | Self::NativeTargetDebuff { .. }
+            | Self::OrbCharm { .. }
             | Self::NativeWeatherWave { .. }
             | Self::NativeEnchantmentGrant { .. }
             | Self::BuildingManaRegeneration { .. }
@@ -1243,6 +1255,7 @@ impl TuningEffect {
             Self::NativeTargetDebuff { .. } => {
                 NativeEffectImplementationId::WarcraftNativeTargetDebuffV1
             }
+            Self::OrbCharm { .. } => NativeEffectImplementationId::WarcraftOrbCharmV1,
             Self::NativeWeatherWave { .. } => NativeEffectImplementationId::WarcraftWeatherWaveV1,
             Self::NativeEnchantmentGrant { .. } => {
                 NativeEffectImplementationId::WarcraftPermanentAbilityGrantsV1
@@ -1310,6 +1323,7 @@ impl TuningEffect {
             Self::HostileArmorAura { .. } => "hostile-armor-aura",
             Self::NativeImpale { .. } => "native-impale",
             Self::NativeTargetDebuff { .. } => "native-target-debuff",
+            Self::OrbCharm { .. } => "orb-charm",
             Self::NativeWeatherWave { .. } => "native-weather-wave",
             Self::NativeEnchantmentGrant { .. } => "native-enchantment-grant",
             Self::SourceDamageDispatcher { .. } => "source-damage-dispatcher",
@@ -1659,7 +1673,7 @@ fn native_unit_mechanics_from_tuning(
                         passive = Some(candidate);
                     }
                 }
-                TuningEffect::NativeImpale { .. } | TuningEffect::NativeTargetDebuff { .. } | TuningEffect::NativeWeatherWave { .. } | TuningEffect::NativeEnchantmentGrant { .. } | TuningEffect::BuildingManaRegeneration { .. } | TuningEffect::RetaliationProjectile { .. } | TuningEffect::ForkedLightning { .. }
+                TuningEffect::NativeImpale { .. } | TuningEffect::NativeTargetDebuff { .. } | TuningEffect::OrbCharm { .. } | TuningEffect::NativeWeatherWave { .. } | TuningEffect::NativeEnchantmentGrant { .. } | TuningEffect::BuildingManaRegeneration { .. } | TuningEffect::RetaliationProjectile { .. } | TuningEffect::ForkedLightning { .. }
                 | TuningEffect::SelfDestruct { .. }
                 | TuningEffect::DamageThreshold { .. }
                 | TuningEffect::ConeWave { .. }
@@ -2188,6 +2202,7 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
         }),
         TuningEffect::NativeImpale { .. }
         | TuningEffect::NativeTargetDebuff { .. }
+        | TuningEffect::OrbCharm { .. }
         | TuningEffect::NativeWeatherWave { .. }
         | TuningEffect::NativeEnchantmentGrant { .. }
         | TuningEffect::BuildingImprovement { .. }
@@ -2217,6 +2232,7 @@ fn build_triggered_effect(effect: &TuningEffect, parent: AbilityId) -> Triggered
             TriggeredAttackEffect::ForkedLightning(*profile)
         }
         TuningEffect::ConeWave { profile, .. } => TriggeredAttackEffect::ConeWave(*profile),
+        TuningEffect::OrbCharm { profile, .. } => TriggeredAttackEffect::Charm(*profile),
         TuningEffect::ChainLightning {
             source_key,
             initial_damage,

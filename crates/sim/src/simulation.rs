@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 100;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 101;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -6367,6 +6367,16 @@ struct PendingAttackEffectResult {
     native_debuff_casts: [Option<AbilityCastEvent>; 2],
     chain_event: Option<ChainLightningEvent>,
     chain_state: Option<ChainLightningState>,
+    charm: Option<OrbCharmRequest>,
+}
+
+/// A landed orb hit whose native Charm child passed target eligibility.
+#[derive(Debug, Clone, Copy)]
+struct OrbCharmRequest {
+    profile: crate::OrbCharmProfile,
+    source: SimId,
+    source_team: Team,
+    index: usize,
 }
 
 fn apply_pending_attack_effects(
@@ -6659,6 +6669,30 @@ fn apply_pending_attack_effects(
                             });
                         }
                     }
+                }
+            }
+            TriggeredAttackEffect::Charm(profile) => {
+                // Native Charm pierces spell immunity but not invulnerability or hero rules.
+                let unit = &units[index];
+                if unit.team != source.team
+                    && !unit.classifications.invulnerable
+                    && !unit.classifications.uses_hero_spell_rules()
+                    && profile
+                        .targets
+                        .can_target_unit(unit.target_movement_class())
+                    && !unit
+                        .classifications
+                        .neutral_hostile_creep_level
+                        .is_some_and(|level| {
+                            profile.maximum_creep_level > 0 && level > profile.maximum_creep_level
+                        })
+                {
+                    result.charm = Some(OrbCharmRequest {
+                        profile,
+                        source: source.id,
+                        source_team: source.team,
+                        index,
+                    });
                 }
             }
             TriggeredAttackEffect::EntanglingRoots(profile) => {
