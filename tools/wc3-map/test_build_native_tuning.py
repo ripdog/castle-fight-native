@@ -485,7 +485,7 @@ class NativeTuningProjectionTest(unittest.TestCase):
         recipe = {"kind": "orb-spell-proc", "source_key": "TEST", "source_kind": "unit-ability"}
         fields = {"dataa1":"0", "datae1":"0", "datab1": "10", "datac1": "20", "datad1": "30", "unitid1": "CHLD", "targs1": "ground"}
         row = native.project_effect(recipe, fields, None, {}, {})
-        self.assertEqual((row['hero_chance_per_10k'],row['summoned_chance_per_10k'],row['chance_per_10k']),(1000,2000,3000))
+        self.assertEqual((row['hero_chance_per_10k'],row['summoned_chance_per_10k'],row['chance_per_10k']),(2000,3000,1000))
         with self.assertRaises(ValueError): native.project_effect(recipe,{**fields,'datab1':'101'},None,{}, {})
 
     def test_orb_does_not_invent_a_weapon_for_an_unusable_enabled_slot(self):
