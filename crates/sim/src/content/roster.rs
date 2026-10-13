@@ -263,6 +263,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    CorruptedProtector = 0x2100_002f => b"n01J",
     EraserLevelThree = 0x2100_002e => b"h01X",
     EraserLevelTwo = 0x2100_002d => b"h01W",
     Eraser = 0x2100_002c => b"h01M",
