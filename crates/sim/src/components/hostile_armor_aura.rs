@@ -9,9 +9,12 @@ pub struct HostileArmorAuraProfile {
     pub armor_bonus_per_100: i16,
     pub targets: AttackTargetMask,
     pub linger_ticks: u16,
+    /// Script-owned extra non-attack damage for recipients carrying this aura's buff.
+    #[serde(default)]
+    pub spell_damage_taken_bonus_per_10k: u16,
 }
 impl HostileArmorAuraProfile {
-    pub(crate) fn canonical_words(self) -> [u64; 6] {
+    pub(crate) fn canonical_words(self) -> [u64; 7] {
         [
             u64::from(self.ability.0),
             u64::from(self.buff_rawcode),
@@ -19,6 +22,7 @@ impl HostileArmorAuraProfile {
             self.armor_bonus_per_100 as u64,
             u64::from(self.targets.bits()),
             u64::from(self.linger_ticks),
+            u64::from(self.spell_damage_taken_bonus_per_10k),
         ]
     }
 }

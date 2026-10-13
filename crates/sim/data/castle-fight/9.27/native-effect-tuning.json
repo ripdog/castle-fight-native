@@ -3,6 +3,21 @@
   "map_version": "9.27",
   "effects": [
     {
+      "source_kind": "unit-ability",
+      "source_key": "A02C",
+      "unit_rawcode": "h04T",
+      "kind": "hostile-armor-aura",
+      "profile": {
+        "ability": 1093677635,
+        "buff_rawcode": 1110454353,
+        "radius": 102398976,
+        "armor_bonus_per_100": -600,
+        "targets": 3,
+        "linger_ticks": 0,
+        "spell_damage_taken_bonus_per_10k": 1200
+      }
+    },
+    {
       "kind": "orb-charm",
       "source_kind": "ability-effect",
       "source_key": "A04O",
@@ -252,7 +267,8 @@
         "radius": 665600,
         "armor_bonus_per_100": -400,
         "targets": 3,
-        "linger_ticks": 0
+        "linger_ticks": 0,
+        "spell_damage_taken_bonus_per_10k": 0
       }
     },
     {
@@ -294,7 +310,8 @@
         "radius": 409600,
         "armor_bonus_per_100": -200,
         "targets": 3,
-        "linger_ticks": 0
+        "linger_ticks": 0,
+        "spell_damage_taken_bonus_per_10k": 0
       }
     },
     {

@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A02C","unit_rawcode":"h04T","kind":"hostile-armor-aura"},
     {"source_kind":"ability-effect","source_key":"A04O","unit_rawcode":"h04I","kind":"orb-charm"},
     {"source_kind":"unit-ability","source_key":"A04N","unit_rawcode":"h04I","kind":"orb-spell-proc"},
     {"source_kind":"unit-ability","source_key":"A04Y","unit_rawcode":"n01E","kind":"death-explosion"},

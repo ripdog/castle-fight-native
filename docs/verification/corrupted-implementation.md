@@ -127,3 +127,11 @@ Validation: a reusable orb-Charm fixture (ordinary, spell-immune, hero, invulner
 ## Corrupted Protector — tower
 
 Runtime r148 promotes `n01J` (`ncap`) as a buildable tower in the bottom-left panel slot. Protected life/armor and the 800-range Chaos splash weapon (`msplash`, air/ground hostile mask, homing missile, source splash bands and the 70% outer factor) consume the retained catalogs through the existing homing-splash path; the second weapon slot is disabled. The only listed ability is the control helper `A09A` (range check), which has no combat effect. The tooltip's "Twilight Orb" is the weapon splash, not a separate ability, so no new engine behavior is introduced. Verified by the catalog/roster/upgrade suites (68 checks); the local presentation audit needs an installed asset pack and was not run.
+
+## Eye of Corruption — global curse tower
+
+Runtime r149 promotes `h04T` (`hbla`) as a buildable tower. Its inventory is native Devotion `A02C` (`AHad`, hostile, area 99999, −6 armor, buff `B00Q`, mask air/ground/ward/vulnerable) and the shared `A06V` legendary marker. The existing hostile armor-aura primitive now admits completed living building sources as well as units, keeps the strongest-per-buff-family selection (so several Eyes never stack) and excludes invulnerable and Locust recipients; allies are never affected.
+
+The script's race damage listener (`runtime-system-mechanics`, id `corrupted-eye-of-corruption-spell-vulnerability`) rewrites positive non-attack damage events on a recipient carrying `B00Q` by ×1.12 and does not stack across buildings. The tuning projection verifies that trace against the aura ability and buff and projects the factor into the aura profile; the engine applies it only in the shared spell-damage path (`spell_damage_after_defend`), after other reductions, as a separate field from weapon-damage vulnerability. Ordering relative to other spell-damage adjustments, and paths that bypass that shared function, are deterministic interpretations pending a Warcraft runtime oracle. Schemas advance to 86/102/96.
+
+Validation: building-source fixture (global range, allies unaffected, two Eyes give one −6 armor and one 12% factor, wire/worker continuation), existing hostile-aura fixtures and projection tests.

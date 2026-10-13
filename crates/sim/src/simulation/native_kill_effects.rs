@@ -61,3 +61,14 @@ pub(super) fn native_incoming_damage_factor(status: &StatusState, tick: u64) -> 
         .sum::<i32>();
     u16::try_from((10_000 + bonus).max(0)).expect("native incoming damage factor fits u16")
 }
+
+/// Non-attack incoming-damage factor from native aura buffs. Same-buff sources never stack because
+/// aura membership keeps one modifier per family.
+pub(super) fn native_spell_vulnerability_factor(status: &StatusState, tick: u64) -> u16 {
+    let bonus = status.armor_modifiers[..usize::from(status.armor_modifier_count)]
+        .iter()
+        .filter(|modifier| tick < modifier.expires_tick)
+        .map(|modifier| u32::from(modifier.spell_damage_taken_bonus_per_10k))
+        .sum::<u32>();
+    u16::try_from(10_000 + bonus).expect("native spell vulnerability factor fits u16")
+}

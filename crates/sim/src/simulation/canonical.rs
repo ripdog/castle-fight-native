@@ -2341,6 +2341,7 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
         hash.write_u64(u64::from(modifier.mana_regeneration_per_second_per_10k));
         hash.write_i32(i32::from(modifier.damage_bonus_per_10k));
         hash.write_i32(i32::from(modifier.damage_taken_bonus_per_10k));
+        hash.write_u16(modifier.spell_damage_taken_bonus_per_10k);
         hash.write_u64(modifier.expires_tick);
         hash.write_u16(modifier.reactive_slow_duration_ticks);
         hash.write_i32(i32::from(modifier.reactive_movement_percent_delta));

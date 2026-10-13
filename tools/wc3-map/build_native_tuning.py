@@ -66,6 +66,19 @@ def unit_targets(value: str, *, allow_structures: bool = False) -> str:
     raise ValueError(f"unsupported native proc targets: {value!r}")
 
 
+def hostile_spell_bonus(recipe: dict[str, Any], fields: dict[str, str], mechanics: dict[str, Any]) -> int:
+    """Script-owned non-attack vulnerability tied to the aura's own buff, or zero without a trace."""
+    trace = mechanics.get("system")
+    if trace is None:
+        return 0
+    if (trace["aura_ability_rawcode"] != recipe["source_key"] or trace["aura_buff_rawcodes"] != [fields["buffid1"]]
+            or not trace["positive_damage_only"] or not trace["requires_target_buff_presence"]
+            or trace["excluded_damage_event_semantics"] != "attack-damage"
+            or not trace["multiple_source_buildings_do_not_stack_script_multiplier"]):
+        raise ValueError("hostile aura spell vulnerability trace changed")
+    return int((Decimal(str(trace["damage_multiplier"])) - 1) * 10000)
+
+
 def self_destruct_profile(source: str, fields: dict[str, str], base: str) -> dict[str, Any]:
     if base != "Asds" or set(fields["targs1"].split(",")) != {"air", "enemies", "ward", "structure", "debris"}:
         raise ValueError("self-destruct requires audited native air/structure/debris targeting")
@@ -127,14 +140,15 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         from project_incinerate import project
         return project(recipe, fields, mechanics["native_base"])
     if kind == "hostile-armor-aura":
-        if (mechanics["native_base"] != "AHad" or set(fields["targs1"].split(",")) != {"air", "enemies", "ground", "vulnerable"}
+        if (mechanics["native_base"] != "AHad" or set(fields["targs1"].split(",")) - {"ward"} != {"air", "enemies", "ground", "vulnerable"}
                 or number("DataB1") != 0 or number("DataA1", 100) >= 0
                 or number("Dur1", 30) != number("HeroDur1", 30) or len(fields["buffid1"]) != 4):
             raise ValueError("hostile Devotion requires its native vulnerable unit mask, flat armor and shared family")
         return {**recipe, "profile": {"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
             "buff_rawcode": int.from_bytes(fields["buffid1"].encode(), "big"), "radius": number("Area1", 1024),
             "armor_bonus_per_100": number("DataA1", 100), "targets": 3,
-            "linger_ticks": number("Dur1", 30)}}
+            "linger_ticks": number("Dur1", 30),
+            "spell_damage_taken_bonus_per_10k": hostile_spell_bonus(recipe, fields, mechanics)}}
     if kind == "permanent-immolation":
         if (mechanics['native_base'] not in {'ANpi', 'ACpi'}
             or set(fields['targs1'].split(',')) not in ({'air', 'ground', 'enemies', 'neutral', 'organic'}, {'air', 'ground', 'enemies', 'neutral'})
@@ -809,6 +823,8 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "automatic-defend-state-maintenance"
     }
+    system_mechanics = {row["system_id"]: json.loads(row["parameters_json"])
+        for row in rows(retained("resolved/runtime-system-mechanics.tsv"))}
     kill_mechanics = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "kill-triggered-native-berserk"}
@@ -914,6 +930,8 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
                 raise ValueError("lava-spawn child conversion/order control flow changed")
             detail.update(lava_spawn=trace, git_tree=tree)
         detail["kill_mechanics"] = kill_mechanics.get(recipe.get("unit_rawcode", ""))
+        detail["system"] = next((trace for trace in system_mechanics.values()
+            if trace.get("aura_ability_rawcode") == source), None)
         if recipe["kind"] == "damage-threshold":
             init = functions["IN"]
             if f'jS={int.from_bytes(source.encode(), "big")}' not in init or "DamageListener_unreduced=false" not in init:

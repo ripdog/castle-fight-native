@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 101;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 102;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -1772,7 +1772,7 @@ impl Simulation {
         self.resolve_permanent_immolation(&mut units);
         self.apply_passive_auras(&mut units, &buildings);
         self.apply_speed_auras(&mut units);
-        self.apply_hostile_armor_auras(&mut units);
+        self.apply_hostile_armor_auras(&mut units, &buildings);
         self.resolve_damage_charge(&mut units, &mut buildings);
         self.refresh_native_building_auras(&mut units, &mut buildings);
         let ability_metrics = self.resolve_automatic_abilities(&mut buildings, &mut units, &grid);
@@ -3019,6 +3019,7 @@ impl Simulation {
                             .mana_regeneration_per_second_per_10k,
                         damage_bonus_per_10k: profile.damage_bonus_per_10k,
                         damage_taken_bonus_per_10k: 0,
+                        spell_damage_taken_bonus_per_10k: 0,
                         expires_tick: self.next_tick + u64::from(profile.linger_ticks.max(1)),
                         reactive_slow_duration_ticks: 0,
                         reactive_movement_percent_delta: 0,
@@ -6019,6 +6020,10 @@ fn spell_damage_after_defend(unit: UnitSnapshot, damage: i32, completed_tick: u6
         });
     let damage = native_kill_effects::damage_after_native_incoming(&unit, damage, completed_tick);
     let damage = scale_damage_per_10k(damage, unit.snow_damage_taken_per_10k);
+    let damage = scale_damage_per_10k(
+        damage,
+        native_kill_effects::native_spell_vulnerability_factor(&unit.status, completed_tick),
+    );
     unit.effective_passive_effects()
         .fold(damage, |damage, effect| {
             if let PassiveUnitEffect::SpellResistance(profile) = effect {

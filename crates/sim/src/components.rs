@@ -2053,6 +2053,9 @@ pub struct TimedArmorModifier {
     pub mana_regeneration_per_second_per_10k: u32,
     pub damage_bonus_per_10k: i16,
     pub damage_taken_bonus_per_10k: i16,
+    /// Extra incoming non-attack damage, kept separate from weapon-damage vulnerability.
+    #[serde(default)]
+    pub spell_damage_taken_bonus_per_10k: u16,
     pub expires_tick: u64,
     pub reactive_slow_duration_ticks: u16,
     pub reactive_movement_percent_delta: i16,

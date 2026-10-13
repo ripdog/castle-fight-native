@@ -13,6 +13,7 @@ fn source(sim: &mut Simulation, x: i32, ability: u32, family: u32, armor: i16) -
                     armor_bonus_per_100: armor,
                     targets: AttackTargetMask::AIR_AND_GROUND,
                     linger_ticks: 0,
+                    spell_damage_taken_bonus_per_10k: 0,
                 },
             )),
             ..Default::default()
@@ -133,4 +134,51 @@ fn zero_linger_hostile_armor_expires_on_the_next_boundary_after_source_death() {
     let mut other = wire_restored(&sim, 4);
     assert_eq!(sim.step().checksum, other.step().checksum);
     assert_eq!(armor(&sim, target), 0);
+}
+
+fn building_source(sim: &mut Simulation, team: u8, x: i32, ability: u32, spell_bonus: u16) {
+    sim.spawn_building_with_properties(
+        BuildingSpawn {
+            team: Team(team),
+            footprint: BuildingFootprint::new(x, 1, 1, 1),
+            health: 1000,
+            production: None,
+            attack: None,
+            spellcasting: None,
+        },
+        BuildingGameplayProperties {
+            passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::HostileArmorAura(
+                HostileArmorAuraProfile {
+                    ability: AbilityId(ability),
+                    buff_rawcode: 872,
+                    radius: 100_000 * SUBUNITS_PER_WORLD_UNIT,
+                    armor_bonus_per_100: -600,
+                    targets: AttackTargetMask::AIR_AND_GROUND,
+                    linger_ticks: 0,
+                    spell_damage_taken_bonus_per_10k: spell_bonus,
+                },
+            )),
+            ..Default::default()
+        },
+    );
+}
+
+#[test]
+fn building_sourced_hostile_aura_is_global_and_adds_spell_vulnerability_once_per_family() {
+    let mut sim = simulation(1);
+    building_source(&mut sim, 0, 1, 871, 1200);
+    building_source(&mut sim, 0, 3, 873, 1200);
+    let enemy = sim.spawn_unit(unit(1, 400, 0, AttackDelivery::Melee));
+    let ally = sim.spawn_unit(unit(0, 400, 0, AttackDelivery::Melee));
+    sim.step();
+    let mut other = wire_restored(&sim, 4);
+    assert_eq!(sim.step().checksum, other.step().checksum);
+    assert_eq!(armor(&sim, enemy), -600);
+    assert_eq!(armor(&sim, ally), 0);
+    let view = sim.unit(enemy).unwrap();
+    let factor = crate::simulation::native_kill_effects::native_spell_vulnerability_factor(
+        &view.status,
+        sim.tick() - 1,
+    );
+    assert_eq!(factor, 11_200);
 }

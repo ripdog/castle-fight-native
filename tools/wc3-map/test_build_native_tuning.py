@@ -488,6 +488,16 @@ class NativeTuningProjectionTest(unittest.TestCase):
         self.assertEqual((row['hero_chance_per_10k'],row['summoned_chance_per_10k'],row['chance_per_10k']),(2000,3000,1000))
         with self.assertRaises(ValueError): native.project_effect(recipe,{**fields,'datab1':'101'},None,{}, {})
 
+    def test_hostile_aura_spell_vulnerability_requires_its_exact_script_trace(self) -> None:
+        trace = {"aura_ability_rawcode": "A", "aura_buff_rawcodes": ["BUFF"], "positive_damage_only": True,
+                 "requires_target_buff_presence": True, "excluded_damage_event_semantics": "attack-damage",
+                 "multiple_source_buildings_do_not_stack_script_multiplier": True, "damage_multiplier": 1.12}
+        recipe, fields = {"source_key": "A"}, {"buffid1": "BUFF"}
+        self.assertEqual(native.hostile_spell_bonus(recipe, fields, {"system": trace}), 1200)
+        self.assertEqual(native.hostile_spell_bonus(recipe, fields, {}), 0)
+        with self.assertRaises(ValueError):
+            native.hostile_spell_bonus(recipe, fields, {"system": {**trace, "positive_damage_only": False}})
+
     def test_orb_does_not_invent_a_weapon_for_an_unusable_enabled_slot(self):
         recipe = {'kind': 'orb-spell-proc', 'source_key': 'ORBB', 'source_kind': 'unit-ability'}
         fields = {'dataa1': '0', 'datab1': '100', 'datac1': '100', 'datad1': '100',

@@ -294,6 +294,7 @@ pub(super) fn apply_ability_effect_to_unit(
                     armor_bonus_per_100: armor_delta_per_100,
                     damage_bonus_per_10k: damage_delta_per_10k,
                     damage_taken_bonus_per_10k: 0,
+                    spell_damage_taken_bonus_per_10k: 0,
                     expires_tick: completed_tick
                         .checked_add(u64::from(duration))
                         .expect("area debuff expiry overflow"),
@@ -407,6 +408,7 @@ pub(super) fn apply_ability_effect_to_unit(
                     mana_regeneration_per_second_per_10k: 0,
                     damage_bonus_per_10k: 0,
                     damage_taken_bonus_per_10k: 0,
+                    spell_damage_taken_bonus_per_10k: 0,
                     expires_tick,
                     reactive_slow_duration_ticks: slow_duration_ticks,
                     reactive_movement_percent_delta: movement_percent_delta,
@@ -466,6 +468,7 @@ pub(super) fn apply_ability_effect_to_unit(
                     mana_regeneration_per_second_per_10k: 0,
                     damage_bonus_per_10k: 0,
                     damage_taken_bonus_per_10k: 0,
+                    spell_damage_taken_bonus_per_10k: 0,
                     revealed_to: None,
                     expires_tick: completed_tick + u64::from(duration_ticks),
                     reactive_slow_duration_ticks: 0,
@@ -511,6 +514,7 @@ pub(super) fn apply_ability_effect_to_unit(
                     damage_bonus_per_10k: i16::try_from(damage_bonus_per_10k)
                         .expect("Prayer damage modifier fits i16"),
                     damage_taken_bonus_per_10k: 0,
+                    spell_damage_taken_bonus_per_10k: 0,
                     revealed_to: None,
                     expires_tick: completed_tick + u64::from(duration_ticks),
                     reactive_slow_duration_ticks: 0,

@@ -1,7 +1,24 @@
 use super::*;
 
 impl Simulation {
-    pub(super) fn apply_hostile_armor_auras(&self, units: &mut [UnitSnapshot]) {
+    pub(super) fn apply_hostile_armor_auras(
+        &self,
+        units: &mut [UnitSnapshot],
+        buildings: &[BuildingSnapshot],
+    ) {
+        let building_sources = buildings
+            .iter()
+            .filter(|b| b.health > 0 && self.world.get::<BuildingConstruction>(b.entity).is_none())
+            .flat_map(|b| {
+                let position =
+                    footprint_center_point(b.footprint, self.config.navigation_cell_size);
+                b.passive_effects.iter().filter_map(move |effect| {
+                    let PassiveUnitEffect::HostileArmorAura(p) = effect else {
+                        return None;
+                    };
+                    Some((p, b.id, b.team, position))
+                })
+            });
         let mut sources = units
             .iter()
             .filter(|u| u.health > 0 && !u.abilities_disabled)
@@ -13,6 +30,7 @@ impl Simulation {
                     Some((p, u.id, u.team, u.position))
                 })
             })
+            .chain(building_sources)
             .collect::<Vec<_>>();
         sources.sort_unstable_by_key(|(p, id, _, _)| (p.buff_rawcode, p.ability, *id));
         for target in units.iter_mut().filter(|u| {
@@ -42,6 +60,7 @@ impl Simulation {
                             stealable: false,
                             organic_only: false,
                         }),
+                        spell_damage_taken_bonus_per_10k: p.spell_damage_taken_bonus_per_10k,
                         aura_membership: true,
                         expires_tick: self.next_tick + u64::from(p.linger_ticks.max(1)),
                         ..Default::default()
