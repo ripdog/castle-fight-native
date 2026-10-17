@@ -135,7 +135,7 @@
           },
           "range": 102398976,
           "speed_per_tick": 51200,
-          "trigger_mechanical_only": true,
+          "trigger_mechanical_only": false,
           "trigger_spell_immune": false,
           "trigger_targets": 5,
           "vision_radius": 131072,
@@ -342,7 +342,7 @@
             ],
             "shield_ability": 1093679436,
             "shield_minimum_level": 2,
-            "trigger_mechanical_only": true,
+            "trigger_mechanical_only": false,
             "trigger_targets": 5
           }
         },
@@ -390,7 +390,7 @@
             ],
             "shield_ability": 1093679436,
             "shield_minimum_level": 2,
-            "trigger_mechanical_only": true,
+            "trigger_mechanical_only": false,
             "trigger_targets": 5
           }
         },
@@ -438,7 +438,7 @@
             ],
             "shield_ability": 1093679436,
             "shield_minimum_level": 2,
-            "trigger_mechanical_only": true,
+            "trigger_mechanical_only": false,
             "trigger_targets": 5
           }
         },
@@ -11983,7 +11983,7 @@
             1098282348,
             1093679176
           ],
-          "trigger_mechanical_only": true,
+          "trigger_mechanical_only": false,
           "trigger_targets": 5
         }
       },
@@ -12055,7 +12055,7 @@
             1093679176
           ],
           "trigger_invulnerable": true,
-          "trigger_mechanical_only": true,
+          "trigger_mechanical_only": false,
           "trigger_spell_immune": false,
           "trigger_targets": 5
         }
@@ -14758,7 +14758,7 @@
             1098282348,
             1093679176
           ],
-          "trigger_mechanical_only": true,
+          "trigger_mechanical_only": false,
           "trigger_targets": 5,
           "vision_radius": 131072,
           "vision_ticks": 3
@@ -14963,7 +14963,7 @@
           ],
           "targets": 3,
           "trigger_invulnerable": true,
-          "trigger_mechanical_only": true,
+          "trigger_mechanical_only": false,
           "trigger_spell_immune": false,
           "trigger_targets": 5,
           "vision_radius": 131072,
@@ -16486,7 +16486,7 @@
           ],
           "targets": 1,
           "trigger_invulnerable": true,
-          "trigger_mechanical_only": true,
+          "trigger_mechanical_only": false,
           "trigger_spell_immune": false,
           "trigger_targets": 5
         }
@@ -17319,7 +17319,7 @@
           },
           "radius": 256000,
           "trigger_invulnerable": true,
-          "trigger_mechanical_only": true,
+          "trigger_mechanical_only": false,
           "trigger_spell_immune": false,
           "trigger_targets": 5
         }
@@ -17447,7 +17447,7 @@
             1093679176
           ],
           "trigger_invulnerable": true,
-          "trigger_mechanical_only": true,
+          "trigger_mechanical_only": false,
           "trigger_spell_immune": false,
           "trigger_targets": 5,
           "vision_radius": 1126400,
@@ -18555,7 +18555,7 @@
             1093679176
           ],
           "trigger_invulnerable": true,
-          "trigger_mechanical_only": true,
+          "trigger_mechanical_only": false,
           "trigger_spell_immune": false,
           "trigger_targets": 5,
           "wounded_exclusion": 1093678678
@@ -18645,7 +18645,7 @@
             "minor": 27
           },
           "trigger_invulnerable": true,
-          "trigger_mechanical_only": true,
+          "trigger_mechanical_only": false,
           "trigger_spell_immune": false,
           "trigger_targets": 5
         }

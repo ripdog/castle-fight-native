@@ -31,7 +31,7 @@ def project(row, fields, units, abilities, protected, traces, version):
     cost=lambda name: next(p['runtime_value'] for p in protected if p['rawcode']==row['ability_rawcode'] and p['field']==name)
     amount=lambda key: 0 if unit[key].strip() in {'','-','_'} else int(Decimal(unit[key]))
     rate=int(Decimal(unit['mana_regen'])*10000)
-    profile={'map_version':version,'trigger_targets':5,'trigger_invulnerable':True,'trigger_spell_immune':False,'trigger_mechanical_only':True,'effect':raw(child),'excluded':params['excluded_ability_id'],
+    profile={'map_version':version,'trigger_targets':5,'trigger_invulnerable':True,'trigger_spell_immune':False,'trigger_mechanical_only':False,'effect':raw(child),'excluded':params['excluded_ability_id'],
         'radius':int(Decimal(a['area'])*1024),'health':int(native['DataB']),'mana':int(native['DataC']),
         'armor_per_100':int(Decimal(str(native['DataA']))*100),'buff':{'rawcode':raw(a['buffs']),'positive':True,'stealable':True,'organic_only':False},
         'duration_ticks':tick(fields[child]['adur:1']),'hero_duration_ticks':tick(fields[child]['ahdu:1'])}

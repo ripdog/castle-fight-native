@@ -46,5 +46,5 @@ def project(row, fields, units, abilities, protected, traces, version):
     cost=lambda k:next(p['runtime_value'] for p in protected if p['rawcode']==parent and p['field']==k)
     amount=lambda k:0 if unit[k].strip() in {'','-','_'} else int(Decimal(unit[k]))
     rate=int(Decimal(unit['mana_regen'])*10000)
-    profile={'map_version':version,'trigger_targets':5,'trigger_invulnerable':True,'trigger_spell_immune':False,'trigger_mechanical_only':True,'grants':grants,'exclusions':exclusions,'locust':locust}
+    profile={'map_version':version,'trigger_targets':5,'trigger_invulnerable':True,'trigger_spell_immune':False,'trigger_mechanical_only':False,'grants':grants,'exclusions':exclusions,'locust':locust}
     return {'mana':{'maximum':amount('mana_max'),'starting':amount('mana_start'),'regen_per_tick_per_10k':(1<<31)|rate},'ability':{'id':raw(parent),'mana_cost':int(cost('mana_cost')),'cooldown_ticks':tick(cost('cooldown')),'range':int(Decimal(fields[parent]['aran:1'])*1024),'target_policy':'NativeBuildingSpellTrigger','effect':{'Wilderness':profile}}}

@@ -93,7 +93,7 @@ def project(row, fields, units, abilities, protected, traces, reference, version
         return {'rawcode': raw(c), 'speed_per_tick': number(u['move_speed'], 1024) // 30,
             'collision_radius': number(u['collision'], 1024),
             'armor': {'armor_points': number(u['armor']), 'armor_type': 'Medium'}}
-    p = {'map_version': version, 'ability': raw(row['ability_rawcode']), 'parent': native_parent, 'trigger_targets': 5, 'trigger_mechanical_only': True,
+    p = {'map_version': version, 'ability': raw(row['ability_rawcode']), 'parent': native_parent, 'trigger_targets': 5, 'trigger_mechanical_only': False,
         'selector_exclusions': exclusions, 'selector_excluded_rawcode': int(excluded[0]),
         'outcome_count': len(branches), 'death_damage': [b['damage'] for b in branches[1:3]],
         'grants': [{'ability': grants[0], 'effect': {'MaximumLife': number(fields[code(grants[0])]['Ilif:1'])}},

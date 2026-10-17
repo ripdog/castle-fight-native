@@ -43,7 +43,7 @@ def project_pyramid(row, fields, units, abilities, protected, traces, version):
     amount = lambda key: 0 if unit[key].strip() in {'', '-', '_'} else integer(unit[key])
     rate = integer(unit['mana_regen'], 10000)
     profile = {'map_version': version, 'trigger_targets': 5, 'trigger_invulnerable': True,
-        'trigger_spell_immune': False, 'trigger_mechanical_only': True, 'selector_exclusions': exclusions,
+        'trigger_spell_immune': False, 'trigger_mechanical_only': False, 'selector_exclusions': exclusions,
         'child': raw(child), 'buff': raw(native['abuf:1']), 'radius': integer(native['aare:1'], 1024),
         'damage': integer(native['Htc1:1']), 'movement_percent_delta': -integer(native['Htc3:1'], 100),
         'attack_speed_percent_delta': -integer(native['Htc4:1'], 100),
@@ -99,7 +99,7 @@ def project_oracle(row, fields, units, abilities, protected, traces, version):
     if not all((rejection, defender, delay, order_block)) or '__wurst_safe_SetUnitOwner(U3q,W3q,true)' not in ownership or 'orderCodeAttackIfAllowed(U3q)' not in ownership:
         raise ValueError('Charm ownership rollback and attack ordering changed')
     profile = {'map_version': version, 'trigger_targets': 5, 'trigger_invulnerable': True,
-        'trigger_spell_immune': False, 'trigger_mechanical_only': True, 'selector_exclusions': exclusions,
+        'trigger_spell_immune': False, 'trigger_mechanical_only': False, 'selector_exclusions': exclusions,
         'selector_excluded_rawcode': int(excluded_type[1]), 'child': raw(child),
         'child_range': integer(native['aran:1'], 1024), 'targets': 3,
         'maximum_creep_level': integer(native['Nch1:1']), 'ownership_rejection': int(rejection[1]),

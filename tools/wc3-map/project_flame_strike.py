@@ -60,7 +60,7 @@ def project(row, fields, units, abilities, protected, traces, version):
         'dur1': parent['adur:1'], 'herodur1': parent['ahdu:1'], 'unitid1': parent['ipmu:1'],
         'cast1': parent['Npa6:1'], 'datae1': parent['Npa5:1'],
         **{f'data{letter}1': parent[f'Poi{i}:1'] for i, letter in enumerate('abcd', 1)}}, version)
-    p = {'map_version': version, 'parent': native_parent, 'trigger_targets': 5, 'trigger_mechanical_only': True,
+    p = {'map_version': version, 'parent': native_parent, 'trigger_targets': 5, 'trigger_mechanical_only': False,
         'selector_exclusions': exclusions, 'dummy_rawcode': raw(dummy), 'dummy_flying': fields[dummy]['umvt:0'] == 'fly',
         'dummy_ticks': tick(params['dummy_lifetime_seconds']), 'options': options}
     u = units[row['building_rawcode']]

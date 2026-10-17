@@ -61,7 +61,7 @@ def project(rows, fields, units, abilities, protected, traces, version):
         'cast1': parent['Npa6:1'], 'datae1': parent['Npa5:1'],
         **{f'data{letter}1': parent[f'Poi{i}:1'] for i, letter in enumerate('abcd', 1)}}, version)
     p = {'map_version': version, 'ability': raw(parent_code), 'parent': native_parent,
-        'trigger_targets': 5, 'trigger_mechanical_only': True, 'selector_exclusions': exclusions,
+        'trigger_targets': 5, 'trigger_mechanical_only': False, 'selector_exclusions': exclusions,
         'selector_excluded_rawcode': int(excluded_type[0]), 'excluded_ability': params['excluded_ability_id'],
         'shield_ability': shield_code, 'shield_minimum_level': int(shield_ids[0][1]) + 1,
         'damage': params['damage']}

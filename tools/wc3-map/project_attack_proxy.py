@@ -83,7 +83,7 @@ def project(row, fields, units, abilities, protected, traces, version):
         'dur1': parent['adur:1'], 'herodur1': parent['ahdu:1'], 'unitid1': parent['ipmu:1'],
         'cast1': parent['Npa6:1'], 'datae1': parent['Npa5:1'],
         **{f'data{letter}1': parent[f'Poi{i}:1'] for i, letter in enumerate('abcd', 1)}}, version)
-    profile = {'map_version': version, 'parent': native_parent, 'trigger_targets': 5, 'trigger_mechanical_only': True, 'trigger_spell_immune': False, 'dummy_rawcode': raw(dummy),
+    profile = {'map_version': version, 'parent': native_parent, 'trigger_targets': 5, 'trigger_mechanical_only': False, 'trigger_spell_immune': False, 'dummy_rawcode': raw(dummy),
         'freeze_ability': raw(freeze), 'levels': levels,
         'level_after_minutes': [s['round_minutes_gt'] + 1 for s in schedule],
         'excluded_rawcodes': exclusions, 'excluded_ability': int(marker[1]),

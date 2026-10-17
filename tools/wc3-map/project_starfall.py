@@ -64,7 +64,7 @@ def project(row, fields, units, abilities, protected, traces, version):
     exclusions=list(map(int,re.findall(r'unit_getAbilityLevel\(zOn,(\d+)\)<=0',selector)))
     if len(exclusions)!=2:raise ValueError('Starfall selector exclusions changed')
     amount=lambda key:0 if u[key].strip() in {'','-','_'} else int(Decimal(u[key]))
-    profile={'map_version':version,'trigger_targets':5,'trigger_invulnerable':True,'trigger_spell_immune':False,'trigger_mechanical_only':True,
+    profile={'map_version':version,'trigger_targets':5,'trigger_invulnerable':True,'trigger_spell_immune':False,'trigger_mechanical_only':False,
         'options':effects,'selector_exclusions':exclusions,
         'selector_excluded_unit':int(re.search(r'unit_getTypeId\(zOn\)==(\d+)',selector)[1]),
         'dummy_rawcode':raw(dummy_code),'dummy_mana':dummy_mana,'dummy_lifetime_ticks':tick(p['dummy_lifetime_seconds']),

@@ -42,7 +42,7 @@ def project(row, fields, units, abilities, protected, traces, version):
         raise ValueError('building trigger requires its empty, zero-effect native Parasite parent')
     cost = lambda ability, field: next(p['runtime_value'] for p in protected if p['rawcode'] == ability and p['field'] == field)
     profile = {'map_version': version, 'trigger_targets': 5, 'trigger_invulnerable': True,
-        'trigger_spell_immune': False, 'trigger_mechanical_only': True,
+        'trigger_spell_immune': False, 'trigger_mechanical_only': False,
         'selector_exclusions': fallback_exclusions, 'selector_excluded_rawcode': int(fallback_type[1]),
         'wounded_exclusion': wounded_exclusions[2], 'damage': int(damage[1]), 'ghost_rawcode': int(ghost[1])}
     profile['parent'] = project_parasite({'buffid1': parent['native_base_buff'].split(',')[0],
