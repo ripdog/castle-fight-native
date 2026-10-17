@@ -1364,7 +1364,7 @@ pub fn setup_wc3_model_composed_features(mut commands: Commands, setup: Wc3Compo
             }
             if let Some(non_inheritance) = Wc3NonInheritance::from_node_flags(extras.wc3_node_flags)
             {
-                commands.entity(entity).insert(non_inheritance);
+                commands.entity(entity).try_insert(non_inheritance);
             }
             if let Some(spec) = &extras.wc3_attachment
                 && let Some(child_model) = registered_child_model_for_node(
@@ -1376,7 +1376,7 @@ pub fn setup_wc3_model_composed_features(mut commands: Commands, setup: Wc3Compo
                     &roots,
                 )
             {
-                commands.entity(entity).insert(Wc3ModelAttachmentRuntime {
+                commands.entity(entity).try_insert(Wc3ModelAttachmentRuntime {
                     child_model,
                     visibility_track: spec.visibility_track.clone(),
                     sequence_windows: spec.sequence_windows.clone(),
@@ -1420,7 +1420,7 @@ pub fn setup_wc3_model_composed_features(mut commands: Commands, setup: Wc3Compo
                             &roots,
                         )
                     {
-                        commands.entity(entity).insert(Wc3SpawnEventRuntime {
+                        commands.entity(entity).try_insert(Wc3SpawnEventRuntime {
                             child_model,
                             track: Arc::clone(track),
                             cursor: Wc3EventCursor::default(),
@@ -1439,7 +1439,7 @@ pub fn setup_wc3_model_composed_features(mut commands: Commands, setup: Wc3Compo
                             .map(|path| asset_server.load::<AudioSource>(path))
                             .collect::<Vec<_>>();
                         if !files.is_empty() {
-                            commands.entity(entity).insert(Wc3SoundEventRuntime {
+                            commands.entity(entity).try_insert(Wc3SoundEventRuntime {
                                 track: Arc::clone(track),
                                 sound,
                                 files,
@@ -1459,7 +1459,7 @@ pub fn setup_wc3_model_composed_features(mut commands: Commands, setup: Wc3Compo
                         && let Some(path) =
                             pack_relative_asset_path(&parent_asset_path, &splat.texture)
                     {
-                        commands.entity(entity).insert(Wc3SplatEventRuntime {
+                        commands.entity(entity).try_insert(Wc3SplatEventRuntime {
                             track: Arc::clone(track),
                             splat,
                             texture: asset_server.load(path),
@@ -1904,7 +1904,7 @@ pub fn emit_wc3_model_particles(
                     .with_rotation(source_rotation)
                     .with_scale(Vec3::splat(uniform_scale)),
             );
-            commands.entity(child).insert(Wc3LegacyModelParticle {
+            commands.entity(child).try_insert(Wc3LegacyModelParticle {
                 velocity,
                 gravity: sample.gravity * uniform_scale,
                 age: 0.0,
@@ -1923,7 +1923,7 @@ pub fn update_wc3_model_particles(
     for (entity, mut transform, mut particle) in &mut particles {
         particle.age += dt;
         if particle.age >= particle.lifespan {
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
             continue;
         }
         particle.velocity.y -= particle.gravity * dt;
@@ -2493,7 +2493,7 @@ pub fn update_wc3_spawned_splats(
                 effect_assets.release_splat_slot(slot);
             }
             meshes.remove(mesh.0.id());
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
             continue;
         }
         let (sampled_color, frame) = splat_sample(&splat.spec, splat.age);
@@ -2548,7 +2548,7 @@ pub fn update_wc3_spawned_event_models(
     for (entity, mut spawned) in &mut spawned {
         spawned.age += dt;
         if spawned.age >= spawned.lifespan {
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
         }
     }
 }
@@ -3869,7 +3869,7 @@ pub fn setup_wc3_visual_animation_players(
         if source.looping {
             active.repeat();
         }
-        commands.entity(entity).insert((
+        commands.entity(entity).try_insert((
             AnimationGraphHandle(graph.clone()),
             transitions,
             Wc3VisualAnimationController,
@@ -3978,7 +3978,7 @@ pub fn fix_wc3_scene_materials(
         .is_some_and(|experiment| **experiment == RenderExperiment::LegacyAnimatedTextureState);
     'mesh: for (entity, mesh, mut material_handle, raw_extras, skin) in &mut meshes {
         let Ok(extras) = serde_json::from_str::<Wc3MaterialExtras>(&raw_extras.value) else {
-            commands.entity(entity).insert(Wc3MaterialProcessed);
+            commands.entity(entity).try_insert(Wc3MaterialProcessed);
             continue;
         };
         let tint = wc3_vertex_tint(entity, &parents, &tint_roots);
@@ -3991,7 +3991,7 @@ pub fn fix_wc3_scene_materials(
             && tint.is_none()
             && opacity == 1.0
         {
-            commands.entity(entity).insert(Wc3MaterialProcessed);
+            commands.entity(entity).try_insert(Wc3MaterialProcessed);
             continue;
         }
 
@@ -4081,7 +4081,7 @@ pub fn fix_wc3_scene_materials(
                 } else {
                     let Some(source_texture) = material_template.base_color_texture.clone() else {
                         warn!("WC3 building team-color material has no textured overlay");
-                        commands.entity(entity).insert(Wc3MaterialProcessed);
+                        commands.entity(entity).try_insert(Wc3MaterialProcessed);
                         continue;
                     };
                     let image_key = (source_texture.id(), team.index);
@@ -4098,7 +4098,7 @@ pub fn fix_wc3_scene_materials(
                                 "WC3 building team-color texture uses unsupported image format {:?}",
                                 source_image.texture_descriptor.format
                             );
-                            commands.entity(entity).insert(Wc3MaterialProcessed);
+                            commands.entity(entity).try_insert(Wc3MaterialProcessed);
                             continue;
                         };
                         let handle = images.add(flattened_image);
@@ -4292,7 +4292,7 @@ pub fn fix_wc3_scene_materials(
         }
 
         if let Some(track) = alpha_track {
-            commands.entity(entity).insert(Wc3AnimatedMaterialAlpha {
+            commands.entity(entity).try_insert(Wc3AnimatedMaterialAlpha {
                 vertex_opacity: if alpha_gpu_slot.is_some() {
                     1.0
                 } else {
@@ -4309,7 +4309,7 @@ pub fn fix_wc3_scene_materials(
         }
 
         if let Some(track) = texture_id_track {
-            commands.entity(entity).insert(Wc3AnimatedMaterialTexture {
+            commands.entity(entity).try_insert(Wc3AnimatedMaterialTexture {
                 static_texture_id: extras.texture_id,
                 static_texture,
                 textures,
@@ -4325,7 +4325,7 @@ pub fn fix_wc3_scene_materials(
             });
         }
 
-        commands.entity(entity).insert(Wc3MaterialProcessed);
+        commands.entity(entity).try_insert(Wc3MaterialProcessed);
     }
 }
 
@@ -4364,7 +4364,7 @@ pub fn advance_wc3_model_sequence_clocks(
         if let Some(mut clock) = clock {
             advance_model_sequence_clock(&mut clock, selection, dt_ms);
         } else {
-            commands.entity(entity).insert(Wc3ModelSequenceClock {
+            commands.entity(entity).try_insert(Wc3ModelSequenceClock {
                 sequence_name: selection.name.clone(),
                 sequence_elapsed_ms: 0.0,
                 global_elapsed_ms: dt_ms,
@@ -4545,7 +4545,7 @@ pub fn setup_wc3_model_lights(
             continue;
         }
 
-        commands.entity(entity).insert(PointLight {
+        commands.entity(entity).try_insert(PointLight {
             color: wc3_model_light_color(spec.color),
             intensity: wc3_model_light_lumens(spec.intensity, 1.0),
             range: wc3_model_light_range(spec.attenuation_end, 1.0),
@@ -4553,7 +4553,7 @@ pub fn setup_wc3_model_lights(
             ..default()
         });
 
-        commands.entity(entity).insert(Wc3PointLightRuntime {
+        commands.entity(entity).try_insert(Wc3PointLightRuntime {
             static_color: spec.color,
             static_intensity: spec.intensity,
             static_range: spec.attenuation_end,
@@ -5146,7 +5146,7 @@ pub fn update_wc3_ribbon_trails(
         }
         if source_missing && trail.points.is_empty() {
             meshes.remove(trail.mesh.id());
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
             continue;
         }
 
@@ -5454,7 +5454,7 @@ pub fn update_wc3_particles(
     for (entity, mut transform, mut mesh, mut material, mut particle) in &mut particles {
         particle.age += dt;
         if particle.age >= particle.lifespan {
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
             continue;
         }
         particle.velocity.y -= particle.gravity * dt;

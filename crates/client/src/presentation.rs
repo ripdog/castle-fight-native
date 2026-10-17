@@ -1619,7 +1619,7 @@ fn spawn_profile_visual_stress(
             ))
             .id();
         if let Some(tint) = model.tint_rgb {
-            commands.entity(entity).insert(Wc3VertexTint(tint));
+            commands.entity(entity).try_insert(Wc3VertexTint(tint));
         }
     }
     println!("spawned {count} profiling WC3 visual scene(s) for rawcode {rawcode:#010x}");
@@ -1799,7 +1799,7 @@ fn setup_imported_unit_animation_players(
             root.rawcode,
             Some(&animations.sequences.stand),
         );
-        commands.entity(entity).insert((
+        commands.entity(entity).try_insert((
             AnimationGraphHandle(animations.graph.clone()),
             transitions,
             ImportedUnitAnimationController {
@@ -1869,7 +1869,7 @@ fn setup_imported_building_animation_players(
         };
         let Some(initial) = initial else {
             if dying {
-                commands.entity(root.presentation_root).despawn();
+                commands.entity(root.presentation_root).try_despawn();
             }
             continue;
         };
@@ -1895,7 +1895,7 @@ fn setup_imported_building_animation_players(
             root.rawcode,
             Some(&initial.name),
         );
-        commands.entity(entity).insert((
+        commands.entity(entity).try_insert((
             AnimationGraphHandle(animations.graph.clone()),
             transitions,
             ImportedBuildingAnimationController {
@@ -1950,7 +1950,7 @@ fn set_building_emitter_sequence(
             .remove::<Wc3ModelSequenceSelection>();
         return;
     };
-    commands.entity(model_root).insert((
+    commands.entity(model_root).try_insert((
         Wc3EmitterSource::with_asset_prefix_for_sequence(
             &model.emitters,
             "wc3/buildings",
@@ -1984,7 +1984,7 @@ fn update_imported_building_animations(
         if dying_roots.get(controller.presentation_root).is_ok() {
             if controller.state != ImportedBuildingAnimationState::Death {
                 let Some(death) = controller.death.clone() else {
-                    commands.entity(controller.presentation_root).despawn();
+                    commands.entity(controller.presentation_root).try_despawn();
                     continue;
                 };
                 transitions.play(&mut player, death.node, Duration::from_millis(50));
@@ -2004,7 +2004,7 @@ fn update_imported_building_animations(
                 .and_then(|death| player.animation(death.node))
                 .is_some_and(|animation| animation.is_finished());
             if finished {
-                commands.entity(controller.presentation_root).despawn();
+                commands.entity(controller.presentation_root).try_despawn();
             }
             continue;
         }
@@ -2258,7 +2258,7 @@ fn set_unit_emitter_sequence(
             .remove::<Wc3ModelSequenceSelection>();
         return;
     };
-    commands.entity(model_root).insert((
+    commands.entity(model_root).try_insert((
         Wc3EmitterSource::with_asset_prefix_for_sequence(
             &model.particle_emitters,
             "wc3/units",
@@ -2674,7 +2674,7 @@ fn update_imported_death_remnant(
     controller: &mut ImportedUnitAnimationController,
 ) {
     let Some(death) = controller.death else {
-        commands.entity(controller.presentation_root).despawn();
+        commands.entity(controller.presentation_root).try_despawn();
         return;
     };
     if controller.state != ImportedUnitAnimationState::Death {
@@ -2686,7 +2686,7 @@ fn update_imported_death_remnant(
         .animation(death.node)
         .is_some_and(|animation| animation.is_finished())
     {
-        commands.entity(controller.presentation_root).despawn();
+        commands.entity(controller.presentation_root).try_despawn();
     }
 }
 
@@ -2893,7 +2893,7 @@ fn update_miss_indicators(
     for (entity, mut indicator, mut node, mut color) in &mut indicators {
         indicator.remaining -= delta;
         if indicator.remaining <= 0.0 {
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
             continue;
         }
 
@@ -3239,7 +3239,7 @@ fn spawn_persistent_unit_attachments(
                 ))
                 .id();
             if let Some(animation) = visual.model.looping_animation_source() {
-                commands.entity(effect).insert(animation);
+                commands.entity(effect).try_insert(animation);
             }
             commands.entity(model_root).add_child(effect);
         }
@@ -3292,7 +3292,7 @@ fn spawn_unit_spheres(
                     ))
                     .id();
                 if let Some(animation) = visual.model.looping_animation_source() {
-                    commands.entity(effect).insert(animation);
+                    commands.entity(effect).try_insert(animation);
                 }
                 commands.entity(model_root).add_child(effect);
             }
@@ -3818,7 +3818,7 @@ fn spawn_or_reuse_wc3_visual(
         ))
         .id();
     if let Some(animation) = playback.animation_source(model) {
-        commands.entity(entity).insert(animation);
+        commands.entity(entity).try_insert(animation);
     }
     let pooled_scene = (pooling_enabled && model.poolable_instance()).then_some(pool_key);
     (entity, pooled_scene)
@@ -3864,7 +3864,7 @@ fn sync_render_entities(
                     && b.status.mana_improvement_link.is_some()
             });
         if !keep {
-            commands.entity(link.entity).despawn();
+            commands.entity(link.entity).try_despawn();
             meshes.remove(link.mesh.id());
             materials.remove(link.material.id());
         }
@@ -4004,7 +4004,7 @@ fn sync_render_entities(
                 .animations(rawcode)
                 .is_some_and(|animations| animations.death.is_some())
         {
-            commands.entity(entry.entity).insert(ImportedDeathRemnant);
+            commands.entity(entry.entity).try_insert(ImportedDeathRemnant);
             continue;
         }
 
@@ -4209,7 +4209,7 @@ fn sync_render_entities(
                     .insert_recursive::<Children>(Disabled);
                 effect_pool.scenes.entry(key).or_default().push(model_root);
             }
-            commands.entity(projectile_entry.entity).despawn();
+            commands.entity(projectile_entry.entity).try_despawn();
             if !samples.current.hidden_entities.contains(&id)
                 && let Some(projectile) = samples.previous.projectiles.get(&id)
             {
@@ -4381,7 +4381,7 @@ fn sync_render_entities(
         );
         if let Some(root) = root {
             commands.entity(root).add_child(entity);
-            commands.entity(entity).insert(Wc3AttachToNode {
+            commands.entity(entity).try_insert(Wc3AttachToNode {
                 owner_root: root,
                 attachment_point: point.to_owned(),
             });
@@ -4602,7 +4602,7 @@ fn sync_render_entities(
             );
             if let Some((root, point)) = attachment {
                 commands.entity(root).add_child(entity);
-                commands.entity(entity).insert(Wc3AttachToNode {
+                commands.entity(entity).try_insert(Wc3AttachToNode {
                     owner_root: root,
                     attachment_point: point.to_owned(),
                 });
@@ -4678,10 +4678,10 @@ fn sync_render_entities(
                 },
                 !legacy_effect_pooling,
             );
-            commands.entity(entity).insert(Wc3VertexTint([255; 3]));
+            commands.entity(entity).try_insert(Wc3VertexTint([255; 3]));
             if let Some(root) = owner_model_root {
                 commands.entity(root).add_child(entity);
-                commands.entity(entity).insert(Wc3AttachToNode {
+                commands.entity(entity).try_insert(Wc3AttachToNode {
                     owner_root: root,
                     attachment_point: "hand left".to_owned(),
                 });
@@ -4758,7 +4758,7 @@ fn sync_render_entities(
                 .id();
             commands.entity(entity).add_child(model_root);
             if let Some(tint) = model.tint_rgb {
-                commands.entity(model_root).insert(Wc3VertexTint(tint));
+                commands.entity(model_root).try_insert(Wc3VertexTint(tint));
             }
             if !model.ribbon_emitters.is_empty() {
                 commands
@@ -4812,10 +4812,10 @@ fn sync_render_entities(
                 if let Some(root) = entry.model_root
                     && let Some([r, g, b, _]) = unit.status.damage_threshold.vertex_rgba
                 {
-                    commands.entity(root).insert(Wc3VertexTint([r, g, b]));
+                    commands.entity(root).try_insert(Wc3VertexTint([r, g, b]));
                 }
                 if friendly_image && let Some(root) = entry.model_root {
-                    commands.entity(root).insert(Wc3VertexTint([0, 0, 255]));
+                    commands.entity(root).try_insert(Wc3VertexTint([0, 0, 255]));
                 }
                 continue;
             }
@@ -4876,7 +4876,7 @@ fn sync_render_entities(
                 .map(|[r, g, b, _]| [r, g, b])
                 .or(model.tint_rgb)
             {
-                commands.entity(model_root).insert(Wc3VertexTint(tint));
+                commands.entity(model_root).try_insert(Wc3VertexTint(tint));
             }
             if !model.ribbon_emitters.is_empty() {
                 commands
@@ -5012,7 +5012,7 @@ fn sync_render_entities(
         .collect();
     for id in stale_stun_effects {
         if let Some(entity) = render_map.stun_effects.remove(&id) {
-            commands.entity(entity).despawn();
+            commands.entity(entity).try_despawn();
         }
     }
     if let Some(stun_model) = wc3_visuals.stun() {
@@ -5104,7 +5104,7 @@ fn sync_render_entities(
                 ))
                 .id();
             if let Some(sequence) = lifecycle_sequence {
-                commands.entity(model_root).insert(
+                commands.entity(model_root).try_insert(
                     Wc3EmitterSource::with_asset_prefix_for_sequence(
                         &model.emitters,
                         "wc3/buildings",
@@ -5174,7 +5174,7 @@ fn sync_render_entities(
                                 ))
                                 .id();
                             if let Some(animation) = visual.model.looping_animation_source() {
-                                commands.entity(effect).insert(animation);
+                                commands.entity(effect).try_insert(animation);
                             }
                             commands.entity(entity).add_child(effect);
                         }
@@ -5197,7 +5197,7 @@ fn sync_render_entities(
                     ))
                     .id();
                 if let Some(animation) = model.looping_animation_source() {
-                    commands.entity(visual).insert(animation);
+                    commands.entity(visual).try_insert(animation);
                 }
                 // Attach to the presentation root so death/upgrade removal clears
                 // decorations even when the native building model becomes a remnant.
@@ -5412,7 +5412,7 @@ fn sync_render_entities(
                 .map(|[r, g, b, _]| [r, g, b])
                 .or(model.tint_rgb)
             {
-                commands.entity(model_root).insert(Wc3VertexTint(tint));
+                commands.entity(model_root).try_insert(Wc3VertexTint(tint));
             }
             if !model.ribbon_emitters.is_empty() {
                 commands
@@ -6330,7 +6330,7 @@ fn spawn_status_visuals(
             if let Some(root) = model_root {
                 commands.entity(root).add_child(entity);
                 if let Some(point) = visual.attachment_points.get(attachment_slot) {
-                    commands.entity(entity).insert(Wc3AttachToNode {
+                    commands.entity(entity).try_insert(Wc3AttachToNode {
                         owner_root: root,
                         attachment_point: point.clone(),
                     });
@@ -6378,7 +6378,7 @@ fn spawn_stun_effect(
         ))
         .id();
     if let Some(animation) = model.animation_source() {
-        commands.entity(entity).insert(animation);
+        commands.entity(entity).try_insert(animation);
     }
     render_map.stun_effects.insert(id, entity);
 }
@@ -6530,7 +6530,7 @@ fn age_timed_wc3_effects(
                     .fade_material
                     .take()
                     .expect("pooled lightning effect must retain its material");
-                commands.entity(effect.entity).insert(Visibility::Hidden);
+                commands.entity(effect.entity).try_insert(Visibility::Hidden);
                 effect_pool.lightning.push(PooledLightningEffect {
                     entity: effect.entity,
                     mesh,
@@ -8725,7 +8725,7 @@ mod tests {
         for (_, effect) in map.status_effects.drain() {
             release_status_visual(&mut commands, &mut pool, effect, true);
         }
-        commands.entity(first_root).despawn();
+        commands.entity(first_root).try_despawn();
         queue.apply(&mut world);
         let new_root = world.spawn_empty().id();
         let mut commands = Commands::new(&mut queue, &world);
@@ -8790,7 +8790,7 @@ mod tests {
                 },
                 true,
             );
-            commands.entity(owner).despawn();
+            commands.entity(owner).try_despawn();
             queue.apply(&mut world);
             assert!(world.get_entity(owner).is_err());
             assert!(world.get_entity(node).is_err());
@@ -8826,7 +8826,7 @@ mod tests {
                 },
                 ready,
             );
-            commands.entity(owner).despawn();
+            commands.entity(owner).try_despawn();
             queue.apply(&mut world);
             assert!(world.get_entity(effect).is_err());
             assert!(world.get_entity(owner).is_err());
@@ -8869,7 +8869,7 @@ mod tests {
             },
             true,
         );
-        commands.entity(owner).despawn();
+        commands.entity(owner).try_despawn();
         queue.apply(&mut world);
 
         assert!(world.get_entity(owner).is_err());
@@ -8906,7 +8906,7 @@ mod tests {
             },
             true,
         );
-        commands.entity(owner).despawn();
+        commands.entity(owner).try_despawn();
         queue.apply(&mut world);
 
         assert!(world.get_entity(effect).is_err());
@@ -9911,7 +9911,7 @@ fn update_snow_terrain(resources: SnowTerrainResources<'_, '_>) {
             .entry(layer.0)
             .or_insert_with(|| material.0.clone());
         meshes.remove(mesh.0.id());
-        commands.entity(entity).despawn();
+        commands.entity(entity).try_despawn();
     }
     for layer in generated {
         let material = cache
