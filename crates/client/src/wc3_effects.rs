@@ -1376,14 +1376,16 @@ pub fn setup_wc3_model_composed_features(mut commands: Commands, setup: Wc3Compo
                     &roots,
                 )
             {
-                commands.entity(entity).try_insert(Wc3ModelAttachmentRuntime {
-                    child_model,
-                    visibility_track: spec.visibility_track.clone(),
-                    sequence_windows: spec.sequence_windows.clone(),
-                    global_sequence_durations_ms: spec.global_sequence_durations_ms.clone(),
-                    fallback_elapsed_ms: 0.0,
-                    child: None,
-                });
+                commands
+                    .entity(entity)
+                    .try_insert(Wc3ModelAttachmentRuntime {
+                        child_model,
+                        visibility_track: spec.visibility_track.clone(),
+                        sequence_windows: spec.sequence_windows.clone(),
+                        global_sequence_durations_ms: spec.global_sequence_durations_ms.clone(),
+                        fallback_elapsed_ms: 0.0,
+                        child: None,
+                    });
             }
             if let Some(spec) = &extras.wc3_model_particle_emitter
                 && let Some(child_model) = registered_child_model_for_node(
@@ -4292,37 +4294,41 @@ pub fn fix_wc3_scene_materials(
         }
 
         if let Some(track) = alpha_track {
-            commands.entity(entity).try_insert(Wc3AnimatedMaterialAlpha {
-                vertex_opacity: if alpha_gpu_slot.is_some() {
-                    1.0
-                } else {
-                    opacity
-                },
-                static_alpha: extras.layer_alpha.clamp(0.0, 1.0),
-                track,
-                sequence_windows: extras.sequence_windows.clone(),
-                global_sequence_durations_ms: extras.global_sequence_durations_ms.clone(),
-                fallback_elapsed_ms: 0.0,
-                last_alpha_bits: u32::MAX,
-                gpu_slot: alpha_gpu_slot,
-            });
+            commands
+                .entity(entity)
+                .try_insert(Wc3AnimatedMaterialAlpha {
+                    vertex_opacity: if alpha_gpu_slot.is_some() {
+                        1.0
+                    } else {
+                        opacity
+                    },
+                    static_alpha: extras.layer_alpha.clamp(0.0, 1.0),
+                    track,
+                    sequence_windows: extras.sequence_windows.clone(),
+                    global_sequence_durations_ms: extras.global_sequence_durations_ms.clone(),
+                    fallback_elapsed_ms: 0.0,
+                    last_alpha_bits: u32::MAX,
+                    gpu_slot: alpha_gpu_slot,
+                });
         }
 
         if let Some(track) = texture_id_track {
-            commands.entity(entity).try_insert(Wc3AnimatedMaterialTexture {
-                static_texture_id: extras.texture_id,
-                static_texture,
-                textures,
-                standard_materials: standard_texture_materials,
-                alpha_materials: alpha_texture_materials,
-                fallback_standard_material,
-                fallback_alpha_material,
-                track,
-                sequence_windows: extras.sequence_windows,
-                global_sequence_durations_ms: extras.global_sequence_durations_ms,
-                fallback_elapsed_ms: 0.0,
-                last_texture_id: None,
-            });
+            commands
+                .entity(entity)
+                .try_insert(Wc3AnimatedMaterialTexture {
+                    static_texture_id: extras.texture_id,
+                    static_texture,
+                    textures,
+                    standard_materials: standard_texture_materials,
+                    alpha_materials: alpha_texture_materials,
+                    fallback_standard_material,
+                    fallback_alpha_material,
+                    track,
+                    sequence_windows: extras.sequence_windows,
+                    global_sequence_durations_ms: extras.global_sequence_durations_ms,
+                    fallback_elapsed_ms: 0.0,
+                    last_texture_id: None,
+                });
         }
 
         commands.entity(entity).try_insert(Wc3MaterialProcessed);

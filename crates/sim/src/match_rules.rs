@@ -21,6 +21,9 @@ pub struct MatchRules {
     pub rescue_strikes_enabled: bool,
     /// Source artillery mode controls alternative native weather objects.
     pub artillery_enabled: bool,
+    /// Developer mode: every player starts with one completed copy of every implemented
+    /// building. Not part of the source map's mode registry.
+    pub debug_all_buildings: bool,
 }
 
 impl Default for MatchRules {
@@ -31,6 +34,7 @@ impl Default for MatchRules {
             rounds_to_win: 1,
             rescue_strikes_enabled: false,
             artillery_enabled: true,
+            debug_all_buildings: false,
         }
     }
 }
@@ -45,6 +49,7 @@ impl MatchRules {
                 rounds_to_win: 1,
                 rescue_strikes_enabled: true,
                 artillery_enabled: true,
+                debug_all_buildings: false,
             }
         } else {
             Self {
@@ -53,6 +58,7 @@ impl MatchRules {
                 rounds_to_win: 1,
                 rescue_strikes_enabled: false,
                 artillery_enabled: true,
+                debug_all_buildings: false,
             }
         }
     }

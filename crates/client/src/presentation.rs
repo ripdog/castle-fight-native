@@ -4004,7 +4004,9 @@ fn sync_render_entities(
                 .animations(rawcode)
                 .is_some_and(|animations| animations.death.is_some())
         {
-            commands.entity(entry.entity).try_insert(ImportedDeathRemnant);
+            commands
+                .entity(entry.entity)
+                .try_insert(ImportedDeathRemnant);
             continue;
         }
 
@@ -6530,7 +6532,9 @@ fn age_timed_wc3_effects(
                     .fade_material
                     .take()
                     .expect("pooled lightning effect must retain its material");
-                commands.entity(effect.entity).try_insert(Visibility::Hidden);
+                commands
+                    .entity(effect.entity)
+                    .try_insert(Visibility::Hidden);
                 effect_pool.lightning.push(PooledLightningEffect {
                     entity: effect.entity,
                     mesh,

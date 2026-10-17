@@ -80,26 +80,18 @@ impl Simulation {
             .expect("invalid authored building placement")
     }
 
-    /// Debug-only population helper that preserves authoritative building state while deliberately
-    /// bypassing ordinary pathing/build-blocker placement checks. The caller must still keep the
-    /// footprint inside the team's build region; this is used for deterministic stress rosters
-    /// that can be denser than legal player construction around the authored castle doodads.
-    pub fn debug_spawn_building_for_player_with_properties(
+    /// Debug-only population helper that spawns a completed building without a construction
+    /// phase or cost, but still applies ordinary placement validation (build region, blockers,
+    /// overlap, occupying units). Returns `None` when the footprint is not placeable.
+    pub fn debug_try_spawn_building_for_player_with_properties(
         &mut self,
         owner: PlayerId,
         building: BuildingSpawn,
         properties: BuildingGameplayProperties,
-    ) -> SimId {
+    ) -> Option<SimId> {
         self.assert_player_team(owner, building.team);
-        self.validate_building_definition(building, properties);
-        assert!(
-            self.footprint_inside_team_build_region(building.team, building.footprint),
-            "debug building footprint must remain inside the owning team's build region"
-        );
-        let (id, entity) = self.spawn_building_shell(Some(owner), building, properties);
-        self.activate_building_entity(entity, building, properties);
-        self.topology_dirty = true;
-        id
+        self.try_spawn_building_internal(Some(owner), building, properties)
+            .ok()
     }
 
     pub fn spawn_shared_building_with_properties(

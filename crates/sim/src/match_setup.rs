@@ -413,6 +413,10 @@ fn create_resolved_castle_fight_match(
             .expect("authored main castle must be a valid team objective");
     }
 
+    if resolved.match_config.rules.debug_all_buildings {
+        crate::debug::populate_debug_building_lines(&mut simulation, resolved.content);
+    }
+
     simulation.prepare_round_restart();
     Ok(CastleFightMatch {
         simulation,
@@ -1250,6 +1254,52 @@ mod tests {
                 human.configuration.appearance,
                 other.configuration.appearance
             );
+        }
+    }
+
+    #[test]
+    fn debug_all_buildings_rule_gives_every_player_the_full_roster_at_start() {
+        let participants = [(0, 0), (1, 0), (6, 1), (7, 1)]
+            .into_iter()
+            .map(|(id, team)| CastleFightParticipantConfig {
+                id: PlayerId(id),
+                team: Team(team),
+                builder_race: CastleFightBuilderRace::Human,
+            })
+            .collect::<Vec<_>>();
+        let build = |debug_all_buildings| {
+            let mut config = CastleFightMatchConfig::development_subset_with_participants(
+                MapVersion::CASTLE_FIGHT_9_27,
+                "r1",
+                1,
+                participants.clone(),
+            )
+            .unwrap();
+            config.rules.debug_all_buildings = debug_all_buildings;
+            create_castle_fight_match(config, 1).unwrap()
+        };
+        let baseline = build(false);
+        let populated = build(true);
+        let roster = populated.content.production_building_definitions().count()
+            + populated.content.tower_definitions().count();
+        assert_eq!(
+            populated.simulation.building_count(),
+            baseline.simulation.building_count() + roster * participants.len()
+        );
+        for participant in &participants {
+            let owned = populated
+                .simulation
+                .buildings()
+                .into_iter()
+                .filter(|building| building.owner == Some(participant.id))
+                .count();
+            let castles = baseline
+                .simulation
+                .buildings()
+                .into_iter()
+                .filter(|building| building.owner == Some(participant.id))
+                .count();
+            assert_eq!(owned, castles + roster);
         }
     }
 

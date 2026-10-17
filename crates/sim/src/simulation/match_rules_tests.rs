@@ -8,6 +8,7 @@ fn timed_simulation(rounds_to_win: u8) -> Simulation {
             rounds_to_win,
             rescue_strikes_enabled: true,
             artillery_enabled: true,
+            debug_all_buildings: false,
         },
         rescue_strike_rules: crate::RescueStrikeRules::for_version(
             crate::MapVersion::CASTLE_FIGHT_9_27,

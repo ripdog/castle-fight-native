@@ -93,6 +93,7 @@ impl LobbyState {
             LobbyAction::Start => true,
             LobbyAction::RoundTarget(wins) => self.options.rules.rounds_to_win == wins,
             LobbyAction::RescueToggle => self.options.rules.rescue_strikes_enabled,
+            LobbyAction::DebugAllBuildingsToggle => self.options.rules.debug_all_buildings,
             LobbyAction::TimeOutcome(mode) => self.options.rules.time_limit_outcome == mode,
             LobbyAction::TimeDelta(_) => false,
             LobbyAction::RaceDropdown(_) => false,
@@ -124,6 +125,7 @@ impl LobbyState {
             LobbyAction::TimeDelta(_)
             | LobbyAction::RoundTarget(_)
             | LobbyAction::RescueToggle
+            | LobbyAction::DebugAllBuildingsToggle
             | LobbyAction::TimeOutcome(_) => self.host_player != Some(self.local_player),
             LobbyAction::Start => {
                 self.host_player != Some(self.local_player)
@@ -152,6 +154,7 @@ enum LobbyAction {
     TimeDelta(i16),
     RoundTarget(u8),
     RescueToggle,
+    DebugAllBuildingsToggle,
     TimeOutcome(TimeLimitOutcome),
     Start,
 }
@@ -273,6 +276,12 @@ fn spawn_lobby(commands: &mut Commands, lobby: &LobbyState) {
                             }
                             let action = LobbyAction::RescueToggle;
                             button(row, if lobby.options.rules.rescue_strikes_enabled { "Rescue strikes: ON" } else { "Rescue strikes: OFF" }, action, lobby.selected(action), lobby.action_disabled(action));
+                        });
+                    settings.spawn(Node { column_gap: px(7.0), align_items: AlignItems::Center, ..default() })
+                        .with_children(|row| {
+                            label(row, "Developer:", 13.0, TEXT);
+                            let action = LobbyAction::DebugAllBuildingsToggle;
+                            button(row, if lobby.options.rules.debug_all_buildings { "Start with all buildings: ON" } else { "Start with all buildings: OFF" }, action, lobby.selected(action), lobby.action_disabled(action));
                         });
                 });
                 panel
@@ -675,6 +684,18 @@ fn handle_lobby_buttons(
                 LobbyAction::RescueToggle => {
                     let mut rules = lobby.options.rules;
                     rules.rescue_strikes_enabled = !rules.rescue_strikes_enabled;
+                    if lobby.networked {
+                        if let Err(error) = game.authoritative.request_network_match_rules(rules) {
+                            lobby.error = Some(error);
+                        }
+                    } else {
+                        lobby.options.rules = rules;
+                    }
+                    redraw = true;
+                }
+                LobbyAction::DebugAllBuildingsToggle => {
+                    let mut rules = lobby.options.rules;
+                    rules.debug_all_buildings = !rules.debug_all_buildings;
                     if lobby.networked {
                         if let Err(error) = game.authoritative.request_network_match_rules(rules) {
                             lobby.error = Some(error);
