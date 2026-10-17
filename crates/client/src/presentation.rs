@@ -2730,22 +2730,31 @@ fn corpse_animation_playback(
     controller: &ImportedUnitAnimationController,
 ) -> Option<CorpseAnimationPlayback> {
     let phase = corpse_animation_phase(current_tick, corpse)?;
-    let clip = match phase.state {
-        ImportedUnitAnimationState::Death => controller.death,
+    let (clip, holds_death_pose) = match phase.state {
+        ImportedUnitAnimationState::Death => (controller.death?, false),
         ImportedUnitAnimationState::DecayFlesh => controller
             .decay_flesh
             .or(controller.decay_bone)
-            .or(controller.death),
+            .map(|clip| (clip, false))
+            .or_else(|| controller.death.map(|clip| (clip, true)))?,
         ImportedUnitAnimationState::DecayBone => controller
             .decay_bone
             .or(controller.decay_flesh)
-            .or(controller.death),
-        _ => None,
-    }?;
+            .map(|clip| (clip, false))
+            .or_else(|| controller.death.map(|clip| (clip, true)))?,
+        _ => return None,
+    };
+    // Models without decay sequences keep the final Death pose rather than replaying Death
+    // stretched across the whole decay period.
+    let seek_seconds = if holds_death_pose {
+        clip.duration_seconds
+    } else {
+        corpse_animation_seek_seconds(phase, clip.duration_seconds)
+    };
     Some(CorpseAnimationPlayback {
         state: phase.state,
         clip,
-        seek_seconds: corpse_animation_seek_seconds(phase, clip.duration_seconds),
+        seek_seconds,
     })
 }
 

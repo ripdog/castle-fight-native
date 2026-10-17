@@ -18,6 +18,7 @@ struct UnitAssetSpec {
     scale: Option<f32>,
     tint_rgb: Option<[u8; 3]>,
     attached_visuals: Vec<AttachedVisualSpec>,
+    animation_properties: Vec<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -395,6 +396,7 @@ fn load_unit_assets(
     let mut model_paths = BTreeMap::<String, String>::new();
     let mut scales = BTreeMap::<String, f32>::new();
     let mut tints = BTreeMap::<String, [u8; 3]>::new();
+    let mut animation_props = BTreeMap::<String, Vec<String>>::new();
     let mut unit_abilities = BTreeMap::<String, Vec<String>>::new();
     let mut ability_base = BTreeMap::<String, String>::new();
     let mut ability_target_art = BTreeSet::<String>::new();
@@ -440,6 +442,12 @@ fn load_unit_assets(
                     scales.insert(rawcode.to_owned(), scale);
                 }
             }
+            Some("uani") => {
+                animation_props.insert(
+                    rawcode.to_owned(),
+                    parse_json_comma_list(row.get(recovered).unwrap_or_default()),
+                );
+            }
             Some("uabi") => {
                 unit_abilities.insert(
                     rawcode.to_owned(),
@@ -466,6 +474,7 @@ fn load_unit_assets(
             model_path: model_paths.remove(&rawcode),
             scale: scales.remove(&rawcode),
             tint_rgb: tints.remove(&rawcode).filter(|tint| *tint != [255; 3]),
+            animation_properties: animation_props.remove(&rawcode).unwrap_or_default(),
             attached_visuals: unit_abilities
                 .remove(&rawcode)
                 .unwrap_or_default()

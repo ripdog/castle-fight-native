@@ -31,6 +31,7 @@ pub struct UnitModelAsset {
     pub particle_emitters: Vec<Wc3ParticleEmitter>,
     pub ribbon_emitters: Vec<Wc3RibbonEmitter>,
     animation_move_speeds: BTreeMap<String, f32>,
+    animation_properties: Vec<String>,
     animations: Option<UnitAnimationSet>,
 }
 
@@ -97,6 +98,8 @@ struct UnitAssetManifestEntry {
     tint_rgb: Option<[u8; 3]>,
     #[serde(default)]
     attached_visuals: Vec<UnitAttachedVisual>,
+    #[serde(default)]
+    animation_properties: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -128,6 +131,7 @@ struct ResolvedUnitAsset {
     particle_emitters: Vec<Wc3ParticleEmitter>,
     ribbon_emitters: Vec<Wc3RibbonEmitter>,
     animation_move_speeds: BTreeMap<String, f32>,
+    animation_properties: Vec<String>,
 }
 
 impl UnitModelSet {
@@ -168,6 +172,7 @@ impl UnitModelSet {
                             particle_emitters: entry.particle_emitters,
                             ribbon_emitters: entry.ribbon_emitters,
                             animation_move_speeds: entry.animation_move_speeds,
+                            animation_properties: entry.animation_properties,
                             animations: None,
                         },
                     );
@@ -198,20 +203,35 @@ impl UnitModelSet {
             let Some(gltf) = gltfs.get(&model.gltf) else {
                 continue;
             };
-            let Some(stand) = find_animation(gltf, AnimationRole::Stand) else {
+            let Some(stand) =
+                find_animation(gltf, AnimationRole::Stand, &model.animation_properties)
+            else {
                 continue;
             };
-            let walk = find_animation(gltf, AnimationRole::Walk);
-            let attack = find_animation(gltf, AnimationRole::Attack);
-            let defend_stand = find_animation(gltf, AnimationRole::DefendStand);
-            let defend_walk = find_animation(gltf, AnimationRole::DefendWalk);
-            let defend_attack = find_animation(gltf, AnimationRole::DefendAttack);
-            let cast = find_animation(gltf, AnimationRole::Cast);
-            let cast_slam = find_animation(gltf, AnimationRole::CastSlam);
-            let cast_throw = find_animation(gltf, AnimationRole::CastThrow);
-            let death = find_animation(gltf, AnimationRole::Death);
-            let decay_flesh = find_animation(gltf, AnimationRole::DecayFlesh);
-            let decay_bone = find_animation(gltf, AnimationRole::DecayBone);
+            let walk = find_animation(gltf, AnimationRole::Walk, &model.animation_properties);
+            let attack = find_animation(gltf, AnimationRole::Attack, &model.animation_properties);
+            let defend_stand = find_animation(
+                gltf,
+                AnimationRole::DefendStand,
+                &model.animation_properties,
+            );
+            let defend_walk =
+                find_animation(gltf, AnimationRole::DefendWalk, &model.animation_properties);
+            let defend_attack = find_animation(
+                gltf,
+                AnimationRole::DefendAttack,
+                &model.animation_properties,
+            );
+            let cast = find_animation(gltf, AnimationRole::Cast, &model.animation_properties);
+            let cast_slam =
+                find_animation(gltf, AnimationRole::CastSlam, &model.animation_properties);
+            let cast_throw =
+                find_animation(gltf, AnimationRole::CastThrow, &model.animation_properties);
+            let death = find_animation(gltf, AnimationRole::Death, &model.animation_properties);
+            let decay_flesh =
+                find_animation(gltf, AnimationRole::DecayFlesh, &model.animation_properties);
+            let decay_bone =
+                find_animation(gltf, AnimationRole::DecayBone, &model.animation_properties);
 
             let selected = [
                 Some(&stand),
@@ -377,15 +397,48 @@ enum AnimationRole {
     DecayBone,
 }
 
-fn find_animation(gltf: &Gltf, role: AnimationRole) -> Option<NamedUnitAnimation> {
+/// Selects the clip for `role`, preferring sequences that carry every required WC3 animation
+/// property word (for example `alternate` for a morphed model) before the ordinary role score.
+fn find_animation(
+    gltf: &Gltf,
+    role: AnimationRole,
+    required_properties: &[String],
+) -> Option<NamedUnitAnimation> {
     gltf.named_animations
         .iter()
-        .filter_map(|(name, clip)| animation_score(name, role).map(|score| (score, name, clip)))
-        .min_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(right.1)))
-        .map(|(_, name, clip)| NamedUnitAnimation {
+        .filter_map(|(name, clip)| {
+            animation_score(name, role).map(|score| {
+                (
+                    missing_animation_properties(name, required_properties),
+                    score,
+                    name,
+                    clip,
+                )
+            })
+        })
+        .min_by(|left, right| {
+            left.0
+                .cmp(&right.0)
+                .then_with(|| left.1.cmp(&right.1))
+                .then_with(|| left.2.cmp(right.2))
+        })
+        .map(|(_, _, name, clip)| NamedUnitAnimation {
             name: name.to_string(),
             clip: clip.clone(),
         })
+}
+
+fn missing_animation_properties(name: &str, required_properties: &[String]) -> usize {
+    let name = name.to_ascii_lowercase();
+    let words = name
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .collect::<Vec<_>>();
+    required_properties
+        .iter()
+        .flat_map(|property| property.split(|character: char| !character.is_ascii_alphanumeric()))
+        .filter(|property| !property.is_empty())
+        .filter(|property| !words.iter().any(|word| word.eq_ignore_ascii_case(property)))
+        .count()
 }
 
 fn animation_score(name: &str, role: AnimationRole) -> Option<u8> {
@@ -560,6 +613,7 @@ fn resolve_manifest_entries(
                     particle_emitters,
                     ribbon_emitters,
                     animation_move_speeds,
+                    animation_properties: entry.animation_properties,
                 },
             )
             .is_some()
@@ -596,6 +650,17 @@ fn validate_relative_asset_path(path: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn required_animation_properties_rank_ahead_of_role_score() {
+        let required = ["Alternate".to_owned()];
+        assert_eq!(
+            missing_animation_properties("Death Alternate", &required),
+            0
+        );
+        assert_eq!(missing_animation_properties("Death", &required), 1);
+        assert_eq!(missing_animation_properties("Death", &[]), 0);
+    }
 
     #[test]
     #[ignore = "requires a locally extracted SD assets/wc3 presentation pack"]

@@ -68,6 +68,7 @@ pub struct UnitManifest {
     pub gltf: Option<String>,
     pub tint_rgb: Option<[u8; 3]>,
     pub attached_visuals: Vec<AttachedVisualSpec>,
+    pub animation_properties: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -710,6 +711,7 @@ struct ResolvedUnit {
     scale: f32,
     tint_rgb: Option<[u8; 3]>,
     attached_visuals: Vec<AttachedVisualSpec>,
+    animation_properties: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -910,6 +912,7 @@ impl Exporter {
                 scale: unit.scale,
                 tint_rgb: unit.tint_rgb,
                 attached_visuals: unit.attached_visuals.clone(),
+                animation_properties: unit.animation_properties.clone(),
                 requested_model: unit.requested_model.clone(),
                 gltf: model_outputs
                     .get(&unit.source_model.to_ascii_lowercase())
@@ -1481,6 +1484,7 @@ impl Exporter {
                 scale,
                 tint_rgb: unit.tint_rgb,
                 attached_visuals: unit.attached_visuals.clone(),
+                animation_properties: unit.animation_properties.clone(),
             });
         }
         let base_model = profile
@@ -1518,6 +1522,7 @@ impl Exporter {
             scale,
             tint_rgb: unit.tint_rgb,
             attached_visuals: unit.attached_visuals.clone(),
+            animation_properties: unit.animation_properties.clone(),
         })
     }
 
