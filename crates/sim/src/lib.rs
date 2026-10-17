@@ -9,7 +9,7 @@ mod match_driver;
 mod match_rules;
 mod match_setup;
 pub use components::{SupportOrderRules, SupportOrderState, WindWalkProfile, WindWalkState};
-pub use match_rules::{MatchRules, RescueStrikeRules, TimeLimitOutcome};
+pub use match_rules::{DebugStartingBuildings, MatchRules, RescueStrikeRules, TimeLimitOutcome};
 mod math;
 mod native_carriers;
 mod native_effects;

@@ -1,6 +1,7 @@
 use bevy::{ecs::system::SystemParam, prelude::*};
 use castle_fight_sim::{
-    CastleFightBuilderRace, CastleFightContentBundle, PlayerId, TimeLimitOutcome,
+    CastleFightBuilderRace, CastleFightContentBundle, DebugStartingBuildings, PlayerId,
+    TimeLimitOutcome,
 };
 
 use crate::{
@@ -93,7 +94,9 @@ impl LobbyState {
             LobbyAction::Start => true,
             LobbyAction::RoundTarget(wins) => self.options.rules.rounds_to_win == wins,
             LobbyAction::RescueToggle => self.options.rules.rescue_strikes_enabled,
-            LobbyAction::DebugAllBuildingsToggle => self.options.rules.debug_all_buildings,
+            LobbyAction::DebugStartingBuildings(mode) => {
+                self.options.rules.debug_starting_buildings == mode
+            }
             LobbyAction::TimeOutcome(mode) => self.options.rules.time_limit_outcome == mode,
             LobbyAction::TimeDelta(_) => false,
             LobbyAction::RaceDropdown(_) => false,
@@ -125,7 +128,7 @@ impl LobbyState {
             LobbyAction::TimeDelta(_)
             | LobbyAction::RoundTarget(_)
             | LobbyAction::RescueToggle
-            | LobbyAction::DebugAllBuildingsToggle
+            | LobbyAction::DebugStartingBuildings(_)
             | LobbyAction::TimeOutcome(_) => self.host_player != Some(self.local_player),
             LobbyAction::Start => {
                 self.host_player != Some(self.local_player)
@@ -154,7 +157,7 @@ enum LobbyAction {
     TimeDelta(i16),
     RoundTarget(u8),
     RescueToggle,
-    DebugAllBuildingsToggle,
+    DebugStartingBuildings(DebugStartingBuildings),
     TimeOutcome(TimeLimitOutcome),
     Start,
 }
@@ -279,9 +282,11 @@ fn spawn_lobby(commands: &mut Commands, lobby: &LobbyState) {
                         });
                     settings.spawn(Node { column_gap: px(7.0), align_items: AlignItems::Center, ..default() })
                         .with_children(|row| {
-                            label(row, "Developer:", 13.0, TEXT);
-                            let action = LobbyAction::DebugAllBuildingsToggle;
-                            button(row, if lobby.options.rules.debug_all_buildings { "Start with all buildings: ON" } else { "Start with all buildings: OFF" }, action, lobby.selected(action), lobby.action_disabled(action));
+                            label(row, "Start with:", 13.0, TEXT);
+                            for (caption, mode) in [("Race buildings", DebugStartingBuildings::OwnRace), ("All buildings", DebugStartingBuildings::All)] {
+                                let action = LobbyAction::DebugStartingBuildings(mode);
+                                button(row, caption, action, lobby.selected(action), lobby.action_disabled(action));
+                            }
                         });
                 });
                 panel
@@ -693,9 +698,14 @@ fn handle_lobby_buttons(
                     }
                     redraw = true;
                 }
-                LobbyAction::DebugAllBuildingsToggle => {
+                LobbyAction::DebugStartingBuildings(mode) => {
                     let mut rules = lobby.options.rules;
-                    rules.debug_all_buildings = !rules.debug_all_buildings;
+                    // Selecting the active mode again turns the developer option off.
+                    rules.debug_starting_buildings = if rules.debug_starting_buildings == mode {
+                        DebugStartingBuildings::Off
+                    } else {
+                        mode
+                    };
                     if lobby.networked {
                         if let Err(error) = game.authoritative.request_network_match_rules(rules) {
                             lobby.error = Some(error);

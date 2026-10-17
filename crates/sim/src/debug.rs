@@ -1,7 +1,7 @@
 //! Deterministic developer actions, applied through the canonical match stream.
 use crate::{
-    BuildingFootprint, CastleFightContentBundle, CastleFightProductionKind, CastleFightTowerKind,
-    PlayerCommand, PlayerId, Simulation, Team,
+    BuildingFootprint, CastleFightBuilderRace, CastleFightBuildingKind, CastleFightContentBundle,
+    CastleFightProductionKind, CastleFightTowerKind, PlayerCommand, PlayerId, Simulation, Team,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,28 +71,91 @@ impl DebugBuildingKind {
     }
 }
 
-/// Spawns one completed copy of every implemented production building and tower (upgraded and
-/// legendary tiers included) for every player, packed from the outer edge of each team's build
-/// region. Returns `(spawned, skipped)`.
-pub fn populate_debug_building_lines(
-    simulation: &mut Simulation,
-    content: &CastleFightContentBundle,
-) -> (usize, usize) {
-    let definitions = CastleFightProductionKind::ALL
+/// Which buildings each player receives from [`populate_debug_buildings`].
+#[derive(Debug, Clone, Copy)]
+pub enum DebugRoster<'a> {
+    /// Every implemented building of every race.
+    All,
+    /// Each listed player's builder-race buildings, upgrade tiers included. Players without an
+    /// entry receive nothing.
+    OwnRace(&'a [(PlayerId, CastleFightBuilderRace)]),
+}
+
+impl DebugBuildingKind {
+    fn from_building(kind: CastleFightBuildingKind) -> Self {
+        match kind {
+            CastleFightBuildingKind::Production(kind) => Self::Production(kind),
+            CastleFightBuildingKind::Tower(kind) => Self::Tower(kind),
+        }
+    }
+
+    fn is_implemented(self, content: &CastleFightContentBundle) -> bool {
+        match self {
+            Self::Production(kind) => content.production_building(kind).is_some(),
+            Self::Tower(kind) => content.tower(kind).is_some(),
+        }
+    }
+}
+
+fn all_definitions(content: &CastleFightContentBundle) -> Vec<DebugBuildingKind> {
+    CastleFightProductionKind::ALL
         .into_iter()
-        .filter(|kind| content.production_building(*kind).is_some())
         .map(DebugBuildingKind::Production)
         .chain(
             CastleFightTowerKind::ALL
                 .into_iter()
-                .filter(|kind| content.tower(*kind).is_some())
                 .map(DebugBuildingKind::Tower),
         )
-        .collect::<Vec<_>>();
-    if definitions.is_empty() {
-        return (0, 0);
-    }
+        .filter(|kind| kind.is_implemented(content))
+        .collect()
+}
 
+/// The race's direct build menu plus everything reachable through upgrade links, in
+/// breadth-first order so base buildings precede their upgrades.
+fn own_race_definitions(
+    content: &CastleFightContentBundle,
+    race: CastleFightBuilderRace,
+) -> Vec<DebugBuildingKind> {
+    let mut reached = content.direct_building_kinds_for_race(race);
+    let mut next = 0;
+    while let Some(&kind) = reached.get(next) {
+        next += 1;
+        for target in kind
+            .upgrade_targets_for_version(content.map_version)
+            .unwrap_or_default()
+        {
+            if !reached.contains(&target) {
+                reached.push(target);
+            }
+        }
+    }
+    reached
+        .into_iter()
+        .map(DebugBuildingKind::from_building)
+        .filter(|kind| kind.is_implemented(content))
+        .collect()
+}
+
+/// Every implemented building of every race, for every player. See [`populate_debug_buildings`].
+pub fn populate_debug_building_lines(
+    simulation: &mut Simulation,
+    content: &CastleFightContentBundle,
+) -> (usize, usize) {
+    populate_debug_buildings(simulation, content, DebugRoster::All)
+}
+
+/// Spawns one completed copy of each building in the player's roster (upgraded and legendary
+/// tiers included), packed from the outer edge of each team's build region. Returns
+/// `(spawned, skipped)`.
+pub fn populate_debug_buildings(
+    simulation: &mut Simulation,
+    content: &CastleFightContentBundle,
+    roster: DebugRoster<'_>,
+) -> (usize, usize) {
+    let all = match roster {
+        DebugRoster::All => all_definitions(content),
+        DebugRoster::OwnRace(_) => Vec::new(),
+    };
     let mut spawned = 0;
     let mut skipped = 0;
 
@@ -124,13 +187,32 @@ pub fn populate_debug_building_lines(
                     .max_by_key(|region| u32::from(region.width) * u32::from(region.height))
             });
         let (Some(castle), Some(region)) = (castle, region) else {
-            skipped += definitions.len() * owners.len();
+            for owner in owners {
+                skipped += match roster {
+                    DebugRoster::All => all.len(),
+                    DebugRoster::OwnRace(races) => races
+                        .iter()
+                        .find(|(id, _)| *id == owner)
+                        .map_or(0, |&(_, race)| own_race_definitions(content, race).len()),
+                };
+            }
             continue;
         };
 
         let mut cursor = PackedColumnCursor::new(region, castle);
         for owner in owners {
-            for &definition in &definitions {
+            let own;
+            let definitions = match roster {
+                DebugRoster::All => &all,
+                DebugRoster::OwnRace(races) => {
+                    let Some(&(_, race)) = races.iter().find(|(id, _)| *id == owner) else {
+                        continue;
+                    };
+                    own = own_race_definitions(content, race);
+                    &own
+                }
+            };
+            for &definition in definitions {
                 let size = definition.footprint_size(content);
                 let placed = cursor.place(size, |footprint| {
                     spawn_debug_building(simulation, content, owner, team, definition, footprint)

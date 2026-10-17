@@ -90,7 +90,7 @@ pub(super) fn canonical_configuration_identity(
     hash.write_u8(config.match_rules.rounds_to_win);
     hash.write_u8(u8::from(config.match_rules.rescue_strikes_enabled));
     hash.write_u8(u8::from(config.match_rules.artillery_enabled));
-    hash.write_u8(u8::from(config.match_rules.debug_all_buildings));
+    hash.write_u8(config.match_rules.debug_starting_buildings as u8);
     hash.write_u8(u8::from(matches!(
         config.match_rules.time_limit_outcome,
         crate::TimeLimitOutcome::Draw

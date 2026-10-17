@@ -413,8 +413,28 @@ fn create_resolved_castle_fight_match(
             .expect("authored main castle must be a valid team objective");
     }
 
-    if resolved.match_config.rules.debug_all_buildings {
-        crate::debug::populate_debug_building_lines(&mut simulation, resolved.content);
+    match resolved.match_config.rules.debug_starting_buildings {
+        crate::DebugStartingBuildings::Off => {}
+        crate::DebugStartingBuildings::All => {
+            crate::debug::populate_debug_buildings(
+                &mut simulation,
+                resolved.content,
+                crate::debug::DebugRoster::All,
+            );
+        }
+        crate::DebugStartingBuildings::OwnRace => {
+            let races = resolved
+                .match_config
+                .participants
+                .iter()
+                .map(|participant| (participant.id, participant.builder_race))
+                .collect::<Vec<_>>();
+            crate::debug::populate_debug_buildings(
+                &mut simulation,
+                resolved.content,
+                crate::debug::DebugRoster::OwnRace(&races),
+            );
+        }
     }
 
     simulation.prepare_round_restart();
@@ -1258,7 +1278,8 @@ mod tests {
     }
 
     #[test]
-    fn debug_all_buildings_rule_gives_every_player_the_full_roster_at_start() {
+    fn debug_starting_buildings_rule_populates_every_player_at_start() {
+        use crate::DebugStartingBuildings;
         let participants = [(0, 0), (1, 0), (6, 1), (7, 1)]
             .into_iter()
             .map(|(id, team)| CastleFightParticipantConfig {
@@ -1267,7 +1288,7 @@ mod tests {
                 builder_race: CastleFightBuilderRace::Human,
             })
             .collect::<Vec<_>>();
-        let build = |debug_all_buildings| {
+        let build = |mode| {
             let mut config = CastleFightMatchConfig::development_subset_with_participants(
                 MapVersion::CASTLE_FIGHT_9_27,
                 "r1",
@@ -1275,31 +1296,26 @@ mod tests {
                 participants.clone(),
             )
             .unwrap();
-            config.rules.debug_all_buildings = debug_all_buildings;
+            config.rules.debug_starting_buildings = mode;
             create_castle_fight_match(config, 1).unwrap()
         };
-        let baseline = build(false);
-        let populated = build(true);
-        let roster = populated.content.production_building_definitions().count()
-            + populated.content.tower_definitions().count();
-        assert_eq!(
-            populated.simulation.building_count(),
-            baseline.simulation.building_count() + roster * participants.len()
-        );
+        let owned = |m: &CastleFightMatch, player: PlayerId| {
+            m.simulation
+                .buildings()
+                .into_iter()
+                .filter(|building| building.owner == Some(player))
+                .count()
+        };
+        let baseline = build(DebugStartingBuildings::Off);
+        let all = build(DebugStartingBuildings::All);
+        let own = build(DebugStartingBuildings::OwnRace);
+        let roster = all.content.production_building_definitions().count()
+            + all.content.tower_definitions().count();
         for participant in &participants {
-            let owned = populated
-                .simulation
-                .buildings()
-                .into_iter()
-                .filter(|building| building.owner == Some(participant.id))
-                .count();
-            let castles = baseline
-                .simulation
-                .buildings()
-                .into_iter()
-                .filter(|building| building.owner == Some(participant.id))
-                .count();
-            assert_eq!(owned, castles + roster);
+            let castles = owned(&baseline, participant.id);
+            assert_eq!(owned(&all, participant.id), castles + roster);
+            let own_count = owned(&own, participant.id) - castles;
+            assert!(own_count > 0 && own_count < roster);
         }
     }
 

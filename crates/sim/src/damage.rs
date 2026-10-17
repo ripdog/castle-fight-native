@@ -248,22 +248,24 @@ impl DamageRules {
             let denominator = i128::from(DAMAGE_MULTIPLIER_SCALE) * 100
                 + factor * i128::from(armor_points_per_100);
             round_ratio(raw * bonus * 100, denominator)
-        } else if armor_points_per_100 % 100 == 0 {
+        } else {
+            let magnitude = armor_points_per_100.unsigned_abs();
+            let mut remaining = magnitude / 100;
             let base = i128::from(DAMAGE_MULTIPLIER_SCALE) - factor;
-            let mut remaining = u32::try_from((-armor_points_per_100) / 100)
-                .expect("negative armor magnitude exceeds u32");
             let mut power = ARMOR_EXP_SCALE;
             while remaining > 0 {
                 power = round_ratio(power * base, i128::from(DAMAGE_MULTIPLIER_SCALE));
                 remaining -= 1;
             }
+            power = round_ratio(
+                power * fractional_power(base, magnitude % 100),
+                ARMOR_EXP_SCALE,
+            );
             let armor_multiplier = 2 * ARMOR_EXP_SCALE - power;
             round_ratio(
                 raw * bonus * armor_multiplier,
                 i128::from(DAMAGE_MULTIPLIER_SCALE) * ARMOR_EXP_SCALE,
             )
-        } else {
-            panic!("fractional negative armor is not yet supported");
         };
         i32::try_from(adjusted.max(1)).expect("adjusted damage exceeds i32")
     }
@@ -374,6 +376,25 @@ fn parse_decimal_per_10k(value: &str, key: &str) -> Result<u16, DamageRulesLoadE
         key: key.to_owned(),
         value: value.to_owned(),
     })
+}
+
+/// `(base_per_10k / 10_000)^(hundredths / 100)` in `ARMOR_EXP_SCALE` fixed point, computed with
+/// integer-only repeated square roots so results are identical on every platform.
+fn fractional_power(base_per_10k: i128, hundredths: u32) -> i128 {
+    const BITS: u32 = 16;
+    let exponent = (u64::from(hundredths) * (1 << BITS) + 50) / 100;
+    let mut root = round_ratio(
+        base_per_10k * ARMOR_EXP_SCALE,
+        i128::from(DAMAGE_MULTIPLIER_SCALE),
+    );
+    let mut result = ARMOR_EXP_SCALE;
+    for bit in (0..BITS).rev() {
+        root = i128::try_from((root * ARMOR_EXP_SCALE).isqrt()).expect("root fits i128");
+        if exponent >> bit & 1 == 1 {
+            result = round_ratio(result * root, ARMOR_EXP_SCALE);
+        }
+    }
+    result
 }
 
 fn round_ratio(numerator: i128, denominator: i128) -> i128 {
@@ -488,6 +509,20 @@ mod tests {
             ),
             127
         );
+    }
+
+    #[test]
+    fn fractional_negative_armor_tracks_continuous_formula() {
+        let rules = DamageRules::warcraft_frozen_throne();
+        for per_100 in [-50, -150, -299, -1, -1234] {
+            let dealt = rules.apply_physical_ability(1_000_000, per_100);
+            let magnitude = f64::from(-per_100) / 100.0;
+            let expected = 1_000_000.0 * (2.0 - 0.94_f64.powf(magnitude));
+            assert!(
+                (f64::from(dealt) - expected).abs() <= 2.0,
+                "{per_100}: {dealt} vs {expected}"
+            );
+        }
     }
 
     #[test]
