@@ -389,7 +389,7 @@ fn fractional_power(base_per_10k: i128, hundredths: u32) -> i128 {
     );
     let mut result = ARMOR_EXP_SCALE;
     for bit in (0..BITS).rev() {
-        root = i128::try_from((root * ARMOR_EXP_SCALE).isqrt()).expect("root fits i128");
+        root = (root * ARMOR_EXP_SCALE).isqrt();
         if exponent >> bit & 1 == 1 {
             result = round_ratio(result * root, ARMOR_EXP_SCALE);
         }
