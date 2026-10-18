@@ -2151,7 +2151,7 @@ pub struct PendingCastState {
 
 pub const MAX_TIMED_ATTACK_SPEED_MODIFIERS: usize = 8;
 pub const MAX_TIMED_ARMOR_MODIFIERS: usize = 16;
-pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 4;
+pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ManaImprovementLink {

@@ -665,11 +665,10 @@ pub(super) fn apply_timed_movement_modifier(
     let active = &status.movement_modifiers[..count];
     match active.binary_search_by_key(&modifier_id, |modifier| modifier.id) {
         Ok(index) => {
+            // A reapplication from another level of the same ability carries its own percentage,
+            // matching the attack-speed modifier refresh.
             let modifier = &mut status.movement_modifiers[index];
-            assert_eq!(
-                modifier.percent_delta, percent_delta,
-                "same ModifierId authored with conflicting movement percentages"
-            );
+            modifier.percent_delta = percent_delta;
             modifier.expires_tick = modifier.expires_tick.max(expires_tick);
         }
         Err(index) => {
@@ -790,12 +789,10 @@ pub(super) fn apply_timed_damage_over_time(
         .expect("damage-over-time pulse tick overflow");
     match active.binary_search_by_key(&modifier_id, |effect| effect.id) {
         Ok(index) => {
+            // Another level of the same ability replaces the pulse parameters.
             let effect = &mut status.damage_over_time[index];
-            assert_eq!(
-                (effect.damage_per_pulse, effect.pulse_interval_ticks),
-                (damage_per_pulse, pulse_interval_ticks),
-                "same ModifierId authored with conflicting damage-over-time parameters"
-            );
+            effect.damage_per_pulse = damage_per_pulse;
+            effect.pulse_interval_ticks = pulse_interval_ticks;
             effect.expires_tick = effect.expires_tick.max(expires_tick);
             effect.next_pulse_tick = next_pulse_tick;
         }
