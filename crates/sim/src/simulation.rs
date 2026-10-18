@@ -5383,6 +5383,11 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                     minimum_delay_ticks,
                     maximum_delay_ticks,
                 } => assert!(maximum_life >= 0 && minimum_delay_ticks < maximum_delay_ticks),
+                crate::ParasiteChild::Berserk {
+                    berserk,
+                    minimum_delay_ticks,
+                    maximum_delay_ticks,
+                } => assert!(berserk.duration_ticks > 0 && minimum_delay_ticks < maximum_delay_ticks),
                 crate::ParasiteChild::SandCloud(cloud) => {
                     assert!(cloud.pulses > 0 && cloud.period_ticks > 0 && cloud.carrier_ticks > 0);
                     assert!(cloud.standard.radius > 0 && cloud.special.radius > 0);

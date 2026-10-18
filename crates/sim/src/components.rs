@@ -1178,7 +1178,7 @@ impl LifeStealProfile {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct KillBerserkProfile {
     pub ability: AbilityId,
     pub duration_ticks: u16,

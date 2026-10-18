@@ -4,6 +4,32 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0AZ",
+      "unit_rawcode": "n02X",
+      "kind": "spell-resistance",
+      "damage_taken_per_10k": 8000,
+      "provenance": {
+        "ability": "A0AZ",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0J6",
+      "unit_rawcode": "n02X",
+      "kind": "pulverize",
+      "chance_per_10k": 3000,
+      "damage": 60,
+      "full_radius_world": 60,
+      "half_radius_world": 100,
+      "targets": "ground-units",
+      "provenance": {
+        "ability": "A0J6",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A0HQ",
       "unit_rawcode": "n035",
       "kind": "speed-aura",

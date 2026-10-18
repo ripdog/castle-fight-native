@@ -33,23 +33,16 @@ impl Simulation {
         let caster = find_unit_index(units, source.id).expect("Parasite script caster");
         self.launch_native_parasite(source, units[caster].owner, units[target].id, p.parent);
         match p.child {
-            ParasiteChild::SandCloud(profile) => {
-                let center = units[target].position;
-                let rawcode = units[caster].rawcode;
-                self.launch_sand_cloud(source, units[caster].owner, rawcode, center, profile);
+            ParasiteChild::Berserk {
+                minimum_delay_ticks,
+                maximum_delay_ticks,
+                ..
             }
-            ParasiteChild::LocustSwarm(profile) => {
-                // The dummy appears at the Parasite target's position at cast time.
-                let center = units[target].position;
-                self.launch_locust_swarm(source, units[caster].owner, center, profile);
-            }
-            ParasiteChild::LifeSteal {
+            | ParasiteChild::LifeSteal {
                 minimum_delay_ticks,
                 maximum_delay_ticks,
                 ..
             } => {
-                // GetRandomReal(min, max) fires strictly after the lower bound and, on the
-                // timer grid, at the first tick not before the drawn instant.
                 let span = u64::from(maximum_delay_ticks.saturating_sub(minimum_delay_ticks)).max(1);
                 let roll = deterministic_random(
                     self.config.match_seed,
@@ -65,6 +58,16 @@ impl Simulation {
                     target: units[target].id,
                     due_tick: self.next_tick + delay,
                 });
+            }
+            ParasiteChild::SandCloud(profile) => {
+                let center = units[target].position;
+                let rawcode = units[caster].rawcode;
+                self.launch_sand_cloud(source, units[caster].owner, rawcode, center, profile);
+            }
+            ParasiteChild::LocustSwarm(profile) => {
+                // The dummy appears at the Parasite target's position at cast time.
+                let center = units[target].position;
+                self.launch_locust_swarm(source, units[caster].owner, center, profile);
             }
         }
         1
@@ -84,6 +87,13 @@ impl Simulation {
             units[caster].status.pending_parasite_script = None;
             match pending.child {
                 ParasiteChild::LocustSwarm(_) | ParasiteChild::SandCloud(_) => {}
+                ParasiteChild::Berserk { berserk, .. } => {
+                    let stunned = units[caster].status.is_stunned(self.next_tick);
+                    if units[caster].health > 0 && !stunned {
+                        native_kill_effects::apply_berserk(&mut units[caster], berserk, self.next_tick);
+                        effects += 1;
+                    }
+                }
                 ParasiteChild::LifeSteal { maximum_life, .. } => {
                     let target = find_unit_index(units, pending.target);
                     let life = target.map_or(0, |index| units[index].health.max(0));

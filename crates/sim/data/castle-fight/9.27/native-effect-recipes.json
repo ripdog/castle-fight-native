@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0AZ","unit_rawcode":"n02X","kind":"spell-resistance"},
+    {"source_kind":"unit-ability","source_key":"A0J6","unit_rawcode":"n02X","kind":"pulverize"},
     {"source_kind":"unit-ability","source_key":"A0HQ","unit_rawcode":"n035","kind":"speed-aura"},
     {"source_kind":"unit-ability","source_key":"A0G8","unit_rawcode":"n030","kind":"parasite-script"},
     {"source_kind":"unit-ability","source_key":"A0H3","unit_rawcode":"n034","kind":"sphere"},

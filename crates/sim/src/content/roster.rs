@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    Ogre = 0x1000_0083 => b"n02X",
     MonstrousSandkin = 0x1000_0082 => b"n035",
     Sandkin = 0x1000_0081 => b"n030",
     HarpiesMatriarch = 0x1000_0080 => b"n034",
@@ -166,6 +167,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    OgreDen = 0x2000_0080 => b"n033",
     MonstrousSandkinBurrow = 0x2000_007f => b"n02R",
     SandkinBurrow = 0x2000_007e => b"n039",
     NestOfHarpyMatriarch = 0x2000_007d => b"n031",

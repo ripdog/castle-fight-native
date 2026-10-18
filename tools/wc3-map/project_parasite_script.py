@@ -73,6 +73,28 @@ def _locust_swarm(recipe, detail, number, raw):
         'structure_damage_per_10k': number(structure[4], 10000), 'targets': mask}}
 
 
+def _berserk(recipe, detail, number, raw):
+    row, parameters = detail['mechanics_row'], detail['semantic_parameters']
+    handler = detail['functions'][row['handler_function']]
+    first, second = (detail['functions'][name] for name in row['delayed_callback_functions'].split(',')[:2])
+    child = parameters['berserk_ability_rawcode']
+    swarm = detail['all_fields'][child]
+    delay = RANDOM_DELAY.search(handler)
+    if (detail['all_bases'][child] != 'Absk' or parameters['berserk_order_id'] != 852100
+        or delay is None or [float(delay[1]), float(delay[2])] != parameters['random_activation_delay_seconds']
+        or 'unit_issueImmediateOrderById(ymn.caster,852100)' not in first
+        or 'orderCodeAttack(' not in handler or 'orderCodeAttack(Bmn.caster)' not in second
+        or swarm['targs1'] not in ('_', '-') or number(swarm['dur1']) != parameters['duration_seconds']
+        or Decimal(swarm['dataa1']) != Decimal(str(parameters['movement_speed_increase']))
+        or Decimal(swarm['datab1']) != Decimal(str(parameters['attack_speed_increase']))
+        or Decimal(swarm['datac1']) != Decimal(str(parameters['damage_taken_increase']))):
+        raise ValueError('Ogre Lord rage control flow changed: random delay, native instant Berserk on the caster, attack resume')
+    return {'Berserk': {'berserk': {'ability': raw(child), 'duration_ticks': number(swarm['dur1'], 30),
+        'movement_percent_delta': number(swarm['dataa1'], 100), 'attack_speed_percent_delta': number(swarm['datab1'], 100),
+        'damage_taken_bonus_per_10k': number(swarm['datac1'], 10000)},
+        'minimum_delay_ticks': number(delay[1], 30), 'maximum_delay_ticks': number(delay[2], 30)}}
+
+
 def _sand_cloud(recipe, detail, number, raw):
     sand = detail['functions']['spellSandCloud']
     callback = detail['functions']['CallbackPeriodic_doPeriodically_RaceDesertAbilities_call_doPeriodically_RaceDesertAbilities']
@@ -127,6 +149,8 @@ def project(recipe, fields, unit, protected, detail):
     kind = semantics['semantic_kind']
     if kind == 'delayed-life-steal':
         child = _life_steal(recipe, detail, number)
+    elif kind == 'delayed-berserk-rage':
+        child = _berserk(recipe, detail, number, raw)
     elif kind == 'periodic-sandcloud-carrier':
         child = _sand_cloud(recipe, detail, number, raw)
     elif kind == 'proxy-object-effect':

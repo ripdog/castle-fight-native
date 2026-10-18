@@ -1,13 +1,22 @@
 use super::*;
+use crate::KillBerserkProfile;
 
 pub(super) fn activate_kill_berserk(source: &mut UnitSnapshot, tick: u64) {
     if source.health <= 0 || source.attacks_disabled || source.status.attacks_disabled(tick) {
         return;
     }
-    for effect in source.passive_effects.iter() {
+    let effects = source.passive_effects;
+    for effect in effects.iter() {
         let PassiveUnitEffect::KillBerserk(profile) = effect else {
             continue;
         };
+        apply_berserk(source, profile, tick);
+    }
+}
+
+/// Native Berserk on its own caster, interrupting the current order.
+pub(super) fn apply_berserk(source: &mut UnitSnapshot, profile: KillBerserkProfile, tick: u64) {
+    {
         let id = ModifierId(profile.ability.0);
         let expires_tick = tick
             .checked_add(u64::from(profile.duration_ticks))

@@ -4,6 +4,12 @@ use super::*;
 /// resources and the missile; the child is the map script's independent consequence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ParasiteChild {
+    /// The caster berserks itself after a random delay.
+    Berserk {
+        berserk: KillBerserkProfile,
+        minimum_delay_ticks: u16,
+        maximum_delay_ticks: u16,
+    },
     /// Periodic dummy-cast miss-chance clouds at the parent's target position.
     SandCloud(SandCloudProfile),
     /// Immediate dummy-cast Locust Swarm released at the parent's target position.
@@ -32,6 +38,24 @@ impl ParasiteChild {
         match self {
             Self::LocustSwarm(p) => p.canonical_words(),
             Self::SandCloud(p) => p.canonical_words(),
+            Self::Berserk {
+                berserk,
+                minimum_delay_ticks,
+                maximum_delay_ticks,
+            } => {
+                let mut words = [0; 16];
+                words[..8].copy_from_slice(&[
+                    4,
+                    u64::from(berserk.ability.0),
+                    u64::from(berserk.duration_ticks),
+                    berserk.movement_percent_delta as u16 as u64,
+                    berserk.attack_speed_percent_delta as u16 as u64,
+                    berserk.damage_taken_bonus_per_10k as u16 as u64,
+                    u64::from(minimum_delay_ticks),
+                    u64::from(maximum_delay_ticks),
+                ]);
+                words
+            }
             Self::LifeSteal {
                 maximum_life,
                 minimum_delay_ticks,
