@@ -30,7 +30,75 @@ impl SpatialPartition {
 #[derive(Debug)]
 pub struct SpatialGrid {
     cell_size: i32,
-    buckets: HashMap<(SpatialPartition, i32, i32), Vec<usize>>,
+    /// Maps each partition to its slot in `partitions`; looked up once per query.
+    slots: HashMap<SpatialPartition, usize>,
+    partitions: Vec<PartitionCells>,
+}
+
+/// Dense cell storage for one partition, restricted to the bounds of its occupied cells.
+#[derive(Debug)]
+struct PartitionCells {
+    min_x: i32,
+    min_y: i32,
+    max_x: i32,
+    max_y: i32,
+    width: usize,
+    /// CSR offsets: local cell `c` owns `indices[cell_start[c]..cell_start[c + 1]]`.
+    cell_start: Vec<u32>,
+    indices: Vec<usize>,
+}
+
+impl PartitionCells {
+    const fn with_cell(x: i32, y: i32) -> Self {
+        Self {
+            min_x: x,
+            min_y: y,
+            max_x: x,
+            max_y: y,
+            width: 0,
+            cell_start: Vec::new(),
+            indices: Vec::new(),
+        }
+    }
+
+    fn local_cell(&self, x: i32, y: i32) -> usize {
+        debug_assert!(x >= self.min_x && x <= self.max_x);
+        debug_assert!(y >= self.min_y && y <= self.max_y);
+        let local_x = (x - self.min_x) as usize;
+        let local_y = (y - self.min_y) as usize;
+        local_y * self.width + local_x
+    }
+
+    /// Indices in insertion order for an in-bounds cell.
+    fn cell_indices(&self, x: i32, y: i32) -> &[usize] {
+        let local = self.local_cell(x, y);
+        let start = self.cell_start[local] as usize;
+        let end = self.cell_start[local + 1] as usize;
+        &self.indices[start..end]
+    }
+
+    fn visit_pruned_cell(
+        &self,
+        cell_size: i32,
+        center: SimPoint,
+        cell: (i32, i32),
+        max_distance_sq: &mut u64,
+        f: &mut impl FnMut(usize) -> Option<u64>,
+    ) {
+        let (cell_x, cell_y) = cell;
+        if cell_x < self.min_x || cell_x > self.max_x || cell_y < self.min_y || cell_y > self.max_y
+        {
+            return;
+        }
+        if cell_min_distance_sq(center, cell_x, cell_y, cell_size) > *max_distance_sq {
+            return;
+        }
+        for &index in self.cell_indices(cell_x, cell_y) {
+            if let Some(tighter) = f(index) {
+                *max_distance_sq = (*max_distance_sq).min(tighter);
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -61,17 +129,74 @@ impl SpatialGrid {
         entries: impl IntoIterator<Item = (SpatialPartition, usize, SimPoint)>,
     ) -> Self {
         assert!(cell_size > 0);
-        let mut buckets = HashMap::new();
+        let mut slots = HashMap::new();
+        let mut partitions: Vec<PartitionCells> = Vec::new();
+        // Entries in input order, tagged with their partition slot and cell.
+        let mut placed: Vec<(usize, usize, i32, i32)> = Vec::new();
 
         for (partition, index, position) in entries {
             let (x, y) = cell_of(position, cell_size);
-            buckets
-                .entry((partition, x, y))
-                .or_insert_with(Vec::new)
-                .push(index);
+            let slot = *slots.entry(partition).or_insert_with(|| {
+                partitions.push(PartitionCells::with_cell(x, y));
+                partitions.len() - 1
+            });
+            let cells = &mut partitions[slot];
+            cells.min_x = cells.min_x.min(x);
+            cells.min_y = cells.min_y.min(y);
+            cells.max_x = cells.max_x.max(x);
+            cells.max_y = cells.max_y.max(y);
+            placed.push((slot, index, x, y));
         }
 
-        Self { cell_size, buckets }
+        for cells in &mut partitions {
+            let width = usize::try_from(i64::from(cells.max_x) - i64::from(cells.min_x) + 1)
+                .expect("spatial grid width overflow");
+            let height = usize::try_from(i64::from(cells.max_y) - i64::from(cells.min_y) + 1)
+                .expect("spatial grid height overflow");
+            let cell_count = width.checked_mul(height).expect("spatial grid too large");
+            cells.width = width;
+            cells.cell_start = vec![0; cell_count + 1];
+        }
+
+        // Counting sort: count into the slot after each cell, then prefix-sum so that
+        // `cell_start[c]` is the first offset of local cell `c`.
+        for &(slot, _, x, y) in &placed {
+            let cells = &mut partitions[slot];
+            let local = cells.local_cell(x, y);
+            cells.cell_start[local + 1] += 1;
+        }
+        for cells in &mut partitions {
+            let mut running = 0u32;
+            for offset in &mut cells.cell_start {
+                running += *offset;
+                *offset = running;
+            }
+            cells.indices = vec![0; running as usize];
+        }
+
+        // Filling in input order keeps each cell's indices in their original insertion order.
+        let mut cursors: Vec<Vec<u32>> = partitions
+            .iter()
+            .map(|cells| cells.cell_start.clone())
+            .collect();
+        for &(slot, index, x, y) in &placed {
+            let cells = &mut partitions[slot];
+            let local = cells.local_cell(x, y);
+            let cursor = &mut cursors[slot][local];
+            cells.indices[*cursor as usize] = index;
+            *cursor += 1;
+        }
+
+        Self {
+            cell_size,
+            slots,
+            partitions,
+        }
+    }
+
+    fn partition_cells(&self, partition: SpatialPartition) -> Option<&PartitionCells> {
+        let slot = *self.slots.get(&partition)?;
+        Some(&self.partitions[slot])
     }
 
     pub fn for_each_candidate(
@@ -82,17 +207,25 @@ impl SpatialGrid {
         mut f: impl FnMut(usize),
     ) {
         debug_assert!(radius >= 0);
+        let Some(cells) = self.partition_cells(partition) else {
+            return;
+        };
         let min = SimPoint::new(center.x - radius, center.y - radius);
         let max = SimPoint::new(center.x + radius, center.y + radius);
         let (min_x, min_y) = cell_of(min, self.cell_size);
         let (max_x, max_y) = cell_of(max, self.cell_size);
+        let min_x = min_x.max(cells.min_x);
+        let min_y = min_y.max(cells.min_y);
+        let max_x = max_x.min(cells.max_x);
+        let max_y = max_y.min(cells.max_y);
+        if min_x > max_x || min_y > max_y {
+            return;
+        }
 
         for y in min_y..=max_y {
             for x in min_x..=max_x {
-                if let Some(bucket) = self.buckets.get(&(partition, x, y)) {
-                    for &index in bucket {
-                        f(index);
-                    }
+                for &index in cells.cell_indices(x, y) {
+                    f(index);
                 }
             }
         }
@@ -107,11 +240,15 @@ impl SpatialGrid {
         mut f: impl FnMut(usize) -> Option<u64>,
     ) {
         debug_assert!(radius >= 0);
+        let Some(cells) = self.partition_cells(partition) else {
+            return;
+        };
+        let cell_size = self.cell_size;
         let min = SimPoint::new(center.x - radius, center.y - radius);
         let max = SimPoint::new(center.x + radius, center.y + radius);
-        let (min_x, min_y) = cell_of(min, self.cell_size);
-        let (max_x, max_y) = cell_of(max, self.cell_size);
-        let (center_x, center_y) = cell_of(center, self.cell_size);
+        let (min_x, min_y) = cell_of(min, cell_size);
+        let (max_x, max_y) = cell_of(max, cell_size);
+        let (center_x, center_y) = cell_of(center, cell_size);
         let max_ring = (center_x - min_x)
             .max(max_x - center_x)
             .max(center_y - min_y)
@@ -119,90 +256,77 @@ impl SpatialGrid {
 
         for ring in 0..=max_ring {
             if ring == 0 {
-                self.visit_pruned_cell(
-                    partition,
+                cells.visit_pruned_cell(
+                    cell_size,
                     center,
                     (center_x, center_y),
                     &mut max_distance_sq,
                     &mut f,
                 );
-                continue;
-            }
+            } else {
+                let left = center_x - ring;
+                let right = center_x + ring;
+                let top = center_y - ring;
+                let bottom = center_y + ring;
 
-            let left = center_x - ring;
-            let right = center_x + ring;
-            let top = center_y - ring;
-            let bottom = center_y + ring;
-
-            for x in left..=right {
-                if x >= min_x && x <= max_x && top >= min_y && top <= max_y {
-                    self.visit_pruned_cell(
-                        partition,
-                        center,
-                        (x, top),
-                        &mut max_distance_sq,
-                        &mut f,
-                    );
-                }
-            }
-            for y in top + 1..=bottom {
-                if right >= min_x && right <= max_x && y >= min_y && y <= max_y {
-                    self.visit_pruned_cell(
-                        partition,
-                        center,
-                        (right, y),
-                        &mut max_distance_sq,
-                        &mut f,
-                    );
-                }
-            }
-            if bottom >= min_y && bottom <= max_y {
-                for x in (left..right).rev() {
-                    if x >= min_x && x <= max_x {
-                        self.visit_pruned_cell(
-                            partition,
+                for x in left..=right {
+                    if x >= min_x && x <= max_x && top >= min_y && top <= max_y {
+                        cells.visit_pruned_cell(
+                            cell_size,
                             center,
-                            (x, bottom),
+                            (x, top),
                             &mut max_distance_sq,
                             &mut f,
                         );
                     }
                 }
-            }
-            if left >= min_x && left <= max_x {
-                for y in (top + 1..bottom).rev() {
-                    if y >= min_y && y <= max_y {
-                        self.visit_pruned_cell(
-                            partition,
+                for y in top + 1..=bottom {
+                    if right >= min_x && right <= max_x && y >= min_y && y <= max_y {
+                        cells.visit_pruned_cell(
+                            cell_size,
                             center,
-                            (left, y),
+                            (right, y),
                             &mut max_distance_sq,
                             &mut f,
                         );
                     }
                 }
+                if bottom >= min_y && bottom <= max_y {
+                    for x in (left..right).rev() {
+                        if x >= min_x && x <= max_x {
+                            cells.visit_pruned_cell(
+                                cell_size,
+                                center,
+                                (x, bottom),
+                                &mut max_distance_sq,
+                                &mut f,
+                            );
+                        }
+                    }
+                }
+                if left >= min_x && left <= max_x {
+                    for y in (top + 1..bottom).rev() {
+                        if y >= min_y && y <= max_y {
+                            cells.visit_pruned_cell(
+                                cell_size,
+                                center,
+                                (left, y),
+                                &mut max_distance_sq,
+                                &mut f,
+                            );
+                        }
+                    }
+                }
             }
-        }
-    }
 
-    fn visit_pruned_cell(
-        &self,
-        partition: SpatialPartition,
-        center: SimPoint,
-        cell: (i32, i32),
-        max_distance_sq: &mut u64,
-        f: &mut impl FnMut(usize) -> Option<u64>,
-    ) {
-        let (cell_x, cell_y) = cell;
-        if cell_min_distance_sq(center, cell_x, cell_y, self.cell_size) > *max_distance_sq {
-            return;
-        }
-        let Some(bucket) = self.buckets.get(&(partition, cell_x, cell_y)) else {
-            return;
-        };
-        for &index in bucket {
-            if let Some(tighter) = f(index) {
-                *max_distance_sq = (*max_distance_sq).min(tighter);
+            // Once this ring's square covers every occupied cell, later rings lie entirely
+            // outside the partition's bounds and cannot produce candidates.
+            let covers_bounds = center_x - ring <= cells.min_x
+                && center_x + ring >= cells.max_x
+                && center_y - ring <= cells.min_y
+                && center_y + ring >= cells.max_y;
+            if covers_bounds {
+                break;
             }
         }
     }
