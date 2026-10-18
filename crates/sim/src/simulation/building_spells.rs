@@ -199,10 +199,13 @@ pub(super) fn native_building_trigger_unit_type(
 }
 impl Simulation {
     pub(super) fn has_negative_building_protection(&self, target: SimId) -> bool {
-        self.world.iter_entities().any(|e| {
-            e.get::<BuildingSpellTargetState>()
-                .is_some_and(|state| state.target == target && state.anti_negative)
-        })
+        self.world
+            .try_query::<&BuildingSpellTargetState>()
+            .is_some_and(|mut states| {
+                states
+                    .iter(&self.world)
+                    .any(|state| state.target == target && state.anti_negative)
+            })
     }
 
     /// Eraser calls Od/nd, which removes a strong shield without Vd's full heal.
@@ -297,22 +300,20 @@ impl Simulation {
                 candidates.push((unit.id, AbilityIntentTarget::Unit { index, id: unit.id }));
             }
         }
-        if targets.can_target_buildings() {
-            for entity in self.world.iter_entities() {
-                let (Some(id), Some(team), Some(health), Some(footprint)) = (
-                    entity.get::<SimId>(),
-                    entity.get::<Team>(),
-                    entity.get::<Health>(),
-                    entity.get::<BuildingFootprint>(),
-                ) else {
-                    continue;
-                };
+        if targets.can_target_buildings()
+            && let Some(mut buildings) = self.world.try_query::<(
+                &SimId,
+                &Team,
+                &Health,
+                &BuildingFootprint,
+                Option<&UnitClassifications>,
+            )>()
+        {
+            // Candidates are ranked by a key ending in the unique SimId, so visit order is moot.
+            for (id, team, health, footprint, flags) in buildings.iter(&self.world) {
                 *checks += 1;
                 let position = footprint_center_point(*footprint, self.config.navigation_cell_size);
-                let flags = entity
-                    .get::<UnitClassifications>()
-                    .copied()
-                    .unwrap_or_default();
+                let flags = flags.copied().unwrap_or_default();
                 if self.native_building_trigger_allowed(
                     source,
                     ability,
@@ -724,22 +725,27 @@ impl Simulation {
     }
 
     pub(super) fn advance_building_spell_controls(&mut self) {
+        // SimId keys are unique, so the map and the sorted state list do not depend on visit order.
         let units: BTreeMap<_, _> = self
             .world
-            .iter_entities()
-            .filter_map(|e| Some((*e.get::<SimId>()?, (e.id(), e.get::<Health>()?.current))))
-            .collect();
+            .try_query::<(&SimId, Entity, &Health)>()
+            .map(|mut units| {
+                units
+                    .iter(&self.world)
+                    .map(|(id, entity, health)| (*id, (entity, health.current)))
+                    .collect()
+            })
+            .unwrap_or_default();
         let mut states: Vec<_> = self
             .world
-            .iter_entities()
-            .filter_map(|e| {
-                Some((
-                    *e.get::<SimId>()?,
-                    e.id(),
-                    e.get::<BuildingSpellTargetState>()?.clone(),
-                ))
+            .try_query::<(&SimId, Entity, &BuildingSpellTargetState)>()
+            .map(|mut states| {
+                states
+                    .iter(&self.world)
+                    .map(|(id, entity, state)| (*id, entity, state.clone()))
+                    .collect()
             })
-            .collect();
+            .unwrap_or_default();
         states.sort_by_key(|(id, _, _)| *id);
         for (_, entity, mut state) in states {
             let Some(&(unit_entity, health)) = units.get(&state.target) else {

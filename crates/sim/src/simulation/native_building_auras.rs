@@ -91,24 +91,32 @@ fn refresh(
 }
 impl Simulation {
     pub(super) fn refresh_native_building_auras_for_timers(&mut self) {
+        // Aura matching only tests existence and sums saturating rates, so visit order is moot.
         let sources: Vec<_> = self
             .world
-            .iter_entities()
-            .filter_map(|e| {
-                let content = e.get::<ContentIdentity>()?;
-                let p = crate::building_mechanics::coral_auras_for_version(content.map_version)?;
-                (content.rawcode == p.source_rawcode && e.get::<BuildingConstruction>().is_none())
-                    .then_some(AuraSource {
-                        version: p.map_version,
-                        team: *e.get::<Team>()?,
-                        position: footprint_center_point(
-                            *e.get::<BuildingFootprint>()?,
-                            self.config.navigation_cell_size,
-                        ),
-                        alive: e.get::<Health>()?.current > 0,
+            .try_query_filtered::<
+                (&ContentIdentity, &Team, &BuildingFootprint, &Health),
+                bevy_ecs::query::Without<BuildingConstruction>,
+            >()
+            .map(|mut query| {
+                query
+                    .iter(&self.world)
+                    .filter_map(|(content, team, footprint, health)| {
+                        let p =
+                            crate::building_mechanics::coral_auras_for_version(content.map_version)?;
+                        (content.rawcode == p.source_rawcode).then_some(AuraSource {
+                            version: p.map_version,
+                            team: *team,
+                            position: footprint_center_point(
+                                *footprint,
+                                self.config.navigation_cell_size,
+                            ),
+                            alive: health.current > 0,
+                        })
                     })
+                    .collect::<Vec<_>>()
             })
-            .collect();
+            .unwrap_or_default();
         let mut q = self.world.query::<(
             &Team,
             &Position,

@@ -121,16 +121,22 @@ impl Simulation {
     }
 
     pub(super) fn refresh_mana_improvement_links(&mut self) {
+        // Each cleared entity is reset independently, so visit order does not matter.
         let cleared: Vec<_> = self
             .world
-            .iter_entities()
-            .filter_map(|entity| {
-                let target = entity.get::<StatusState>()?.mana_improvement_target?;
-                self.building(target)
-                    .is_none_or(|b| b.health <= 0)
-                    .then_some(entity.id())
+            .try_query::<(Entity, &StatusState)>()
+            .map(|mut query| {
+                query
+                    .iter(&self.world)
+                    .filter_map(|(entity, status)| {
+                        let target = status.mana_improvement_target?;
+                        self.building(target)
+                            .is_none_or(|b| b.health <= 0)
+                            .then_some(entity)
+                    })
+                    .collect::<Vec<_>>()
             })
-            .collect();
+            .unwrap_or_default();
         for entity in cleared {
             self.world
                 .get_mut::<StatusState>(entity)

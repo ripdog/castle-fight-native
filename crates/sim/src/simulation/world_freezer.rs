@@ -131,10 +131,11 @@ impl Simulation {
         units: &mut [UnitSnapshot],
         buildings: &mut [BuildingSnapshot],
     ) {
+        // At most one freezer state entity exists: start_world_freezer spawns it only when none does.
         let Some(entity) = self
             .world
-            .iter_entities()
-            .find_map(|e| e.get::<WorldFreezerState>().map(|_| e.id()))
+            .try_query_filtered::<Entity, bevy_ecs::query::With<WorldFreezerState>>()
+            .and_then(|mut query| query.iter(&self.world).next())
         else {
             return;
         };
