@@ -1042,17 +1042,17 @@ impl Simulation {
 
     fn builder_follow_target(&self, target_id: SimId) -> Option<BuilderFollowTargetSnapshot> {
         let default_collision_radius = self.default_collision_radius();
-        self.world
-            .iter_entities()
-            .find(|entity| entity.get::<SimId>().copied() == Some(target_id))
-            .and_then(|entity| builder_follow_target_from_entity(entity, default_collision_radius))
+        // SimIds are unique, so the single match is found regardless of visit order.
+        let mut query = self.world.try_query::<(Entity, &SimId)>()?;
+        let (entity, _) = query.iter(&self.world).find(|(_, id)| **id == target_id)?;
+        builder_follow_target_from_entity(self.world.entity(entity), default_collision_radius)
     }
 
     fn builder_repair_target(&self, target_id: SimId) -> Option<BuilderRepairTargetSnapshot> {
-        self.world
-            .iter_entities()
-            .find(|entity| entity.get::<SimId>().copied() == Some(target_id))
-            .and_then(builder_repair_target_from_entity)
+        // SimIds are unique, so the single match is found regardless of visit order.
+        let mut query = self.world.try_query::<(Entity, &SimId)>()?;
+        let (entity, _) = query.iter(&self.world).find(|(_, id)| **id == target_id)?;
+        builder_repair_target_from_entity(self.world.entity(entity))
     }
 
     fn select_builder_autocast_repair_target(
@@ -1062,9 +1062,14 @@ impl Simulation {
         acquisition_range: i32,
     ) -> Option<SimId> {
         let max_distance_sq = square_i32(acquisition_range);
-        self.world
-            .iter_entities()
-            .filter_map(builder_repair_target_from_entity)
+        let mut query = self.world.try_query::<(Entity, &SimId, &Team, &Health)>()?;
+        query
+            .iter(&self.world)
+            // Team and health are cheap row checks, so only plausible candidates build snapshots.
+            .filter(|(_, _, candidate_team, health)| {
+                **candidate_team == team && health.current > 0 && health.current < health.max
+            })
+            .filter_map(|(entity, ..)| builder_repair_target_from_entity(self.world.entity(entity)))
             .filter(|target| {
                 target.team == team
                     && target.health.current > 0
