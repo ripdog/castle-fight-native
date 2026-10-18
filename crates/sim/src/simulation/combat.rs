@@ -1136,6 +1136,7 @@ impl Simulation {
                 | PassiveUnitEffect::Aura(_)
                 | PassiveUnitEffect::SpellResistance(_)
                 | PassiveUnitEffect::SpikedShell(_)
+                | PassiveUnitEffect::LifeSteal(_)
                 | PassiveUnitEffect::HardenedSkin(_)
                 | PassiveUnitEffect::PermanentImmolation(_)
                 | PassiveUnitEffect::HostileArmorAura(_) => {}

@@ -518,6 +518,7 @@ fn cleanse_native_effects(
             PassiveUnitEffect::SpeedAura(p) => Some(p.ability),
             PassiveUnitEffect::Sphere(p) => Some(p.ability),
             PassiveUnitEffect::SpikedShell(p) => Some(p.ability),
+            PassiveUnitEffect::LifeSteal(p) => Some(p.ability),
             PassiveUnitEffect::HardenedSkin(p) => Some(p.ability),
             PassiveUnitEffect::PermanentImmolation(p) => Some(p.ability),
             PassiveUnitEffect::SpellResistance(p) => Some(p.ability),

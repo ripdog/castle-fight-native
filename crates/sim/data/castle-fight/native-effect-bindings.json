@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"ability-effect","source_key":"A0GD","implementation":"warcraft-native-target-debuff-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0KB","implementation":"warcraft-life-steal-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0G5","implementation":"warcraft-orb-spell-proc-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0G9","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0G3","implementation":"warcraft-evasion-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0GG","implementation":"warcraft-mana-attack-orb-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0HL","implementation":"warcraft-critical-strike-v1","valid_from":"9.27","valid_through":"9.27"},

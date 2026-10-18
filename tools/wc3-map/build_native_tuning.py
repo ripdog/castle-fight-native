@@ -241,6 +241,12 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     if kind == "fan-of-knives":
         from project_fan_of_knives import project
         return project(recipe, fields, unit, protected, mechanics)
+    if kind == "life-steal":
+        from project_life_steal import project
+        return project(recipe, fields, unit, mechanics)
+    if kind == "parasite-script":
+        from project_parasite_script import project
+        return project(recipe, fields, unit, protected, mechanics)
     if kind == "scripted-roots":
         from project_scripted_roots import project
         return project(recipe, fields, unit, protected, mechanics)
@@ -896,7 +902,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         if recipe["kind"] in {"inner-fire", "spell-steal", "native-curse"} and default_autocast.get(recipe.get("unit_rawcode")) != source:
             raise ValueError("native buff source must retain default-active autocast")
         spell = spell_mechanics.get("A02U" if recipe["kind"] == "siren-purge" else source)
-        if recipe['kind'] in {'travelling-mana-clap', 'parasite-area-buff', 'impale-fan', 'native-impale'}:
+        if recipe['kind'] in {'travelling-mana-clap', 'parasite-area-buff', 'parasite-script', 'impale-fan', 'native-impale'}:
             spell = next(row for row in spell_mechanics.values() if row['unit_rawcode'] == recipe['unit_rawcode'])
         if spell is None and recipe["kind"] in {"healing-wave", "solar-strike", "war-stomp", "howl-of-terror", "frost-nova", "ensnare"}:
             matches = [row for row in spell_mechanics.values() if row["unit_rawcode"] == recipe.get("unit_rawcode")
@@ -905,7 +911,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
                 raise ValueError(f"proxy child {source} needs one semantic parent for its source unit")
             spell = matches[0]
         detail = dict(mechanics.get(recipe.get("unit_rawcode", ""), {}))
-        if recipe['kind'] in {'travelling-mana-clap', 'parasite-area-buff', 'impale-fan', 'native-impale'}:
+        if recipe['kind'] in {'travelling-mana-clap', 'parasite-area-buff', 'parasite-script', 'impale-fan', 'native-impale'}:
             detail.update(all_fields=abilities, all_bases=ability_bases, all_units=units,
                 all_unit_fields=unit_fields, all_unit_stats=unit_stats,
                 all_protected=protected, functions=functions, git_tree=tree,
@@ -985,12 +991,13 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
                 raise ValueError('native Slow default-active alias differs from its source class')
             detail.update(reference_source_sha256=reference['source_sha256'], default_active_alias=default)
         detail["native_base"] = ability_bases[source]
+        detail["source_unit_stats"] = unit_stats.get(recipe.get("unit_rawcode", ""), {})
         if recipe["kind"] in {"impale-fan", "native-impale", "mana-attack-orb"}:
             detail["default_active_alias"] = default_autocast[recipe["unit_rawcode"]]
         if spell is not None and recipe["kind"] != "master-projectiles":
             semantics = spell_semantics[spell["ability_rawcode"]]
             effect_key = semantics["effect_rawcodes"].split(",")[0]
-            detail.update(effect_key=effect_key, effect_fields=abilities[effect_key],
+            detail.update(effect_key=effect_key, effect_fields=abilities.get(effect_key, {}),
                 effect_protected=protected.get(effect_key, {}), mechanics_row=spell, semantics_row=semantics)
         effects.append(project_effect(recipe, abilities[source], unit, protected.get(source, {}), detail))
     from project_unit_death_rules import project as project_death_rules

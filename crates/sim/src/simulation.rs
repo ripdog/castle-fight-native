@@ -44,6 +44,7 @@ mod native_building_auras;
 mod native_immolation;
 mod night_elf;
 mod parasite_area_buff;
+mod parasite_script;
 mod permanent_grants;
 mod starfall;
 mod training_variants;
@@ -5373,6 +5374,16 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         AbilityEffect::ParasiteAreaBuff(p) => {
             assert!(p.radius >= 0 && p.duration_ticks > 0);
         }
+        AbilityEffect::ParasiteScript(p) => {
+            match p.child {
+                crate::ParasiteChild::LifeSteal {
+                    maximum_life,
+                    minimum_delay_ticks,
+                    maximum_delay_ticks,
+                } => assert!(maximum_life >= 0 && minimum_delay_ticks < maximum_delay_ticks),
+            }
+            assert!(p.parent.speed_per_tick > 0);
+        }
         AbilityEffect::TravellingManaClap(p) => {
             assert!(p.callback_speed_per_second > 0 && p.mover_duration_ticks > 0);
             assert!(p.maximum_mana_burn >= 0 && p.burn_radius >= 0);
@@ -6722,6 +6733,37 @@ impl Simulation {
                         + i32::try_from(healing).expect("life stolen fits missing health");
                     state.unit_health[source_index] = health;
                     state.units[source_index].health = health;
+                }
+                if matches!(kind, WeaponDamageKind::Melee | WeaponDamageKind::Ranged)
+                    && let Some(source_index) = source_index
+                    && state.unit_health[source_index] > 0
+                {
+                    // Native life steal heals the attacker from post-defense damage dealt to units.
+                    let movement = state.units[index].target_movement_class();
+                    let stolen = state.units[source_index]
+                        .passive_effects
+                        .iter()
+                        .filter_map(|effect| match effect {
+                            PassiveUnitEffect::LifeSteal(profile)
+                                if profile.targets.can_target_unit(movement) =>
+                            {
+                                Some(profile.stolen_per_10k)
+                            }
+                            _ => None,
+                        })
+                        .max()
+                        .unwrap_or(0);
+                    if stolen > 0 {
+                        let healing = (i64::from(event_damage.max(0)) * i64::from(stolen) / 10_000)
+                            .min(i64::from(
+                                state.units[source_index].health_max
+                                    - state.unit_health[source_index],
+                            ));
+                        let health = state.unit_health[source_index]
+                            + i32::try_from(healing).expect("life stolen fits missing health");
+                        state.unit_health[source_index] = health;
+                        state.units[source_index].health = health;
+                    }
                 }
                 Some(state.unit_positions[index])
             }

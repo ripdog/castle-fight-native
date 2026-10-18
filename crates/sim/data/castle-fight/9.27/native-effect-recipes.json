@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"ability-effect","source_key":"A0GD","unit_rawcode":"n032","kind":"native-target-debuff"},
+    {"source_kind":"unit-ability","source_key":"A0KB","unit_rawcode":"n032","kind":"life-steal"},
+    {"source_kind":"unit-ability","source_key":"A0G5","unit_rawcode":"n032","kind":"orb-spell-proc"},
+    {"source_kind":"unit-ability","source_key":"A0G9","unit_rawcode":"n032","kind":"parasite-script"},
     {"source_kind":"unit-ability","source_key":"A0G3","unit_rawcode":"n02W","kind":"evasion"},
     {"source_kind":"unit-ability","source_key":"A0GG","unit_rawcode":"n02T","kind":"mana-attack-orb"},
     {"source_kind":"unit-ability","source_key":"A0HL","unit_rawcode":"n02T","kind":"critical-strike"},

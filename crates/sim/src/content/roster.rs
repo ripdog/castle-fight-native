@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    HarpyWitch = 0x1000_007f => b"n032",
     Harpy = 0x1000_007e => b"n02W",
     FireGnoll = 0x1000_007d => b"n02T",
     Gnoll = 0x1000_007c => b"n02S",
@@ -162,6 +163,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    NestOfHarpyWitch = 0x2000_007c => b"n03B",
     HarpyNest = 0x2000_007b => b"n02Q",
     FireGnollHut = 0x2000_007a => b"n02N",
     GnollTent = 0x2000_0079 => b"n02P",

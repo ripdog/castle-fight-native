@@ -19,10 +19,13 @@ pub struct NativeDebuffProfile {
     pub attack_speed_percent_delta: i16,
     pub damage_bonus_per_10k: i16,
     pub ethereal: Option<EtherealEffectProfile>,
+    /// Chance the debuffed unit's ordinary attacks miss.
+    #[serde(default)]
+    pub miss_chance_per_10k: u16,
 }
 
 impl NativeDebuffProfile {
-    pub(crate) fn canonical_words(self) -> [u64; 13] {
+    pub(crate) fn canonical_words(self) -> [u64; 14] {
         [
             u64::from(self.ability.0),
             u64::from(self.buff),
@@ -37,6 +40,7 @@ impl NativeDebuffProfile {
             u64::from(self.ethereal.map_or(0, |e| e.magic_damage_per_10k)),
             u64::from(self.ethereal.map_or(0, |e| e.healing_per_10k)),
             u64::from(self.ethereal.map_or(0, |e| e.allied_damage_per_10k)),
+            u64::from(self.miss_chance_per_10k),
         ]
     }
 }

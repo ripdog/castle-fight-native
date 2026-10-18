@@ -119,7 +119,8 @@ impl Simulation {
         units: &mut [UnitSnapshot],
         grid: &SpatialGrid,
     ) -> AbilityMetrics {
-        let delayed_effects = self.resolve_delayed_secondary_resurrections(units);
+        let delayed_effects = self.resolve_delayed_secondary_resurrections(units)
+            + self.resolve_pending_parasite_scripts(units);
         let due_pending_casts = units
             .iter()
             .enumerate()
@@ -349,6 +350,7 @@ impl Simulation {
                             | AbilityEffect::SirenPurge(_)
                             | AbilityEffect::TravellingManaClap(_)
                             | AbilityEffect::ParasiteAreaBuff(_)
+                            | AbilityEffect::ParasiteScript(_)
                             | AbilityEffect::ImpaleFan(_)
                     ))
                     && !self.ability_target_is_valid(
@@ -591,6 +593,8 @@ impl Simulation {
                         emit_cast_visual = false;
                     } else if let AbilityEffect::ParasiteAreaBuff(p) = intent.ability.effect {
                         metrics.effects += self.cast_parasite_area_buff(source, index, p, units);
+                    } else if let AbilityEffect::ParasiteScript(p) = intent.ability.effect {
+                        metrics.effects += self.cast_parasite_script(source, index, p, units);
                     } else if let AbilityEffect::TravellingManaClap(p) = intent.ability.effect {
                         self.cast_travelling_mana_clap(source, index, p, units);
                         metrics.effects += 1;
@@ -1459,6 +1463,7 @@ impl Simulation {
                     source: intent.source_id,
                     ability: match intent.ability.effect {
                         AbilityEffect::ParasiteAreaBuff(p) => p.ability,
+                        AbilityEffect::ParasiteScript(p) => p.ability,
                         AbilityEffect::SirenPurge(p) => p.child.ability,
                         AbilityEffect::AreaStun { ability, .. }
                         | AbilityEffect::AreaDebuff { ability, .. }
@@ -1998,6 +2003,7 @@ impl Simulation {
                     || (matches!(ability.effect, AbilityEffect::SirenPurge(p) if !super::native_summons::purge_primary_eligible(candidate, source.team, p, self.next_tick)))
                     || (matches!(ability.effect, AbilityEffect::ImpaleFan(_)) && !super::impale::primary_eligible(candidate, source.team, self.next_tick))
                     || (matches!(ability.effect, AbilityEffect::ParasiteAreaBuff(p) if !super::parasite_area_buff::primary_eligible(candidate, source.team, p, self.next_tick)))
+                    || (matches!(ability.effect, AbilityEffect::ParasiteScript(p) if !super::parasite_script::primary_eligible(candidate, source.team, p, self.next_tick)))
                     || (matches!(ability.effect, AbilityEffect::TravellingManaClap(p) if !super::travelling_mana_clap::primary_eligible(candidate, source.team, p, self.next_tick)))
                     || (matches!(ability.effect, AbilityEffect::ScriptedRoots(p) if !super::scripted_roots::primary_eligible(candidate, source.team, p, self.next_tick)))
                     || (matches!(
@@ -2472,6 +2478,7 @@ impl Simulation {
                     && !(matches!(ability.effect, AbilityEffect::ImpaleFan(_))
                         && !super::impale::primary_eligible(target, source.team, self.next_tick))
                     && !matches!(ability.effect, AbilityEffect::ParasiteAreaBuff(p) if !super::parasite_area_buff::primary_eligible(target, source.team, p, self.next_tick))
+                    && !matches!(ability.effect, AbilityEffect::ParasiteScript(p) if !super::parasite_script::primary_eligible(target, source.team, p, self.next_tick))
                     && !matches!(ability.effect, AbilityEffect::TravellingManaClap(p) if !super::travelling_mana_clap::primary_eligible(target, source.team, p, self.next_tick))
                     && !matches!(ability.effect, AbilityEffect::ScriptedRoots(p) if !super::scripted_roots::primary_eligible(target, source.team, p, self.next_tick))
                     && match ability.target_policy {

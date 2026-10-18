@@ -12,6 +12,7 @@ fn profile(ethereal: bool) -> NativeDebuffProfile {
         movement_percent_delta: -40,
         attack_speed_percent_delta: -20,
         damage_bonus_per_10k: 0,
+        miss_chance_per_10k: 0,
         ethereal: ethereal.then_some(EtherealEffectProfile {
             magic_damage_per_10k: 20_000,
             healing_per_10k: 15_000,

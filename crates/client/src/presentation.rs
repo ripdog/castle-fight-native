@@ -3528,6 +3528,7 @@ fn prewarm_timed_wc3_effects(
                         AbilityEffect::NativeDebuff(p) => Some((p.ability.0, p.duration_ticks)),
                         AbilityEffect::Curse(p) => Some((p.ability.0, p.duration_ticks)),
                         AbilityEffect::ParasiteAreaBuff(p) => Some((p.ability.0, p.duration_ticks)),
+                        AbilityEffect::ParasiteScript(_) => None,
                         AbilityEffect::SirenPurge(p) => {
                             Some((p.child.ability.0, p.child.duration_ticks))
                         }

@@ -30,6 +30,7 @@ const TUNING_9_27_JSON: &str = include_str!("../data/castle-fight/9.27/native-ef
 pub enum NativeEffectImplementationId {
     WarcraftPermanentImmolationV1,
     WarcraftSpikedShellV1,
+    WarcraftLifeStealV1,
     WarcraftHardenedSkinV1,
     WarcraftDeathSpawnV1,
     WarcraftCompanionProductionV1,
@@ -120,6 +121,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftNativeBuildingAurasV1 => 94,
             Self::WarcraftNagaTidalWaveV1 => 95,
             Self::WarcraftSpikedShellV1 => 90,
+            Self::WarcraftLifeStealV1 => 110,
             Self::WarcraftHardenedSkinV1 => 91,
             Self::WarcraftDeathSpawnV1 => 89,
             Self::WarcraftCompanionProductionV1 => 88,
@@ -774,6 +776,12 @@ enum TuningEffect {
         unit_rawcode: String,
         profile: crate::components::SpikedShellProfile,
     },
+    LifeSteal {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        profile: crate::components::LifeStealProfile,
+    },
     Sphere {
         source_kind: String,
         source_key: String,
@@ -1116,6 +1124,7 @@ impl TuningEffect {
             | Self::KillBerserk { source_kind, .. }
             | Self::Corruption { source_kind, .. }
             | Self::SpikedShell { source_kind, .. }
+            | Self::LifeSteal { source_kind, .. }
             | Self::HardenedSkin { source_kind, .. }
             | Self::PermanentImmolation { source_kind, .. }
             | Self::Sphere { source_kind, .. }
@@ -1170,6 +1179,7 @@ impl TuningEffect {
             | Self::KillBerserk { source_key, .. }
             | Self::Corruption { source_key, .. }
             | Self::SpikedShell { source_key, .. }
+            | Self::LifeSteal { source_key, .. }
             | Self::HardenedSkin { source_key, .. }
             | Self::PermanentImmolation { source_key, .. }
             | Self::Sphere { source_key, .. }
@@ -1214,6 +1224,7 @@ impl TuningEffect {
             | Self::KillBerserk { unit_rawcode, .. }
             | Self::Corruption { unit_rawcode, .. }
             | Self::SpikedShell { unit_rawcode, .. }
+            | Self::LifeSteal { unit_rawcode, .. }
             | Self::HardenedSkin { unit_rawcode, .. }
             | Self::PermanentImmolation { unit_rawcode, .. }
             | Self::Sphere { unit_rawcode, .. }
@@ -1289,6 +1300,7 @@ impl TuningEffect {
             Self::SpeedAura { .. } => NativeEffectImplementationId::WarcraftSpeedAuraV1,
             Self::Corruption { .. } => NativeEffectImplementationId::WarcraftCorruptionV1,
             Self::SpikedShell { .. } => NativeEffectImplementationId::WarcraftSpikedShellV1,
+            Self::LifeSteal { .. } => NativeEffectImplementationId::WarcraftLifeStealV1,
             Self::HardenedSkin { .. } => NativeEffectImplementationId::WarcraftHardenedSkinV1,
             Self::PermanentImmolation { .. } => {
                 NativeEffectImplementationId::WarcraftPermanentImmolationV1
@@ -1351,6 +1363,7 @@ impl TuningEffect {
             Self::SpeedAura { .. } => "speed-aura",
             Self::Corruption { .. } => "corruption",
             Self::SpikedShell { .. } => "spiked-shell",
+            Self::LifeSteal { .. } => "life-steal",
             Self::HardenedSkin { .. } => "hardened-skin",
             Self::PermanentImmolation { .. } => "permanent-immolation",
             Self::Sphere { .. } => "sphere",
@@ -1658,6 +1671,7 @@ fn native_unit_mechanics_from_tuning(
                 | TuningEffect::KillBerserk { .. }
                 | TuningEffect::Corruption { .. }
                 | TuningEffect::SpikedShell { .. }
+                | TuningEffect::LifeSteal { .. }
                 | TuningEffect::HardenedSkin { .. }
                 | TuningEffect::DeathExplosion { .. }
                 | TuningEffect::ManaAttackOrb { .. }
@@ -1937,6 +1951,7 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
         }
         TuningEffect::Corruption { profile, .. } => PassiveUnitEffect::Corruption(*profile),
         TuningEffect::SpikedShell { profile, .. } => PassiveUnitEffect::SpikedShell(*profile),
+        TuningEffect::LifeSteal { profile, .. } => PassiveUnitEffect::LifeSteal(*profile),
         TuningEffect::HardenedSkin { profile, .. } => PassiveUnitEffect::HardenedSkin(*profile),
         TuningEffect::PermanentImmolation { profile, .. } => {
             assert!(profile.interval_ticks > 0 && profile.damage >= 0 && profile.radius >= 0);

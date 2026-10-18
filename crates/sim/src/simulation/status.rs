@@ -119,6 +119,7 @@ pub(super) fn apply_ability_effect_to_unit(
                         organic_only: p.organic_only,
                     }),
                     damage_bonus_per_10k: p.damage_bonus_per_10k,
+                    attack_miss_chance_per_10k: p.miss_chance_per_10k,
                     ethereal: p.ethereal,
                     expires_tick,
                     ..Default::default()
@@ -564,6 +565,7 @@ pub(super) fn apply_ability_effect_to_unit(
         | AbilityEffect::SirenPurge(_)
         | AbilityEffect::TravellingManaClap(_)
         | AbilityEffect::ParasiteAreaBuff(_)
+        | AbilityEffect::ParasiteScript(_)
         | AbilityEffect::WindWalk(_)
         | AbilityEffect::MasterProjectiles(_)
         | AbilityEffect::ScriptedRoots(_)

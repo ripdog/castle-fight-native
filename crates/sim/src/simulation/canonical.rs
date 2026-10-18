@@ -2104,6 +2104,12 @@ fn hash_status_state(hash: &mut Fnv64, status: &StatusState) {
     }
     hash.write_u64(status.retaliation_sequence);
     hash_optional_u64(hash, status.flying_retarget_tick);
+    hash.write_u8(u8::from(status.pending_parasite_script.is_some()));
+    if let Some(pending) = status.pending_parasite_script {
+        for word in pending.canonical_words() {
+            hash.write_u64(word);
+        }
+    }
     hash.write_u64(status.hardened_skin_sequence);
     hash.write_u8(u8::from(status.acid_bomb.is_some()));
     if let Some(acid) = status.acid_bomb {
@@ -2580,6 +2586,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: &PassiveUnitEffects) {
             }
             PassiveUnitEffect::SpikedShell(profile) => {
                 hash.write_u8(25);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
+            PassiveUnitEffect::LifeSteal(profile) => {
+                hash.write_u8(33);
                 for word in profile.canonical_words() {
                     hash.write_u64(word);
                 }
@@ -3079,6 +3091,11 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: &AutomaticAbilityProfile) {
             p.visit_canonical_words(|word| hash.write_u64(word));
         }
         AbilityEffect::ParasiteAreaBuff(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
+        AbilityEffect::ParasiteScript(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);
             }

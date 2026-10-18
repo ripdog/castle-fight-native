@@ -3,6 +3,124 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "native-target-debuff",
+      "source_kind": "ability-effect",
+      "source_key": "A0GD",
+      "profile": {
+        "ability": 1093683012,
+        "buff": 1110454863,
+        "targets": 3,
+        "organic_only": false,
+        "duration_ticks": 120,
+        "hero_duration_ticks": 120,
+        "movement_percent_delta": -50,
+        "attack_speed_percent_delta": 0,
+        "damage_bonus_per_10k": 0,
+        "ethereal": null,
+        "miss_chance_per_10k": 6500
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "ANdh",
+        "targets": "air,enemies,ground",
+        "protected_resources": {
+          "cooldown": "0.1",
+          "mana_cost": "0"
+        }
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0KB",
+      "unit_rawcode": "n032",
+      "kind": "life-steal",
+      "profile": {
+        "ability": 1093684034,
+        "stolen_per_10k": 2300,
+        "targets": 3
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "AIva",
+        "targets": "air,ground,enemy"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0G5",
+      "unit_rawcode": "n032",
+      "kind": "orb-spell-proc",
+      "chance_per_10k": 1600,
+      "effect_ability_rawcode": "A0GD",
+      "targets": "air-ground-units-and-buildings",
+      "provenance": {
+        "ability": "A0G5",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0G9",
+      "unit_rawcode": "n032",
+      "spellcasting": {
+        "mana": {
+          "maximum": 100,
+          "starting": 50,
+          "regen_per_tick_per_10k": 2147498648
+        },
+        "ability": {
+          "id": 1093683001,
+          "mana_cost": 24,
+          "cooldown_ticks": 420,
+          "range": 460800,
+          "target_policy": "RandomEnemyUnit",
+          "effect": {
+            "ParasiteScript": {
+              "parent": {
+                "buff_rawcode": 1110454585,
+                "map_version": {
+                  "major": 9,
+                  "minor": 27
+                },
+                "speed_per_tick": 64853,
+                "affects_invulnerable": false,
+                "duration_ticks": 1,
+                "hero_duration_ticks": 1,
+                "body_rawcode": 1852203634,
+                "count": 1,
+                "body_duration_ticks": 1
+              },
+              "parent_targets": 3,
+              "parent_organic_only": true,
+              "parent_nonhero_only": false,
+              "ability": 1093683001,
+              "child": {
+                "LifeSteal": {
+                  "maximum_life": 75,
+                  "minimum_delay_ticks": 3,
+                  "maximum_delay_ticks": 18
+                }
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 15000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "semantics": "resolved/unit-spell-semantics.tsv",
+        "functions": [
+          "UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceDesertAbilities_cast_registerUnitSpellWithTargetOrder_RaceDesertAbilities4",
+          "CallbackSingle_doAfter_RaceDesertAbilities_call_doAfter_RaceDesertAbilities2"
+        ]
+      }
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A0G3",
       "unit_rawcode": "n02W",

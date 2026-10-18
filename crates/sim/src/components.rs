@@ -23,7 +23,9 @@ pub use native_summons::{
 mod curse;
 pub use curse::CurseProfile;
 mod parasite_area_buff;
+mod parasite_script;
 pub use parasite_area_buff::ParasiteAreaBuffProfile;
+pub use parasite_script::{ParasiteChild, ParasiteScriptProfile, PendingParasiteScript};
 pub use travelling_mana_clap::TravellingManaClapProfile;
 pub(crate) use travelling_mana_clap::TravellingManaClapState;
 mod death_explosion;
@@ -1107,6 +1109,7 @@ pub enum PassiveUnitEffect {
     FrostAttack(FrostAttackEffectProfile),
     Pulverize(PulverizeEffectProfile),
     SpikedShell(SpikedShellProfile),
+    LifeSteal(LifeStealProfile),
     HardenedSkin(NativeAbilityGrant),
 }
 
@@ -1150,6 +1153,24 @@ impl SpikedShellProfile {
             self.returned_damage_per_10k as u64,
             self.received_damage_per_10k as u64,
             self.armor_bonus_per_100 as i64 as u64,
+        ]
+    }
+}
+
+/// Native `AIva`: heals the attacker by a fraction of the damage its ordinary attacks deal to units.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LifeStealProfile {
+    pub ability: AbilityId,
+    pub stolen_per_10k: u32,
+    pub targets: AttackTargetMask,
+}
+
+impl LifeStealProfile {
+    pub(crate) const fn canonical_words(self) -> [u64; 3] {
+        [
+            self.ability.0 as u64,
+            self.stolen_per_10k as u64,
+            self.targets.bits() as u64,
         ]
     }
 }
@@ -1938,6 +1959,7 @@ pub enum AbilityEffect {
     SirenPurge(SirenPurgeProfile),
     TravellingManaClap(TravellingManaClapProfile),
     ParasiteAreaBuff(ParasiteAreaBuffProfile),
+    ParasiteScript(ParasiteScriptProfile),
     Curse(CurseProfile),
     ManaBurnVisual,
     NativeSummon(NativeSummonProfile),
@@ -1960,6 +1982,7 @@ impl AbilityEffect {
         match self {
             Self::Curse(_) => 53,
             Self::ParasiteAreaBuff(_) => 52,
+            Self::ParasiteScript(_) => 63,
             Self::TravellingManaClap(_) => 50,
             Self::ManaBurnVisual => 51,
             Self::SirenPurge(_) => 45,
@@ -2196,6 +2219,8 @@ pub struct StatusState {
     pub retaliation_sequence: u64,
     /// Completed tick of the last flying-attacker retarget order, throttling the next one.
     pub flying_retarget_tick: Option<u64>,
+    /// A Parasite child callback waiting for its authored delay.
+    pub pending_parasite_script: Option<PendingParasiteScript>,
     pub hardened_skin_sequence: u64,
     /// Last authoritative order/movement heading, normalized by consumers.
     pub facing_direction: SimPoint,
