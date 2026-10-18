@@ -731,9 +731,11 @@ impl Simulation {
                         damage_percent_per_bounce,
                         allow_repeat_targets,
                     } => {
+                        // Rolled bonus damage (critical, Demolish) is already folded into
+                        // `damage`, which the bounce chain decays from like any other hit.
                         assert_eq!(
-                            (bonus_damage, on_hit),
-                            (0, PendingAttackEffects::default()),
+                            on_hit,
+                            PendingAttackEffects::default(),
                             "passive on-hit effects are not yet defined for bounce attacks"
                         );
                         // A native zero-speed missile never reaches its victim. The attack
