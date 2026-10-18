@@ -4,6 +4,49 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0HX",
+      "unit_rawcode": "n02Z",
+      "kind": "orb-spell-proc",
+      "chance_per_10k": 3500,
+      "effect_ability_rawcode": "A0HW",
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A0HX",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "kind": "orb-acid-bomb",
+      "source_kind": "ability-effect",
+      "source_key": "A0HW",
+      "profile": {
+        "ability": 1093683287,
+        "range": 1022976,
+        "radius": 131072,
+        "speed_per_tick": 34133,
+        "homing": true,
+        "armor_penalty_per_100": 400,
+        "movement_percent_delta": -20,
+        "attack_speed_percent_delta": -30,
+        "primary_damage": 2,
+        "secondary_damage": 10,
+        "interval_ticks": 15,
+        "duration_ticks": 150,
+        "hero_duration_ticks": 150,
+        "targets": 3
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "ANab",
+        "targets": "air,enemies,ground",
+        "protected_resources": {
+          "cooldown": "2.0",
+          "mana_cost": "0"
+        }
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A093",
       "unit_rawcode": "n02Y",
       "kind": "spell-resistance",

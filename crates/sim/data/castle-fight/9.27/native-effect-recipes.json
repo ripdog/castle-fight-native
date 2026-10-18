@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0HX","unit_rawcode":"n02Z","kind":"orb-spell-proc"},
+    {"source_kind":"ability-effect","source_key":"A0HW","unit_rawcode":"n02Z","kind":"orb-acid-bomb"},
     {"source_kind":"unit-ability","source_key":"A093","unit_rawcode":"n02Y","kind":"spell-resistance"},
     {"source_kind":"unit-ability","source_key":"A0GU","unit_rawcode":"n02Y","kind":"bash"},
     {"source_kind":"unit-ability","source_key":"A0J7","unit_rawcode":"n02Y","kind":"pulverize"},

@@ -220,6 +220,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     if kind == "native-target-debuff":
         from project_cripple import project
         return project(recipe, fields, protected, mechanics)
+    if kind == "orb-acid-bomb":
+        from project_orb_acid_bomb import project
+        return project(recipe, fields, protected, mechanics)
     if kind == "orb-charm":
         from project_orb_charm import project
         return project(recipe, fields, protected, mechanics)

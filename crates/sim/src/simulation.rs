@@ -6846,6 +6846,18 @@ struct PendingAttackEffectResult {
     chain_event: Option<ChainLightningEvent>,
     chain_state: Option<ChainLightningState>,
     charm: Option<OrbCharmRequest>,
+    acid_bomb: Option<AcidBombRequest>,
+}
+
+/// A landed orb hit whose native Acid Bomb child passed target eligibility.
+#[derive(Debug, Clone, Copy)]
+struct AcidBombRequest {
+    profile: crate::AcidBombProfile,
+    source: SimId,
+    team: Team,
+    origin: SimPoint,
+    target: SimId,
+    destination: SimPoint,
 }
 
 /// A landed orb hit whose native Charm child passed target eligibility.
@@ -7180,6 +7192,18 @@ fn apply_pending_attack_effects(
             }
             TriggeredAttackEffect::Charm(profile) => {
                 result.charm = orb_charm_request(units, index, source, profile);
+            }
+            TriggeredAttackEffect::AcidBomb(profile) => {
+                if native_actions::acid_bomb::eligible(&units[index], source.team, profile) {
+                    result.acid_bomb = Some(AcidBombRequest {
+                        profile,
+                        source: source.id,
+                        team: source.team,
+                        origin: source.position,
+                        target: units[index].id,
+                        destination: units[index].position,
+                    });
+                }
             }
             TriggeredAttackEffect::EntanglingRoots(profile) => {
                 if !units[index].classifications.spell_immune

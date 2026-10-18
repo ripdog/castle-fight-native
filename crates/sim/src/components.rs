@@ -562,6 +562,8 @@ pub enum TriggeredAttackEffect {
     ChainLightning(ChainLightningEffectProfile),
     EntanglingRoots(EntanglingRootsEffectProfile),
     Charm(OrbCharmProfile),
+    /// Free native Acid Bomb cast by a landed orb attack; the missile is an independent action.
+    AcidBomb(AcidBombProfile),
 }
 
 /// Free native Charm invoked by a landed orb attack. Ownership-event behaviour is the versioned

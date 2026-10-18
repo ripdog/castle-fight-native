@@ -405,6 +405,16 @@ impl Simulation {
                                     completed_tick,
                                 );
                             }
+                            if let Some(request) = pending.acid_bomb {
+                                self.launch_acid_bomb(
+                                    request.source,
+                                    request.team,
+                                    request.origin,
+                                    request.target,
+                                    request.destination,
+                                    request.profile,
+                                );
+                            }
                             if let Some(state) = pending.cone_wave {
                                 self.launch_attack_cone_wave(state);
                             }
