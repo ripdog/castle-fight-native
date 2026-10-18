@@ -2,7 +2,36 @@
 from decimal import Decimal, ROUND_CEILING
 
 
+def project_searing_arrows(recipe, fields, unit, protected, detail):
+    """Native ACsa: a default-active bonus-damage weapon mode with no collateral splash."""
+    def number(key, scale=1):
+        return int((Decimal(str(fields[key.lower()])) * scale).to_integral_value(rounding=ROUND_CEILING))
+    cost = int(Decimal(protected.get('mana_cost', fields['cost1'])))
+    cooldown = Decimal(protected.get('cooldown', fields['cool1']))
+    tokens = set(fields['targs1'].split(','))
+    movement = tokens & {'air', 'ground', 'structure'}
+    if (detail['default_active_alias'] != recipe['source_key'] or not {'enemies', 'enemy'} & tokens
+            or tokens - {'air', 'ground', 'structure', 'enemy', 'enemies', 'neutral'} or not movement
+            or number('levels') != 1 or cooldown != 0 or cost < 0
+            or any(number(k) != 0 for k in ['cast1', 'dur1', 'herodur1'])
+            or number('missilehoming') != 1 or not unit['attack1_weapon_type'].startswith('missile')):
+        raise ValueError('native Searing Arrows requires its default-active homing missile weapon mode and free cast clocks')
+    mask = sum(bit for token, bit in [('ground', 1), ('air', 2), ('structure', 4)] if token in movement)
+    p = {'primary_targets': mask, 'ability': int.from_bytes(recipe['source_key'].encode(), 'big'), 'mana_cost': cost,
+        'bonus_damage': number('dataa1'), 'speed_per_tick': int(Decimal(fields['missilespeed']) * 1024 / 30),
+        # No area: an empty collateral mask keeps the orb machinery from touching bystanders.
+        'splash': {'full_radius': 0, 'medium_radius': 0, 'outer_radius': 0,
+            'medium_damage_per_10k': 0, 'outer_damage_per_10k': 0, 'targets': 0}}
+    if p['bonus_damage'] < 0 or p['speed_per_tick'] <= 0:
+        raise ValueError('native Searing Arrows requires nonnegative bonus damage and positive missile speed')
+    return {**recipe, 'profile': p, 'provenance': {'source': 'resolved/object-fields.tsv', 'native_base': detail['native_base'],
+        'default_active_alias': detail['default_active_alias'], 'targets': fields['targs1'],
+        'protected_resources': protected, 'native_cast_range': fields['rng1'], 'missile_art': fields['missileart']}}
+
+
 def project(recipe, fields, unit, protected, detail):
+    if detail['native_base'] == 'ACsa':
+        return project_searing_arrows(recipe, fields, unit, protected, detail)
     def number(key, scale=1):
         return int((Decimal(str(fields[key.lower()])) * scale).to_integral_value(rounding=ROUND_CEILING))
     cost = int(Decimal(protected.get('mana_cost', fields['cost1'])))

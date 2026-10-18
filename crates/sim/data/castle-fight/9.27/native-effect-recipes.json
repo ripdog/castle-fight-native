@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0GG","unit_rawcode":"n02T","kind":"mana-attack-orb"},
+    {"source_kind":"unit-ability","source_key":"A0HL","unit_rawcode":"n02T","kind":"critical-strike"},
     {"source_kind":"unit-ability","source_key":"A0G2","unit_rawcode":"n02S","kind":"poison"},
     {"source_kind":"unit-ability","source_key":"A0HM","unit_rawcode":"n02S","kind":"critical-strike"},
     {"source_kind":"unit-ability","source_key":"A0GL","unit_rawcode":"n02U","kind":"fan-of-knives"},

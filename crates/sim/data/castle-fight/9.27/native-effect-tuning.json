@@ -4,6 +4,51 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0GG",
+      "unit_rawcode": "n02T",
+      "kind": "mana-attack-orb",
+      "profile": {
+        "primary_targets": 5,
+        "ability": 1093683015,
+        "mana_cost": 10,
+        "bonus_damage": 45,
+        "speed_per_tick": 51200,
+        "splash": {
+          "full_radius": 0,
+          "medium_radius": 0,
+          "outer_radius": 0,
+          "medium_damage_per_10k": 0,
+          "outer_damage_per_10k": 0,
+          "targets": 0
+        }
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "ACsa",
+        "default_active_alias": "A0GG",
+        "targets": "enemies,ground,neutral,structure",
+        "protected_resources": {
+          "mana_cost": "10"
+        },
+        "native_cast_range": "375",
+        "missile_art": "Abilities\\\\Weapons\\\\SearingArrow\\\\SearingArrowMissile.mdl"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0HL",
+      "unit_rawcode": "n02T",
+      "kind": "critical-strike",
+      "chance_per_10k": 10000,
+      "damage_multiplier_per_10k": 30000,
+      "targets": "air-units",
+      "provenance": {
+        "ability": "A0HL",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A0G2",
       "unit_rawcode": "n02S",
       "kind": "poison",
