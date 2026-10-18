@@ -284,7 +284,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u64(structures.len() as u64);
                 for structure in structures {
                     hash.write_u64(structure.id.0);
-                    hash_content_identity(&mut hash, structure.content);
+                    hash_content_identity(&mut hash, structure.content.as_ref());
                     match structure.owner {
                         Some(owner) => {
                             hash.write_u8(1);
@@ -455,7 +455,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 "canonical state omitted an entity with an invalid authoritative component shape"
             );
         };
-        match entity {
+        match &entity {
             CanonicalEntity::WorldFreezer { id, state } => {
                 hash.write_u8(16);
                 hash.write_u64(id.0);
@@ -567,7 +567,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                     } => {
                         hash.write_u8(20);
                         hash.write_u64(child.0);
-                        hash.write_u64(expires_tick);
+                        hash.write_u64(*expires_tick);
                     }
                     NativeAction::ImmediateSummonOrder {
                         source,
@@ -578,8 +578,8 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u8(17);
                         hash.write_u64(source.0);
                         hash.write_u32(ability.0);
-                        hash.write_u64(due_tick);
-                        hash.write_u16(resume_delay_ticks);
+                        hash.write_u64(*due_tick);
+                        hash.write_u16(*resume_delay_ticks);
                     }
                     NativeAction::SummonFamily {
                         source,
@@ -590,7 +590,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u8(18);
                         hash.write_u64(source.0);
                         hash.write_u32(ability.0);
-                        hash.write_u64(expires_tick);
+                        hash.write_u64(*expires_tick);
                         hash.write_u64(children.len() as u64);
                         for child in children {
                             hash.write_u64(child.0);
@@ -599,7 +599,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                     NativeAction::ResumeAttack { source, due_tick } => {
                         hash.write_u8(14);
                         hash.write_u64(source.0);
-                        hash.write_u64(due_tick);
+                        hash.write_u64(*due_tick);
                     }
                     NativeAction::SupportOrders(state) => {
                         hash.write_u8(13);
@@ -706,7 +706,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u64(state.source.0);
                         hash.write_u64(state.target.0);
                         hash.write_u64(state.generation.0);
-                        hash_poison_profile(&mut hash, state.profile);
+                        hash_poison_profile(&mut hash, &state.profile);
                         hash.write_u64(state.next_pulse_tick);
                         hash.write_u64(state.expires_tick);
                     }
@@ -742,22 +742,22 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         expires_tick,
                     } => {
                         hash.write_u8(24);
-                        hash.write_u8(u8::from(flying));
+                        hash.write_u8(u8::from(*flying));
                         hash.write_u8(owner.0);
                         hash.write_u8(team.0);
                         hash.write_u16(map_version.major);
                         hash.write_u16(map_version.minor);
-                        hash.write_u32(rawcode);
+                        hash.write_u32(*rawcode);
                         hash.write_i32(position.x);
                         hash.write_i32(position.y);
-                        hash.write_u64(expires_tick);
+                        hash.write_u64(*expires_tick);
                     }
                     NativeAction::Hailstone(state) => {
                         hash.write_u8(2);
                         hash.write_u64(state.source.0);
                         hash.write_u8(state.team.0);
                         hash.write_u64(state.target.0);
-                        hash_hailstone_profile(&mut hash, state.profile);
+                        hash_hailstone_profile(&mut hash, &state.profile);
                         hash.write_i32(state.origin.x);
                         hash.write_i32(state.origin.y);
                         hash.write_i32(state.destination.x);
@@ -770,7 +770,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u64(state.source.0);
                         hash.write_u8(state.team.0);
                         hash.write_u64(state.target.0);
-                        hash_ensnare_profile(&mut hash, state.profile);
+                        hash_ensnare_profile(&mut hash, &state.profile);
                         hash.write_i32(state.launch_position.x);
                         hash.write_i32(state.launch_position.y);
                         hash.write_i32(state.position.x);
@@ -788,7 +788,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u64(state.source.0);
                         hash.write_u8(state.team.0);
                         hash.write_u64(state.target.0);
-                        hash_native_bolt_profile(&mut hash, state.profile);
+                        hash_native_bolt_profile(&mut hash, &state.profile);
                         hash.write_i32(state.launch_position.x);
                         hash.write_i32(state.launch_position.y);
                         hash.write_u64(state.launch_tick);
@@ -801,7 +801,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u8(0);
                         hash.write_u64(state.source.0);
                         hash.write_u8(state.team.0);
-                        hash_healing_wave_profile(&mut hash, state.profile);
+                        hash_healing_wave_profile(&mut hash, &state.profile);
                         hash.write_u64(state.started_tick);
                         hash.write_u8(state.jump_index);
                         hash.write_u64(state.current_target.0);
@@ -860,13 +860,13 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         super::building_spells::ControlAction::DefenderDefend => 1,
                         super::building_spells::ControlAction::DefenderAttack => 2,
                     });
-                    hash_hex_profile(&mut hash, callback.profile);
+                    hash_hex_profile(&mut hash, &callback.profile);
                 }
             }
             CanonicalEntity::Unit(unit) => {
                 hash.write_u8(0);
                 hash.write_u64(unit.id.0);
-                hash_content_identity(&mut hash, unit.content);
+                hash_content_identity(&mut hash, unit.content.as_ref());
                 hash.write_u8(unit.owner.0);
                 hash.write_u8(unit.team.0);
                 hash.write_i32(unit.position.x);
@@ -875,27 +875,27 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_i32(unit.health.max);
                 hash.write_u32(unit.health_regeneration.per_second_per_10k);
                 hash.write_u32(unit.health_regeneration.remainder_per_10k_hz);
-                hash_attack_delivery(&mut hash, unit.attack.delivery);
+                hash_attack_delivery(&mut hash, &unit.attack.delivery);
                 hash_action_timing(&mut hash, unit.action_timing);
                 hash.write_u8(unit.attack_targets.bits());
                 hash.write_u8(unit.damage_type.stable_tag());
                 hash.write_u8(unit.armor.armor_type.stable_tag());
                 hash.write_i32(i32::from(unit.armor.armor_points));
-                hash_passive_unit_effects(&mut hash, unit.passive_effects);
+                hash_passive_unit_effects(&mut hash, &unit.passive_effects);
                 hash.write_u8(match unit.movement_class {
                     MovementClass::Ground => 0,
                     MovementClass::Air => 1,
                 });
                 hash.write_u8(u8::from(unit.mechanical));
-                hash_unit_classifications(&mut hash, unit.classifications);
-                hash_shrine_state(&mut hash, unit.shrine_state);
+                hash_unit_classifications(&mut hash, &unit.classifications);
+                hash_shrine_state(&mut hash, &unit.shrine_state);
                 hash_optional_u32(&mut hash, unit.build_time_ticks);
                 hash_optional_u32(&mut hash, unit.repair_time_ticks);
                 hash.write_i32(unit.attack.damage);
                 hash.write_i32(unit.attack.range);
                 hash.write_i32(unit.attack.acquisition_range);
                 hash.write_u16(unit.attack.cooldown_ticks);
-                hash_secondary_attack(&mut hash, unit.secondary_attack);
+                hash_secondary_attack(&mut hash, unit.secondary_attack.as_ref());
                 hash.write_i32(unit.movement.speed_per_tick);
                 hash.write_u16(unit.cooldown.remaining);
                 hash.write_u64(unit.attack_sequence.0);
@@ -904,7 +904,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(u8::from(unit.target.ally_defense_lock));
                 hash_optional_sim_id(&mut hash, unit.retaliation.attacker);
                 hash_optional_u64(&mut hash, unit.retaliation.attacked_tick);
-                hash_status_state(&mut hash, unit.status);
+                hash_status_state(&mut hash, &unit.status);
                 match unit.navigation.avoidance_goal {
                     NavigationGoal::None => hash.write_u8(0),
                     NavigationGoal::Objective(team) => {
@@ -935,12 +935,12 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                     }
                     None => hash.write_u8(0),
                 }
-                if let Some(spellcasting) = unit.spellcasting {
+                if let Some(spellcasting) = &unit.spellcasting {
                     hash.write_u8(1);
                     hash.write_i32(spellcasting.mana.maximum);
                     hash.write_i32(spellcasting.mana.starting);
                     hash.write_u64(u64::from(spellcasting.mana.regen_per_tick_per_10k));
-                    hash_automatic_ability(&mut hash, spellcasting.ability);
+                    hash_automatic_ability(&mut hash, &spellcasting.ability);
                     let state = unit
                         .ability_state
                         .expect("spellcasting unit missing ability state");
@@ -958,20 +958,20 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 } else {
                     hash.write_u8(0);
                 }
-                hash_additional_abilities(&mut hash, unit.additional_abilities);
+                hash_additional_abilities(&mut hash, unit.additional_abilities.as_ref());
                 match &unit.resurrection {
                     None => hash.write_u8(0),
                     Some(ResurrectionDefinitionSource::CurrentUnit) => hash.write_u8(1),
                     Some(ResurrectionDefinitionSource::Original(definition)) => {
                         hash.write_u8(2);
-                        hash_resolved_unit_definition(&mut hash, Some(**definition));
+                        hash_resolved_unit_definition(&mut hash, Some(&**definition));
                     }
                 }
             }
             CanonicalEntity::Building(building) => {
                 hash.write_u8(1);
                 hash.write_u64(building.id.0);
-                hash_content_identity(&mut hash, building.content);
+                hash_content_identity(&mut hash, building.content.as_ref());
                 match building.owner {
                     Some(owner) => {
                         hash.write_u8(1);
@@ -991,8 +991,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                     building
                         .passive_effects
                         .as_deref()
-                        .copied()
-                        .unwrap_or_default(),
+                        .unwrap_or(&PassiveUnitEffects::EMPTY),
                 );
                 if let Some(regeneration) = building.health_regeneration {
                     hash.write_u8(1);
@@ -1001,26 +1000,26 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 } else {
                     hash.write_u8(0);
                 }
-                if let Some(construction) = building.construction {
+                if let Some(construction) = &building.construction {
                     hash.write_u8(1);
                     hash.write_u64(construction.started_tick);
                     hash.write_u64(construction.complete_tick);
                     let mut definition_hash = Fnv64::new();
                     hash_building_definition(
                         &mut definition_hash,
-                        construction.building,
-                        construction.properties,
+                        &construction.building,
+                        &construction.properties,
                     );
-                    if let Some(source) = construction.upgrade_from {
+                    if let Some(source) = &construction.upgrade_from {
                         definition_hash.write_u8(1);
                         hash_building_definition(
                             &mut definition_hash,
-                            source.building,
-                            source.properties,
+                            &source.building,
+                            &source.properties,
                         );
                         definition_hash.write_i32(source.health.current);
                         definition_hash.write_i32(source.health.max);
-                        hash_building_runtime_state(&mut definition_hash, source.runtime);
+                        hash_building_runtime_state(&mut definition_hash, &source.runtime);
                     } else {
                         definition_hash.write_u8(0);
                     }
@@ -1039,7 +1038,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                     hash.write_u8(0);
                 }
                 hash_optional_u32(&mut hash, building.repair_time_ticks);
-                hash_unit_classifications(&mut hash, building.classifications);
+                hash_unit_classifications(&mut hash, &building.classifications);
                 hash.write_u8(building.damage_type.stable_tag());
                 hash.write_u8(building.armor.armor_type.stable_tag());
                 hash.write_i32(i32::from(building.armor.armor_points));
@@ -1049,7 +1048,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                     hash.write_u16(profile.interval_ticks);
                     hash.write_u16(profile.search_radius_cells);
                     hash.write_i32(profile.unit.health);
-                    hash_attack_delivery(&mut hash, profile.unit.attack.delivery);
+                    hash_attack_delivery(&mut hash, &profile.unit.attack.delivery);
                     hash.write_i32(profile.unit.attack.damage);
                     hash.write_i32(profile.unit.attack.range);
                     hash.write_i32(profile.unit.attack.acquisition_range);
@@ -1067,7 +1066,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                             .expect("production profile missing state")
                             .queued,
                     );
-                    hash_content_identity(&mut hash, building.production_content);
+                    hash_content_identity(&mut hash, building.production_content.as_ref());
                     match building.production_corpse {
                         Some(corpse) => {
                             hash.write_u8(1);
@@ -1105,7 +1104,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                             .expect("production building missing attack target mask")
                             .bits(),
                     );
-                    hash_secondary_attack(&mut hash, building.production_secondary_attack);
+                    hash_secondary_attack(&mut hash, building.production_secondary_attack.as_ref());
                     hash_action_timing(
                         &mut hash,
                         building
@@ -1130,15 +1129,15 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         &mut hash,
                         building
                             .production_passive_effects
+                            .as_ref()
                             .expect("production building missing unit passive effects"),
                     );
                     hash_additional_ability_definitions(
                         &mut hash,
-                        building.production_additional_abilities.as_deref().copied(),
+                        building.production_additional_abilities.as_deref(),
                     );
-                    hash_unit_classifications(&mut hash, building.production_classifications);
-                    if let Some(spellcasting) = building.production_spellcasting.as_deref().copied()
-                    {
+                    hash_unit_classifications(&mut hash, &building.production_classifications);
+                    if let Some(spellcasting) = building.production_spellcasting.as_deref() {
                         hash.write_u8(1);
                         hash_spellcasting_profile(&mut hash, spellcasting);
                     } else {
@@ -1148,10 +1147,10 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                     hash.write_u8(0);
                 }
                 hash_action_timing(&mut hash, building.action_timing);
-                hash_secondary_attack(&mut hash, building.secondary_attack);
+                hash_secondary_attack(&mut hash, building.secondary_attack.as_ref());
                 if let Some(attack) = building.attack {
                     hash.write_u8(1);
-                    hash_attack_delivery(&mut hash, attack.delivery);
+                    hash_attack_delivery(&mut hash, &attack.delivery);
                     hash.write_u8(
                         building
                             .attack_targets
@@ -1183,18 +1182,18 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 } else {
                     hash.write_u8(0);
                 }
-                if let Some(status) = building.status {
+                if let Some(status) = &building.status {
                     hash.write_u8(1);
                     hash_status_state(&mut hash, status);
                 } else {
                     hash.write_u8(0);
                 }
-                if let Some(spellcasting) = building.spellcasting {
+                if let Some(spellcasting) = &building.spellcasting {
                     hash.write_u8(1);
                     hash.write_i32(spellcasting.mana.maximum);
                     hash.write_i32(spellcasting.mana.starting);
                     hash.write_u64(u64::from(spellcasting.mana.regen_per_tick_per_10k));
-                    hash_automatic_ability(&mut hash, spellcasting.ability);
+                    hash_automatic_ability(&mut hash, &spellcasting.ability);
                     let state = building
                         .ability_state
                         .expect("spellcasting building missing ability state");
@@ -1212,7 +1211,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 } else {
                     hash.write_u8(0);
                 }
-                hash_additional_abilities(&mut hash, building.additional_abilities);
+                hash_additional_abilities(&mut hash, building.additional_abilities.as_ref());
             }
             CanonicalEntity::Projectile(projectile) => {
                 hash.write_u8(2);
@@ -1222,7 +1221,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(u8::from(projectile.projectile.source_is_building));
                 hash.write_u64(projectile.projectile.target.0);
                 hash.write_i32(projectile.projectile.damage);
-                hash_pending_attack_effects(&mut hash, projectile.projectile.on_hit);
+                hash_pending_attack_effects(&mut hash, &projectile.projectile.on_hit);
                 hash.write_u8(projectile.projectile.damage_type.stable_tag());
                 hash.write_i32(projectile.projectile.speed_per_tick);
                 hash.write_i32(projectile.projectile.launch_position.x);
@@ -1260,7 +1259,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u64(p.target.0);
                 hash.write_i32(p.damage);
                 hash.write_u8(p.damage_type.stable_tag());
-                hash_attack_delivery(&mut hash, p.delivery);
+                hash_attack_delivery(&mut hash, &p.delivery);
                 hash.write_i32(p.launch_position.x);
                 hash.write_i32(p.launch_position.y);
                 hash.write_u64(p.launch_tick);
@@ -1288,7 +1287,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(projectile.projectile.source_team.0);
                 hash.write_u8(projectile.projectile.target_mask.bits());
                 hash.write_i32(projectile.projectile.damage);
-                hash_frost_profile_option(&mut hash, projectile.projectile.frost);
+                hash_frost_profile_option(&mut hash, projectile.projectile.frost.as_ref());
                 match projectile.projectile.charm {
                     Some(charm) => {
                         hash.write_u8(1);
@@ -1302,14 +1301,14 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 match projectile.projectile.burning_oil {
                     Some(profile) => {
                         hash.write_u8(1);
-                        hash_burning_oil_profile(&mut hash, profile);
+                        hash_burning_oil_profile(&mut hash, &profile);
                     }
                     None => hash.write_u8(0),
                 }
                 match projectile.projectile.splash_falloff {
                     Some(profile) => {
                         hash.write_u8(1);
-                        hash_splash_falloff_profile(&mut hash, profile);
+                        hash_splash_falloff_profile(&mut hash, &profile);
                     }
                     None => hash.write_u8(0),
                 }
@@ -1366,8 +1365,8 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u64(corpse.corpse.created_tick);
                 hash.write_u64(corpse.corpse.decay_start_tick);
                 hash_optional_u64(&mut hash, corpse.corpse.expires_tick);
-                hash_resolved_unit_definition(&mut hash, corpse.corpse.resurrection);
-                hash_shrine_state(&mut hash, corpse.corpse.shrine_state);
+                hash_resolved_unit_definition(&mut hash, corpse.corpse.resurrection.as_ref());
+                hash_shrine_state(&mut hash, &corpse.corpse.shrine_state);
             }
             CanonicalEntity::BurningOil(zone) => {
                 hash.write_u8(7);
@@ -1376,7 +1375,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(zone.zone.source_team.0);
                 hash.write_i32(zone.zone.center.x);
                 hash.write_i32(zone.zone.center.y);
-                hash_burning_oil_profile(&mut hash, zone.zone.profile);
+                hash_burning_oil_profile(&mut hash, &zone.zone.profile);
                 hash.write_u64(zone.zone.created_tick);
                 hash.write_u16(zone.zone.pulse_index);
             }
@@ -1414,7 +1413,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_i32(revival.position.y);
                 hash.write_u64(revival.due_tick);
                 hash.write_u64(revival.death_generation);
-                hash_resolved_unit_definition(&mut hash, Some(revival.definition));
+                hash_resolved_unit_definition(&mut hash, Some(&revival.definition));
             }
             CanonicalEntity::NativeCarrier { id, state } => {
                 use crate::native_carriers::NativeCarrierState;
@@ -1444,8 +1443,8 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_i32(position.y);
                         hash.write_u16(map_version.major);
                         hash.write_u16(map_version.minor);
-                        hash.write_u64(ready_tick);
-                        hash.write_u64(sequence);
+                        hash.write_u64(*ready_tick);
+                        hash.write_u64(*sequence);
                     }
                     NativeCarrierState::Bolt(bolt) => {
                         hash.write_u8(1);
@@ -1499,8 +1498,8 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                     BuilderLocomotion::Hover => 1,
                 });
                 hash.write_u64(builder.configuration.build_catalog.len() as u64);
-                for rawcode in builder.configuration.build_catalog {
-                    hash.write_u64(u64::from(rawcode));
+                for rawcode in &builder.configuration.build_catalog {
+                    hash.write_u64(u64::from(*rawcode));
                 }
                 match builder.state.destination {
                     Some(destination) => {
@@ -1515,11 +1514,11 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u64(u64::from(builder.state.repair_progress_remainder));
                 hash.write_u8(u8::from(builder.state.repair_autocast_enabled));
                 hash.write_u64(builder.orders.0.len() as u64);
-                for order in builder.orders.0 {
+                for order in &builder.orders.0 {
                     match order {
                         BuilderOrder::Build(build) => {
                             hash.write_u8(0);
-                            hash_building_definition(&mut hash, build.building, build.properties);
+                            hash_building_definition(&mut hash, &build.building, &build.properties);
                         }
                         BuilderOrder::Move(point) => {
                             hash.write_u8(1);
@@ -1546,7 +1545,8 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
         }
     }
 
-    let mut alerts = defense_alerts.to_vec();
+    // Sort references rather than copies; every sort key field is hashed, so ties hash identically.
+    let mut alerts: Vec<&DefenseAlert> = defense_alerts.iter().collect();
     alerts.sort_unstable_by_key(|alert| {
         (
             alert.attacked_tick,
@@ -1849,7 +1849,7 @@ pub(super) struct CanonicalChainLightning {
     pub(super) state: ChainLightningState,
 }
 
-fn hash_content_identity(hash: &mut Fnv64, content: Option<ContentIdentity>) {
+fn hash_content_identity(hash: &mut Fnv64, content: Option<&ContentIdentity>) {
     match content {
         Some(content) => {
             hash.write_u8(1);
@@ -1891,9 +1891,9 @@ fn hash_optional_u64(hash: &mut Fnv64, value: Option<u64>) {
     }
 }
 
-fn hash_building_runtime_state(hash: &mut Fnv64, runtime: BuildingRuntimeState) {
-    hash_passive_unit_effects(hash, runtime.passive_effects);
-    hash_unit_classifications(hash, runtime.classifications);
+fn hash_building_runtime_state(hash: &mut Fnv64, runtime: &BuildingRuntimeState) {
+    hash_passive_unit_effects(hash, &runtime.passive_effects);
+    hash_unit_classifications(hash, &runtime.classifications);
     match runtime.production {
         Some(production) => {
             hash.write_u8(1);
@@ -1951,31 +1951,31 @@ fn hash_building_runtime_state(hash: &mut Fnv64, runtime: BuildingRuntimeState) 
         }
         None => hash.write_u8(0),
     }
-    hash_additional_abilities(hash, runtime.additional_abilities);
+    hash_additional_abilities(hash, runtime.additional_abilities.as_ref());
     match runtime.status {
         Some(status) => {
             hash.write_u8(1);
-            hash_status_state(hash, status);
+            hash_status_state(hash, &status);
         }
         None => hash.write_u8(0),
     }
 }
 
-fn hash_resolved_unit_definition(hash: &mut Fnv64, definition: Option<ResolvedUnitDefinition>) {
+fn hash_resolved_unit_definition(hash: &mut Fnv64, definition: Option<&ResolvedUnitDefinition>) {
     let Some(definition) = definition else {
         hash.write_u8(0);
         return;
     };
     hash.write_u8(1);
     hash.write_i32(definition.template.health);
-    hash_attack_delivery(hash, definition.template.attack.delivery);
+    hash_attack_delivery(hash, &definition.template.attack.delivery);
     hash.write_i32(definition.template.attack.damage);
     hash.write_i32(definition.template.attack.range);
     hash.write_i32(definition.template.attack.acquisition_range);
     hash.write_u16(definition.template.attack.cooldown_ticks);
     hash.write_i32(definition.template.movement.speed_per_tick);
-    let properties = definition.properties;
-    hash_content_identity(hash, properties.content);
+    let properties = &definition.properties;
+    hash_content_identity(hash, properties.content.as_ref());
     hash_action_timing(hash, properties.action_timing);
     hash.write_u32(properties.health_regen_per_second_per_10k);
     hash.write_u8(u8::from(properties.corpse.is_some()));
@@ -1990,27 +1990,27 @@ fn hash_resolved_unit_definition(hash: &mut Fnv64, definition: Option<ResolvedUn
         MovementClass::Air => 1,
     });
     hash.write_u8(u8::from(properties.mechanical));
-    hash_unit_classifications(hash, properties.classifications);
+    hash_unit_classifications(hash, &properties.classifications);
     hash_optional_u32(hash, properties.build_time_ticks);
     hash_optional_u32(hash, properties.repair_time_ticks);
     hash.write_u8(properties.attack_targets.bits());
-    hash_secondary_attack(hash, properties.secondary_attack);
+    hash_secondary_attack(hash, properties.secondary_attack.as_ref());
     hash.write_u8(properties.damage_type.stable_tag());
     hash.write_u8(properties.armor.armor_type.stable_tag());
     hash.write_i32(i32::from(properties.armor.armor_points));
-    hash_passive_unit_effects(hash, properties.passive_effects);
-    if let Some(spellcasting) = definition.spellcasting {
+    hash_passive_unit_effects(hash, &properties.passive_effects);
+    if let Some(spellcasting) = &definition.spellcasting {
         hash.write_u8(1);
         hash_spellcasting_profile(hash, spellcasting);
     } else {
         hash.write_u8(0);
     }
-    hash_additional_ability_definitions(hash, definition.additional_abilities);
+    hash_additional_ability_definitions(hash, definition.additional_abilities.as_ref());
 }
 
 fn hash_additional_ability_definitions(
     hash: &mut Fnv64,
-    definitions: Option<AdditionalAutomaticAbilityDefinitions>,
+    definitions: Option<&AdditionalAutomaticAbilityDefinitions>,
 ) {
     let Some(definitions) = definitions else {
         hash.write_u8(0);
@@ -2019,11 +2019,11 @@ fn hash_additional_ability_definitions(
     hash.write_u8(1);
     hash.write_u64(definitions.iter().count() as u64);
     for ability in definitions.iter() {
-        hash_automatic_ability(hash, ability);
+        hash_automatic_ability(hash, &ability);
     }
 }
 
-fn hash_additional_abilities(hash: &mut Fnv64, abilities: Option<AdditionalAutomaticAbilities>) {
+fn hash_additional_abilities(hash: &mut Fnv64, abilities: Option<&AdditionalAutomaticAbilities>) {
     let Some(abilities) = abilities else {
         hash.write_u8(0);
         return;
@@ -2031,7 +2031,7 @@ fn hash_additional_abilities(hash: &mut Fnv64, abilities: Option<AdditionalAutom
     hash.write_u8(1);
     hash.write_u64(abilities.iter().count() as u64);
     for entry in abilities.iter() {
-        hash_automatic_ability(hash, entry.profile);
+        hash_automatic_ability(hash, &entry.profile);
         hash.write_u64(entry.state.ready_tick);
         hash.write_u64(entry.state.cast_sequence);
         hash.write_u8(u8::from(entry.state.autocast_enabled));
@@ -2050,7 +2050,7 @@ fn hash_action_timing(hash: &mut Fnv64, timing: ActionTimingProfile) {
     hash.write_u16(timing.cast_point_ticks);
 }
 
-fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
+fn hash_status_state(hash: &mut Fnv64, status: &StatusState) {
     match status.purge {
         Some(p) => {
             hash.write_u8(1);
@@ -2119,7 +2119,7 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     }
     hash.write_u8(u8::from(status.poison.is_some()));
     if let Some(poison) = status.poison {
-        hash_poison_profile(hash, poison.profile);
+        hash_poison_profile(hash, &poison.profile);
         hash.write_i32(poison.total_damage_per_second);
         for buff in poison.buffs {
             hash.write_u8(u8::from(buff.is_some()));
@@ -2208,7 +2208,7 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     }
     hash.write_u8(u8::from(status.pending_cast.is_some()));
     if let Some(pending) = status.pending_cast {
-        hash_automatic_ability(hash, pending.ability);
+        hash_automatic_ability(hash, &pending.ability);
         hash.write_u64(pending.cast_sequence);
         hash.write_u64(pending.release_tick);
         match pending.target {
@@ -2281,7 +2281,7 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
     hash.write_u64(status.rooted_until_tick);
     hash.write_u8(u8::from(status.ensnare.is_some()));
     if let Some(net) = status.ensnare {
-        hash_ensnare_profile(hash, net.profile);
+        hash_ensnare_profile(hash, &net.profile);
         hash.write_u64(net.applied_tick);
         hash.write_u64(net.expires_tick);
     }
@@ -2382,8 +2382,8 @@ fn hash_status_state(hash: &mut Fnv64, status: StatusState) {
 
 fn hash_building_definition(
     hash: &mut Fnv64,
-    building: BuildingSpawn,
-    properties: BuildingGameplayProperties,
+    building: &BuildingSpawn,
+    properties: &BuildingGameplayProperties,
 ) {
     hash.write_u8(building.team.0);
     hash.write_i32(building.footprint.min_x);
@@ -2391,15 +2391,15 @@ fn hash_building_definition(
     hash.write_u16(building.footprint.width);
     hash.write_u16(building.footprint.height);
     hash.write_i32(building.health);
-    hash_content_identity(hash, properties.content);
-    hash_passive_unit_effects(hash, properties.passive_effects);
-    hash_unit_classifications(hash, properties.classifications);
+    hash_content_identity(hash, properties.content.as_ref());
+    hash_passive_unit_effects(hash, &properties.passive_effects);
+    hash_unit_classifications(hash, &properties.classifications);
     hash_optional_u32(hash, properties.construction_time_ticks);
     hash_optional_u32(hash, properties.repair_time_ticks);
     hash.write_u32(properties.health_regen_per_second_per_10k);
     hash.write_u8(properties.attack_targets.bits());
     hash_action_timing(hash, properties.action_timing);
-    hash_secondary_attack(hash, properties.secondary_attack);
+    hash_secondary_attack(hash, properties.secondary_attack.as_ref());
     hash.write_u8(properties.damage_type.stable_tag());
     hash.write_u8(properties.armor.armor_type.stable_tag());
     hash.write_i32(i32::from(properties.armor.armor_points));
@@ -2419,30 +2419,30 @@ fn hash_building_definition(
         hash.write_u16(production.interval_ticks);
         hash.write_u16(production.search_radius_cells);
         hash.write_i32(production.unit.health);
-        hash_attack_delivery(hash, production.unit.attack.delivery);
+        hash_attack_delivery(hash, &production.unit.attack.delivery);
         hash.write_i32(production.unit.attack.damage);
         hash.write_i32(production.unit.attack.range);
         hash.write_i32(production.unit.attack.acquisition_range);
         hash.write_u16(production.unit.attack.cooldown_ticks);
         hash.write_i32(production.unit.movement.speed_per_tick);
-        let unit = properties.production_unit;
-        hash_content_identity(hash, unit.content);
+        let unit = &properties.production_unit;
+        hash_content_identity(hash, unit.content.as_ref());
         hash.write_u8(match unit.movement_class {
             MovementClass::Ground => 0,
             MovementClass::Air => 1,
         });
         hash.write_u8(u8::from(unit.mechanical));
-        hash_unit_classifications(hash, unit.classifications);
+        hash_unit_classifications(hash, &unit.classifications);
         hash_optional_u32(hash, unit.build_time_ticks);
         hash_optional_u32(hash, unit.repair_time_ticks);
         hash.write_u8(unit.attack_targets.bits());
-        hash_secondary_attack(hash, unit.secondary_attack);
+        hash_secondary_attack(hash, unit.secondary_attack.as_ref());
         hash.write_u32(unit.health_regen_per_second_per_10k);
         hash_action_timing(hash, unit.action_timing);
         hash.write_u8(unit.damage_type.stable_tag());
         hash.write_u8(unit.armor.armor_type.stable_tag());
         hash.write_i32(i32::from(unit.armor.armor_points));
-        hash_passive_unit_effects(hash, unit.passive_effects);
+        hash_passive_unit_effects(hash, &unit.passive_effects);
         if let Some(corpse) = unit.corpse {
             hash.write_u8(1);
             hash.write_u64(u64::from(corpse.definition.0));
@@ -2457,8 +2457,11 @@ fn hash_building_definition(
         } else {
             hash.write_u8(0);
         }
-        hash_additional_ability_definitions(hash, properties.production_additional_abilities);
-        if let Some(spellcasting) = properties.production_spellcasting {
+        hash_additional_ability_definitions(
+            hash,
+            properties.production_additional_abilities.as_ref(),
+        );
+        if let Some(spellcasting) = &properties.production_spellcasting {
             hash.write_u8(1);
             hash_spellcasting_profile(hash, spellcasting);
         } else {
@@ -2469,7 +2472,7 @@ fn hash_building_definition(
     }
     if let Some(attack) = building.attack {
         hash.write_u8(1);
-        hash_attack_delivery(hash, attack.delivery);
+        hash_attack_delivery(hash, &attack.delivery);
         hash.write_i32(attack.damage);
         hash.write_i32(attack.range);
         hash.write_i32(attack.acquisition_range);
@@ -2477,7 +2480,7 @@ fn hash_building_definition(
     } else {
         hash.write_u8(0);
     }
-    if let Some(spellcasting) = building.spellcasting {
+    if let Some(spellcasting) = &building.spellcasting {
         hash.write_u8(1);
         hash_spellcasting_profile(hash, spellcasting);
     } else {
@@ -2485,21 +2488,20 @@ fn hash_building_definition(
     }
 }
 
-fn hash_spellcasting_profile(hash: &mut Fnv64, spellcasting: SpellcastingProfile) {
+fn hash_spellcasting_profile(hash: &mut Fnv64, spellcasting: &SpellcastingProfile) {
     hash.write_i32(spellcasting.mana.maximum);
     hash.write_i32(spellcasting.mana.starting);
     hash.write_u64(u64::from(spellcasting.mana.regen_per_tick_per_10k));
-    hash_automatic_ability(hash, spellcasting.ability);
+    hash_automatic_ability(hash, &spellcasting.ability);
 }
 
-fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
-    let effects: Vec<_> = effects.iter().collect();
-    hash.write_u8(u8::try_from(effects.len()).expect("passive effect count fits u8"));
-    for effect in effects {
+fn hash_passive_unit_effects(hash: &mut Fnv64, effects: &PassiveUnitEffects) {
+    hash.write_u8(u8::try_from(effects.iter().count()).expect("passive effect count fits u8"));
+    for effect in effects.iter() {
         match effect {
             PassiveUnitEffect::Poison(profile) => {
                 hash.write_u8(15);
-                hash_poison_profile(hash, profile);
+                hash_poison_profile(hash, &profile);
             }
             PassiveUnitEffect::DamageThreshold(profile) => {
                 hash.write_u8(14);
@@ -2523,7 +2525,7 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
             }
             PassiveUnitEffect::SplashFalloff(profile) => {
                 hash.write_u8(6);
-                hash_splash_falloff_profile(hash, profile);
+                hash_splash_falloff_profile(hash, &profile);
             }
             PassiveUnitEffect::CriticalStrike(profile) => {
                 hash.write_u8(5);
@@ -2562,11 +2564,11 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
                 hash.write_u64(profile.hero_chance_per_10k.map_or(u64::MAX, u64::from));
                 hash.write_u64(profile.summoned_chance_per_10k.map_or(u64::MAX, u64::from));
                 hash.write_u8(profile.targets.bits());
-                hash_triggered_attack_effect(hash, profile.effect);
+                hash_triggered_attack_effect(hash, &profile.effect);
             }
             PassiveUnitEffect::BurningOil(profile) => {
                 hash.write_u8(4);
-                hash_burning_oil_profile(hash, profile);
+                hash_burning_oil_profile(hash, &profile);
             }
             PassiveUnitEffect::Cleave(profile) => {
                 hash.write_u8(7);
@@ -2722,7 +2724,7 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: PassiveUnitEffects) {
     }
 }
 
-fn hash_triggered_attack_effect(hash: &mut Fnv64, effect: TriggeredAttackEffect) {
+fn hash_triggered_attack_effect(hash: &mut Fnv64, effect: &TriggeredAttackEffect) {
     match effect {
         TriggeredAttackEffect::NativeDebuff { parent, profile } => {
             hash.write_u8(4);
@@ -2770,7 +2772,10 @@ fn hash_triggered_attack_effect(hash: &mut Fnv64, effect: TriggeredAttackEffect)
     }
 }
 
-fn hash_burning_oil_profile(hash: &mut Fnv64, profile: crate::components::BurningOilEffectProfile) {
+fn hash_burning_oil_profile(
+    hash: &mut Fnv64,
+    profile: &crate::components::BurningOilEffectProfile,
+) {
     hash.write_u64(u64::from(profile.ability.0));
     hash.write_i32(profile.radius);
     hash.write_i32(profile.full_damage);
@@ -2783,7 +2788,10 @@ fn hash_burning_oil_profile(hash: &mut Fnv64, profile: crate::components::Burnin
     hash.write_u8(u8::from(profile.target_buildings));
 }
 
-fn hash_splash_falloff_profile(hash: &mut Fnv64, profile: crate::components::SplashFalloffProfile) {
+fn hash_splash_falloff_profile(
+    hash: &mut Fnv64,
+    profile: &crate::components::SplashFalloffProfile,
+) {
     hash.write_i32(profile.full_radius);
     hash.write_i32(profile.medium_radius);
     hash.write_i32(profile.outer_radius);
@@ -2792,7 +2800,7 @@ fn hash_splash_falloff_profile(hash: &mut Fnv64, profile: crate::components::Spl
     hash.write_u8(profile.targets.bits());
 }
 
-fn hash_unit_classifications(hash: &mut Fnv64, flags: UnitClassifications) {
+fn hash_unit_classifications(hash: &mut Fnv64, flags: &UnitClassifications) {
     hash.write_u8(u8::from(flags.locust));
     hash.write_u8(u8::from(flags.hero));
     hash.write_u8(u8::from(flags.resistant_skin));
@@ -2812,7 +2820,7 @@ fn hash_unit_classifications(hash: &mut Fnv64, flags: UnitClassifications) {
     hash.write_u8(u8::from(flags.melee_attacker));
 }
 
-fn hash_shrine_state(hash: &mut Fnv64, state: ShrineRevivalState) {
+fn hash_shrine_state(hash: &mut Fnv64, state: &ShrineRevivalState) {
     hash.write_u8(u8::from(state.revived));
     hash.write_u8(u8::from(state.suppress_next_death));
     hash_optional_sim_id(hash, state.death_identity);
@@ -2828,7 +2836,7 @@ fn hash_feedback_profile(hash: &mut Fnv64, profile: crate::components::FeedbackE
 
 fn hash_frost_profile_option(
     hash: &mut Fnv64,
-    frost: Option<crate::components::FrostAttackEffectProfile>,
+    frost: Option<&crate::components::FrostAttackEffectProfile>,
 ) {
     match frost {
         None => hash.write_u8(0),
@@ -2844,7 +2852,7 @@ fn hash_frost_profile_option(
     }
 }
 
-fn hash_pending_attack_effects(hash: &mut Fnv64, effects: PendingAttackEffects) {
+fn hash_pending_attack_effects(hash: &mut Fnv64, effects: &PendingAttackEffects) {
     hash.write_u8(u8::from(effects.missile_ability.is_some()));
     if let Some(a) = effects.missile_ability {
         hash.write_u32(a.0);
@@ -2857,7 +2865,7 @@ fn hash_pending_attack_effects(hash: &mut Fnv64, effects: PendingAttackEffects) 
     }
     hash.write_u8(u8::from(effects.poison.is_some()));
     if let Some(profile) = effects.poison {
-        hash_poison_profile(hash, profile);
+        hash_poison_profile(hash, &profile);
     }
 
     hash.write_u8(u8::from(effects.corruption.is_some()));
@@ -2866,7 +2874,7 @@ fn hash_pending_attack_effects(hash: &mut Fnv64, effects: PendingAttackEffects) 
             hash.write_u64(word);
         }
     }
-    hash_frost_profile_option(hash, effects.frost);
+    hash_frost_profile_option(hash, effects.frost.as_ref());
     hash.write_u16(effects.stun_duration_ticks);
     if let Some(profile) = effects.feedback {
         hash.write_u8(1);
@@ -2877,21 +2885,21 @@ fn hash_pending_attack_effects(hash: &mut Fnv64, effects: PendingAttackEffects) 
     match effects.triggered_spell {
         Some(effect) => {
             hash.write_u8(1);
-            hash_triggered_attack_effect(hash, effect);
+            hash_triggered_attack_effect(hash, &effect);
         }
         None => hash.write_u8(0),
     }
     match effects.burning_oil {
         Some(profile) => {
             hash.write_u8(1);
-            hash_burning_oil_profile(hash, profile);
+            hash_burning_oil_profile(hash, &profile);
         }
         None => hash.write_u8(0),
     }
     match effects.splash_falloff {
         Some(profile) => {
             hash.write_u8(1);
-            hash_splash_falloff_profile(hash, profile);
+            hash_splash_falloff_profile(hash, &profile);
         }
         None => hash.write_u8(0),
     }
@@ -2905,7 +2913,7 @@ fn hash_hex_form(hash: &mut Fnv64, form: crate::building_mechanics::HexFormProfi
     hash.write_u8(form.armor.armor_type.stable_tag());
 }
 
-fn hash_hex_profile(hash: &mut Fnv64, profile: crate::building_mechanics::HexEffectProfile) {
+fn hash_hex_profile(hash: &mut Fnv64, profile: &crate::building_mechanics::HexEffectProfile) {
     hash.write_u16(profile.map_version.major);
     hash.write_u16(profile.map_version.minor);
     hash.write_u16(profile.duration_ticks);
@@ -2918,7 +2926,7 @@ fn hash_hex_profile(hash: &mut Fnv64, profile: crate::building_mechanics::HexEff
     hash_hex_form(hash, profile.air);
 }
 
-fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
+fn hash_automatic_ability(hash: &mut Fnv64, ability: &AutomaticAbilityProfile) {
     hash.write_u64(u64::from(ability.id.0));
     hash.write_i32(ability.mana_cost);
     hash.write_u16(ability.cooldown_ticks);
@@ -2947,7 +2955,7 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             search_radius,
             maximum_targets,
         } => {
-            hash_ensnare_profile(hash, profile);
+            hash_ensnare_profile(hash, &profile);
             hash.write_i32(search_radius);
             hash.write_u8(maximum_targets);
         }
@@ -2999,7 +3007,7 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
         AbilityEffect::BuildingAttackProxy(p) => {
             p.visit_canonical_words(|word| hash.write_u64(word))
         }
-        AbilityEffect::Hailstone(profile) => hash_hailstone_profile(hash, profile),
+        AbilityEffect::Hailstone(profile) => hash_hailstone_profile(hash, &profile),
         AbilityEffect::BuildingAura(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);
@@ -3123,7 +3131,7 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_u8(p.trigger_targets.bits());
             hash.write_u8(u8::from(p.trigger_invulnerable));
             hash.write_u8(u8::from(p.trigger_spell_immune));
-            hash_native_bolt_profile(hash, p.bolt);
+            hash_native_bolt_profile(hash, &p.bolt);
             hash.write_i32(p.child_range);
             hash.write_i32(p.vision_radius);
             hash.write_u16(p.vision_ticks);
@@ -3132,7 +3140,7 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_u16(map_version.major);
             hash.write_u16(map_version.minor);
         }
-        AbilityEffect::Hex { profile } => hash_hex_profile(hash, profile),
+        AbilityEffect::Hex { profile } => hash_hex_profile(hash, &profile),
         AbilityEffect::FaerieFire {
             native_buff: _,
             modifier,
@@ -3145,17 +3153,17 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_u16(duration_ticks);
             hash.write_u16(hero_duration_ticks);
         }
-        AbilityEffect::PhoenixFire(profile) => hash_native_bolt_profile(hash, profile),
+        AbilityEffect::PhoenixFire(profile) => hash_native_bolt_profile(hash, &profile),
         AbilityEffect::SolarStrike {
             profile,
             radius,
             maximum_targets,
         } => {
-            hash_native_bolt_profile(hash, profile);
+            hash_native_bolt_profile(hash, &profile);
             hash.write_i32(radius);
             hash.write_u8(maximum_targets);
         }
-        AbilityEffect::HealingWave(profile) => hash_healing_wave_profile(hash, profile),
+        AbilityEffect::HealingWave(profile) => hash_healing_wave_profile(hash, &profile),
         AbilityEffect::Damage { amount } => hash.write_i32(amount),
         AbilityEffect::Stun { duration_ticks } => hash.write_u16(duration_ticks),
         AbilityEffect::ModifyMovementSpeedPercent {
@@ -3328,7 +3336,7 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
             hash.write_i32(min_damage);
             hash.write_i32(max_damage);
             hash.write_i32(speed_per_tick);
-            hash_splash_falloff_profile(hash, splash);
+            hash_splash_falloff_profile(hash, &splash);
             hash.write_u64(u64::from(burning_oil.ability.0));
             hash.write_i32(burning_oil.radius);
             hash.write_i32(burning_oil.full_damage);
@@ -3343,7 +3351,7 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: AutomaticAbilityProfile) {
     }
 }
 
-fn hash_ensnare_profile(hash: &mut Fnv64, profile: crate::components::EnsnareProfile) {
+fn hash_ensnare_profile(hash: &mut Fnv64, profile: &crate::components::EnsnareProfile) {
     hash.write_u32(profile.ability.0);
     hash.write_u16(profile.duration_ticks);
     hash.write_u16(profile.hero_duration_ticks);
@@ -3354,7 +3362,7 @@ fn hash_ensnare_profile(hash: &mut Fnv64, profile: crate::components::EnsnarePro
     hash.write_i32(profile.melee_range);
 }
 
-fn hash_native_bolt_profile(hash: &mut Fnv64, profile: crate::components::NativeBoltProfile) {
+fn hash_native_bolt_profile(hash: &mut Fnv64, profile: &crate::components::NativeBoltProfile) {
     hash.write_u64(u64::from(profile.ability.0));
     hash.write_i32(profile.damage);
     hash.write_u16(profile.stun_ticks);
@@ -3366,7 +3374,7 @@ fn hash_native_bolt_profile(hash: &mut Fnv64, profile: crate::components::Native
     hash.write_u8(profile.targets.bits());
 }
 
-fn hash_healing_wave_profile(hash: &mut Fnv64, profile: crate::components::HealingWaveProfile) {
+fn hash_healing_wave_profile(hash: &mut Fnv64, profile: &crate::components::HealingWaveProfile) {
     hash.write_u64(u64::from(profile.ability.0));
     hash.write_i32(profile.healing);
     hash.write_i32(profile.trigger_healing);
@@ -3376,10 +3384,10 @@ fn hash_healing_wave_profile(hash: &mut Fnv64, profile: crate::components::Heali
     hash.write_u16(profile.recovery_ticks);
 }
 
-fn hash_secondary_attack(hash: &mut Fnv64, secondary: Option<SecondaryAttackProfile>) {
+fn hash_secondary_attack(hash: &mut Fnv64, secondary: Option<&SecondaryAttackProfile>) {
     if let Some(profile) = secondary {
         hash.write_u8(1);
-        hash_attack_delivery(hash, profile.attack.delivery);
+        hash_attack_delivery(hash, &profile.attack.delivery);
         hash.write_i32(profile.attack.damage);
         hash.write_i32(profile.attack.range);
         hash.write_i32(profile.attack.acquisition_range);
@@ -3392,9 +3400,9 @@ fn hash_secondary_attack(hash: &mut Fnv64, secondary: Option<SecondaryAttackProf
     }
 }
 
-fn hash_attack_delivery(hash: &mut Fnv64, delivery: AttackDelivery) {
+fn hash_attack_delivery(hash: &mut Fnv64, delivery: &AttackDelivery) {
     hash.write_u8(delivery.stable_tag());
-    match delivery {
+    match *delivery {
         AttackDelivery::Melee | AttackDelivery::RangedInstant => {}
         AttackDelivery::RangedGuaranteedHit { speed_per_tick } => {
             hash.write_i32(speed_per_tick);
@@ -3479,7 +3487,7 @@ impl Fnv64 {
     }
 }
 
-fn hash_hailstone_profile(hash: &mut Fnv64, p: crate::building_mechanics::HailstoneProfile) {
+fn hash_hailstone_profile(hash: &mut Fnv64, p: &crate::building_mechanics::HailstoneProfile) {
     hash.write_u16(p.map_version.major);
     hash.write_u16(p.map_version.minor);
     hash.write_u32(p.dummy_rawcode);
@@ -3503,14 +3511,14 @@ fn hash_hailstone_profile(hash: &mut Fnv64, p: crate::building_mechanics::Hailst
     hash.write_u16(p.vision_ticks);
 }
 
-fn hash_world_freezer_state(hash: &mut Fnv64, state: WorldFreezerState) {
+fn hash_world_freezer_state(hash: &mut Fnv64, state: &WorldFreezerState) {
     for word in state.profile.canonical_words() {
         hash.write_u64(word);
     }
     hash.write_u64(state.timer_origin_tick);
     hash.write_u64(state.timer_step);
     hash.write_u64(state.pending.len() as u64);
-    for cast in state.pending {
+    for cast in &state.pending {
         hash.write_u64(cast.source.0);
         hash.write_u8(cast.owner.0);
         hash.write_u8(cast.team.0);
@@ -3519,7 +3527,7 @@ fn hash_world_freezer_state(hash: &mut Fnv64, state: WorldFreezerState) {
         hash.write_u64(cast.due_tick);
     }
     hash.write_u64(state.orbs.len() as u64);
-    for orb in state.orbs {
+    for orb in &state.orbs {
         hash.write_u64(orb.id.0);
         hash.write_u64(orb.source.0);
         hash.write_u8(orb.owner.0);
@@ -3535,7 +3543,7 @@ fn hash_world_freezer_state(hash: &mut Fnv64, state: WorldFreezerState) {
     }
 }
 
-fn hash_poison_profile(hash: &mut Fnv64, profile: crate::PoisonProfile) {
+fn hash_poison_profile(hash: &mut Fnv64, profile: &crate::PoisonProfile) {
     hash.write_u32(profile.ability.0);
     hash.write_u32(profile.buff_rawcode);
     hash.write_i32(profile.damage_per_second);
