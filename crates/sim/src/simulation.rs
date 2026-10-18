@@ -2347,6 +2347,18 @@ impl Simulation {
             self.golden_shrine_support(Team(0)),
             self.golden_shrine_support(Team(1)),
         ];
+        let mut writeback = self.world.query::<(
+            &mut Health,
+            &mut AttackCooldown,
+            &mut AttackSequence,
+            &mut Position,
+            &mut NavigationState,
+            &mut TargetState,
+            &mut RetaliationState,
+            &mut StatusState,
+            Option<&mut ManaState>,
+            Option<&mut AutomaticAbilityState>,
+        )>();
         for (index, unit) in units.iter().enumerate() {
             if unit.removed_without_death {
                 if let Some(source) = source_damage_runtime::RetiredDamageSource::capture(unit) {
@@ -2408,62 +2420,54 @@ impl Simulation {
                 target_is_alive(*target, &units, &buildings, &unit_health, &building_health)
             });
 
-            let mut entity = self.world.entity_mut(unit.entity);
-            entity
-                .get_mut::<Health>()
-                .expect("unit health missing")
-                .current = unit_health[index];
-            entity.get_mut::<Health>().expect("unit health missing").max = unit.health_max;
-            entity
-                .get_mut::<AttackCooldown>()
-                .expect("unit cooldown missing")
-                .remaining = cooldowns[index];
-            entity
-                .get_mut::<AttackSequence>()
-                .expect("unit attack sequence missing")
-                .0 = attack_sequences[index];
-            entity
-                .get_mut::<Position>()
-                .expect("unit position missing")
-                .0 = positions[index];
-            *entity
-                .get_mut::<NavigationState>()
-                .expect("unit navigation state missing") = navigation_states[index];
-            let mut target_state = entity
-                .get_mut::<TargetState>()
-                .expect("unit target missing");
+            // Write-back goes through the cached query: each component is fetched by archetype
+            // slot instead of a TypeId lookup per component per unit.
+            let (
+                mut health,
+                mut cooldown,
+                mut attack_sequence_state,
+                mut position_state,
+                mut navigation,
+                mut target_state,
+                mut retaliation,
+                mut status_state,
+                mana,
+                ability,
+            ) = writeback
+                .get_mut(&mut self.world, unit.entity)
+                .expect("unit write-back components missing");
+            health.current = unit_health[index];
+            health.max = unit.health_max;
+            cooldown.remaining = cooldowns[index];
+            attack_sequence_state.0 = attack_sequences[index];
+            position_state.0 = positions[index];
+            *navigation = navigation_states[index];
             target_state.current = live_target;
             target_state.direct_retaliation_lock =
                 live_target.is_some() && unit.direct_retaliation_lock;
             target_state.ally_defense_lock = live_target.is_some() && unit.ally_defense_lock;
-            *entity
-                .get_mut::<RetaliationState>()
-                .expect("unit retaliation state missing") = match attackers_this_tick[index] {
+            *retaliation = match attackers_this_tick[index] {
                 Some(attacker) => RetaliationState {
                     attacker: Some(attacker),
                     attacked_tick: Some(completed_tick),
                 },
                 None => RetaliationState::default(),
             };
-            let mut status = unit.status;
+            // Copy the snapshot status once, straight into the world, then apply facing.
+            *status_state = unit.status;
             if positions[index] != unit.position {
-                status.facing_direction = SimPoint::new(
+                status_state.facing_direction = SimPoint::new(
                     positions[index].x - unit.position.x,
                     positions[index].y - unit.position.y,
                 );
             }
-            *entity
-                .get_mut::<StatusState>()
-                .expect("unit status state missing") = status;
-            if let Some(mut mana) = entity.get_mut::<ManaState>() {
+            if let Some(mut mana) = mana {
                 mana.current = unit
                     .mana_current
                     .expect("mana-bearing unit snapshot mana missing");
             }
             if unit.spellcasting.is_some() {
-                *entity
-                    .get_mut::<AutomaticAbilityState>()
-                    .expect("spellcasting unit ability state missing") = unit
+                *ability.expect("spellcasting unit ability state missing") = unit
                     .ability_state
                     .expect("spellcasting unit snapshot ability state missing");
             }
@@ -2513,6 +2517,14 @@ impl Simulation {
 
         let building_death_start = Instant::now();
         let mut building_deaths = Vec::new();
+        let mut building_writeback = self.world.query::<(
+            &mut Health,
+            Option<&mut AttackCooldown>,
+            Option<&mut TargetState>,
+            Option<&mut StatusState>,
+            Option<&mut ManaState>,
+            Option<&mut AutomaticAbilityState>,
+        )>();
         for (index, building) in buildings.iter().enumerate() {
             if building_health[index] <= 0 {
                 building_deaths.push(building.entity);
@@ -2521,38 +2533,42 @@ impl Simulation {
                 let live_target = building.target.filter(|target| {
                     target_is_alive(*target, &units, &buildings, &unit_health, &building_health)
                 });
-                let mut entity = self.world.entity_mut(building.entity);
-                entity
-                    .get_mut::<Health>()
-                    .expect("building health missing")
-                    .current = building_health[index];
-                if building.attack.is_some() {
-                    entity
-                        .get_mut::<AttackCooldown>()
-                        .expect("attack building cooldown missing")
-                        .remaining = building_cooldowns[index];
-                    let mut target_state = entity
-                        .get_mut::<TargetState>()
-                        .expect("attack building target missing");
-                    target_state.current = live_target;
-                    target_state.direct_retaliation_lock = false;
-                    target_state.ally_defense_lock = false;
-                }
-                if let Some(status) = building.status {
-                    entity.insert(status);
-                }
-                if building.spellcasting.is_some() {
-                    entity
-                        .get_mut::<ManaState>()
-                        .expect("spellcasting building mana missing")
-                        .current = building
-                        .mana_current
-                        .expect("spellcasting building snapshot mana missing");
-                    *entity
-                        .get_mut::<AutomaticAbilityState>()
-                        .expect("spellcasting building ability state missing") = building
-                        .ability_state
-                        .expect("spellcasting building snapshot ability state missing");
+                // A status that is absent from the world is inserted after the query borrow ends.
+                let missing_status = {
+                    let (mut health, cooldown, target_state, status_state, mana, ability) =
+                        building_writeback
+                            .get_mut(&mut self.world, building.entity)
+                            .expect("building write-back components missing");
+                    health.current = building_health[index];
+                    if building.attack.is_some() {
+                        cooldown
+                            .expect("attack building cooldown missing")
+                            .remaining = building_cooldowns[index];
+                        let mut target_state =
+                            target_state.expect("attack building target missing");
+                        target_state.current = live_target;
+                        target_state.direct_retaliation_lock = false;
+                        target_state.ally_defense_lock = false;
+                    }
+                    let mut missing_status = None;
+                    if let Some(status) = building.status {
+                        match status_state {
+                            Some(mut slot) => *slot = status,
+                            None => missing_status = Some(status),
+                        }
+                    }
+                    if building.spellcasting.is_some() {
+                        mana.expect("spellcasting building mana missing").current = building
+                            .mana_current
+                            .expect("spellcasting building snapshot mana missing");
+                        *ability.expect("spellcasting building ability state missing") = building
+                            .ability_state
+                            .expect("spellcasting building snapshot ability state missing");
+                    }
+                    missing_status
+                };
+                if let Some(status) = missing_status {
+                    self.world.entity_mut(building.entity).insert(status);
                 }
             }
         }
