@@ -1,7 +1,9 @@
 //! Integer, team-shared Warcraft-style visibility. Smoothing belongs exclusively to the client.
 use serde::{Deserialize, Serialize};
 
-use crate::{BuildingFootprint, ContentIdentity, PlayerId, SimId, SimPoint, Team};
+use crate::{
+    BuildingFootprint, ContentIdentity, PlayerId, SimId, SimPoint, Team, math::CellDivisor,
+};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SightProfile {
@@ -141,10 +143,9 @@ impl FogOfWar {
     }
 
     pub fn index(&self, point: SimPoint) -> Option<usize> {
-        let x =
-            (i64::from(point.x) - i64::from(self.origin.x)).div_euclid(i64::from(self.cell_size));
-        let y =
-            (i64::from(point.y) - i64::from(self.origin.y)).div_euclid(i64::from(self.cell_size));
+        let divisor = CellDivisor::new(self.cell_size);
+        let x = divisor.floor_div_wide(i64::from(point.x) - i64::from(self.origin.x));
+        let y = divisor.floor_div_wide(i64::from(point.y) - i64::from(self.origin.y));
         (x >= 0 && y >= 0 && (x as usize) < self.width && (y as usize) < self.height)
             .then(|| y as usize * self.width + x as usize)
     }
@@ -182,17 +183,18 @@ impl FogOfWar {
 
     /// Inclusive cell bounds of a circle's bounding box, clamped to the grid; `None` when empty.
     fn circle_bounds(&self, position: SimPoint, radius: i32) -> Option<(i32, i32, i32, i32)> {
-        let min_x = (position.x.saturating_sub(radius) - self.origin.x)
-            .div_euclid(self.cell_size)
+        let divisor = CellDivisor::new(self.cell_size);
+        let min_x = divisor
+            .floor_div(position.x.saturating_sub(radius) - self.origin.x)
             .max(0);
-        let min_y = (position.y.saturating_sub(radius) - self.origin.y)
-            .div_euclid(self.cell_size)
+        let min_y = divisor
+            .floor_div(position.y.saturating_sub(radius) - self.origin.y)
             .max(0);
-        let max_x = (position.x.saturating_add(radius) - self.origin.x)
-            .div_euclid(self.cell_size)
+        let max_x = divisor
+            .floor_div(position.x.saturating_add(radius) - self.origin.x)
             .min(self.width as i32 - 1);
-        let max_y = (position.y.saturating_add(radius) - self.origin.y)
-            .div_euclid(self.cell_size)
+        let max_y = divisor
+            .floor_div(position.y.saturating_add(radius) - self.origin.y)
             .min(self.height as i32 - 1);
         (min_x <= max_x && min_y <= max_y).then_some((min_x, min_y, max_x, max_y))
     }

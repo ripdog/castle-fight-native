@@ -1,4 +1,5 @@
 use super::*;
+use crate::math::CellDivisor;
 
 impl Simulation {
     pub(super) fn resolve_movement(
@@ -1375,9 +1376,8 @@ impl Simulation {
         collision_radius: Option<i32>,
     ) -> Option<NavCell> {
         let cell_size = self.config.navigation_cell_size;
-        let radius_cells = attack_range
-            .saturating_add(cell_size - 1)
-            .div_euclid(cell_size)
+        let radius_cells = CellDivisor::new(cell_size)
+            .floor_div(attack_range.saturating_add(cell_size - 1))
             .saturating_add(1);
         let target_cell = self.topology.cell_of_point(target);
         let range_sq = square_i32(attack_range);
@@ -1413,9 +1413,8 @@ impl Simulation {
         collision_radius: Option<i32>,
     ) -> Option<NavCell> {
         let cell_size = self.config.navigation_cell_size;
-        let radius_cells = attack_range
-            .saturating_add(cell_size - 1)
-            .div_euclid(cell_size)
+        let radius_cells = CellDivisor::new(cell_size)
+            .floor_div(attack_range.saturating_add(cell_size - 1))
             .saturating_add(1);
         let range_sq = square_i32(attack_range);
         let mut best: Option<(u64, i32, i32, NavCell)> = None;

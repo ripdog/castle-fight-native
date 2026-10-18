@@ -3,7 +3,10 @@ use std::{
     collections::{BinaryHeap, VecDeque},
 };
 
-use crate::{components::BuildingFootprint, math::SimPoint};
+use crate::{
+    components::BuildingFootprint,
+    math::{CellDivisor, SimPoint},
+};
 
 const UNREACHABLE: u32 = u32::MAX;
 
@@ -42,6 +45,7 @@ impl PursuitStep {
 #[derive(Debug, Clone)]
 pub struct TopologyGrid {
     cell_size: i32,
+    divisor: CellDivisor,
     min: NavCell,
     width: usize,
     height: usize,
@@ -70,11 +74,12 @@ impl TopologyGrid {
         let len = width
             .checked_mul(height)
             .expect("navigation grid too large");
-        let objective = objectives.map(|point| {
-            NavCell::new(point.x.div_euclid(cell_size), point.y.div_euclid(cell_size))
-        });
+        let divisor = CellDivisor::new(cell_size);
+        let objective = objectives
+            .map(|point| NavCell::new(divisor.floor_div(point.x), divisor.floor_div(point.y)));
         let mut grid = Self {
             cell_size,
+            divisor,
             min,
             width,
             height,
@@ -104,8 +109,8 @@ impl TopologyGrid {
     #[must_use]
     pub fn cell_of_point(&self, point: SimPoint) -> NavCell {
         NavCell::new(
-            point.x.div_euclid(self.cell_size),
-            point.y.div_euclid(self.cell_size),
+            self.divisor.floor_div(point.x),
+            self.divisor.floor_div(point.y),
         )
     }
 

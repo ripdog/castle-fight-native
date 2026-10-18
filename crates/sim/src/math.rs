@@ -78,3 +78,65 @@ mod tests {
         );
     }
 }
+
+/// Floor division by a fixed positive cell size. Power-of-two sizes divide with an arithmetic
+/// shift, which is exactly `div_euclid` for a positive divisor; other sizes use `div_euclid`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CellDivisor {
+    size: i32,
+    shift: Option<u32>,
+}
+
+impl CellDivisor {
+    #[must_use]
+    pub(crate) const fn new(size: i32) -> Self {
+        assert!(size > 0, "cell size must be positive");
+        let shift = if size.count_ones() == 1 {
+            Some(size.trailing_zeros())
+        } else {
+            None
+        };
+        Self { size, shift }
+    }
+
+    #[inline]
+    #[must_use]
+    pub(crate) fn floor_div(self, value: i32) -> i32 {
+        let quotient = match self.shift {
+            Some(shift) => value >> shift,
+            None => value.div_euclid(self.size),
+        };
+        debug_assert_eq!(quotient, value.div_euclid(self.size));
+        quotient
+    }
+
+    #[inline]
+    #[must_use]
+    pub(crate) fn floor_div_wide(self, value: i64) -> i64 {
+        let quotient = match self.shift {
+            Some(shift) => value >> shift,
+            None => value.div_euclid(i64::from(self.size)),
+        };
+        debug_assert_eq!(quotient, value.div_euclid(i64::from(self.size)));
+        quotient
+    }
+}
+
+#[cfg(test)]
+mod cell_divisor_tests {
+    use super::*;
+
+    #[test]
+    fn shift_path_matches_euclidean_division_for_negative_values() {
+        for size in [1, 2, 1024, 1 << 15, 1 << 16, 1 << 18, 1 << 30, 3, 1000] {
+            let divisor = CellDivisor::new(size);
+            for value in [i32::MIN, -1025, -1, 0, 1, 1023, 1024, 65_537, i32::MAX] {
+                assert_eq!(divisor.floor_div(value), value.div_euclid(size));
+                assert_eq!(
+                    divisor.floor_div_wide(i64::from(value)),
+                    i64::from(value).div_euclid(i64::from(size))
+                );
+            }
+        }
+    }
+}

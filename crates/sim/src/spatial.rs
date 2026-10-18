@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::math::SimPoint;
+use crate::math::{CellDivisor, SimPoint};
 
 const NONE: usize = usize::MAX;
 
@@ -30,6 +30,7 @@ impl SpatialPartition {
 #[derive(Debug)]
 pub struct SpatialGrid {
     cell_size: i32,
+    divisor: CellDivisor,
     /// Maps each partition to its slot in `partitions`; looked up once per query.
     slots: HashMap<SpatialPartition, usize>,
     partitions: Vec<PartitionCells>,
@@ -110,7 +111,7 @@ struct ReservationEntry {
 
 #[derive(Debug)]
 pub struct SpatialReservationGrid {
-    cell_size: i32,
+    divisor: CellDivisor,
     min_cell_x: i32,
     min_cell_y: i32,
     width: usize,
@@ -128,14 +129,14 @@ impl SpatialGrid {
         cell_size: i32,
         entries: impl IntoIterator<Item = (SpatialPartition, usize, SimPoint)>,
     ) -> Self {
-        assert!(cell_size > 0);
+        let divisor = CellDivisor::new(cell_size);
         let mut slots = HashMap::new();
         let mut partitions: Vec<PartitionCells> = Vec::new();
         // Entries in input order, tagged with their partition slot and cell.
         let mut placed: Vec<(usize, usize, i32, i32)> = Vec::new();
 
         for (partition, index, position) in entries {
-            let (x, y) = cell_of(position, cell_size);
+            let (x, y) = cell_of(position, divisor);
             let slot = *slots.entry(partition).or_insert_with(|| {
                 partitions.push(PartitionCells::with_cell(x, y));
                 partitions.len() - 1
@@ -189,6 +190,7 @@ impl SpatialGrid {
 
         Self {
             cell_size,
+            divisor,
             slots,
             partitions,
         }
@@ -212,8 +214,8 @@ impl SpatialGrid {
         };
         let min = SimPoint::new(center.x - radius, center.y - radius);
         let max = SimPoint::new(center.x + radius, center.y + radius);
-        let (min_x, min_y) = cell_of(min, self.cell_size);
-        let (max_x, max_y) = cell_of(max, self.cell_size);
+        let (min_x, min_y) = cell_of(min, self.divisor);
+        let (max_x, max_y) = cell_of(max, self.divisor);
         let min_x = min_x.max(cells.min_x);
         let min_y = min_y.max(cells.min_y);
         let max_x = max_x.min(cells.max_x);
@@ -246,9 +248,9 @@ impl SpatialGrid {
         let cell_size = self.cell_size;
         let min = SimPoint::new(center.x - radius, center.y - radius);
         let max = SimPoint::new(center.x + radius, center.y + radius);
-        let (min_x, min_y) = cell_of(min, cell_size);
-        let (max_x, max_y) = cell_of(max, cell_size);
-        let (center_x, center_y) = cell_of(center, cell_size);
+        let (min_x, min_y) = cell_of(min, self.divisor);
+        let (max_x, max_y) = cell_of(max, self.divisor);
+        let (center_x, center_y) = cell_of(center, self.divisor);
         let max_ring = (center_x - min_x)
             .max(max_x - center_x)
             .max(center_y - min_y)
@@ -355,10 +357,10 @@ impl SpatialReservationGrid {
         entry_capacity: usize,
         entries: impl IntoIterator<Item = (usize, SimPoint)>,
     ) -> Self {
-        assert!(cell_size > 0);
+        let divisor = CellDivisor::new(cell_size);
         assert!(bounds_max.x >= bounds_min.x && bounds_max.y >= bounds_min.y);
-        let (min_cell_x, min_cell_y) = cell_of(bounds_min, cell_size);
-        let (max_cell_x, max_cell_y) = cell_of(bounds_max, cell_size);
+        let (min_cell_x, min_cell_y) = cell_of(bounds_min, divisor);
+        let (max_cell_x, max_cell_y) = cell_of(bounds_max, divisor);
         let width =
             usize::try_from(max_cell_x - min_cell_x + 1).expect("reservation grid width overflow");
         let height =
@@ -367,7 +369,7 @@ impl SpatialReservationGrid {
             .checked_mul(height)
             .expect("reservation grid too large");
         let mut grid = Self {
-            cell_size,
+            divisor,
             min_cell_x,
             min_cell_y,
             width,
@@ -476,8 +478,8 @@ impl SpatialReservationGrid {
             position.x.saturating_add(search_distance),
             position.y.saturating_add(search_distance),
         );
-        let (mut min_x, mut min_y) = cell_of(min, self.cell_size);
-        let (mut max_x, mut max_y) = cell_of(max, self.cell_size);
+        let (mut min_x, mut min_y) = cell_of(min, self.divisor);
+        let (mut max_x, mut max_y) = cell_of(max, self.divisor);
         let grid_max_x = self.min_cell_x + self.width as i32 - 1;
         let grid_max_y = self.min_cell_y + self.height as i32 - 1;
         min_x = min_x.max(self.min_cell_x);
@@ -513,7 +515,7 @@ impl SpatialReservationGrid {
     }
 
     fn bucket_index(&self, position: SimPoint) -> Option<usize> {
-        let (x, y) = cell_of(position, self.cell_size);
+        let (x, y) = cell_of(position, self.divisor);
         if x < self.min_cell_x || y < self.min_cell_y {
             return None;
         }
@@ -534,8 +536,8 @@ impl SpatialReservationGrid {
     }
 }
 
-fn cell_of(point: SimPoint, cell_size: i32) -> (i32, i32) {
-    (point.x.div_euclid(cell_size), point.y.div_euclid(cell_size))
+fn cell_of(point: SimPoint, divisor: CellDivisor) -> (i32, i32) {
+    (divisor.floor_div(point.x), divisor.floor_div(point.y))
 }
 
 #[cfg(test)]
@@ -544,9 +546,10 @@ mod tests {
 
     #[test]
     fn negative_coordinates_use_euclidean_cells() {
-        assert_eq!(cell_of(SimPoint::new(-1, -1), 10), (-1, -1));
-        assert_eq!(cell_of(SimPoint::new(-10, -10), 10), (-1, -1));
-        assert_eq!(cell_of(SimPoint::new(-11, -11), 10), (-2, -2));
+        let divisor = CellDivisor::new(10);
+        assert_eq!(cell_of(SimPoint::new(-1, -1), divisor), (-1, -1));
+        assert_eq!(cell_of(SimPoint::new(-10, -10), divisor), (-1, -1));
+        assert_eq!(cell_of(SimPoint::new(-11, -11), divisor), (-2, -2));
     }
 
     #[test]
