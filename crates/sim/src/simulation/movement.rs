@@ -25,6 +25,10 @@ impl Simulation {
         radius_objective_keys.sort_unstable();
         radius_objective_keys.dedup();
         for (team, radius) in radius_objective_keys {
+            if !self.radius_center_masks.contains_key(&radius) {
+                let mask = self.topology.center_traversable_mask(radius);
+                self.radius_center_masks.insert(radius, mask);
+            }
             if self.radius_objective_fields.contains_key(&(team, radius)) {
                 continue;
             }
@@ -484,6 +488,14 @@ impl Simulation {
         }
     }
 
+    /// Precomputed center-traversability mask for a collision radius, prepared at the start of
+    /// `resolve_movement`. `None` falls back to the exact geometric check, which gives the same answers.
+    fn center_mask(&self, collision_radius: Option<i32>) -> Option<&[bool]> {
+        collision_radius
+            .and_then(|radius| self.radius_center_masks.get(&radius))
+            .map(Vec::as_slice)
+    }
+
     fn route_to_cell(
         &self,
         source_cell: NavCell,
@@ -502,6 +514,7 @@ impl Simulation {
                 cached_fallback,
                 radius,
                 route_bias,
+                self.center_mask(collision_radius),
             )
         } else {
             self.topology
@@ -562,6 +575,7 @@ impl Simulation {
                 field,
                 radius,
                 route_bias,
+                self.center_mask(unit.collision_radius_override),
             )
         } else {
             self.topology
@@ -792,6 +806,7 @@ impl Simulation {
             None,
             unit.collision_radius,
             sidestep_sign(unit.id),
+            None,
         );
         let Some(next_cell) = route.next_cell else {
             return MovementDecision {

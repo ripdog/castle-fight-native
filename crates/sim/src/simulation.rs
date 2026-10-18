@@ -721,6 +721,9 @@ pub struct Simulation {
     topology_dirty: bool,
     pursuit_cache: BTreeMap<(NavCell, NavCell, Option<i32>, i8), NavCell>,
     radius_objective_fields: BTreeMap<(u8, i32), Vec<u32>>,
+    /// Derived from the topology per collision radius (see `TopologyGrid::center_traversable_mask`).
+    /// Never hashed or serialized; cleared wherever `radius_objective_fields` is cleared.
+    radius_center_masks: BTreeMap<i32, Vec<bool>>,
     defense_alerts: Vec<DefenseAlert>,
     last_attacks: Vec<AttackEvent>,
     last_ability_casts: Vec<AbilityCastEvent>,
@@ -903,6 +906,7 @@ impl Simulation {
             topology_dirty: false,
             pursuit_cache: BTreeMap::new(),
             radius_objective_fields: BTreeMap::new(),
+            radius_center_masks: BTreeMap::new(),
             defense_alerts: Vec::new(),
             last_attacks: Vec::new(),
             last_ability_casts: Vec::new(),
@@ -3227,6 +3231,7 @@ impl Simulation {
         self.topology_dirty = false;
         self.pursuit_cache.clear();
         self.radius_objective_fields.clear();
+        self.radius_center_masks.clear();
         true
     }
 

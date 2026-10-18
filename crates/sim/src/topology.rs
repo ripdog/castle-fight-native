@@ -297,14 +297,13 @@ impl TopologyGrid {
         self.step_from_distance_field_with_bias(from, field, bias)
     }
 
-    pub(crate) fn objective_distance_field_with_radius(&self, team: u8, radius: i32) -> Vec<u32> {
+    /// Per-cell mask of cells whose center can host a circle of `radius` inside the cell's own
+    /// component. Callers that route with a fixed radius use it through `center_circle_ok`, which
+    /// answers the same question as `circle_is_traversable_in_component(center_of_cell(cell))`.
+    pub(crate) fn center_traversable_mask(&self, radius: i32) -> Vec<bool> {
         debug_assert!(radius >= 0);
-        let Some(base_field) = self.objective_distance.get(usize::from(team)) else {
-            return vec![UNREACHABLE; self.blocked.len()];
-        };
-
-        let mut valid = vec![false; self.blocked.len()];
-        for (index, is_valid) in valid.iter_mut().enumerate() {
+        let mut mask = vec![false; self.blocked.len()];
+        for (index, is_valid) in mask.iter_mut().enumerate() {
             let cell = self.cell_from_index(index);
             let Some(component) = self.component_id(cell) else {
                 continue;
@@ -315,6 +314,16 @@ impl TopologyGrid {
                 component,
             );
         }
+        mask
+    }
+
+    pub(crate) fn objective_distance_field_with_radius(&self, team: u8, radius: i32) -> Vec<u32> {
+        debug_assert!(radius >= 0);
+        let Some(base_field) = self.objective_distance.get(usize::from(team)) else {
+            return vec![UNREACHABLE; self.blocked.len()];
+        };
+
+        let valid = self.center_traversable_mask(radius);
 
         let mut radius_component = vec![UNREACHABLE; self.blocked.len()];
         let mut component_best = Vec::new();
@@ -396,10 +405,11 @@ impl TopologyGrid {
         field: &[u32],
         radius: i32,
         bias: i32,
+        center_mask: Option<&[bool]>,
     ) -> Option<NavCell> {
         let component = self.component_id(from)?;
         self.step_from_distance_field_with_filter(from, field, bias, |cell| {
-            self.radius_transition_is_traversable(from, cell, radius, component)
+            self.radius_transition_is_traversable(from, cell, radius, component, center_mask)
         })
     }
 
@@ -523,6 +533,7 @@ impl TopologyGrid {
         cached_fallback: Option<NavCell>,
         radius: i32,
         bias: i32,
+        center_mask: Option<&[bool]>,
     ) -> PursuitStep {
         debug_assert!(bias == -1 || bias == 1);
         if !self.same_component(from, target) {
@@ -532,11 +543,7 @@ impl TopologyGrid {
             return PursuitStep::none();
         };
         if from == target {
-            return if self.circle_is_traversable_in_component(
-                self.center_of_cell(from),
-                radius,
-                component,
-            ) {
+            return if self.center_circle_ok(from, radius, component, center_mask) {
                 PursuitStep {
                     next_cell: Some(from),
                     used_a_star: false,
@@ -548,7 +555,9 @@ impl TopologyGrid {
             };
         }
 
-        if let Some(greedy) = self.greedy_route_first_step_with_radius(from, target, radius, bias) {
+        if let Some(greedy) =
+            self.greedy_route_first_step_with_radius(from, target, radius, bias, center_mask)
+        {
             return PursuitStep {
                 next_cell: Some(greedy),
                 used_a_star: false,
@@ -558,7 +567,13 @@ impl TopologyGrid {
         }
 
         if let Some(next_cell) = cached_fallback
-            && self.radius_transition_is_traversable(from, next_cell, radius, component)
+            && self.radius_transition_is_traversable(
+                from,
+                next_cell,
+                radius,
+                component,
+                center_mask,
+            )
         {
             return PursuitStep {
                 next_cell: Some(next_cell),
@@ -569,7 +584,7 @@ impl TopologyGrid {
         }
 
         let (next_cell, a_star_expanded_nodes) =
-            self.a_star_first_step_with_radius(from, target, radius, bias);
+            self.a_star_first_step_with_radius(from, target, radius, bias, center_mask);
         PursuitStep {
             next_cell,
             used_a_star: true,
@@ -614,6 +629,7 @@ impl TopologyGrid {
         target: NavCell,
         radius: i32,
         bias: i32,
+        center_mask: Option<&[bool]>,
     ) -> Option<NavCell> {
         debug_assert!(bias == -1 || bias == 1);
         let component = self.component_id(from)?;
@@ -626,7 +642,13 @@ impl TopologyGrid {
                 .into_iter()
                 .flatten()
                 .filter(|cell| {
-                    self.radius_transition_is_traversable(current, *cell, radius, component)
+                    self.radius_transition_is_traversable(
+                        current,
+                        *cell,
+                        radius,
+                        component,
+                        center_mask,
+                    )
                 })
                 .min_by_key(|cell| {
                     (
@@ -723,6 +745,7 @@ impl TopologyGrid {
         target: NavCell,
         radius: i32,
         bias: i32,
+        center_mask: Option<&[bool]>,
     ) -> (Option<NavCell>, usize) {
         debug_assert!(bias == -1 || bias == 1);
         let Some(start) = self.index(from) else {
@@ -734,8 +757,7 @@ impl TopologyGrid {
         let Some(component) = self.component_id(from) else {
             return (None, 0);
         };
-        if !self.circle_is_traversable_in_component(self.center_of_cell(target), radius, component)
-        {
+        if !self.center_circle_ok(target, radius, component, center_mask) {
             return (None, 0);
         }
 
@@ -774,11 +796,7 @@ impl TopologyGrid {
                 let Some(next) = self.index(neighbor) else {
                     continue;
                 };
-                if !self.circle_is_traversable_in_component(
-                    self.center_of_cell(neighbor),
-                    radius,
-                    component,
-                ) {
+                if !self.center_circle_ok(neighbor, radius, component, center_mask) {
                     continue;
                 }
                 let next_cost = cost.checked_add(1).expect("navigation path cost overflow");
@@ -949,14 +967,37 @@ impl TopologyGrid {
         ]
     }
 
+    /// Whether a circle of `radius` centered in `cell` fits in `component`. With a mask (from
+    /// `center_traversable_mask(radius)`) this is a table lookup; without one it runs the exact
+    /// geometric check. Both answer identically.
+    fn center_circle_ok(
+        &self,
+        cell: NavCell,
+        radius: i32,
+        component: u32,
+        center_mask: Option<&[bool]>,
+    ) -> bool {
+        match center_mask {
+            Some(mask) => self
+                .index(cell)
+                .is_some_and(|index| mask[index] && self.component[index] == component),
+            None => self.circle_is_traversable_in_component(
+                self.center_of_cell(cell),
+                radius,
+                component,
+            ),
+        }
+    }
+
     fn radius_transition_is_traversable(
         &self,
         from: NavCell,
         to: NavCell,
         radius: i32,
         component: u32,
+        center_mask: Option<&[bool]>,
     ) -> bool {
-        if !self.circle_is_traversable_in_component(self.center_of_cell(to), radius, component) {
+        if !self.center_circle_ok(to, radius, component, center_mask) {
             return false;
         }
         let dx = to.x - from.x;
@@ -971,9 +1012,7 @@ impl TopologyGrid {
             NavCell::new(from.x, from.y + dy),
         ]
         .into_iter()
-        .all(|side| {
-            self.circle_is_traversable_in_component(self.center_of_cell(side), radius, component)
-        })
+        .all(|side| self.center_circle_ok(side, radius, component, center_mask))
     }
 
     fn index(&self, cell: NavCell) -> Option<usize> {
@@ -1245,6 +1284,7 @@ mod tests {
             None,
             cell / 2 + 1,
             -1,
+            None,
         );
         assert!(result.used_a_star);
         assert!(result.a_star_expanded_nodes > 0);
@@ -1269,7 +1309,7 @@ mod tests {
 
         let field = grid.objective_distance_field_with_radius(0, radius);
         let first = grid
-            .step_from_distance_field_with_radius_bias(from, &field, radius, -1)
+            .step_from_distance_field_with_radius_bias(from, &field, radius, -1, None)
             .expect("radius-aware objective field should provide a detour");
         assert_ne!(first, NavCell::new(3, 3));
 
@@ -1280,7 +1320,7 @@ mod tests {
                 break;
             }
             current = grid
-                .step_from_distance_field_with_radius_bias(current, &field, radius, -1)
+                .step_from_distance_field_with_radius_bias(current, &field, radius, -1, None)
                 .expect("radius-aware objective detour should remain reachable");
             path.push(current);
         }
