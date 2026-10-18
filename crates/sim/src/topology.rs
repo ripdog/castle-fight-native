@@ -47,6 +47,9 @@ pub struct TopologyGrid {
     height: usize,
     blocked: Vec<bool>,
     component: Vec<u32>,
+    /// Chebyshev clearance per cell: every cell within this many cells (Chebyshev distance) is
+    /// in-grid, not blocked, and reachable. Recomputed whenever `blocked`/`component` change.
+    clearance: Vec<u16>,
     objective_distance: [Vec<u32>; 2],
 }
 
@@ -77,6 +80,7 @@ impl TopologyGrid {
             height,
             blocked: vec![false; len],
             component: vec![UNREACHABLE; len],
+            clearance: vec![0; len],
             objective_distance: [vec![UNREACHABLE; len], vec![UNREACHABLE; len]],
         };
 
@@ -175,7 +179,8 @@ impl TopologyGrid {
         component: u32,
     ) -> bool {
         debug_assert!(radius >= 0);
-        let Some(center_component) = self.component_id(self.cell_of_point(center)) else {
+        let center_cell = self.cell_of_point(center);
+        let Some(center_component) = self.component_id(center_cell) else {
             return false;
         };
         if center_component != component || !self.circle_is_inside_bounds(center, radius) {
@@ -183,6 +188,18 @@ impl TopologyGrid {
         }
         if radius == 0 {
             return true;
+        }
+
+        // Fast path: the scanned bounding box lies within Chebyshev distance
+        // `radius / cell_size + 1` of the center cell. If clearance covers that distance, every
+        // such cell is in-grid, unblocked and reachable, and the square is a filled block of
+        // cells, which is 4-connected (rebuild_components floods over 4-neighbours). All of them
+        // therefore share `center_component`, so the exact scan below would also return true.
+        if let Some(center_index) = self.index(center_cell) {
+            let reach = i64::from(radius / self.cell_size) + 1;
+            if i64::from(self.clearance[center_index]) >= reach {
+                return true;
+            }
         }
 
         let radius_i64 = i64::from(radius);
@@ -793,6 +810,62 @@ impl TopologyGrid {
             next_component = next_component
                 .checked_add(1)
                 .expect("too many nav components");
+        }
+        self.rebuild_clearance();
+    }
+
+    /// Multi-source BFS over the king-move graph, which yields exact Chebyshev distances.
+    /// Blocked, unreachable and out-of-grid cells are sources at distance zero. The grid is padded
+    /// by one ring of out-of-grid cells so border cells see the outside as bad.
+    fn rebuild_clearance(&mut self) {
+        let padded_width = self.width + 2;
+        let padded_height = self.height + 2;
+        let mut distance = vec![UNREACHABLE; padded_width * padded_height];
+        let mut queue = VecDeque::new();
+
+        for py in 0..padded_height {
+            for px in 0..padded_width {
+                let is_bad =
+                    if px == 0 || py == 0 || px == padded_width - 1 || py == padded_height - 1 {
+                        true
+                    } else {
+                        let index = (py - 1) * self.width + (px - 1);
+                        self.blocked[index] || self.component[index] == UNREACHABLE
+                    };
+                if is_bad {
+                    let padded_index = py * padded_width + px;
+                    distance[padded_index] = 0;
+                    queue.push_back(padded_index);
+                }
+            }
+        }
+
+        while let Some(current) = queue.pop_front() {
+            let next_distance = distance[current] + 1;
+            let cx = current % padded_width;
+            let cy = current / padded_width;
+            for ny in cy.saturating_sub(1)..=(cy + 1).min(padded_height - 1) {
+                for nx in cx.saturating_sub(1)..=(cx + 1).min(padded_width - 1) {
+                    let neighbor = ny * padded_width + nx;
+                    if distance[neighbor] == UNREACHABLE {
+                        distance[neighbor] = next_distance;
+                        queue.push_back(neighbor);
+                    }
+                }
+            }
+        }
+
+        // Clearance k means the nearest bad cell is at Chebyshev distance k + 1.
+        // Bad cells report 0 (their value is never consulted).
+        self.clearance.clear();
+        self.clearance.reserve(self.width * self.height);
+        for y in 0..self.height {
+            let row_start = (y + 1) * padded_width + 1;
+            self.clearance.extend(
+                distance[row_start..row_start + self.width]
+                    .iter()
+                    .map(|&d| u16::try_from(d.saturating_sub(1)).unwrap_or(u16::MAX)),
+            );
         }
     }
 
