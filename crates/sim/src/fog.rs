@@ -61,6 +61,13 @@ pub struct FogReveal {
     pub expires_tick: u64,
 }
 
+/// Contiguous range of grid cell indices, in row-major order.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CellRun {
+    pub(crate) start: u32,
+    pub(crate) len: u32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RememberedConstruction {
     pub started_tick: u64,
@@ -173,16 +180,8 @@ impl FogOfWar {
         )
     }
 
-    pub(crate) fn unveil_circle(
-        &mut self,
-        team: Team,
-        position: SimPoint,
-        radius: i32,
-        mut can_see: impl FnMut(SimPoint) -> bool,
-    ) {
-        if radius <= 0 {
-            return;
-        }
+    /// Inclusive cell bounds of a circle's bounding box, clamped to the grid; `None` when empty.
+    fn circle_bounds(&self, position: SimPoint, radius: i32) -> Option<(i32, i32, i32, i32)> {
         let min_x = (position.x.saturating_sub(radius) - self.origin.x)
             .div_euclid(self.cell_size)
             .max(0);
@@ -195,10 +194,78 @@ impl FogOfWar {
         let max_y = (position.y.saturating_add(radius) - self.origin.y)
             .div_euclid(self.cell_size)
             .min(self.height as i32 - 1);
+        (min_x <= max_x && min_y <= max_y).then_some((min_x, min_y, max_x, max_y))
+    }
+
+    /// Every cell in a circle's bounding box that is within `radius` and accepted by `can_see`,
+    /// ignoring current visibility, as ascending index runs. The origin cell is not included; see
+    /// `unveil_cached_circle`.
+    pub(crate) fn circle_runs(
+        &self,
+        position: SimPoint,
+        radius: i32,
+        mut can_see: impl FnMut(SimPoint) -> bool,
+    ) -> Vec<CellRun> {
+        let mut runs: Vec<CellRun> = Vec::new();
+        if radius <= 0 {
+            return runs;
+        }
+        let Some((min_x, min_y, max_x, max_y)) = self.circle_bounds(position, radius) else {
+            return runs;
+        };
         let radius_sq = i64::from(radius).pow(2) as u64;
-        if min_x > max_x || min_y > max_y {
+        for y in min_y..=max_y {
+            for x in min_x..=max_x {
+                let point = self.center(x, y);
+                if position.distance_sq(point) <= radius_sq && can_see(point) {
+                    let index = (y as usize * self.width + x as usize) as u32;
+                    match runs.last_mut() {
+                        Some(run) if run.start + run.len == index => run.len += 1,
+                        _ => runs.push(CellRun {
+                            start: index,
+                            len: 1,
+                        }),
+                    }
+                }
+            }
+        }
+        runs
+    }
+
+    /// Marks runs previously produced by `circle_runs` for the same circle, plus its origin cell.
+    /// Equivalent to `unveil_circle` with the same visibility predicate, for a positive radius.
+    pub(crate) fn unveil_cached_circle(
+        &mut self,
+        team: Team,
+        position: SimPoint,
+        runs: &[CellRun],
+    ) {
+        let origin = self.index(position);
+        let visible = &mut self.visible[usize::from(team.0)];
+        for run in runs {
+            let start = run.start as usize;
+            visible[start..start + run.len as usize].fill(1);
+        }
+        // A positive-radius source always occupies a visible cell, even below cell resolution.
+        if let Some(index) = origin {
+            visible[index] = 1;
+        }
+    }
+
+    pub(crate) fn unveil_circle(
+        &mut self,
+        team: Team,
+        position: SimPoint,
+        radius: i32,
+        mut can_see: impl FnMut(SimPoint) -> bool,
+    ) {
+        if radius <= 0 {
             return;
         }
+        let Some((min_x, min_y, max_x, max_y)) = self.circle_bounds(position, radius) else {
+            return;
+        };
+        let radius_sq = i64::from(radius).pow(2) as u64;
         for y in min_y..=max_y {
             let start = y as usize * self.width + min_x as usize;
             let end = y as usize * self.width + max_x as usize + 1;

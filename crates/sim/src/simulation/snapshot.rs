@@ -415,6 +415,7 @@ impl Simulation {
             player.resources = initial.resources;
         }
         self.fog.clone_from(&template.fog);
+        self.vision_cache = Default::default();
         self.team_objectives = template.team_objectives;
         self.gjallarhorn_constructed_count = template.gjallarhorn_constructed_count;
         self.shrine_death_generation = template.shrine_death_generation;
@@ -584,6 +585,7 @@ impl Simulation {
         );
         self.world = restored_world;
         self.fog.clone_from(&snapshot.fog);
+        self.vision_cache = Default::default();
         self.players.clone_from(&snapshot.players);
         self.lifecycle = snapshot.lifecycle;
         self.team_objectives = snapshot.team_objectives;

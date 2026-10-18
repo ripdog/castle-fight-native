@@ -750,6 +750,8 @@ pub struct Simulation {
     configuration_identity: u64,
     debug_buildings_invulnerable: bool,
     fog: Option<crate::FogOfWar>,
+    /// Derived from fog geometry and static line-of-sight inputs; excluded from state identity.
+    vision_cache: vision::VisionFootprintCache,
 }
 
 /// Times one sub-step into `$spans` and yields the expression's value. The timed expression runs
@@ -936,6 +938,7 @@ impl Simulation {
             next_visual_id: 1,
             configuration_identity,
             debug_buildings_invulnerable: false,
+            vision_cache: vision::VisionFootprintCache::default(),
         }
     }
 

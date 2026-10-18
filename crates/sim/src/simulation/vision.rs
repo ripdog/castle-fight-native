@@ -1,17 +1,20 @@
 use super::*;
-use crate::{FogOfWar, FogReveal, RememberedStructure};
+use crate::{FogOfWar, FogReveal, RememberedStructure, fog::CellRun};
+use std::collections::{HashMap, HashSet};
 
 impl Simulation {
     /// Readback also resolves tick-zero spawns and command-boundary teleports without advancing time.
     pub fn fog_of_war(&self) -> Option<FogOfWar> {
         let mut fog = self.fog.clone()?;
-        self.populate_vision(&mut fog);
+        self.populate_vision(&mut fog, &mut VisionFootprintCache::default());
         Some(fog)
     }
 
     pub(crate) fn refresh_vision(&mut self) {
         if let Some(mut fog) = self.fog.take() {
-            self.populate_vision(&mut fog);
+            let mut cache = std::mem::take(&mut self.vision_cache);
+            self.populate_vision(&mut fog, &mut cache);
+            self.vision_cache = cache;
             self.fog = Some(fog);
         }
     }
@@ -86,12 +89,13 @@ impl Simulation {
         }
     }
 
-    fn populate_vision(&self, fog: &mut FogOfWar) {
+    fn populate_vision(&self, fog: &mut FogOfWar, cache: &mut VisionFootprintCache) {
         let rules = self
             .config
             .fog
             .as_ref()
             .expect("fog rules accompany fog state");
+        cache.begin_call();
         for cells in &mut fog.visible {
             cells.fill(0);
         }
@@ -286,32 +290,53 @@ impl Simulation {
             }));
         }
         sources.sort_unstable_by_key(|source| source.0);
-        for &(_, team, position, radius, flying, revealed_teams, _, _, _, _) in &sources {
-            // Capture size outside the closure so mutating the visibility grid needs no clone.
+        let terrain = self.combat_rules.terrain_elevation.as_ref();
+        let blockers = rules.sight_blockers.as_slice();
+        let unveil_source = |fog: &mut FogOfWar,
+                             cache: &mut VisionFootprintCache,
+                             team: Team,
+                             position: SimPoint,
+                             radius: i32,
+                             flying: bool| {
             let cell_size = fog.cell_size;
-            fog.unveil_circle(team, position, radius, |point| {
-                flying
-                    || ground_line_visible(
-                        position,
-                        point,
-                        cell_size,
-                        self.combat_rules.terrain_elevation.as_ref(),
-                        &rules.sight_blockers,
-                    )
-            });
+            let can_see = |point| {
+                flying || ground_line_visible(position, point, cell_size, terrain, blockers)
+            };
+            if flying || radius <= 0 {
+                fog.unveil_circle(team, position, radius, can_see);
+                return;
+            }
+            // Ground line of sight depends only on (position, radius) for the match's fixed fog
+            // geometry, terrain and sight blockers. Cached footprints are the full visible set, so
+            // OR-ing them into the grid is order-independent and matches the skip-visible path.
+            let key = (position, radius);
+            if let Some(entry) = cache.entries.get_mut(&key) {
+                entry.last_used_call = cache.call;
+                fog.unveil_cached_circle(team, position, &entry.runs);
+            } else if cache.seen_last_call.contains(&key) && cache.seen_two_calls_ago.contains(&key)
+            {
+                let runs = fog
+                    .circle_runs(position, radius, can_see)
+                    .into_boxed_slice();
+                fog.unveil_cached_circle(team, position, &runs);
+                cache.entries.insert(
+                    key,
+                    CachedFootprint {
+                        runs,
+                        last_used_call: cache.call,
+                    },
+                );
+            } else {
+                fog.unveil_circle(team, position, radius, can_see);
+                cache.seen_this_call.insert(key);
+            }
+        };
+        for &(_, team, position, radius, flying, revealed_teams, _, _, _, _) in &sources {
+            unveil_source(fog, cache, team, position, radius, flying);
             // Faerie Fire shares the marked target's sight and tracks it as it moves.
             for observer in [Team(0), Team(1)] {
                 if observer != team && revealed_teams & (1 << observer.0) != 0 {
-                    fog.unveil_circle(observer, position, radius, |point| {
-                        flying
-                            || ground_line_visible(
-                                position,
-                                point,
-                                cell_size,
-                                self.combat_rules.terrain_elevation.as_ref(),
-                                &rules.sight_blockers,
-                            )
-                    });
+                    unveil_source(fog, cache, observer, position, radius, flying);
                 }
             }
         }
@@ -349,6 +374,41 @@ impl Simulation {
             ));
             fog.remembered_structures[team] = merge_remembered_structures(memory, &incoming);
         }
+        cache.finish_call();
+    }
+}
+
+/// Non-authoritative memo of full ground line-of-sight footprints, keyed by source position and
+/// radius. It never affects checksums, snapshots or equality, and it is only valid for one
+/// simulation's fixed fog geometry, terrain and sight blockers.
+#[derive(Default)]
+pub(super) struct VisionFootprintCache {
+    entries: HashMap<(SimPoint, i32), CachedFootprint>,
+    /// Keys whose footprint was marked by the line-of-sight path in the previous two populate calls.
+    /// A source must stay put across consecutive calls before its footprint is worth caching.
+    seen_two_calls_ago: HashSet<(SimPoint, i32)>,
+    seen_last_call: HashSet<(SimPoint, i32)>,
+    seen_this_call: HashSet<(SimPoint, i32)>,
+    call: u64,
+}
+
+struct CachedFootprint {
+    runs: Box<[CellRun]>,
+    last_used_call: u64,
+}
+
+impl VisionFootprintCache {
+    fn begin_call(&mut self) {
+        self.call += 1;
+    }
+
+    /// Evicts footprints unused this call. Eviction order never affects the visible grid.
+    fn finish_call(&mut self) {
+        let call = self.call;
+        self.entries.retain(|_, entry| entry.last_used_call == call);
+        std::mem::swap(&mut self.seen_two_calls_ago, &mut self.seen_last_call);
+        std::mem::swap(&mut self.seen_last_call, &mut self.seen_this_call);
+        self.seen_this_call.clear();
     }
 }
 
