@@ -476,10 +476,12 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
             "speed_per_tick": int(Decimal(fields["missilespeed"]) * 1024 / 30)})
     elif kind == "speed-aura":
         tokens = set(fields["targs1"].split(","))
-        hostile = tokens == {"air", "enemies", "ward"}
+        hostile_air = tokens == {"air", "enemies", "ward"}
+        hostile_ground = tokens == {"enemies", "ward", "ground", "invulnerable", "vulnerable"}
+        hostile = hostile_air or hostile_ground
         friendly = tokens == {"ground", "friend", "air", "self", "invulnerable", "vulnerable", "ward"}
         if mechanics["native_base"] != "AOae" or not (hostile or friendly):
-            raise ValueError("speed aura needs audited native hostile-air or friendly-unit semantics")
+            raise ValueError("speed aura needs audited native hostile or friendly-unit semantics")
         if number("dur1") != 0 or number("herodur1") != 0:
             raise ValueError("speed aura currently supports zero linger only")
         buffs = fields["buffid1"].split(",")
@@ -487,7 +489,8 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
             raise ValueError("speed aura must retain exactly one native buff family")
         effect.update(profile={"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
             "buff_rawcode": int.from_bytes(buffs[0].encode(), "big"), "radius": number("Area1", 1024),
-            "targets": 2 if hostile else 3, "hostile": hostile, "organic_only": False, "affects_invulnerable": friendly,
+            "targets": 2 if hostile_air else 1 if hostile_ground else 3, "hostile": hostile, "organic_only": False,
+            "affects_invulnerable": friendly or hostile_ground,
             "movement_percent_delta": number("DataA1", 100), "attack_speed_percent_delta": number("DataB1", 100)})
     elif kind == "native-aura":
         base = mechanics["native_base"]
@@ -878,6 +881,11 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
     building_spells = {row["ability_rawcode"]: row for row in rows(retained("resolved/building-spell-mechanics.tsv"))}
     spell_mechanics = {row["ability_rawcode"]: row for row in rows(retained("resolved/unit-spell-mechanics.tsv"))}
     spell_semantics = {row["ability_rawcode"]: row for row in rows(retained("resolved/unit-spell-semantics.tsv"))}
+    # A scripted ability shared by several bodies has one row per body; the recipe's unit picks its own.
+    spell_semantics_by_unit = {(row["unit_rawcode"], row["ability_rawcode"]): row
+        for row in rows(retained("resolved/unit-spell-semantics.tsv"))}
+    spell_mechanics_by_unit = {(row["unit_rawcode"], row["ability_rawcode"]): row
+        for row in rows(retained("resolved/unit-spell-mechanics.tsv"))}
     misc = dict(line.split("=", 1) for line in retained("war3mapMisc.txt").decode().splitlines() if "=" in line and not line.startswith("//"))
     effects = []
     seen = set()
@@ -903,7 +911,8 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             raise ValueError("native buff source must retain default-active autocast")
         spell = spell_mechanics.get("A02U" if recipe["kind"] == "siren-purge" else source)
         if recipe['kind'] in {'travelling-mana-clap', 'parasite-area-buff', 'parasite-script', 'impale-fan', 'native-impale'}:
-            spell = next(row for row in spell_mechanics.values() if row['unit_rawcode'] == recipe['unit_rawcode'])
+            spell = spell_mechanics_by_unit.get((recipe['unit_rawcode'], source)) or next(
+                row for row in spell_mechanics.values() if row['unit_rawcode'] == recipe['unit_rawcode'])
         if spell is None and recipe["kind"] in {"healing-wave", "solar-strike", "war-stomp", "howl-of-terror", "frost-nova", "ensnare"}:
             matches = [row for row in spell_mechanics.values() if row["unit_rawcode"] == recipe.get("unit_rawcode")
                 and source in spell_semantics[row["ability_rawcode"]]["effect_rawcodes"].split(",")]
@@ -995,7 +1004,8 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         if recipe["kind"] in {"impale-fan", "native-impale", "mana-attack-orb"}:
             detail["default_active_alias"] = default_autocast[recipe["unit_rawcode"]]
         if spell is not None and recipe["kind"] != "master-projectiles":
-            semantics = spell_semantics[spell["ability_rawcode"]]
+            semantics = spell_semantics_by_unit.get((spell["unit_rawcode"], spell["ability_rawcode"]),
+                spell_semantics[spell["ability_rawcode"]])
             effect_key = semantics["effect_rawcodes"].split(",")[0]
             detail.update(effect_key=effect_key, effect_fields=abilities.get(effect_key, {}),
                 effect_protected=protected.get(effect_key, {}), mechanics_row=spell, semantics_row=semantics)

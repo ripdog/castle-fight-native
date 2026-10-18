@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r160";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r161";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -861,7 +861,16 @@ impl CastleFightUnitKind {
             }
         }
         definition.passive_effects = PassiveUnitEffects::from_slice(&passive_effects);
-        let native_mana = mechanics.spellcasting.map(|profile| profile.mana);
+        // A scripted ability can be shared by bodies with different mana pools; the body's
+        // retained pool, not the pool of the recipe's source unit, applies.
+        let mut native_primary = mechanics.spellcasting;
+        if let Some((profile, mana)) = native_primary
+            .as_mut()
+            .zip(native_mana_profile_for_version(version, definition.rawcode))
+        {
+            profile.mana = mana;
+        }
+        let native_mana = native_primary.map(|profile| profile.mana);
         let native_additional = mechanics
             .additional_abilities
             .as_ref()
@@ -873,7 +882,7 @@ impl CastleFightUnitKind {
                 ability,
             });
         let (spellcasting, additional_abilities) = compose_spellcasting_profiles(
-            mechanics.spellcasting,
+            native_primary,
             self.human_spellcasting_9_27()
                 .into_iter()
                 .chain(native_additional),
@@ -1909,6 +1918,9 @@ fn stable_ability_id(
     let id = match (source.kind, source.key) {
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0G6") => {
             0x4000_020c
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0G8") => {
+            0x4000_021b
         }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0H3") => {
             0x4000_021a

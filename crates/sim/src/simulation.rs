@@ -45,6 +45,7 @@ mod native_immolation;
 mod night_elf;
 mod parasite_area_buff;
 mod locust_swarm;
+mod sand_cloud;
 mod parasite_script;
 mod permanent_grants;
 mod starfall;
@@ -5382,6 +5383,10 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                     minimum_delay_ticks,
                     maximum_delay_ticks,
                 } => assert!(maximum_life >= 0 && minimum_delay_ticks < maximum_delay_ticks),
+                crate::ParasiteChild::SandCloud(cloud) => {
+                    assert!(cloud.pulses > 0 && cloud.period_ticks > 0 && cloud.carrier_ticks > 0);
+                    assert!(cloud.standard.radius > 0 && cloud.special.radius > 0);
+                }
                 crate::ParasiteChild::LocustSwarm(swarm) => {
                     assert!(swarm.count > 0 && usize::from(swarm.count) <= crate::MAX_LOCUSTS);
                     assert!(swarm.max_per_target > 0 && swarm.duration_ticks > 0);

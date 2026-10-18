@@ -3,6 +3,101 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0G8",
+      "unit_rawcode": "n030",
+      "spellcasting": {
+        "mana": {
+          "maximum": 120,
+          "starting": 80,
+          "regen_per_tick_per_10k": 2147498648
+        },
+        "ability": {
+          "id": 1093683000,
+          "mana_cost": 35,
+          "cooldown_ticks": 360,
+          "range": 460800,
+          "target_policy": "RandomEnemyUnit",
+          "effect": {
+            "ParasiteScript": {
+              "parent": {
+                "buff_rawcode": 1110454585,
+                "map_version": {
+                  "major": 9,
+                  "minor": 27
+                },
+                "speed_per_tick": 64853,
+                "affects_invulnerable": false,
+                "duration_ticks": 1,
+                "hero_duration_ticks": 1,
+                "body_rawcode": 1852203634,
+                "count": 1,
+                "body_duration_ticks": 1
+              },
+              "parent_targets": 1,
+              "parent_organic_only": false,
+              "parent_nonhero_only": false,
+              "ability": 1093683000,
+              "child": {
+                "SandCloud": {
+                  "carrier_ticks": 171,
+                  "period_ticks": 30,
+                  "pulses": 5,
+                  "special_caster_rawcode": 1848652597,
+                  "standard": {
+                    "radius": 225280,
+                    "debuff": {
+                      "ability": 1093683009,
+                      "buff": 1110454866,
+                      "targets": 3,
+                      "organic_only": false,
+                      "duration_ticks": 36,
+                      "hero_duration_ticks": 36,
+                      "movement_percent_delta": 0,
+                      "attack_speed_percent_delta": 0,
+                      "damage_bonus_per_10k": 0,
+                      "ethereal": null,
+                      "miss_chance_per_10k": 3000
+                    }
+                  },
+                  "special": {
+                    "radius": 307200,
+                    "debuff": {
+                      "ability": 1093683280,
+                      "buff": 1110454866,
+                      "targets": 3,
+                      "organic_only": false,
+                      "duration_ticks": 36,
+                      "hero_duration_ticks": 36,
+                      "movement_percent_delta": 0,
+                      "attack_speed_percent_delta": 0,
+                      "damage_bonus_per_10k": 0,
+                      "ethereal": null,
+                      "miss_chance_per_10k": 4500
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 15000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "semantics": "resolved/unit-spell-semantics.tsv",
+        "functions": [
+          "UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceDesertAbilities_cast_registerUnitSpellWithTargetOrder_RaceDesertAbilities",
+          ""
+        ]
+      }
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A0H3",
       "unit_rawcode": "n034",

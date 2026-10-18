@@ -54,7 +54,7 @@ pub use components::{
     NativeBoltProfile, NativeBuffIdentity, NativeDebuffProfile, NativeNovaProfile,
     NativeParasiteProfile, NativeSummonProfile, OrbCharmProfile, Owner, ParasiteAreaBuffProfile,
     LocustSwarmProfile, LocustSwarmState, LocustState, MAX_LOCUSTS, ParasiteChild,
-    ParasiteScriptProfile, PendingParasiteScript,
+    ParasiteScriptProfile, PendingParasiteScript, SandCloudProfile, SandCloudState, SandCloudVariant,
     PassiveUnitEffect, PassiveUnitEffects, PendingAttackState, PendingCastState, PendingCastTarget,
     PermanentImmolationProfile, PlayerId, PoisonBuffStatus, PoisonProfile, PoisonStatus,
     ProductionProfile, PulverizeEffectProfile, PurgeProfile, PurgeState, ResolvedUnitDefinition,

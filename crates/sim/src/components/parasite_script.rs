@@ -4,6 +4,8 @@ use super::*;
 /// resources and the missile; the child is the map script's independent consequence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ParasiteChild {
+    /// Periodic dummy-cast miss-chance clouds at the parent's target position.
+    SandCloud(SandCloudProfile),
     /// Immediate dummy-cast Locust Swarm released at the parent's target position.
     LocustSwarm(LocustSwarmProfile),
     /// Delayed Chaos attack damage equal to a clamped steal, healing the caster by the same
@@ -29,6 +31,7 @@ impl ParasiteChild {
     pub(crate) fn canonical_words(self) -> [u64; 16] {
         match self {
             Self::LocustSwarm(p) => p.canonical_words(),
+            Self::SandCloud(p) => p.canonical_words(),
             Self::LifeSteal {
                 maximum_life,
                 minimum_delay_ticks,
@@ -143,4 +146,63 @@ pub struct LocustSwarmState {
     pub start_tick: u64,
     pub expires_tick: u64,
     pub locusts: [LocustState; MAX_LOCUSTS],
+}
+
+/// One cloud strength: the dummy's Silence-derived area and the miss-chance debuff it applies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct SandCloudVariant {
+    pub radius: i32,
+    pub debuff: NativeDebuffProfile,
+}
+
+/// A script that spawns a short-lived carrier and re-casts its area ability at a fixed period.
+/// The caster body type selects the stronger variant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct SandCloudProfile {
+    pub carrier_ticks: u16,
+    pub period_ticks: u16,
+    pub pulses: u8,
+    pub special_caster_rawcode: u32,
+    pub standard: SandCloudVariant,
+    pub special: SandCloudVariant,
+}
+
+impl SandCloudProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 16] {
+        let mut words = [0; 16];
+        words[0] = 3;
+        words[1] = u64::from(self.carrier_ticks);
+        words[2] = u64::from(self.period_ticks);
+        words[3] = u64::from(self.pulses);
+        words[4] = u64::from(self.special_caster_rawcode);
+        for (offset, variant) in [(5, self.standard), (10, self.special)] {
+            words[offset] = variant.radius as u64;
+            // Pack the variant's identity: ability, buff, duration, miss chance and movement.
+            words[offset + 1] = u64::from(variant.debuff.ability.0);
+            words[offset + 2] = u64::from(variant.debuff.buff);
+            words[offset + 3] = u64::from(variant.debuff.duration_ticks)
+                | u64::from(variant.debuff.hero_duration_ticks) << 16
+                | u64::from(variant.debuff.miss_chance_per_10k) << 32
+                | u64::from(variant.debuff.targets.bits()) << 48;
+            words[offset + 4] = variant.debuff.movement_percent_delta as u16 as u64
+                | (variant.debuff.attack_speed_percent_delta as u16 as u64) << 16
+                | (variant.debuff.damage_bonus_per_10k as u16 as u64) << 32
+                | u64::from(variant.debuff.organic_only) << 48;
+        }
+        words
+    }
+}
+
+/// A fixed-position carrier casting its cloud at the retained period.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SandCloudState {
+    pub variant: SandCloudVariant,
+    pub source: SimId,
+    pub owner: PlayerId,
+    pub team: Team,
+    pub center: SimPoint,
+    pub expires_tick: u64,
+    pub next_pulse_tick: u64,
+    pub period_ticks: u16,
+    pub pulses_remaining: u8,
 }

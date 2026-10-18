@@ -73,6 +73,46 @@ def _locust_swarm(recipe, detail, number, raw):
         'structure_damage_per_10k': number(structure[4], 10000), 'targets': mask}}
 
 
+def _sand_cloud(recipe, detail, number, raw):
+    sand = detail['functions']['spellSandCloud']
+    callback = detail['functions']['CallbackPeriodic_doPeriodically_RaceDesertAbilities_call_doPeriodically_RaceDesertAbilities']
+    match = re.search(
+        r'(\w+)=unit_getX\((\w+)\)(\w+)=unit_getY\(\2\)(\w+)=(\d+) if\(unit_getTypeId\((\w+)\)==(\d+)\)then \4=(\d+) end '
+        r'(\w+)=dummyCarrierWithAbility\(unit_getOwner\(\6\),\4,\{\1;\3\},([\d.]+)\)orderCodeAttack\(\6\)(\w+)=\w+:create\d+\(\)'
+        r'\w+\.ca=\9 \w+\.x=\1 \w+\.y=\3 \w+\.i=0 doPeriodically\(([\d.]+),\11\)end$', sand)
+    again = re.search(r'unit_issuePointOrderById\(\w+\.ca,P6,\{\w+\.x;\w+\.y\}\)\w+\.i=\(\w+\.i\+1\)if\(\w+\.i>=(\d+)\)then CallbackPeriodic_destroyCallbackPeriodic', callback)
+    if match is None or again is None:
+        raise ValueError('Sandcloud control flow changed: target-position carrier, caster-type variant and periodic point order')
+    standard, special_code, special = match[5], int(match[7]), match[8]
+    variants = []
+    for ability in (f'{standard}', f'{special}'):
+        pass
+    codes = [(int(match[5]), 'standard'), (int(match[8]), 'special')]
+    names = [value.to_bytes(4, 'big').decode() for value, _ in codes]
+    profiles = []
+    for name in names:
+        fields = detail['all_fields'][name]
+        tokens = set(fields['targs1'].split(','))
+        if (detail['all_bases'][name] != 'ACsi' or number(fields['dataa1']) != 0 or number(fields['datac1']) != 0
+            or number(fields['datad1']) != 0 or number(fields['cast1']) != 0 or len(fields['buffid1']) != 4
+            or not {'enemies', 'enemy'} & tokens or not tokens & {'air', 'ground'}
+            or tokens - {'air', 'ground', 'enemies', 'enemy', 'structure', 'neutral', 'invulnerable', 'vulnerable'}):
+            raise ValueError('Sandcloud child requires the audited free miss-chance Silence variant')
+        movement = tokens & {'air', 'ground'}
+        profiles.append({'radius': number(fields['area1'], 1024), 'debuff': {
+            'ability': raw(name), 'buff': raw(fields['buffid1']),
+            'targets': sum(bit for token, bit in [('ground', 1), ('air', 2)] if token in movement),
+            'organic_only': False, 'duration_ticks': number(fields['dur1'], 30), 'hero_duration_ticks': number(fields['herodur1'], 30),
+            'movement_percent_delta': 0, 'attack_speed_percent_delta': 0, 'damage_bonus_per_10k': 0, 'ethereal': None,
+            'miss_chance_per_10k': number(fields['datab1'], 10000)}})
+    period = Decimal(match[12])
+    if period != Decimal(1) or int(again[1]) != number(detail['semantic_parameters']['cast_iterations']):
+        raise ValueError('Sandcloud period/iterations disagree with the retained semantics')
+    return {'SandCloud': {'carrier_ticks': number(match[10], 30), 'period_ticks': number(period, 30),
+        'pulses': int(again[1]), 'special_caster_rawcode': special_code,
+        'standard': profiles[0], 'special': profiles[1]}}
+
+
 def project(recipe, fields, unit, protected, detail):
     number, raw = _helpers()
     row, semantics = detail['mechanics_row'], detail['semantics_row']
@@ -87,6 +127,8 @@ def project(recipe, fields, unit, protected, detail):
     kind = semantics['semantic_kind']
     if kind == 'delayed-life-steal':
         child = _life_steal(recipe, detail, number)
+    elif kind == 'periodic-sandcloud-carrier':
+        child = _sand_cloud(recipe, detail, number, raw)
     elif kind == 'proxy-object-effect':
         child = _locust_swarm(recipe, detail, number, raw)
     else:

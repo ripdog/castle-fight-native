@@ -27,7 +27,7 @@ mod parasite_script;
 pub use parasite_area_buff::ParasiteAreaBuffProfile;
 pub use parasite_script::{
     LocustSwarmProfile, LocustSwarmState, LocustState, MAX_LOCUSTS, ParasiteChild,
-    ParasiteScriptProfile, PendingParasiteScript,
+    ParasiteScriptProfile, PendingParasiteScript, SandCloudProfile, SandCloudState, SandCloudVariant,
 };
 pub use travelling_mana_clap::TravellingManaClapProfile;
 pub(crate) use travelling_mana_clap::TravellingManaClapState;
