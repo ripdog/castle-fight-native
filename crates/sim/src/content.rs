@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r167";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r168";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -6320,7 +6320,23 @@ fn extracted_tower_definition_927(
                     .unwrap_or_else(|| panic!("tower {rawcode:#010x} is missing splash radius")),
             }
         }
-        ExtractedWeaponKind927::Bounce | ExtractedWeaponKind927::Line => panic!(
+        ExtractedWeaponKind927::Line => {
+            let line = content
+                .line_weapons
+                .get(&rawcode)
+                .unwrap_or_else(|| panic!("tower {rawcode:#010x} needs retained line weapon evidence"));
+            AttackDelivery::Line {
+                speed_per_tick: unit
+                    .projectile_speed_per_tick
+                    .unwrap_or_else(|| panic!("tower {rawcode:#010x} is missing line missile speed")),
+                minimum_range: world(line.minimum_range_world),
+                spill_distance: world(line.spill_distance_world),
+                spill_radius: world(line.spill_radius_world),
+                damage_retention_per_10k: line.damage_retention_per_10k,
+                spill_targets: parse_attack_targets_927(&line.splash_targets),
+            }
+        }
+        ExtractedWeaponKind927::Bounce => panic!(
             "tower {rawcode:#010x} uses an extracted weapon primitive that is not implemented in the current native slice"
         ),
     };

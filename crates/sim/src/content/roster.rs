@@ -290,6 +290,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    BallistaTower = 0x2100_0033 => b"h07E",
     ForgottenOne = 0x2100_0032 => b"h04R",
     WellOfPain = 0x2100_0031 => b"h04K",
     EyeOfCorruption = 0x2100_0030 => b"h04T",
