@@ -565,3 +565,50 @@ fn pending_hex_shield_and_defender_state_restores_across_workers() {
         assert_eq!(sim.unit(target), restored.unit(target));
     }
 }
+
+#[test]
+fn debug_mana_randomization_is_seed_and_sim_id_deterministic_within_bounds() {
+    const MAXIMUM: i32 = 100;
+    let caster = |sim: &mut Simulation, x| {
+        sim.spawn_building(BuildingSpawn {
+            team: Team(0),
+            footprint: BuildingFootprint::new(x, 10, 1, 1),
+            health: 10_000,
+            production: None,
+            attack: None,
+            spellcasting: Some(SpellcastingProfile {
+                mana: ManaProfile {
+                    maximum: MAXIMUM,
+                    starting: 0,
+                    regen_per_tick_per_10k: 0,
+                },
+                ability: AutomaticAbilityProfile {
+                    id: AbilityId(9),
+                    mana_cost: 10,
+                    cooldown_ticks: 1000,
+                    range: 0,
+                    target_policy: AbilityTargetPolicy::RandomEnemyUnitGlobal,
+                    effect: AbilityEffect::Damage { amount: 1 },
+                },
+            }),
+        })
+    };
+    let randomized = |seed| {
+        let mut sim = simulation(1);
+        let ids = [caster(&mut sim, 0), caster(&mut sim, 4)];
+        assert_eq!(sim.debug_randomize_spellcaster_mana(seed), ids.len());
+        ids.map(|id| {
+            sim.world
+                .get::<ManaState>(entity(&sim, id))
+                .unwrap()
+                .current
+        })
+    };
+
+    let first = randomized(0x5eed_0000_c0de_0001);
+    assert_eq!(first, randomized(0x5eed_0000_c0de_0001));
+    assert_ne!(first, randomized(0x5eed_0000_c0de_0002));
+    for value in first {
+        assert!((0..=MAXIMUM).contains(&value), "mana {value} out of bounds");
+    }
+}

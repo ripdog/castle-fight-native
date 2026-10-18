@@ -1060,6 +1060,59 @@ impl Simulation {
         self.debug_buildings_invulnerable
     }
 
+    /// Assigns developer-tool current mana to every live mana-bearing entity.
+    ///
+    /// Each entity receives a value uniform over `[0, maximum]` derived only from `seed` and its
+    /// `SimId`, so ECS iteration order and hashing cannot influence the result. The maximum comes
+    /// from its spellcasting profile, or from the retained native mana definition for native-mana
+    /// entities. Entities without a resolvable maximum are left unchanged. Current mana is
+    /// canonical state, so the change is covered by the checksum. Returns the number of entities
+    /// assigned a value.
+    pub fn debug_randomize_spellcaster_mana(&mut self, seed: u64) -> usize {
+        let mut assignments = Vec::new();
+        {
+            let mut query = self.world.query::<(
+                Entity,
+                &SimId,
+                &ManaState,
+                Option<&SpellcastingProfile>,
+                Option<&ContentIdentity>,
+            )>();
+            for (entity, id, _, spellcasting, content) in query.iter(&self.world) {
+                let maximum = match (spellcasting, content) {
+                    (Some(profile), _) => profile.mana.maximum,
+                    (None, Some(identity)) => {
+                        let Some(profile) = crate::content::native_mana_profile_for_version(
+                            identity.map_version,
+                            identity.rawcode,
+                        ) else {
+                            continue;
+                        };
+                        profile.maximum
+                    }
+                    (None, None) => continue,
+                };
+                let Ok(maximum) = u64::try_from(maximum) else {
+                    continue;
+                };
+                let roll = splitmix64(seed ^ id.0) % (maximum + 1);
+                assignments.push((
+                    entity,
+                    i32::try_from(roll).expect("mana roll is bounded by an i32 maximum"),
+                ));
+            }
+        }
+
+        let assigned = assignments.len();
+        for (entity, current) in assignments {
+            self.world
+                .get_mut::<ManaState>(entity)
+                .expect("mana entity lost ManaState during debug randomization")
+                .current = current;
+        }
+        assigned
+    }
+
     /// Applies direct developer-tool damage to every live combat unit.
     ///
     /// The query intentionally matches the normal unit archetype via `MovementProfile`. Buildings
