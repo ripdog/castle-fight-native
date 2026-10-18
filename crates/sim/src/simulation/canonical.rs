@@ -1285,6 +1285,16 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u8(projectile.projectile.target_mask.bits());
                 hash.write_i32(projectile.projectile.damage);
                 hash_frost_profile_option(&mut hash, projectile.projectile.frost);
+                match projectile.projectile.charm {
+                    Some(charm) => {
+                        hash.write_u8(1);
+                        hash.write_u64(charm.target.0);
+                        for word in charm.profile.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                    }
+                    None => hash.write_u8(0),
+                }
                 match projectile.projectile.burning_oil {
                     Some(profile) => {
                         hash.write_u8(1);

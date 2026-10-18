@@ -1386,6 +1386,7 @@ impl Simulation {
                                 burning_oil: Some(burning_oil),
                                 splash_falloff: Some(splash),
                                 frost: None,
+                                charm: None,
                                 damage_type: DamageType::Siege,
                                 launch_position,
                                 destination: position,

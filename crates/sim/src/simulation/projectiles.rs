@@ -805,6 +805,29 @@ impl Simulation {
                         {
                             apply_native_frost_attack(&mut units[index], profile, completed_tick);
                         }
+                        // Only the original target of the attack receives its rolled Charm.
+                        if let Some(charm) = snapshot.projectile.charm
+                            && let TargetIndex::Unit(index) = target
+                            && units[index].id == charm.target
+                            && unit_health[index] > 0
+                            && let Some(request) = orb_charm_request(
+                                units,
+                                index,
+                                PendingAttackEffectSource {
+                                    id: snapshot.projectile.source,
+                                    position: snapshot.projectile.launch_position,
+                                    team: snapshot.projectile.source_team,
+                                },
+                                charm.profile,
+                            )
+                        {
+                            self.apply_orb_charm(
+                                request,
+                                &mut units[index],
+                                &mut unit_health[index],
+                                completed_tick,
+                            );
+                        }
                     }
                 }
                 if let Some(profile) = snapshot.projectile.burning_oil {
@@ -931,6 +954,7 @@ impl Simulation {
                     burning_oil: launch.burning_oil,
                     splash_falloff: launch.splash_falloff,
                     frost: launch.frost,
+                    charm: launch.charm,
                     damage_type: launch.damage_type,
                     launch_position: launch.launch_position,
                     destination: launch.destination,

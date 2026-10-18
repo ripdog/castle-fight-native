@@ -286,6 +286,14 @@ pub(crate) struct ReflectedProjectile {
     pub impact_tick: u64,
 }
 
+/// Orb Charm rolled at attack launch and applied when a ballistic attack lands on its original
+/// target. Splash victims other than `target` never receive it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct BallisticOrbCharm {
+    pub target: SimId,
+    pub profile: OrbCharmProfile,
+}
+
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct BallisticProjectile {
     pub source: SimId,
@@ -295,6 +303,7 @@ pub(crate) struct BallisticProjectile {
     pub burning_oil: Option<BurningOilEffectProfile>,
     pub splash_falloff: Option<SplashFalloffProfile>,
     pub frost: Option<FrostAttackEffectProfile>,
+    pub charm: Option<BallisticOrbCharm>,
     pub damage_type: DamageType,
     pub launch_position: SimPoint,
     pub destination: SimPoint,

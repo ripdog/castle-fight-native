@@ -630,16 +630,29 @@ impl Simulation {
                         speed_per_tick,
                         impact_radius,
                     } => {
+                        // Orb Charm is carried to impact; other triggered spells stay unsupported.
+                        let unsupported_triggered_spell = on_hit
+                            .triggered_spell
+                            .filter(|spell| !matches!(spell, TriggeredAttackEffect::Charm(_)));
                         assert_eq!(
                             (
                                 on_hit.stun_duration_ticks,
-                                on_hit.triggered_spell,
+                                unsupported_triggered_spell,
                                 on_hit.feedback,
                                 on_hit.corruption
                             ),
                             (0, None, None, None),
                             "ballistic stun/triggered-spell/Feedback passives are unsupported"
                         );
+                        let charm = match on_hit.triggered_spell {
+                            Some(TriggeredAttackEffect::Charm(profile)) => {
+                                Some(crate::components::BallisticOrbCharm {
+                                    target: intent.target_id,
+                                    profile,
+                                })
+                            }
+                            _ => None,
+                        };
                         let travel_ticks =
                             projectile_travel_ticks(intent.distance_sq, speed_per_tick);
                         let impact_tick = completed_tick
@@ -653,6 +666,7 @@ impl Simulation {
                             burning_oil: on_hit.burning_oil,
                             splash_falloff: on_hit.splash_falloff,
                             frost: on_hit.frost,
+                            charm,
                             damage_type: intent.damage_type,
                             launch_position: intent.source_position,
                             destination: target_position,

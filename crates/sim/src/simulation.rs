@@ -4423,6 +4423,7 @@ struct BallisticProjectileLaunch {
     burning_oil: Option<crate::components::BurningOilEffectProfile>,
     splash_falloff: Option<crate::components::SplashFalloffProfile>,
     frost: Option<crate::components::FrostAttackEffectProfile>,
+    charm: Option<crate::components::BallisticOrbCharm>,
     damage_type: DamageType,
     launch_position: SimPoint,
     destination: SimPoint,
@@ -6406,6 +6407,35 @@ struct OrbCharmRequest {
     index: usize,
 }
 
+/// Native Charm eligibility for a landed orb. It pierces spell immunity but not
+/// invulnerability or hero rules.
+fn orb_charm_request(
+    units: &[UnitSnapshot],
+    index: usize,
+    source: PendingAttackEffectSource,
+    profile: crate::OrbCharmProfile,
+) -> Option<OrbCharmRequest> {
+    let unit = &units[index];
+    (unit.team != source.team
+        && !unit.classifications.invulnerable
+        && !unit.classifications.uses_hero_spell_rules()
+        && profile
+            .targets
+            .can_target_unit(unit.target_movement_class())
+        && !unit
+            .classifications
+            .neutral_hostile_creep_level
+            .is_some_and(|level| {
+                profile.maximum_creep_level > 0 && level > profile.maximum_creep_level
+            }))
+    .then_some(OrbCharmRequest {
+        profile,
+        source: source.id,
+        source_team: source.team,
+        index,
+    })
+}
+
 fn apply_pending_attack_effects(
     target: TargetIndex,
     effects: PendingAttackEffects,
@@ -6699,28 +6729,7 @@ fn apply_pending_attack_effects(
                 }
             }
             TriggeredAttackEffect::Charm(profile) => {
-                // Native Charm pierces spell immunity but not invulnerability or hero rules.
-                let unit = &units[index];
-                if unit.team != source.team
-                    && !unit.classifications.invulnerable
-                    && !unit.classifications.uses_hero_spell_rules()
-                    && profile
-                        .targets
-                        .can_target_unit(unit.target_movement_class())
-                    && !unit
-                        .classifications
-                        .neutral_hostile_creep_level
-                        .is_some_and(|level| {
-                            profile.maximum_creep_level > 0 && level > profile.maximum_creep_level
-                        })
-                {
-                    result.charm = Some(OrbCharmRequest {
-                        profile,
-                        source: source.id,
-                        source_team: source.team,
-                        index,
-                    });
-                }
+                result.charm = orb_charm_request(units, index, source, profile);
             }
             TriggeredAttackEffect::EntanglingRoots(profile) => {
                 if !units[index].classifications.spell_immune
