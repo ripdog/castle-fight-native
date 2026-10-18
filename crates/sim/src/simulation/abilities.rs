@@ -554,6 +554,7 @@ impl Simulation {
                     ..
                 } | AbilityEffect::AreaStun { .. }
                     | AbilityEffect::AreaDebuff { .. }
+                    | AbilityEffect::FanOfKnives { .. }
                     | AbilityEffect::ParasiteAreaBuff(_)
             ) {
                 match source.origin {
@@ -1346,6 +1347,9 @@ impl Simulation {
                             unreachable!()
                         };
                         metrics.effects += self.cast_native_summon(index, p, units);
+                    } else if matches!(intent.ability.effect, AbilityEffect::FanOfKnives { .. }) {
+                        metrics.effects +=
+                            self.cast_fan_of_knives(source, intent.ability.effect, units);
                     } else {
                         let AbilityEffect::ArtilleryBombardment {
                             min_damage,
@@ -1721,6 +1725,11 @@ impl Simulation {
                     None
                 }
             }
+            AbilityTargetPolicy::AttackDamageTrigger => {
+                candidate_checks = 1;
+                self.attack_damage_trigger_position(source, units)
+                    .map(|position| AbilityIntentTarget::Point { position })
+            }
             AbilityTargetPolicy::NativeBuildingSpellTrigger => self.native_building_trigger_target(
                 source,
                 spellcasting.ability,
@@ -1935,6 +1944,22 @@ impl Simulation {
             }),
             candidate_checks,
         }
+    }
+
+    /// The listener fires when the unit itself took ordinary weapon damage on the previous
+    /// completed tick; the fan is centered on the unit.
+    fn attack_damage_trigger_position(
+        &self,
+        source: AbilitySourceSnapshot,
+        units: &[UnitSnapshot],
+    ) -> Option<SimPoint> {
+        let (AbilitySourceIndex::Unit(index), AbilitySourceOrigin::Unit(position)) =
+            (source.source, source.origin)
+        else {
+            return None;
+        };
+        let previous = self.next_tick.checked_sub(1)?;
+        (units.get(index)?.retaliation.attacked_tick == Some(previous)).then_some(position)
     }
 
     fn random_enemy_ability_target(
@@ -2551,6 +2576,7 @@ impl Simulation {
                                 )
                         }
                         AbilityTargetPolicy::ScriptedController
+                        | AbilityTargetPolicy::AttackDamageTrigger
                         | AbilityTargetPolicy::AllEnemyUnits => false,
                         AbilityTargetPolicy::AllFriendlyUnits
                         | AbilityTargetPolicy::RandomCorpse
@@ -2695,6 +2721,8 @@ impl Simulation {
                 ability.target_policy == AbilityTargetPolicy::RandomEnemyBasePoint
                     || (ability.target_policy == AbilityTargetPolicy::ScriptedController
                         && matches!(ability.effect, AbilityEffect::NativeSummon(_)))
+                    || (ability.target_policy == AbilityTargetPolicy::AttackDamageTrigger
+                        && self.attack_damage_trigger_position(source, units).is_some())
             }
         }
     }

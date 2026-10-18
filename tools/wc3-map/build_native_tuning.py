@@ -238,6 +238,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     if kind == "travelling-mana-clap":
         from project_travelling_mana_clap import project
         return project(recipe, fields, unit, protected, mechanics)
+    if kind == "fan-of-knives":
+        from project_fan_of_knives import project
+        return project(recipe, fields, unit, protected, mechanics)
     if kind == "scripted-roots":
         from project_scripted_roots import project
         return project(recipe, fields, unit, protected, mechanics)
@@ -846,6 +849,9 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
     all_protected = {}
     for row in rows(retained("resolved/protected-ability-fields.tsv")):
         all_protected.setdefault(row["rawcode"],{}).setdefault(row["level"],{})[row["field"]] = row["runtime_value"]
+    fan_of_knives = {row["unit_rawcode"]: json.loads(row["parameters_json"])
+        for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
+        if row["mechanic_kind"] == "damage-triggered-auto-fan-of-knives"}
     lava_spawns = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "native-lava-spawn-split-with-child-conversion"}
@@ -960,6 +966,8 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             detail.update(improvement_handler=functions["improveSpecialBuilding"], improvement_cleanup=functions["yK"], improvement_cleanup_registration=re.search(r'_I\[_T\(\d+,"[0-9a-f]+"\)\]=yK',lua.decode()).group(), improvement_death=functions["fJ"], improvement_ui=ability_ui[source], git_tree=tree)
         if recipe["kind"] in {"building-weather", "native-weather-wave", "building-enchantment", "native-enchantment-grant", "source-damage-dispatcher"}:
             detail.update(all_fields=abilities, all_bases=ability_bases, all_protected=protected, functions=functions, building_spell=building_spells.get(source), git_tree=tree, map_version=dict(zip(["major","minor"],map(int,release["map_version"].split(".")))))
+        if recipe["kind"] == "fan-of-knives":
+            detail.update(fan_of_knives=fan_of_knives[recipe["unit_rawcode"]], functions=functions, git_tree=tree)
         if recipe["kind"] in {"scripted-roots", "wind-walk", "native-heal", "orb-charm"}:
             detail.update(all_bases=ability_bases, functions=functions, git_tree=tree,
                 map_version=dict(zip(["major", "minor"], map(int, release["map_version"].split(".")))))

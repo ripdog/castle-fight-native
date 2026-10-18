@@ -79,6 +79,7 @@ mod content_lifecycle_tests;
 mod damage_charge;
 mod damage_retaliation;
 mod damage_thresholds;
+mod fan_of_knives;
 mod death_spawns;
 mod economy;
 mod forked_lightning;
@@ -5138,6 +5139,9 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         | AbilityTargetPolicy::WoundedFriendlyUnit
         | AbilityTargetPolicy::AllFriendlyUnits
         | AbilityTargetPolicy::RandomCorpse => {}
+        AbilityTargetPolicy::AttackDamageTrigger => {
+            assert_eq!(spellcasting.ability.range, 0);
+        }
         AbilityTargetPolicy::AllEnemyUnits
         | AbilityTargetPolicy::RandomEnemyUnitGlobal
         | AbilityTargetPolicy::RandomEnemyBasePoint => {
@@ -5553,6 +5557,23 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
             assert_eq!(
                 spellcasting.ability.target_policy,
                 AbilityTargetPolicy::RandomGroundEnemyUnit
+            );
+        }
+        AbilityEffect::FanOfKnives {
+            damage,
+            maximum_total_damage,
+            radius,
+            targets,
+            ..
+        } => {
+            assert!(damage >= 0 && maximum_total_damage >= 0 && radius > 0);
+            assert!(
+                targets.can_target_unit(MovementClass::Ground)
+                    || targets.can_target_unit(MovementClass::Air)
+            );
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::AttackDamageTrigger
             );
         }
         AbilityEffect::AreaDamage { amount, radius, .. } => {

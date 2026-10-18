@@ -3560,6 +3560,7 @@ fn prewarm_timed_wc3_effects(
                         | AbilityEffect::AreaDebuff { .. }
                         | AbilityEffect::FrostNova { .. }
                         | AbilityEffect::AreaDamage { .. }
+                        | AbilityEffect::FanOfKnives { .. }
                         | AbilityEffect::Purification { .. }
                         | AbilityEffect::ArtilleryBombardment { .. } => None,
                     };

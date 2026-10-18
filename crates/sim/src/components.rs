@@ -1715,6 +1715,9 @@ pub enum AbilityTargetPolicy {
     FriendlyUnitInCombat,
     /// Native Spell Steal selects a transferable hostile buff or friendly debuff.
     NativeBuffDonor,
+    /// Source-owned damage listener: the unit itself was struck by an ordinary weapon on the
+    /// previous completed tick. The cast is centered on the unit, so it carries no unit target.
+    AttackDamageTrigger,
 }
 
 impl AbilityTargetPolicy {
@@ -1738,6 +1741,7 @@ impl AbilityTargetPolicy {
             Self::RandomEnemyDebuff => 20,
             Self::FriendlyUnitInCombat => 21,
             Self::NativeBuffDonor => 22,
+            Self::AttackDamageTrigger => 24,
         }
     }
 }
@@ -1830,6 +1834,18 @@ pub enum AbilityEffect {
         amount: i32,
         radius: i32,
         origin: AreaDamageOrigin,
+    },
+    /// Native Fan of Knives: one caster-centered spell hit per eligible enemy, the per-target
+    /// damage reduced when the retained total-damage cap would otherwise be exceeded.
+    FanOfKnives {
+        ability: AbilityId,
+        damage: i32,
+        maximum_total_damage: i32,
+        /// Zero means unlimited.
+        maximum_targets: u16,
+        radius: i32,
+        targets: AttackTargetMask,
+        organic_only: bool,
     },
     FrostArmor {
         native_buff: Option<NativeBuffIdentity>,
@@ -1966,6 +1982,7 @@ impl AbilityEffect {
             Self::Stun { .. } => 1,
             Self::ModifyMovementSpeedPercent { .. } => 2,
             Self::AreaDamage { .. } => 3,
+            Self::FanOfKnives { .. } => 62,
             Self::FrostArmor { .. } => 4,
             Self::HolyAid { .. } => 5,
             Self::Prayer { .. } => 6,

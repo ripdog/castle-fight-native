@@ -17,6 +17,21 @@ pub(super) fn timed_armor_effect_active(
         })
 }
 
+/// Eligibility, other than hostility, shared by the Fan of Knives target count and its
+/// per-target application.
+pub(super) fn fan_of_knives_target_eligible(
+    target: &UnitSnapshot,
+    targets: AttackTargetMask,
+    organic_only: bool,
+) -> bool {
+    target.health > 0
+        && !target.classifications.locust
+        && !target.classifications.invulnerable
+        && !target.classifications.spell_immune
+        && !(organic_only && target.mechanical)
+        && targets.can_target_unit(target.target_movement_class())
+}
+
 pub(super) fn ability_damage_for_unit(
     target: &UnitSnapshot,
     effect: AbilityEffect,
@@ -25,6 +40,14 @@ pub(super) fn ability_damage_for_unit(
 ) -> Option<i32> {
     let amount = match effect {
         AbilityEffect::Damage { amount } | AbilityEffect::AreaDamage { amount, .. } => amount,
+        AbilityEffect::FanOfKnives {
+            damage,
+            targets,
+            organic_only,
+            ..
+        } if fan_of_knives_target_eligible(target, targets, organic_only) => {
+            damage
+        }
         AbilityEffect::FrostNova {
             area_damage,
             targets,
@@ -335,6 +358,18 @@ pub(super) fn apply_ability_effect_to_unit(
                     .checked_add(u64::from(duration))
                     .expect("area stun expiry overflow"),
             );
+        }
+        AbilityEffect::FanOfKnives { .. } => {
+            let Some(event_damage) =
+                ability_damage_for_unit(target, effect, completed_tick, damage_rules)
+            else {
+                return false;
+            };
+            super::damage_thresholds::observe_damage_event(target, target.health, event_damage);
+            target.health = target
+                .health
+                .checked_sub(event_damage)
+                .expect("Fan of Knives damage overflowed validated bounds");
         }
         AbilityEffect::AreaDamage { .. } => {
             let event_damage =

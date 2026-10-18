@@ -3,6 +3,62 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0GL",
+      "unit_rawcode": "n02U",
+      "spellcasting": {
+        "mana": {
+          "maximum": 150,
+          "starting": 75,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093683020,
+          "mana_cost": 40,
+          "cooldown_ticks": 30,
+          "range": 0,
+          "target_policy": "AttackDamageTrigger",
+          "effect": {
+            "FanOfKnives": {
+              "ability": 1093683020,
+              "damage": 45,
+              "maximum_total_damage": 300,
+              "maximum_targets": 0,
+              "radius": 409600,
+              "targets": 3,
+              "organic_only": true
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "native": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/production-unit-special-mechanics.tsv",
+        "handler": "handleFanOfKnives,code__addAction_DamageRuntime"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0G7",
+      "unit_rawcode": "n02U",
+      "kind": "spiked-shell",
+      "profile": {
+        "ability": 1093682999,
+        "returned_damage_per_10k": 7000,
+        "received_damage_per_10k": 10000,
+        "armor_bonus_per_100": 0
+      },
+      "provenance": {
+        "ability": "A0G7",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A0G6",
       "unit_rawcode": "n02V",

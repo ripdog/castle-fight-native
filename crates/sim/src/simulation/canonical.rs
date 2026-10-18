@@ -3240,6 +3240,23 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: &AutomaticAbilityProfile) {
                 AreaDamageOrigin::Target => 1,
             });
         }
+        AbilityEffect::FanOfKnives {
+            ability,
+            damage,
+            maximum_total_damage,
+            maximum_targets,
+            radius,
+            targets,
+            organic_only,
+        } => {
+            hash.write_u32(ability.0);
+            hash.write_i32(damage);
+            hash.write_i32(maximum_total_damage);
+            hash.write_u16(maximum_targets);
+            hash.write_i32(radius);
+            hash.write_u8(targets.bits());
+            hash.write_u8(u8::from(organic_only));
+        }
         AbilityEffect::FrostArmor {
             native_buff: _,
             modifier,
