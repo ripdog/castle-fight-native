@@ -206,20 +206,8 @@ impl TopologyGrid {
             center.y.saturating_add(radius),
         ));
 
-        // Fast path: every cell of the scanned span lies within Chebyshev distance `span_reach`
-        // of the center cell. Clearance k means every cell within Chebyshev distance k is
-        // in-grid, unblocked and reachable. If clearance covers `span_reach`, all span cells
-        // are such cells, and the span is a filled rectangle of cells, which is 4-connected
-        // (rebuild_components floods over 4-neighbours). All of them therefore share
-        // `center_component`, so the exact scan below would also return true.
-        if let Some(center_index) = self.index(center_cell) {
-            let span_reach = (i64::from(center_cell.x) - i64::from(min_cell.x))
-                .max(i64::from(max_cell.x) - i64::from(center_cell.x))
-                .max(i64::from(center_cell.y) - i64::from(min_cell.y))
-                .max(i64::from(max_cell.y) - i64::from(center_cell.y));
-            if i64::from(self.clearance[center_index]) >= span_reach {
-                return true;
-            }
+        if self.clearance_covers_span(center_cell, min_cell, max_cell) {
+            return true;
         }
 
         let radius_sq = (radius_i64 * radius_i64) as u64;
@@ -243,6 +231,22 @@ impl TopologyGrid {
         true
     }
 
+    /// True when every cell of the inclusive span `[min, max]` lies within the clearance of
+    /// `center`, which must itself be in the grid. Clearance k means every cell within Chebyshev
+    /// distance k is in-grid, unblocked and reachable. Such a span is a filled rectangle of cells
+    /// that is 4-connected (rebuild_components floods over 4-neighbours) and contains `center`,
+    /// so all of its cells share `center`'s component.
+    fn clearance_covers_span(&self, center: NavCell, min: NavCell, max: NavCell) -> bool {
+        let Some(center_index) = self.index(center) else {
+            return false;
+        };
+        let span_reach = (i64::from(center.x) - i64::from(min.x))
+            .max(i64::from(max.x) - i64::from(center.x))
+            .max(i64::from(center.y) - i64::from(min.y))
+            .max(i64::from(max.y) - i64::from(center.y));
+        i64::from(self.clearance[center_index]) >= span_reach
+    }
+
     /// Validate the entire swept collision circle, not just its destination. Tangency is legal.
     pub(crate) fn circle_segment_is_traversable_in_component(
         &self,
@@ -264,6 +268,12 @@ impl TopologyGrid {
             from.x.max(to.x).saturating_add(radius),
             from.y.max(to.y).saturating_add(radius),
         ));
+        // The swept span contains `from`'s cell, which lies in `component` once the endpoint
+        // check passed. Clearance covering the span therefore proves every span cell is in
+        // `component`, so the exact scan below could not find a foreign cell.
+        if self.clearance_covers_span(self.cell_of_point(from), min, max) {
+            return true;
+        }
         for y in min.y..=max.y {
             for x in min.x..=max.x {
                 let cell = NavCell::new(x, y);
