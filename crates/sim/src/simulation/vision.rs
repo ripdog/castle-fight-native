@@ -315,6 +315,8 @@ impl Simulation {
                 }
             }
         }
+        // Sources are sorted by unique SimId, so the incoming records are already in id order.
+        let mut incoming = Vec::new();
         for observer in [Team(0), Team(1)] {
             let team = usize::from(observer.0);
             for (explored, visible) in fog.explored[team].iter_mut().zip(&fog.visible[team]) {
@@ -329,27 +331,52 @@ impl Simulation {
                     footprint_center_point(structure.footprint, self.config.navigation_cell_size),
                 )
             });
-            for &(id, owner_team, position, _, _, _, footprint, content, owner, construction) in
-                &sources
-            {
-                if owner_team != observer
-                    && fog.is_visible(observer, position)
-                    && let Some(footprint) = footprint
-                {
-                    memory.retain(|structure| structure.id != id);
-                    memory.push(RememberedStructure {
-                        id,
-                        content,
-                        owner,
-                        footprint,
-                        construction,
-                    });
-                }
-            }
             memory.sort_unstable_by_key(|structure| structure.id);
-            fog.remembered_structures[team] = memory;
+            incoming.clear();
+            incoming.extend(sources.iter().filter_map(
+                |&(id, owner_team, position, _, _, _, footprint, content, owner, construction)| {
+                    (owner_team != observer && fog.is_visible(observer, position))
+                        .then_some(footprint)
+                        .flatten()
+                        .map(|footprint| RememberedStructure {
+                            id,
+                            content,
+                            owner,
+                            footprint,
+                            construction,
+                        })
+                },
+            ));
+            fog.remembered_structures[team] = merge_remembered_structures(memory, &incoming);
         }
     }
+}
+
+/// Merges id-sorted remembered structures with id-sorted live observations in one linear pass.
+/// An observation replaces the remembered record with the same id. Both inputs hold unique ids.
+fn merge_remembered_structures(
+    memory: Vec<RememberedStructure>,
+    incoming: &[RememberedStructure],
+) -> Vec<RememberedStructure> {
+    let mut merged = Vec::with_capacity(memory.len() + incoming.len());
+    let mut old = memory.into_iter().peekable();
+    let mut new = incoming.iter().copied().peekable();
+    loop {
+        match (old.peek(), new.peek()) {
+            (Some(kept), Some(fresh)) => match kept.id.cmp(&fresh.id) {
+                std::cmp::Ordering::Less => merged.extend(old.next()),
+                std::cmp::Ordering::Greater => merged.extend(new.next()),
+                std::cmp::Ordering::Equal => {
+                    old.next();
+                    merged.extend(new.next());
+                }
+            },
+            (Some(_), None) => merged.extend(old.next()),
+            (None, Some(_)) => merged.extend(new.next()),
+            (None, None) => break,
+        }
+    }
+    merged
 }
 
 /// Ground vision stops at higher cliff levels and authored occluders; air vision bypasses both.
