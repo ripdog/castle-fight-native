@@ -257,8 +257,6 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
         debug_buildings_invulnerable,
         fog,
     } = state;
-    let entities = super::snapshot::canonical_entities(world);
-
     let mut hash = Fnv64::new();
     hash.write_u64(0x4346_5354_4154_4503);
     hash.write_u64(u64::from(CANONICAL_CHECKSUM_SCHEMA_VERSION));
@@ -449,8 +447,14 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
         hash.write_u16(player.resources.legendary_points_used);
         hash.write_u16(player.resources.legendary_points_cap);
     }
-    hash.write_u64(entities.len() as u64);
-    for entity in entities {
+    let entity_keys = super::snapshot::canonical_entity_keys(world);
+    hash.write_u64(entity_keys.len() as u64);
+    for &(_, entity) in &entity_keys {
+        let Some(entity) = super::snapshot::canonical_entity(world.entity(entity)) else {
+            panic!(
+                "canonical state omitted an entity with an invalid authoritative component shape"
+            );
+        };
         match entity {
             CanonicalEntity::WorldFreezer { id, state } => {
                 hash.write_u8(16);

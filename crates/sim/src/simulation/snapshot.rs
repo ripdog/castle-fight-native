@@ -1,6 +1,7 @@
 use super::{canonical::*, *};
 use crate::CastleFightContentBundle;
 use crate::components::NativeAction;
+use bevy_ecs::world::EntityRef;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -620,269 +621,277 @@ impl Simulation {
     }
 }
 
-pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
-    let authoritative_entity_count = world
-        .iter_entities()
-        .filter(|entity| entity.get::<SimId>().is_some())
-        .count();
-    let mut entities: Vec<_> = world
-        .iter_entities()
-        .filter_map(|entity| {
-            let id = *entity.get::<SimId>()?;
-            if let Some(state) = entity.get::<WorldFreezerState>() {
-                return Some(CanonicalEntity::WorldFreezer {
-                    id,
-                    state: state.clone(),
-                });
-            }
-            if let Some(action) = entity.get::<NativeAction>() {
-                return Some(CanonicalEntity::NativeAction {
-                    id,
-                    action: action.clone(),
-                });
-            }
-            if let Some(revival) = entity.get::<DelayedShrineRevival>() {
-                return Some(CanonicalEntity::DelayedShrineRevival {
-                    id,
-                    revival: *revival,
-                });
-            }
-            if let Some(state) = entity.get::<SnowveilState>() {
-                return Some(CanonicalEntity::Snowveil {
-                    id,
-                    state: state.clone(),
-                });
-            }
-            if let Some(state) = entity.get::<BuildingSpellTargetState>() {
-                return Some(CanonicalEntity::BuildingSpellTarget {
-                    id,
-                    state: state.clone(),
-                });
-            }
-            if let Some(state) = entity.get::<crate::native_carriers::NativeCarrierState>() {
-                return Some(CanonicalEntity::NativeCarrier { id, state: *state });
-            }
-            if let Some(projectile) = entity.get::<GuaranteedHitProjectile>() {
-                return Some(CanonicalEntity::Projectile(CanonicalProjectile {
-                    id,
-                    projectile: *projectile,
-                }));
-            }
-            if let Some(projectile) = entity.get::<ReflectedProjectile>() {
-                return Some(CanonicalEntity::ReflectedProjectile(
-                    CanonicalReflectedProjectile {
-                        id,
-                        projectile: *projectile,
-                    },
-                ));
-            }
-            if let Some(projectile) = entity.get::<LineProjectile>() {
-                return Some(CanonicalEntity::LineProjectile(CanonicalLineProjectile {
-                    id,
-                    projectile: projectile.clone(),
-                }));
-            }
-            if let Some(projectile) = entity.get::<BallisticProjectile>() {
-                return Some(CanonicalEntity::BallisticProjectile(
-                    CanonicalBallisticProjectile {
-                        id,
-                        projectile: *projectile,
-                    },
-                ));
-            }
-            if let Some(projectile) = entity.get::<BounceProjectile>() {
-                return Some(CanonicalEntity::BounceProjectile(
-                    CanonicalBounceProjectile {
-                        id,
-                        projectile: *projectile,
-                    },
-                ));
-            }
-            if let Some(zone) = entity.get::<BurningOilZone>() {
-                return Some(CanonicalEntity::BurningOil(CanonicalBurningOil {
-                    id,
-                    zone: *zone,
-                }));
-            }
-            if let Some(state) = entity.get::<ChainLightningState>() {
-                return Some(CanonicalEntity::ChainLightning(CanonicalChainLightning {
-                    id,
-                    state: *state,
-                }));
-            }
-            if let Some(corpse) = entity.get::<Corpse>() {
-                return Some(CanonicalEntity::Corpse(CanonicalCorpse {
-                    id,
-                    position: entity.get::<Position>()?.0,
-                    corpse: *corpse,
-                }));
-            }
-            if entity.get::<Builder>().is_some() {
-                return Some(CanonicalEntity::Builder(CanonicalBuilder {
-                    id,
-                    owner: entity.get::<Owner>()?.0,
-                    team: *entity.get::<Team>()?,
-                    position: entity.get::<Position>()?.0,
-                    profile: *entity.get::<BuilderProfile>()?,
-                    configuration: entity.get::<BuilderConfiguration>()?.clone(),
-                    state: *entity.get::<BuilderState>()?,
-                    orders: entity
-                        .get::<BuilderOrderQueue>()
-                        .cloned()
-                        .unwrap_or_default(),
-                }));
-            }
-            let team = *entity.get::<Team>()?;
-            let health = *entity.get::<Health>()?;
-            if let Some(position) = entity.get::<Position>() {
-                let mut unit = CanonicalUnit {
-                    id,
-                    content: entity.get::<ContentIdentity>().copied(),
-                    owner: entity.get::<Owner>()?.0,
-                    team,
-                    position: position.0,
-                    health,
-                    health_regeneration: *entity.get::<HealthRegeneration>()?,
-                    attack: *entity.get::<AttackProfile>()?,
-                    action_timing: *entity.get::<ActionTimingProfile>()?,
-                    secondary_attack: entity.get::<SecondaryAttackProfile>().copied(),
-                    attack_targets: *entity.get::<AttackTargetMask>()?,
-                    damage_type: *entity.get::<DamageType>()?,
-                    armor: *entity.get::<ArmorProfile>()?,
-                    passive_effects: *entity.get::<PassiveUnitEffects>()?,
-                    movement_class: *entity.get::<MovementClass>()?,
-                    mechanical: entity.get::<MechanicalUnit>().is_some(),
-                    classifications: entity
-                        .get::<UnitClassifications>()
-                        .copied()
-                        .unwrap_or_default(),
-                    shrine_state: entity
-                        .get::<ShrineRevivalState>()
-                        .copied()
-                        .unwrap_or_default(),
-                    build_time_ticks: entity.get::<BuildTimeTicks>().map(|ticks| ticks.0),
-                    repair_time_ticks: entity.get::<RepairTimeTicks>().map(|ticks| ticks.0),
-                    movement: *entity.get::<MovementProfile>()?,
-                    cooldown: *entity.get::<AttackCooldown>()?,
-                    attack_sequence: *entity.get::<AttackSequence>()?,
-                    target: *entity.get::<TargetState>()?,
-                    retaliation: *entity.get::<RetaliationState>()?,
-                    status: *entity.get::<StatusState>()?,
-                    navigation: *entity.get::<NavigationState>()?,
-                    spawn_tick: *entity.get::<SpawnTick>()?,
-                    corpse: entity.get::<CorpseProducer>().map(|corpse| corpse.0),
-                    collision_radius: entity.get::<CollisionRadius>().copied(),
-                    spellcasting: entity.get::<SpellcastingProfile>().copied(),
-                    mana: entity.get::<ManaState>().copied(),
-                    ability_state: entity.get::<AutomaticAbilityState>().copied(),
-                    additional_abilities: entity.get::<AdditionalAutomaticAbilities>().copied(),
-                    resurrection: None,
-                };
-                unit.set_resurrection_definition(
-                    entity.get::<ResurrectionProfile>().map(|profile| profile.0),
-                );
-                Some(CanonicalEntity::Unit(unit))
-            } else {
-                Some(CanonicalEntity::Building(CanonicalBuilding {
-                    action_timing: entity
-                        .get::<ActionTimingProfile>()
-                        .copied()
-                        .unwrap_or_default(),
-                    secondary_attack: entity.get::<SecondaryAttackProfile>().copied(),
-                    passive_effects: entity
-                        .get::<PassiveUnitEffects>()
-                        .filter(|effects| effects.iter().next().is_some())
-                        .copied()
-                        .map(Box::new),
-                    id,
-                    content: entity.get::<ContentIdentity>().copied(),
-                    owner: entity.get::<Owner>().map(|owner| owner.0),
-                    team,
-                    footprint: *entity.get::<BuildingFootprint>()?,
-                    health,
-                    health_regeneration: entity.get::<HealthRegeneration>().copied(),
-                    construction: entity.get::<BuildingConstruction>().copied().map(Box::new),
-                    economy: entity.get::<BuildingEconomyProfile>().copied(),
-                    repair_time_ticks: entity.get::<RepairTimeTicks>().map(|ticks| ticks.0),
-                    production: entity.get::<ProductionProfile>().copied(),
-                    production_state: entity.get::<ProductionState>().copied(),
-                    production_content: entity
-                        .get::<ProductionContentIdentity>()
-                        .map(|content| content.0),
-                    production_corpse: entity
-                        .get::<ProductionCorpseProfile>()
-                        .map(|corpse| corpse.0),
-                    production_collision_radius: entity
-                        .get::<ProductionCollisionRadius>()
-                        .map(|radius| radius.0),
-                    production_movement_class: entity
-                        .get::<ProductionMovementClass>()
-                        .map(|class| class.0),
-                    production_repair_metadata: entity
-                        .get::<ProductionUnitRepairMetadata>()
-                        .copied(),
-                    production_attack_targets: entity
-                        .get::<ProductionAttackTargets>()
-                        .map(|targets| targets.0),
-                    production_action_timing: entity
-                        .get::<ProductionActionTiming>()
-                        .map(|timing| timing.0),
-                    production_secondary_attack: entity
-                        .get::<ProductionSecondaryAttack>()
-                        .map(|profile| profile.0),
-                    production_health_regen_per_second_per_10k: entity
-                        .get::<ProductionHealthRegeneration>()
-                        .map(|regeneration| regeneration.0),
-                    production_damage_type: entity
-                        .get::<ProductionDamageType>()
-                        .map(|damage_type| damage_type.0),
-                    production_armor: entity.get::<ProductionArmorProfile>().map(|armor| armor.0),
-                    production_passive_effects: entity
-                        .get::<ProductionPassiveEffects>()
-                        .map(|effects| effects.0),
-                    production_spellcasting: entity
-                        .get::<ProductionSpellcastingProfile>()
-                        .map(|profile| Box::new(profile.0)),
-                    classifications: entity
-                        .get::<UnitClassifications>()
-                        .copied()
-                        .unwrap_or_default(),
-                    production_classifications: entity
-                        .get::<ProductionUnitClassifications>()
-                        .map_or(UnitClassifications::default(), |flags| flags.0),
-                    production_additional_abilities: entity
-                        .get::<ProductionAdditionalAutomaticAbilities>()
-                        .map(|profiles| Box::new(profiles.0)),
-                    attack: entity.get::<AttackProfile>().copied(),
-                    attack_targets: entity.get::<AttackTargetMask>().copied(),
-                    damage_type: *entity.get::<DamageType>()?,
-                    armor: *entity.get::<ArmorProfile>()?,
-                    cooldown: entity.get::<AttackCooldown>().copied(),
-                    target: entity.get::<TargetState>().copied(),
-                    spawn_tick: entity.get::<SpawnTick>().copied(),
-                    spellcasting: entity.get::<SpellcastingProfile>().copied(),
-                    mana: entity.get::<ManaState>().copied(),
-                    ability_state: entity.get::<AutomaticAbilityState>().copied(),
-                    additional_abilities: entity.get::<AdditionalAutomaticAbilities>().copied(),
-                    status: entity.get::<StatusState>().copied(),
-                }))
-            }
-        })
-        .collect();
-    assert_eq!(
-        entities.len(),
-        authoritative_entity_count,
-        "canonical state omitted an entity with an invalid authoritative component shape"
-    );
-    entities.sort_unstable_by_key(CanonicalEntity::id);
-    for pair in entities.windows(2) {
+/// Returns the authoritative `SimId`-bearing entities as `(SimId, Entity)` keys in ascending
+/// `SimId` order. Ids are unique, so this order is total and independent of ECS storage order.
+pub(super) fn canonical_entity_keys(world: &World) -> Vec<(SimId, Entity)> {
+    let mut keys = Vec::with_capacity(world.entities().len() as usize);
+    keys.extend(world.iter_entities().filter_map(|entity| {
+        let id = *entity.get::<SimId>()?;
+        Some((id, entity.id()))
+    }));
+    keys.sort_unstable_by_key(|&(id, _)| id);
+    for pair in keys.windows(2) {
         assert_ne!(
-            pair[0].id(),
-            pair[1].id(),
+            pair[0].0, pair[1].0,
             "canonical state contains duplicate SimIds"
         );
     }
+    keys
+}
+
+pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
+    let keys = canonical_entity_keys(world);
+    let mut entities = Vec::with_capacity(keys.len());
+    entities.extend(
+        keys.iter()
+            .filter_map(|&(_, entity)| canonical_entity(world.entity(entity))),
+    );
+    assert_eq!(
+        entities.len(),
+        keys.len(),
+        "canonical state omitted an entity with an invalid authoritative component shape"
+    );
     entities
+}
+
+/// Builds the canonical record for one authoritative entity, or `None` when the entity lacks a
+/// component required by its authoritative shape.
+pub(super) fn canonical_entity(entity: EntityRef<'_>) -> Option<CanonicalEntity> {
+    let id = *entity.get::<SimId>()?;
+    if let Some(state) = entity.get::<WorldFreezerState>() {
+        return Some(CanonicalEntity::WorldFreezer {
+            id,
+            state: state.clone(),
+        });
+    }
+    if let Some(action) = entity.get::<NativeAction>() {
+        return Some(CanonicalEntity::NativeAction {
+            id,
+            action: action.clone(),
+        });
+    }
+    if let Some(revival) = entity.get::<DelayedShrineRevival>() {
+        return Some(CanonicalEntity::DelayedShrineRevival {
+            id,
+            revival: *revival,
+        });
+    }
+    if let Some(state) = entity.get::<SnowveilState>() {
+        return Some(CanonicalEntity::Snowveil {
+            id,
+            state: state.clone(),
+        });
+    }
+    if let Some(state) = entity.get::<BuildingSpellTargetState>() {
+        return Some(CanonicalEntity::BuildingSpellTarget {
+            id,
+            state: state.clone(),
+        });
+    }
+    if let Some(state) = entity.get::<crate::native_carriers::NativeCarrierState>() {
+        return Some(CanonicalEntity::NativeCarrier { id, state: *state });
+    }
+    if let Some(projectile) = entity.get::<GuaranteedHitProjectile>() {
+        return Some(CanonicalEntity::Projectile(CanonicalProjectile {
+            id,
+            projectile: *projectile,
+        }));
+    }
+    if let Some(projectile) = entity.get::<ReflectedProjectile>() {
+        return Some(CanonicalEntity::ReflectedProjectile(
+            CanonicalReflectedProjectile {
+                id,
+                projectile: *projectile,
+            },
+        ));
+    }
+    if let Some(projectile) = entity.get::<LineProjectile>() {
+        return Some(CanonicalEntity::LineProjectile(CanonicalLineProjectile {
+            id,
+            projectile: projectile.clone(),
+        }));
+    }
+    if let Some(projectile) = entity.get::<BallisticProjectile>() {
+        return Some(CanonicalEntity::BallisticProjectile(
+            CanonicalBallisticProjectile {
+                id,
+                projectile: *projectile,
+            },
+        ));
+    }
+    if let Some(projectile) = entity.get::<BounceProjectile>() {
+        return Some(CanonicalEntity::BounceProjectile(
+            CanonicalBounceProjectile {
+                id,
+                projectile: *projectile,
+            },
+        ));
+    }
+    if let Some(zone) = entity.get::<BurningOilZone>() {
+        return Some(CanonicalEntity::BurningOil(CanonicalBurningOil {
+            id,
+            zone: *zone,
+        }));
+    }
+    if let Some(state) = entity.get::<ChainLightningState>() {
+        return Some(CanonicalEntity::ChainLightning(CanonicalChainLightning {
+            id,
+            state: *state,
+        }));
+    }
+    if let Some(corpse) = entity.get::<Corpse>() {
+        return Some(CanonicalEntity::Corpse(CanonicalCorpse {
+            id,
+            position: entity.get::<Position>()?.0,
+            corpse: *corpse,
+        }));
+    }
+    if entity.get::<Builder>().is_some() {
+        return Some(CanonicalEntity::Builder(CanonicalBuilder {
+            id,
+            owner: entity.get::<Owner>()?.0,
+            team: *entity.get::<Team>()?,
+            position: entity.get::<Position>()?.0,
+            profile: *entity.get::<BuilderProfile>()?,
+            configuration: entity.get::<BuilderConfiguration>()?.clone(),
+            state: *entity.get::<BuilderState>()?,
+            orders: entity
+                .get::<BuilderOrderQueue>()
+                .cloned()
+                .unwrap_or_default(),
+        }));
+    }
+    let team = *entity.get::<Team>()?;
+    let health = *entity.get::<Health>()?;
+    if let Some(position) = entity.get::<Position>() {
+        let mut unit = CanonicalUnit {
+            id,
+            content: entity.get::<ContentIdentity>().copied(),
+            owner: entity.get::<Owner>()?.0,
+            team,
+            position: position.0,
+            health,
+            health_regeneration: *entity.get::<HealthRegeneration>()?,
+            attack: *entity.get::<AttackProfile>()?,
+            action_timing: *entity.get::<ActionTimingProfile>()?,
+            secondary_attack: entity.get::<SecondaryAttackProfile>().copied(),
+            attack_targets: *entity.get::<AttackTargetMask>()?,
+            damage_type: *entity.get::<DamageType>()?,
+            armor: *entity.get::<ArmorProfile>()?,
+            passive_effects: *entity.get::<PassiveUnitEffects>()?,
+            movement_class: *entity.get::<MovementClass>()?,
+            mechanical: entity.get::<MechanicalUnit>().is_some(),
+            classifications: entity
+                .get::<UnitClassifications>()
+                .copied()
+                .unwrap_or_default(),
+            shrine_state: entity
+                .get::<ShrineRevivalState>()
+                .copied()
+                .unwrap_or_default(),
+            build_time_ticks: entity.get::<BuildTimeTicks>().map(|ticks| ticks.0),
+            repair_time_ticks: entity.get::<RepairTimeTicks>().map(|ticks| ticks.0),
+            movement: *entity.get::<MovementProfile>()?,
+            cooldown: *entity.get::<AttackCooldown>()?,
+            attack_sequence: *entity.get::<AttackSequence>()?,
+            target: *entity.get::<TargetState>()?,
+            retaliation: *entity.get::<RetaliationState>()?,
+            status: *entity.get::<StatusState>()?,
+            navigation: *entity.get::<NavigationState>()?,
+            spawn_tick: *entity.get::<SpawnTick>()?,
+            corpse: entity.get::<CorpseProducer>().map(|corpse| corpse.0),
+            collision_radius: entity.get::<CollisionRadius>().copied(),
+            spellcasting: entity.get::<SpellcastingProfile>().copied(),
+            mana: entity.get::<ManaState>().copied(),
+            ability_state: entity.get::<AutomaticAbilityState>().copied(),
+            additional_abilities: entity.get::<AdditionalAutomaticAbilities>().copied(),
+            resurrection: None,
+        };
+        unit.set_resurrection_definition(
+            entity.get::<ResurrectionProfile>().map(|profile| profile.0),
+        );
+        Some(CanonicalEntity::Unit(unit))
+    } else {
+        Some(CanonicalEntity::Building(CanonicalBuilding {
+            action_timing: entity
+                .get::<ActionTimingProfile>()
+                .copied()
+                .unwrap_or_default(),
+            secondary_attack: entity.get::<SecondaryAttackProfile>().copied(),
+            passive_effects: entity
+                .get::<PassiveUnitEffects>()
+                .filter(|effects| effects.iter().next().is_some())
+                .copied()
+                .map(Box::new),
+            id,
+            content: entity.get::<ContentIdentity>().copied(),
+            owner: entity.get::<Owner>().map(|owner| owner.0),
+            team,
+            footprint: *entity.get::<BuildingFootprint>()?,
+            health,
+            health_regeneration: entity.get::<HealthRegeneration>().copied(),
+            construction: entity.get::<BuildingConstruction>().copied().map(Box::new),
+            economy: entity.get::<BuildingEconomyProfile>().copied(),
+            repair_time_ticks: entity.get::<RepairTimeTicks>().map(|ticks| ticks.0),
+            production: entity.get::<ProductionProfile>().copied(),
+            production_state: entity.get::<ProductionState>().copied(),
+            production_content: entity
+                .get::<ProductionContentIdentity>()
+                .map(|content| content.0),
+            production_corpse: entity
+                .get::<ProductionCorpseProfile>()
+                .map(|corpse| corpse.0),
+            production_collision_radius: entity
+                .get::<ProductionCollisionRadius>()
+                .map(|radius| radius.0),
+            production_movement_class: entity.get::<ProductionMovementClass>().map(|class| class.0),
+            production_repair_metadata: entity.get::<ProductionUnitRepairMetadata>().copied(),
+            production_attack_targets: entity
+                .get::<ProductionAttackTargets>()
+                .map(|targets| targets.0),
+            production_action_timing: entity
+                .get::<ProductionActionTiming>()
+                .map(|timing| timing.0),
+            production_secondary_attack: entity
+                .get::<ProductionSecondaryAttack>()
+                .map(|profile| profile.0),
+            production_health_regen_per_second_per_10k: entity
+                .get::<ProductionHealthRegeneration>()
+                .map(|regeneration| regeneration.0),
+            production_damage_type: entity
+                .get::<ProductionDamageType>()
+                .map(|damage_type| damage_type.0),
+            production_armor: entity.get::<ProductionArmorProfile>().map(|armor| armor.0),
+            production_passive_effects: entity
+                .get::<ProductionPassiveEffects>()
+                .map(|effects| effects.0),
+            production_spellcasting: entity
+                .get::<ProductionSpellcastingProfile>()
+                .map(|profile| Box::new(profile.0)),
+            classifications: entity
+                .get::<UnitClassifications>()
+                .copied()
+                .unwrap_or_default(),
+            production_classifications: entity
+                .get::<ProductionUnitClassifications>()
+                .map_or(UnitClassifications::default(), |flags| flags.0),
+            production_additional_abilities: entity
+                .get::<ProductionAdditionalAutomaticAbilities>()
+                .map(|profiles| Box::new(profiles.0)),
+            attack: entity.get::<AttackProfile>().copied(),
+            attack_targets: entity.get::<AttackTargetMask>().copied(),
+            damage_type: *entity.get::<DamageType>()?,
+            armor: *entity.get::<ArmorProfile>()?,
+            cooldown: entity.get::<AttackCooldown>().copied(),
+            target: entity.get::<TargetState>().copied(),
+            spawn_tick: entity.get::<SpawnTick>().copied(),
+            spellcasting: entity.get::<SpellcastingProfile>().copied(),
+            mana: entity.get::<ManaState>().copied(),
+            ability_state: entity.get::<AutomaticAbilityState>().copied(),
+            additional_abilities: entity.get::<AdditionalAutomaticAbilities>().copied(),
+            status: entity.get::<StatusState>().copied(),
+        }))
+    }
 }
 
 fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
