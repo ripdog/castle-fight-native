@@ -23,7 +23,7 @@ use bevy::{
     render::diagnostic::RenderDiagnosticsPlugin,
     time::Fixed,
 };
-use castle_fight_sim::{CASTLE_FIGHT_SIMULATION_HZ, TickTimings};
+use castle_fight_sim::{CASTLE_FIGHT_SIMULATION_HZ, SpanTimings, TickTimings};
 
 use crate::{
     bridge::PresentationSamples, presentation::DebugPresentation, resource_ui::TOP_BAR_HEIGHT,
@@ -1363,6 +1363,7 @@ fn average_sim_samples(
         structural_commit: total.structural_commit / divisor,
         checksum: total.checksum / divisor,
         total: total.total / divisor,
+        spans: SpanTimings::default(),
     })
 }
 

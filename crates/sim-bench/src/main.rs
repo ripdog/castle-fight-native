@@ -11,7 +11,7 @@ use castle_fight_sim::{
     CastleFightProductionKind, CastleFightUnitKind, CollisionRadius, CombatRules,
     DebugStartingBuildings, ManaProfile, MapVersion, ModifierId, MovementProfile, PlayerId,
     ProductionProfile, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation, SimulationConfig,
-    SpellcastingProfile, Team, TickResult, TickTimings, UnitSpawn, UnitTemplate,
+    Span, SpanTimings, SpellcastingProfile, Team, TickResult, TickTimings, UnitSpawn, UnitTemplate,
     castle_fight_damage_rules, create_castle_fight_match,
 };
 
@@ -128,6 +128,8 @@ struct Args {
     /// `None` means the scenario's default; see `Args::run_length`.
     warmup: Option<u64>,
     all_buildings: AllBuildingsOptions,
+    /// Prints the sub-step span breakdown for every scenario. All-buildings always prints it.
+    spans: bool,
 }
 
 impl Default for Args {
@@ -139,6 +141,7 @@ impl Default for Args {
             ticks: None,
             warmup: None,
             all_buildings: AllBuildingsOptions::default(),
+            spans: false,
         }
     }
 }
@@ -324,6 +327,9 @@ fn main() {
                 if scenario == Scenario::AllBuildings {
                     print_tick_profile(&result.tick_samples, warmup);
                 }
+                if args.spans || scenario == Scenario::AllBuildings {
+                    print_span_breakdown(&result, scenario.name(), units, workers);
+                }
             }
         }
     }
@@ -427,6 +433,10 @@ struct BenchResult {
     traffic_lower_half_units: usize,
     traffic_upper_half_units: usize,
     checksum: u64,
+    /// Measured ticks, the divisor for `spans` averages.
+    ticks: u64,
+    /// Sub-step span totals over the measured ticks.
+    spans: SpanTimings,
     /// Per-tick samples, recorded only for the all-buildings scenario.
     tick_samples: Vec<TickSample>,
 }
@@ -709,6 +719,8 @@ fn run_case(
         traffic_lower_half_units,
         traffic_upper_half_units,
         checksum: simulation.checksum(),
+        ticks,
+        spans: timings.spans,
         tick_samples,
     }
 }
@@ -740,6 +752,55 @@ fn phase_durations(timings: &TickTimings) -> [Duration; PHASE_COUNT] {
         timings.structural_commit,
         timings.checksum,
     ]
+}
+
+/// Prints the sub-step breakdown: one row per nonzero span sorted by average ms per tick, then an
+/// `untracked` row for the wall time not covered by any span.
+fn print_span_breakdown(result: &BenchResult, scenario: &str, units: usize, workers: usize) {
+    let wall_ms = result.ms_per_tick;
+    let mut rows: Vec<(Span, Duration, f64)> = Span::ALL
+        .into_iter()
+        .filter_map(|span| {
+            let total = result.spans.get(span);
+            (total > Duration::ZERO).then(|| (span, total, ms_per_tick(total, result.ticks)))
+        })
+        .collect();
+    rows.sort_by(|a, b| b.2.total_cmp(&a.2));
+    let tracked_ms: f64 = rows.iter().map(|(_, _, ms)| ms).sum();
+    let percent = |ms: f64| {
+        if wall_ms > 0.0 {
+            ms * 100.0 / wall_ms
+        } else {
+            0.0
+        }
+    };
+
+    println!();
+    println!(
+        "span breakdown: scenario={scenario} units={units} workers={workers} ticks={} wall-ms/tick={wall_ms:.3} tracked-ms/tick={tracked_ms:.3}",
+        result.ticks,
+    );
+    println!(
+        "{:<28} {:<8} {:>10} {:>8}",
+        "span", "phase", "avg ms/tick", "% wall"
+    );
+    for (span, _, ms) in &rows {
+        println!(
+            "{:<28} {:<8} {:>10.3} {:>7.2}%",
+            span.name(),
+            span.phase(),
+            ms,
+            percent(*ms),
+        );
+    }
+    let untracked_ms = wall_ms - tracked_ms;
+    println!(
+        "{:<28} {:<8} {:>10.3} {:>7.2}%",
+        "untracked",
+        "-",
+        untracked_ms,
+        percent(untracked_ms),
+    );
 }
 
 /// Prints per-window (10 game-second) timing and state, then the slowest individual ticks.
@@ -1932,6 +1993,7 @@ fn accumulate_timings(total: &mut TickTimings, tick: TickTimings) {
     total.structural_commit += tick.structural_commit;
     total.checksum += tick.checksum;
     total.total += tick.total;
+    total.spans.accumulate(&tick.spans);
 }
 
 fn average_phase_ms(total: TickTimings, ticks: u64) -> PhaseMs {
@@ -1989,6 +2051,7 @@ fn parse_args() -> Args {
                 args.all_buildings.players_per_team = players;
             }
             "--mortal-buildings" => args.all_buildings.invulnerable_buildings = false,
+            "--spans" => args.spans = true,
             "--synced-mana" => args.all_buildings.randomize_mana = false,
             "-h" | "--help" => {
                 println!("Usage: cargo run --release -p castle-fight-sim-bench -- [options]");
@@ -1996,6 +2059,9 @@ fn parse_args() -> Args {
                     "  --scenario lane,cage,crowd,pathing,topology,production,projectile,ballistic,bounce,tower,ability,stun,slow,radius,traffic,traffic-flow,traffic-production,mixed,all-buildings"
                 );
                 println!("  --units 700,1000,5000,10000");
+                println!(
+                    "  --spans (print the per-sub-step span breakdown for every scenario; all-buildings always prints it)"
+                );
                 println!("  --workers 1,2,4,8");
                 println!("  --ticks 200 (all-buildings: 120 seconds of game time)");
                 println!("  --warmup 20 (all-buildings: 0)");

@@ -98,7 +98,9 @@ use match_rules::{PendingRescueStrike, PlayerStrikeState};
 pub use match_rules::{PlayerRoundScore, RescueStrikeVisualEvent, RoundScoreboard};
 mod movement;
 mod native_actions;
+mod spans;
 pub use native_actions::aura_carrier::AuraCarrierView;
+pub use spans::{Span, SpanTimings};
 #[cfg(test)]
 mod native_actions_tests;
 mod native_buff_transfer;
@@ -344,6 +346,8 @@ pub struct TickTimings {
     pub structural_commit: Duration,
     pub checksum: Duration,
     pub total: Duration,
+    /// Always-on sub-step breakdown; each span is also covered by one of the phases above.
+    pub spans: SpanTimings,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -746,6 +750,17 @@ pub struct Simulation {
     configuration_identity: u64,
     debug_buildings_invulnerable: bool,
     fog: Option<crate::FogOfWar>,
+}
+
+/// Times one sub-step into `$spans` and yields the expression's value. The timed expression runs
+/// exactly where it would have run without the wrapper, so call order and arguments are unchanged.
+macro_rules! timed {
+    ($spans:ident, $span:expr, $body:expr $(,)?) => {{
+        let span_start = Instant::now();
+        let value = $body;
+        $spans.add($span, span_start.elapsed());
+        value
+    }};
 }
 
 impl Simulation {
@@ -1740,170 +1755,306 @@ impl Simulation {
         self.clear_presentation_events();
         let tick_start = Instant::now();
         let completed_tick = self.next_tick;
+        let mut spans = SpanTimings::default();
 
         let phase_start = Instant::now();
-        let mut topology_rebuilt = self.refresh_topology_if_dirty();
+        let mut topology_rebuilt = timed!(
+            spans,
+            Span::TopologyRefresh,
+            self.refresh_topology_if_dirty()
+        );
         let mut topology = phase_start.elapsed();
 
         let phase_start = Instant::now();
-        self.refresh_mana_improvement_links();
-        self.refresh_carrier_auras_for_timers();
-        self.refresh_native_mana_auras_for_timers();
-        self.refresh_native_building_auras_for_timers();
-        self.advance_cooldowns();
-        self.advance_rescue_strikes(completed_tick);
-        self.resolve_shrine_revivals();
-        self.advance_building_spell_controls();
-        let mirror_spawns = self.advance_mirror_images() + self.advance_lava_spawns();
-        let corpses_expired = self.expire_corpses();
-        self.pause_frozen_building_activities();
-        self.advance_builders();
-        self.advance_building_construction();
+        timed!(
+            spans,
+            Span::ManaImprovementLinks,
+            self.refresh_mana_improvement_links()
+        );
+        timed!(
+            spans,
+            Span::CarrierAurasTimers,
+            self.refresh_carrier_auras_for_timers()
+        );
+        timed!(
+            spans,
+            Span::NativeManaAurasTimers,
+            self.refresh_native_mana_auras_for_timers()
+        );
+        timed!(
+            spans,
+            Span::NativeBuildingAurasTimers,
+            self.refresh_native_building_auras_for_timers()
+        );
+        timed!(spans, Span::AdvanceCooldowns, self.advance_cooldowns());
+        timed!(
+            spans,
+            Span::RescueStrikes,
+            self.advance_rescue_strikes(completed_tick)
+        );
+        timed!(spans, Span::ShrineRevivals, self.resolve_shrine_revivals());
+        timed!(
+            spans,
+            Span::BuildingSpellControls,
+            self.advance_building_spell_controls()
+        );
+        let mirror_spawns = timed!(
+            spans,
+            Span::MirrorImagesAndLava,
+            self.advance_mirror_images() + self.advance_lava_spawns()
+        );
+        let corpses_expired = timed!(spans, Span::ExpireCorpses, self.expire_corpses());
+        timed!(
+            spans,
+            Span::PauseFrozenBuildingActivities,
+            self.pause_frozen_building_activities()
+        );
+        timed!(spans, Span::AdvanceBuilders, self.advance_builders());
+        timed!(
+            spans,
+            Span::BuildingConstruction,
+            self.advance_building_construction()
+        );
         let timers = phase_start.elapsed();
 
         // Builder construction can add an occupied footprint during this tick. Rebuild before
         // target selection/movement so the site blocks ground navigation on its first live tick.
         let phase_start = Instant::now();
-        topology_rebuilt |= self.refresh_topology_if_dirty();
+        topology_rebuilt |= timed!(
+            spans,
+            Span::TopologyRefresh,
+            self.refresh_topology_if_dirty()
+        );
         topology += phase_start.elapsed();
 
         let phase_start = Instant::now();
-        let (units_spawned, spawn_failures) = self.advance_production();
+        let (units_spawned, spawn_failures) =
+            timed!(spans, Span::Production, self.advance_production());
         let production = phase_start.elapsed();
 
         let phase_start = Instant::now();
-        self.refresh_vision();
-        let mut units = self.snapshot_units();
-        let mut buildings = self.snapshot_buildings();
-        self.refresh_snow_protection(&mut units, &mut buildings);
-        death_healing::refresh_support(&mut units, &buildings, None);
-        resolve_periodic_unit_statuses(
-            &mut units,
-            completed_tick,
-            self.combat_rules.damage_rules,
-            &self.retired_damage_sources,
+        timed!(spans, Span::RefreshVision, self.refresh_vision());
+        let mut units = timed!(spans, Span::SnapshotUnits, self.snapshot_units());
+        let mut buildings = timed!(spans, Span::SnapshotBuildings, self.snapshot_buildings());
+        timed!(
+            spans,
+            Span::SnowProtection,
+            self.refresh_snow_protection(&mut units, &mut buildings)
         );
-        native_actions::resolve_native_building_damage_over_time(
-            &mut buildings,
-            completed_tick,
-            self.combat_rules.damage_rules,
+        timed!(
+            spans,
+            Span::SupportRefreshInitial,
+            death_healing::refresh_support(&mut units, &buildings, None)
         );
-        death_healing::refresh_support(&mut units, &buildings, None);
-        self.resolve_burning_oil_zones(&mut units, &mut buildings, completed_tick);
-        let mut grid = SpatialGrid::build(
-            self.config.spatial_cell_size,
-            units
-                .iter()
-                .enumerate()
-                .filter(|(_, unit)| unit.health > 0)
-                .flat_map(|(index, unit)| {
-                    let component_entry = (unit.movement_class == MovementClass::Ground)
-                        .then(|| {
-                            self.topology
-                                .component_id(self.topology.cell_of_point(unit.position))
-                        })
+        timed!(
+            spans,
+            Span::PeriodicUnitStatuses,
+            resolve_periodic_unit_statuses(
+                &mut units,
+                completed_tick,
+                self.combat_rules.damage_rules,
+                &self.retired_damage_sources,
+            )
+        );
+        timed!(
+            spans,
+            Span::BuildingDamageOverTime,
+            native_actions::resolve_native_building_damage_over_time(
+                &mut buildings,
+                completed_tick,
+                self.combat_rules.damage_rules,
+            )
+        );
+        timed!(
+            spans,
+            Span::SupportRefreshAfterDamage,
+            death_healing::refresh_support(&mut units, &buildings, None)
+        );
+        timed!(
+            spans,
+            Span::BurningOilZones,
+            self.resolve_burning_oil_zones(&mut units, &mut buildings, completed_tick)
+        );
+        let mut grid = timed!(
+            spans,
+            Span::SpatialGridBuild,
+            SpatialGrid::build(
+                self.config.spatial_cell_size,
+                units
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, unit)| unit.health > 0)
+                    .flat_map(|(index, unit)| {
+                        let component_entry = (unit.movement_class == MovementClass::Ground)
+                            .then(|| {
+                                self.topology
+                                    .component_id(self.topology.cell_of_point(unit.position))
+                            })
+                            .flatten()
+                            .map(|component| {
+                                (
+                                    SpatialPartition::new(unit.team.0, component),
+                                    index,
+                                    unit.position,
+                                )
+                            });
+                        [
+                            component_entry,
+                            Some((SpatialPartition::global(unit.team.0), index, unit.position)),
+                        ]
+                        .into_iter()
                         .flatten()
-                        .map(|component| {
-                            (
-                                SpatialPartition::new(unit.team.0, component),
-                                index,
-                                unit.position,
-                            )
-                        });
-                    [
-                        component_entry,
-                        Some((SpatialPartition::global(unit.team.0), index, unit.position)),
-                    ]
-                    .into_iter()
-                    .flatten()
-                }),
+                    }),
+            )
         );
         let mut snapshot_and_spatial = phase_start.elapsed();
 
         let phase_start = Instant::now();
-        self.resolve_support_orders(&mut units);
-        self.resolve_world_freezer(&mut units, &mut buildings);
-        self.resolve_native_actions(&mut units, &mut buildings);
-        self.resolve_permanent_immolation(&mut units);
-        self.apply_passive_auras(&mut units, &buildings);
-        self.apply_speed_auras(&mut units);
-        self.apply_hostile_armor_auras(&mut units, &buildings);
-        self.resolve_damage_charge(&mut units, &mut buildings);
-        self.refresh_native_building_auras(&mut units, &mut buildings);
-        let ability_metrics = self.resolve_automatic_abilities(&mut buildings, &mut units, &grid);
-        self.refresh_native_building_auras(&mut units, &mut buildings);
+        timed!(
+            spans,
+            Span::SupportOrders,
+            self.resolve_support_orders(&mut units)
+        );
+        timed!(
+            spans,
+            Span::WorldFreezer,
+            self.resolve_world_freezer(&mut units, &mut buildings)
+        );
+        timed!(
+            spans,
+            Span::NativeActions,
+            self.resolve_native_actions(&mut units, &mut buildings)
+        );
+        timed!(
+            spans,
+            Span::PermanentImmolation,
+            self.resolve_permanent_immolation(&mut units)
+        );
+        timed!(
+            spans,
+            Span::PassiveAuras,
+            self.apply_passive_auras(&mut units, &buildings)
+        );
+        timed!(spans, Span::SpeedAuras, self.apply_speed_auras(&mut units));
+        timed!(
+            spans,
+            Span::HostileArmorAuras,
+            self.apply_hostile_armor_auras(&mut units, &buildings)
+        );
+        timed!(
+            spans,
+            Span::DamageCharge,
+            self.resolve_damage_charge(&mut units, &mut buildings)
+        );
+        timed!(
+            spans,
+            Span::NativeBuildingAuras,
+            self.refresh_native_building_auras(&mut units, &mut buildings)
+        );
+        let ability_metrics = timed!(
+            spans,
+            Span::AutomaticAbilities,
+            self.resolve_automatic_abilities(&mut buildings, &mut units, &grid)
+        );
+        timed!(
+            spans,
+            Span::NativeBuildingAuras,
+            self.refresh_native_building_auras(&mut units, &mut buildings)
+        );
         if self
             .last_ability_casts
             .iter()
             .any(|c| matches!(c.effect, AbilityEffect::NagaCharm(_)))
         {
             // Ownership changes during spell resolution invalidate team partitions immediately.
-            grid = SpatialGrid::build(
-                self.config.spatial_cell_size,
-                units
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, u)| u.health > 0)
-                    .flat_map(|(i, u)| {
-                        let component = (u.movement_class == MovementClass::Ground)
-                            .then(|| {
-                                self.topology
-                                    .component_id(self.topology.cell_of_point(u.position))
-                            })
-                            .flatten();
-                        [
-                            component.map(|c| (SpatialPartition::new(u.team.0, c), i, u.position)),
-                            Some((SpatialPartition::global(u.team.0), i, u.position)),
-                        ]
-                        .into_iter()
-                        .flatten()
-                    }),
+            grid = timed!(
+                spans,
+                Span::NagaCharmGridRebuild,
+                SpatialGrid::build(
+                    self.config.spatial_cell_size,
+                    units
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, u)| u.health > 0)
+                        .flat_map(|(i, u)| {
+                            let component = (u.movement_class == MovementClass::Ground)
+                                .then(|| {
+                                    self.topology
+                                        .component_id(self.topology.cell_of_point(u.position))
+                                })
+                                .flatten();
+                            [
+                                component
+                                    .map(|c| (SpatialPartition::new(u.team.0, c), i, u.position)),
+                                Some((SpatialPartition::global(u.team.0), i, u.position)),
+                            ]
+                            .into_iter()
+                            .flatten()
+                        }),
+                )
             );
         }
         let abilities = phase_start.elapsed();
 
         let phase_start = Instant::now();
-        let needs_ally_defense_index = !self.defense_alerts.is_empty()
-            && self.pool.install(|| {
-                units
-                    .par_iter()
-                    .any(|unit| self.unit_will_query_ally_defense(unit, &units, &buildings))
-            });
+        let needs_ally_defense_index = timed!(
+            spans,
+            Span::AllyDefenseVictims,
+            !self.defense_alerts.is_empty()
+                && self.pool.install(|| {
+                    units
+                        .par_iter()
+                        .any(|unit| self.unit_will_query_ally_defense(unit, &units, &buildings))
+                })
+        );
         let defense_victims = if needs_ally_defense_index {
-            grouped_defense_victims(&self.defense_alerts, &units, &buildings)
+            timed!(
+                spans,
+                Span::AllyDefenseVictims,
+                grouped_defense_victims(&self.defense_alerts, &units, &buildings)
+            )
         } else {
             Vec::new()
         };
-        let alert_grid = SpatialGrid::build(
-            self.config.spatial_cell_size,
-            defense_victims.iter().enumerate().map(|(index, victim)| {
-                (
-                    SpatialPartition::global(victim.victim_team.0),
-                    index,
-                    victim.victim_position,
-                )
-            }),
+        let alert_grid = timed!(
+            spans,
+            Span::DefenseGridBuild,
+            SpatialGrid::build(
+                self.config.spatial_cell_size,
+                defense_victims.iter().enumerate().map(|(index, victim)| {
+                    (
+                        SpatialPartition::global(victim.victim_team.0),
+                        index,
+                        victim.victim_position,
+                    )
+                }),
+            )
         );
         let unit_snapshots = units.as_slice();
-        let defense_attacker_grid = SpatialGrid::build(
-            self.config.spatial_cell_size,
-            defense_victims
-                .iter()
-                .enumerate()
-                .flat_map(|(victim_index, victim)| {
-                    let partition = defense_attacker_partition(victim_index);
-                    victim
-                        .unit_attackers
-                        .iter()
-                        .copied()
-                        .map(move |unit_index| {
-                            (partition, unit_index, unit_snapshots[unit_index].position)
-                        })
-                }),
+        let defense_attacker_grid = timed!(
+            spans,
+            Span::DefenseGridBuild,
+            SpatialGrid::build(
+                self.config.spatial_cell_size,
+                defense_victims
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(victim_index, victim)| {
+                        let partition = defense_attacker_partition(victim_index);
+                        victim
+                            .unit_attackers
+                            .iter()
+                            .copied()
+                            .map(move |unit_index| {
+                                (partition, unit_index, unit_snapshots[unit_index].position)
+                            })
+                    }),
+            )
         );
         snapshot_and_spatial += phase_start.elapsed();
 
         let phase_start = Instant::now();
+        let select_targets_start = Instant::now();
         let target_selection = self.select_targets(
             &units,
             &buildings,
@@ -1917,6 +2068,8 @@ impl Simulation {
             unit.direct_retaliation_lock = decision.direct_retaliation_lock;
             unit.ally_defense_lock = decision.ally_defense_lock;
         }
+        spans.add(Span::SelectTargets, select_targets_start.elapsed());
+        let select_building_start = Instant::now();
         let building_target_selection = self.select_building_targets(&buildings, &units, &grid);
         for (building, target) in buildings
             .iter_mut()
@@ -1926,8 +2079,10 @@ impl Simulation {
                 building.target = *target;
             }
         }
+        spans.add(Span::SelectBuildingTargets, select_building_start.elapsed());
         let targeting = phase_start.elapsed();
 
+        let combat_prep_start = Instant::now();
         let mut unit_health: Vec<i32> = units.iter().map(|unit| unit.health).collect();
         let mut building_health: Vec<i32> =
             buildings.iter().map(|building| building.health).collect();
@@ -1944,38 +2099,51 @@ impl Simulation {
         let mut attackers_this_tick = vec![None; units.len()];
         let mut next_defense_alerts = Vec::new();
 
-        let chain_lightning_hops = self.resolve_due_chain_lightning_hops(
-            &mut units,
-            &mut unit_health,
-            &positions,
-            completed_tick,
+        spans.add(Span::CombatPrep, combat_prep_start.elapsed());
+        let chain_lightning_hops = timed!(
+            spans,
+            Span::ChainLightning,
+            self.resolve_due_chain_lightning_hops(
+                &mut units,
+                &mut unit_health,
+                &positions,
+                completed_tick,
+            )
         );
         let chain_lightning_updates = chain_lightning_hops.updates;
         let chain_lightning_entities_to_remove = chain_lightning_hops.removals;
 
         let phase_start = Instant::now();
-        let native_carriers = self.resolve_native_carriers(TargetProjectileContext {
-            units: &mut units,
-            buildings: &mut buildings,
-            grid: &grid,
-            unit_health: &mut unit_health,
-            building_health: &mut building_health,
-            positions: &positions,
-            attackers_this_tick: &mut attackers_this_tick,
-            next_defense_alerts: &mut next_defense_alerts,
-            completed_tick,
-        });
-        let target_projectiles = self.resolve_due_target_projectiles(TargetProjectileContext {
-            units: &mut units,
-            buildings: &mut buildings,
-            grid: &grid,
-            unit_health: &mut unit_health,
-            building_health: &mut building_health,
-            positions: &positions,
-            attackers_this_tick: &mut attackers_this_tick,
-            next_defense_alerts: &mut next_defense_alerts,
-            completed_tick,
-        });
+        let native_carriers = timed!(
+            spans,
+            Span::NativeCarriers,
+            self.resolve_native_carriers(TargetProjectileContext {
+                units: &mut units,
+                buildings: &mut buildings,
+                grid: &grid,
+                unit_health: &mut unit_health,
+                building_health: &mut building_health,
+                positions: &positions,
+                attackers_this_tick: &mut attackers_this_tick,
+                next_defense_alerts: &mut next_defense_alerts,
+                completed_tick,
+            })
+        );
+        let target_projectiles = timed!(
+            spans,
+            Span::TargetProjectiles,
+            self.resolve_due_target_projectiles(TargetProjectileContext {
+                units: &mut units,
+                buildings: &mut buildings,
+                grid: &grid,
+                unit_health: &mut unit_health,
+                building_health: &mut building_health,
+                positions: &positions,
+                attackers_this_tick: &mut attackers_this_tick,
+                next_defense_alerts: &mut next_defense_alerts,
+                completed_tick,
+            })
+        );
         let due_ballistic_projectiles = target_projectiles.due_ballistic_projectiles;
         let mut projectile_entities_to_remove = target_projectiles.projectile_entities_to_remove;
         let bounce_projectile_updates = target_projectiles.bounce_projectile_updates;
@@ -1990,19 +2158,23 @@ impl Simulation {
         let mut chain_lightning_launches = target_projectiles.chain_lightning_launches;
         let reflected_projectile_launches = target_projectiles.reflected_projectile_launches;
 
-        let attack_resolution = self.resolve_attacks(AttackResolutionContext {
-            units: &mut units,
-            buildings: &mut buildings,
-            unit_health: &mut unit_health,
-            building_health: &mut building_health,
-            cooldowns: &mut cooldowns,
-            attack_sequences: &mut attack_sequences,
-            building_cooldowns: &mut building_cooldowns,
-            positions: &positions,
-            attackers_this_tick: &mut attackers_this_tick,
-            next_defense_alerts: &mut next_defense_alerts,
-            completed_tick,
-        });
+        let attack_resolution = timed!(
+            spans,
+            Span::Attacks,
+            self.resolve_attacks(AttackResolutionContext {
+                units: &mut units,
+                buildings: &mut buildings,
+                unit_health: &mut unit_health,
+                building_health: &mut building_health,
+                cooldowns: &mut cooldowns,
+                attack_sequences: &mut attack_sequences,
+                building_cooldowns: &mut building_cooldowns,
+                positions: &positions,
+                attackers_this_tick: &mut attackers_this_tick,
+                next_defense_alerts: &mut next_defense_alerts,
+                completed_tick,
+            })
+        );
         let attacks_resolved = attack_resolution.attacks_resolved;
         let projectile_launches = attack_resolution.projectile_launches;
         let line_projectile_launches = attack_resolution.line_projectile_launches;
@@ -2018,40 +2190,59 @@ impl Simulation {
             + attack_resolution.native_barrage_launches;
         let combat = phase_start.elapsed();
 
-        let movement = self.resolve_movement(
-            &units,
-            &buildings,
-            &unit_health,
-            &building_health,
-            &mut positions,
-            &mut navigation_states,
+        let movement = timed!(
+            spans,
+            Span::Movement,
+            self.resolve_movement(
+                &units,
+                &buildings,
+                &unit_health,
+                &building_health,
+                &mut positions,
+                &mut navigation_states,
+            )
         );
 
         for (unit, position) in units.iter_mut().zip(&positions) {
             unit.death_position = *position;
         }
         let phase_start = Instant::now();
-        self.refresh_snow_protection_at(&mut units, &mut buildings, Some(&positions));
-        let ballistic_impacts = self.resolve_due_ballistic_impacts(BallisticImpactContext {
-            due_projectiles: due_ballistic_projectiles,
-            units: &mut units,
-            buildings: &buildings,
-            positions: &positions,
-            unit_health: &mut unit_health,
-            building_health: &mut building_health,
-            attackers_this_tick: &mut attackers_this_tick,
-            next_defense_alerts: &mut next_defense_alerts,
-            completed_tick,
-        });
-        let (hailstone_impacts, hailstone_effects) = self.resolve_due_hailstone_impacts(
-            &mut units,
-            &mut buildings,
-            &positions,
-            &mut unit_health,
-            &mut building_health,
+        timed!(
+            spans,
+            Span::SnowProtectionAt,
+            self.refresh_snow_protection_at(&mut units, &mut buildings, Some(&positions))
         );
-        let (proxy_impacts, proxy_effects) =
-            self.resolve_due_attack_proxy_impacts(&mut buildings, &mut building_health);
+        let ballistic_impacts = timed!(
+            spans,
+            Span::BallisticImpacts,
+            self.resolve_due_ballistic_impacts(BallisticImpactContext {
+                due_projectiles: due_ballistic_projectiles,
+                units: &mut units,
+                buildings: &buildings,
+                positions: &positions,
+                unit_health: &mut unit_health,
+                building_health: &mut building_health,
+                attackers_this_tick: &mut attackers_this_tick,
+                next_defense_alerts: &mut next_defense_alerts,
+                completed_tick,
+            })
+        );
+        let (hailstone_impacts, hailstone_effects) = timed!(
+            spans,
+            Span::HailstoneImpacts,
+            self.resolve_due_hailstone_impacts(
+                &mut units,
+                &mut buildings,
+                &positions,
+                &mut unit_health,
+                &mut building_health,
+            )
+        );
+        let (proxy_impacts, proxy_effects) = timed!(
+            spans,
+            Span::AttackProxyImpacts,
+            self.resolve_due_attack_proxy_impacts(&mut buildings, &mut building_health)
+        );
         projectile_impacts += proxy_impacts;
         projectile_effects += proxy_effects;
         if proxy_impacts > 0 {
@@ -2064,7 +2255,9 @@ impl Simulation {
         projectile_effects += ballistic_impacts.projectile_effects;
         let ballistic_candidate_checks = ballistic_impacts.candidate_checks;
         let burning_oil_zone_launches = ballistic_impacts.burning_oil_zone_launches;
-        let (line_impacts, line_effects, line_invalidations) =
+        let (line_impacts, line_effects, line_invalidations) = timed!(
+            spans,
+            Span::LineProjectiles,
             self.resolve_line_projectiles(TargetProjectileContext {
                 units: &mut units,
                 buildings: &mut buildings,
@@ -2075,36 +2268,50 @@ impl Simulation {
                 attackers_this_tick: &mut attackers_this_tick,
                 next_defense_alerts: &mut next_defense_alerts,
                 completed_tick,
-            });
+            })
+        );
         projectile_impacts += line_impacts;
         projectile_effects += line_effects;
         projectile_invalidations += line_invalidations;
         let ballistic_impact = phase_start.elapsed();
 
         let phase_start = Instant::now();
-        self.commit_projectile_world_changes(ProjectileWorldChanges {
-            chain_lightning_removals: chain_lightning_entities_to_remove,
-            chain_lightning_updates,
-            projectile_removals: projectile_entities_to_remove,
-            bounce_updates: bounce_projectile_updates,
-            burning_oil_zone_launches,
-            chain_lightning_launches,
-            projectile_launches,
-            line_projectile_launches,
-            reflected_projectile_launches,
-            ballistic_projectile_launches,
-            bounce_projectile_launches,
-            completed_tick,
-        });
-
-        self.resolve_overheat_deaths(
-            &mut units,
-            &buildings,
-            &positions,
-            &mut unit_health,
-            &mut building_health,
+        timed!(
+            spans,
+            Span::CommitProjectileChanges,
+            self.commit_projectile_world_changes(ProjectileWorldChanges {
+                chain_lightning_removals: chain_lightning_entities_to_remove,
+                chain_lightning_updates,
+                projectile_removals: projectile_entities_to_remove,
+                bounce_updates: bounce_projectile_updates,
+                burning_oil_zone_launches,
+                chain_lightning_launches,
+                projectile_launches,
+                line_projectile_launches,
+                reflected_projectile_launches,
+                ballistic_projectile_launches,
+                bounce_projectile_launches,
+                completed_tick,
+            })
         );
-        self.release_spheres(&mut units);
+
+        timed!(
+            spans,
+            Span::OverheatDeaths,
+            self.resolve_overheat_deaths(
+                &mut units,
+                &buildings,
+                &positions,
+                &mut unit_health,
+                &mut building_health,
+            )
+        );
+        timed!(
+            spans,
+            Span::ReleaseSpheres,
+            self.release_spheres(&mut units)
+        );
+        let death_observers_start = Instant::now();
         self.observe_native_death_explosions(&units, &unit_health, &positions);
         self.observe_incinerate_deaths(&units, &unit_health, &positions);
         self.observe_master_parasite_deaths(&units, &unit_health, &positions);
@@ -2116,6 +2323,8 @@ impl Simulation {
             &building_health,
         );
         self.emit_death_heal_visuals(&units, &positions);
+        spans.add(Span::DeathObservers, death_observers_start.elapsed());
+        let unit_death_start = Instant::now();
         let mut deaths = 0;
         let mut corpse_spawns = Vec::new();
         let mut death_spawns = 0;
@@ -2247,7 +2456,9 @@ impl Simulation {
             }
         }
 
+        spans.add(Span::UnitDeathLoop, unit_death_start.elapsed());
         let corpses_spawned = corpse_spawns.len();
+        let corpse_spawn_start = Instant::now();
         for (
             source_unit,
             source_owner,
@@ -2285,7 +2496,9 @@ impl Simulation {
                 },
             ));
         }
+        spans.add(Span::CorpseSpawns, corpse_spawn_start.elapsed());
 
+        let building_death_start = Instant::now();
         let mut building_deaths = Vec::new();
         for (index, building) in buildings.iter().enumerate() {
             if building_health[index] <= 0 {
@@ -2330,6 +2543,8 @@ impl Simulation {
                 }
             }
         }
+        spans.add(Span::BuildingDeathLoop, building_death_start.elapsed());
+        let building_despawn_start = Instant::now();
         if !building_deaths.is_empty() {
             for entity in building_deaths {
                 let id = *self.world.get::<SimId>(entity).expect("dead building id");
@@ -2339,50 +2554,65 @@ impl Simulation {
             }
             self.topology_dirty = true;
         }
+        spans.add(Span::BuildingDespawn, building_despawn_start.elapsed());
 
-        self.prune_retired_air_bonus_sources();
-        self.refresh_mana_improvement_links();
-        self.evaluate_objective_outcome(completed_tick);
-        if self.lifecycle == MatchLifecycle::Running {
-            self.advance_economy_income();
-        }
+        timed!(spans, Span::PostCommitCleanup, {
+            self.prune_retired_air_bonus_sources();
+            self.refresh_mana_improvement_links();
+        });
+        timed!(
+            spans,
+            Span::ObjectiveOutcome,
+            self.evaluate_objective_outcome(completed_tick)
+        );
+        timed!(spans, Span::EconomyIncome, {
+            if self.lifecycle == MatchLifecycle::Running {
+                self.advance_economy_income();
+            }
+        });
         self.defense_alerts = next_defense_alerts;
         let projectiles_alive = self.projectile_count();
         let corpses_alive = self.corpse_count();
-        self.reveal_fogged_attack_sources(&units, &buildings);
-        self.next_tick = self
-            .next_tick
-            .checked_add(1)
-            .expect("tick counter exhausted");
-        self.refresh_vision();
+        timed!(spans, Span::FogAndVision, {
+            self.reveal_fogged_attack_sources(&units, &buildings);
+            self.next_tick = self
+                .next_tick
+                .checked_add(1)
+                .expect("tick counter exhausted");
+            self.refresh_vision();
+        });
         let structural_commit = phase_start.elapsed();
 
         let phase_start = Instant::now();
-        let checksum = canonical_checksum(
-            &self.world,
-            CanonicalMatchState {
-                shrine_death_generation: self.shrine_death_generation,
-                retired_damage_sources: &self.retired_damage_sources,
-                debug_buildings_invulnerable: self.debug_buildings_invulnerable,
-                fog: self.fog.as_ref(),
-                next_tick: self.next_tick,
-                next_id: self.next_id,
-                next_visual_id: self.next_visual_id,
-                configuration_identity: self.configuration_identity,
-                defense_alerts: &self.defense_alerts,
-                players: &self.players,
-                lifecycle: self.lifecycle,
-                team_objectives: self.team_objectives,
-                gjallarhorn_constructed_count: self.gjallarhorn_constructed_count,
-                round_index: self.round_index,
-                round_start_tick: self.round_start_tick,
-                round_wins: self.round_wins,
-                player_strikes: &self.player_strikes,
-                pending_rescue_strikes: &self.pending_rescue_strikes,
-                team_rescue_ready_ticks: self.team_rescue_ready_ticks,
-                review_until_tick: self.review_until_tick,
-                last_round_scoreboard: self.last_round_scoreboard.as_ref(),
-            },
+        let checksum = timed!(
+            spans,
+            Span::Checksum,
+            canonical_checksum(
+                &self.world,
+                CanonicalMatchState {
+                    shrine_death_generation: self.shrine_death_generation,
+                    retired_damage_sources: &self.retired_damage_sources,
+                    debug_buildings_invulnerable: self.debug_buildings_invulnerable,
+                    fog: self.fog.as_ref(),
+                    next_tick: self.next_tick,
+                    next_id: self.next_id,
+                    next_visual_id: self.next_visual_id,
+                    configuration_identity: self.configuration_identity,
+                    defense_alerts: &self.defense_alerts,
+                    players: &self.players,
+                    lifecycle: self.lifecycle,
+                    team_objectives: self.team_objectives,
+                    gjallarhorn_constructed_count: self.gjallarhorn_constructed_count,
+                    round_index: self.round_index,
+                    round_start_tick: self.round_start_tick,
+                    round_wins: self.round_wins,
+                    player_strikes: &self.player_strikes,
+                    pending_rescue_strikes: &self.pending_rescue_strikes,
+                    team_rescue_ready_ticks: self.team_rescue_ready_ticks,
+                    review_until_tick: self.review_until_tick,
+                    last_round_scoreboard: self.last_round_scoreboard.as_ref(),
+                },
+            )
         );
         let checksum_time = phase_start.elapsed();
         let timings = TickTimings {
@@ -2402,6 +2632,7 @@ impl Simulation {
             structural_commit,
             checksum: checksum_time,
             total: tick_start.elapsed(),
+            spans,
         };
 
         TickResult {
