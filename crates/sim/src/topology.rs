@@ -190,18 +190,6 @@ impl TopologyGrid {
             return true;
         }
 
-        // Fast path: the scanned bounding box lies within Chebyshev distance
-        // `radius / cell_size + 1` of the center cell. If clearance covers that distance, every
-        // such cell is in-grid, unblocked and reachable, and the square is a filled block of
-        // cells, which is 4-connected (rebuild_components floods over 4-neighbours). All of them
-        // therefore share `center_component`, so the exact scan below would also return true.
-        if let Some(center_index) = self.index(center_cell) {
-            let reach = i64::from(radius / self.cell_size) + 1;
-            if i64::from(self.clearance[center_index]) >= reach {
-                return true;
-            }
-        }
-
         let radius_i64 = i64::from(radius);
 
         let min_cell = self.cell_of_point(SimPoint::new(
@@ -212,6 +200,23 @@ impl TopologyGrid {
             center.x.saturating_add(radius),
             center.y.saturating_add(radius),
         ));
+
+        // Fast path: every cell of the scanned span lies within Chebyshev distance `span_reach`
+        // of the center cell. Clearance k means every cell within Chebyshev distance k is
+        // in-grid, unblocked and reachable. If clearance covers `span_reach`, all span cells
+        // are such cells, and the span is a filled rectangle of cells, which is 4-connected
+        // (rebuild_components floods over 4-neighbours). All of them therefore share
+        // `center_component`, so the exact scan below would also return true.
+        if let Some(center_index) = self.index(center_cell) {
+            let span_reach = (i64::from(center_cell.x) - i64::from(min_cell.x))
+                .max(i64::from(max_cell.x) - i64::from(center_cell.x))
+                .max(i64::from(center_cell.y) - i64::from(min_cell.y))
+                .max(i64::from(max_cell.y) - i64::from(center_cell.y));
+            if i64::from(self.clearance[center_index]) >= span_reach {
+                return true;
+            }
+        }
+
         let radius_sq = (radius_i64 * radius_i64) as u64;
         for y in min_cell.y..=max_cell.y {
             for x in min_cell.x..=max_cell.x {
