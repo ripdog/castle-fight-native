@@ -20,20 +20,25 @@ struct Recipient {
     movement: MovementClass,
     invulnerable: bool,
 }
-fn refresh(
-    status: &mut StatusState,
-    r: Recipient,
-    p: NativeBuildingAuraProfile,
-    sources: &[AuraSource],
-    tick: u64,
-) {
+/// Retires last tick's aura modifiers. Shared by every recipient, alive or not.
+fn retain_aura_modifiers(status: &mut StatusState, p: NativeBuildingAuraProfile) {
     native_carriers::retain_modifiers(
         &mut status.armor_modifiers,
         &mut status.armor_modifier_count,
         |m| m.id.0 != p.armor_ability.0 && m.id.0 != p.regeneration_ability.0,
     );
+}
+
+/// This tick's aura modifier for one recipient, or `None` when no aura applies. Depends only on
+/// the recipient and sources, never on the recipient's current status.
+fn aura_modifier(
+    r: Recipient,
+    p: NativeBuildingAuraProfile,
+    sources: &[AuraSource],
+    tick: u64,
+) -> Option<TimedArmorModifier> {
     if !r.alive {
-        return;
+        return None;
     }
     let matching = |radius| {
         sources.iter().filter(move |s| {
@@ -48,7 +53,7 @@ fn refresh(
             || (r.invulnerable && !p.armor_invulnerable)
             || matching(p.armor_radius).next().is_none()
         {
-            return;
+            return None;
         }
         (
             p.armor_ability,
@@ -65,30 +70,41 @@ fn refresh(
         if !p.regeneration_targets.can_target_unit(r.movement)
             || (r.invulnerable && !p.regeneration_invulnerable)
         {
-            return;
+            return None;
         }
         let regen = matching(p.regeneration_radius).fold(0u32, |rate, _| {
             rate.saturating_add(p.regeneration_per_second_per_10k)
         });
         if regen == 0 {
-            return;
+            return None;
         }
         (p.regeneration_ability, 0, regen, None)
     };
-    apply_timed_armor_modifier(
-        status,
-        TimedArmorModifier {
-            id: ModifierId(ability.0),
-            armor_bonus_per_100: armor,
-            regeneration_per_second_per_10k: regen,
-            native_buff: buff,
-            aura_membership: true,
-            undispellable: true,
-            expires_tick: tick + 1,
-            ..Default::default()
-        },
-    );
+    Some(TimedArmorModifier {
+        id: ModifierId(ability.0),
+        armor_bonus_per_100: armor,
+        regeneration_per_second_per_10k: regen,
+        native_buff: buff,
+        aura_membership: true,
+        undispellable: true,
+        expires_tick: tick + 1,
+        ..Default::default()
+    })
 }
+
+fn refresh(
+    status: &mut StatusState,
+    r: Recipient,
+    p: NativeBuildingAuraProfile,
+    sources: &[AuraSource],
+    tick: u64,
+) {
+    retain_aura_modifiers(status, p);
+    if let Some(modifier) = aura_modifier(r, p, sources, tick) {
+        apply_timed_armor_modifier(status, modifier);
+    }
+}
+
 impl Simulation {
     pub(super) fn refresh_native_building_auras_for_timers(&mut self) {
         // Aura matching only tests existence and sums saturating rates, so visit order is moot.
@@ -202,9 +218,7 @@ impl Simulation {
             ) else {
                 continue;
             };
-            let mut status = b.status.unwrap_or_default();
-            refresh(
-                &mut status,
+            let modifier = aura_modifier(
                 Recipient {
                     team: b.team,
                     position: footprint_center_point(b.footprint, self.config.navigation_cell_size),
@@ -217,8 +231,22 @@ impl Simulation {
                 &sources,
                 self.next_tick,
             );
-            if b.status.is_some() || status.armor_modifier_count > 0 {
-                b.status = Some(status);
+            // Update existing status in place. A building without status gains one only when an
+            // aura actually applies, so no default status is built or copied on the common path.
+            match b.status.as_mut() {
+                Some(status) => {
+                    retain_aura_modifiers(status, p);
+                    if let Some(modifier) = modifier {
+                        apply_timed_armor_modifier(status, modifier);
+                    }
+                }
+                None => {
+                    if let Some(modifier) = modifier {
+                        let mut status = StatusState::default();
+                        apply_timed_armor_modifier(&mut status, modifier);
+                        b.status = Some(status);
+                    }
+                }
             }
         }
     }
