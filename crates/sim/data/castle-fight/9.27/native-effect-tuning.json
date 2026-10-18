@@ -3,6 +3,27 @@
   "map_version": "9.27",
   "effects": [
     {
+      "source_kind": "unit-ability",
+      "source_key": "A0HQ",
+      "unit_rawcode": "n035",
+      "kind": "speed-aura",
+      "profile": {
+        "ability": 1093683281,
+        "buff_rawcode": 1110454871,
+        "radius": 92160,
+        "targets": 1,
+        "hostile": true,
+        "organic_only": false,
+        "affects_invulnerable": true,
+        "movement_percent_delta": -20,
+        "attack_speed_percent_delta": -35
+      },
+      "provenance": {
+        "ability": "A0HQ",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
       "source_key": "A0G8",
