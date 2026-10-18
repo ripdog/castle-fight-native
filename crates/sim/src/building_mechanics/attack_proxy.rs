@@ -79,6 +79,7 @@ impl BuildingAttackProxyProfile {
                 u64::from(p.targets.bits()),
                 u64::from(p.stack_damage),
                 u64::from(p.can_kill),
+                u64::from(p.organic_only),
             ] {
                 visit(word);
             }

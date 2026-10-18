@@ -80,6 +80,7 @@ mod damage_charge;
 mod damage_retaliation;
 mod damage_thresholds;
 mod fan_of_knives;
+mod flying_retarget;
 mod death_spawns;
 mod economy;
 mod forked_lightning;
@@ -6653,6 +6654,15 @@ impl Simulation {
                     attacker_id: source_id,
                     attacked_tick: completed_tick,
                 });
+                if let Some(source_index) = source_index {
+                    Self::observe_flying_attacker_retarget(
+                        index,
+                        source_index,
+                        completed_tick,
+                        state.units,
+                        state.unit_health,
+                    );
+                }
                 if shell.count > 0
                     && let Some(source_index) = find_unit_index(state.units, source_id)
                 {

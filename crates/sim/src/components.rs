@@ -1199,6 +1199,13 @@ pub struct PoisonProfile {
     pub targets: AttackTargetMask,
     pub stack_damage: bool,
     pub can_kill: bool,
+    /// Native `organic` target token: mechanical bodies are immune only when it is listed.
+    #[serde(default = "poison_organic_only_default")]
+    pub organic_only: bool,
+}
+
+const fn poison_organic_only_default() -> bool {
+    true
 }
 
 pub const MAX_NATIVE_POISON_BUFFS: usize = 8;
@@ -2187,6 +2194,8 @@ pub struct StatusState {
     /// Native lightning and the permanent grant survive generator death.
     pub mana_improvement_link: Option<ManaImprovementLink>,
     pub retaliation_sequence: u64,
+    /// Completed tick of the last flying-attacker retarget order, throttling the next one.
+    pub flying_retarget_tick: Option<u64>,
     pub hardened_skin_sequence: u64,
     /// Last authoritative order/movement heading, normalized by consumers.
     pub facing_direction: SimPoint,

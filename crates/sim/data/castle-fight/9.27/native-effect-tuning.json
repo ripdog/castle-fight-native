@@ -3,6 +3,44 @@
   "map_version": "9.27",
   "effects": [
     {
+      "source_kind": "unit-ability",
+      "source_key": "A0G2",
+      "unit_rawcode": "n02S",
+      "kind": "poison",
+      "profile": {
+        "ability": 1093682994,
+        "buff_rawcode": 1110454585,
+        "damage_per_second": 0,
+        "movement_percent_delta": -20,
+        "attack_speed_percent_delta": 0,
+        "duration_ticks": 60,
+        "hero_duration_ticks": 60,
+        "targets": 3,
+        "stack_damage": true,
+        "can_kill": false,
+        "organic_only": false
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "ACvs",
+        "stacking_flags": 1,
+        "unrepresented_damage_per_second": "0.01"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0HM",
+      "unit_rawcode": "n02S",
+      "kind": "critical-strike",
+      "chance_per_10k": 10000,
+      "damage_multiplier_per_10k": 20000,
+      "targets": "air-units",
+      "provenance": {
+        "ability": "A0HM",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
       "source_key": "A0GL",
@@ -1611,12 +1649,14 @@
         "hero_duration_ticks": 240,
         "targets": 3,
         "stack_damage": true,
-        "can_kill": false
+        "can_kill": false,
+        "organic_only": true
       },
       "provenance": {
         "source": "resolved/object-fields.tsv",
         "native_base": "Aspo",
-        "stacking_flags": 1
+        "stacking_flags": 1,
+        "unrepresented_damage_per_second": "0"
       }
     },
     {
@@ -1658,12 +1698,14 @@
         "hero_duration_ticks": 150,
         "targets": 3,
         "stack_damage": true,
-        "can_kill": false
+        "can_kill": false,
+        "organic_only": true
       },
       "provenance": {
         "source": "resolved/object-fields.tsv",
         "native_base": "Aspo",
-        "stacking_flags": 1
+        "stacking_flags": 1,
+        "unrepresented_damage_per_second": "0"
       }
     },
     {
@@ -5211,12 +5253,14 @@
         "hero_duration_ticks": 23,
         "targets": 3,
         "stack_damage": true,
-        "can_kill": false
+        "can_kill": false,
+        "organic_only": true
       },
       "provenance": {
         "source": "resolved/object-fields.tsv",
         "native_base": "Aven",
-        "stacking_flags": 1
+        "stacking_flags": 1,
+        "unrepresented_damage_per_second": "0"
       }
     },
     {
@@ -5234,13 +5278,25 @@
         "hero_duration_ticks": 120,
         "targets": 3,
         "stack_damage": true,
-        "can_kill": false
+        "can_kill": false,
+        "organic_only": true
       },
       "provenance": {
         "source": "resolved/object-fields.tsv",
         "native_base": "ACvs",
-        "stacking_flags": 1
+        "stacking_flags": 1,
+        "unrepresented_damage_per_second": "0"
       }
+    }
+  ],
+  "unit_flying_retarget_rules": [
+    {
+      "rawcode": 1848652371,
+      "throttle_ticks": 75
+    },
+    {
+      "rawcode": 1848652372,
+      "throttle_ticks": 75
     }
   ],
   "unit_death_rules": [

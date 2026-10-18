@@ -32,6 +32,7 @@ fn source(sim: &mut Simulation) -> SimId {
                     targets: AttackTargetMask::AIR_AND_GROUND,
                     stack_damage: true,
                     can_kill: false,
+                    organic_only: true,
                 }),
             ]),
             ..Default::default()

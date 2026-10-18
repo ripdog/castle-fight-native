@@ -2103,6 +2103,7 @@ fn hash_status_state(hash: &mut Fnv64, status: &StatusState) {
         hash.write_u32(link.ability.0);
     }
     hash.write_u64(status.retaliation_sequence);
+    hash_optional_u64(hash, status.flying_retarget_tick);
     hash.write_u64(status.hardened_skin_sequence);
     hash.write_u8(u8::from(status.acid_bomb.is_some()));
     if let Some(acid) = status.acid_bomb {
@@ -3571,6 +3572,7 @@ fn hash_poison_profile(hash: &mut Fnv64, profile: &crate::PoisonProfile) {
     hash.write_u8(profile.targets.bits());
     hash.write_u8(u8::from(profile.stack_damage));
     hash.write_u8(u8::from(profile.can_kill));
+    hash.write_u8(u8::from(profile.organic_only));
 }
 
 #[cfg(test)]

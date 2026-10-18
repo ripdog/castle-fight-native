@@ -310,20 +310,27 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
                 "handler": "vampireCharge", "damage_handler": "handleTargetDamageEffects", "phase": "pre-health-commit-reduced-damage-event"})
         return effect
     if kind == "poison":
-        if set(fields["targs1"].split(",")) != {"air", "ground", "organic"} or number("DataD1") != 1:
-            raise ValueError("poison requires the audited organic mask and damage-only stacking flags")
+        mask = set(fields["targs1"].split(","))
+        if mask not in ({"air", "ground", "organic"}, {"air", "ground"}) or number("DataD1") != 1:
+            raise ValueError("poison requires the audited unit mask and damage-only stacking flags")
         ticks = lambda field: int((Decimal(fields[field]) * 30).to_integral_value(rounding="ROUND_CEILING"))
         if mechanics["native_base"] not in ("Aven", "ACvs", "Aspo"):
             raise ValueError("unsupported native poison base")
-        movement_field, attack_field = ("DataB1", "DataC1") if mechanics["native_base"] == "Aspo" else ("DataC1", "DataB1")
+        # Resolved metadata labels Poi2/Spo2 as movement and Poi3/Spo3 as attack speed for every base.
+        movement_field, attack_field = "DataB1", "DataC1"
         buffs = [code for code in fields["buffid1"].split(",") if code not in ("", "_", "-", "0")]
         buff = buffs[min(1, len(buffs) - 1)]
+        # Health resolution is whole points: a sub-point poison rate is a slow-only marker and its
+        # fraction is recorded rather than silently rounded.
+        rate = abs(Decimal(fields["dataa1"]))
         effect.update(profile={"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
             "buff_rawcode": int.from_bytes(buff.encode(), "big"),
-            "damage_per_second": abs(number("DataA1")), "movement_percent_delta": -number(movement_field, 100),
+            "damage_per_second": int(rate), "movement_percent_delta": -number(movement_field, 100),
             "attack_speed_percent_delta": -number(attack_field, 100), "duration_ticks": ticks("dur1"),
-            "hero_duration_ticks": ticks("herodur1"), "targets": 3, "stack_damage": True, "can_kill": False},
-            provenance={"source": "resolved/object-fields.tsv", "native_base": mechanics["native_base"], "stacking_flags": number("DataD1")})
+            "hero_duration_ticks": ticks("herodur1"), "targets": 3, "stack_damage": True, "can_kill": False,
+            "organic_only": "organic" in mask},
+            provenance={"source": "resolved/object-fields.tsv", "native_base": mechanics["native_base"], "stacking_flags": number("DataD1"),
+                "unrepresented_damage_per_second": str(rate - int(rate))})
         return effect
     if kind == "damage-threshold":
         trace = mechanics["damage_threshold"]
@@ -990,7 +997,10 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
     death_rules = project_death_rules(rows(retained("resolved/production-unit-special-mechanics.tsv")), functions)
     families = [{"source_key": key, "buff": buff_identity(abilities[key], positive=base != "ACff")}
         for key, base in sorted(ability_bases.items()) if base in {"Ainf", "ACf2", "ACff", "AIrr", "AEer", "Aenr"}]
+    from project_flying_retarget import project as project_flying_retarget
+    flying_retargets = project_flying_retarget(rows(retained("resolved/production-unit-special-mechanics.tsv")), functions)
     return {"schema_version": 3, "map_version": release["map_version"], "effects": effects,
+        "unit_flying_retarget_rules": flying_retargets,
         "unit_death_rules": death_rules, "unit_death_rules_source": {"git_tree": tree, "path": "resolved/production-unit-special-mechanics.tsv", "function": "fJ"},
         "native_reference_source_sha256": reference["source_sha256"], "buff_families": families, "buff_family_source": {"git_tree": tree, "path": "resolved/object-fields.tsv"}}
 

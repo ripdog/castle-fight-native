@@ -5,7 +5,7 @@ use crate::{
 };
 
 pub(in crate::simulation) fn eligible(target: &UnitSnapshot, profile: PoisonProfile) -> bool {
-    !target.mechanical
+    !(profile.organic_only && target.mechanical)
         && !target.classifications.invulnerable
         && profile
             .targets

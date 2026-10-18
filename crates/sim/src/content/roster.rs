@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    Gnoll = 0x1000_007c => b"n02S",
     Razormane = 0x1000_007b => b"n02U",
     Quillboar = 0x1000_007a => b"n02V",
     RaisedTentacle = 0x1000_0078 => b"n01C",
@@ -159,6 +160,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    GnollTent = 0x2000_0079 => b"n02P",
     RazormaneAbode = 0x2000_0078 => b"n037",
     QuillboarYard = 0x2000_0077 => b"n036",
     DemonicStatue = 0x2000_0076 => b"h04U",

@@ -587,6 +587,8 @@ struct TuningFile {
     map_version: String,
     buff_families: Vec<NativeBuffRecord>,
     unit_death_rules: Vec<NativeUnitDeathRule>,
+    #[serde(default)]
+    unit_flying_retarget_rules: Vec<NativeUnitFlyingRetargetRule>,
     effects: Vec<TuningEffect>,
 }
 
@@ -2729,6 +2731,7 @@ mod tests {
                 schema_version: 3,
                 buff_families: Vec::new(),
                 unit_death_rules: Vec::new(),
+                unit_flying_retarget_rules: Vec::new(),
                 map_version: "9.27".to_owned(),
                 effects: vec![TuningEffect::OrbSpellProc {
                     hero_chance_per_10k: None,
@@ -2818,6 +2821,7 @@ mod tests {
             schema_version: 3,
             buff_families: Vec::new(),
             unit_death_rules: Vec::new(),
+            unit_flying_retarget_rules: Vec::new(),
             map_version: "9.27".to_owned(),
             effects: vec![frost("F002", 100), frost("F001", 100)],
         };
@@ -3003,6 +3007,35 @@ pub(crate) fn unit_death_rule_for_version(
         .iter()
         .find(|r| r.rawcode == rawcode)
         .copied()
+}
+
+/// A shared damage listener that orders the damaged unit to attack a flying damage source, at
+/// most once per throttle interval per damaged unit.
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+pub(crate) struct NativeUnitFlyingRetargetRule {
+    pub rawcode: u32,
+    pub throttle_ticks: u32,
+}
+
+pub(crate) fn unit_flying_retarget_rule_for_version(
+    version: MapVersion,
+    rawcode: u32,
+) -> Option<NativeUnitFlyingRetargetRule> {
+    catalog()
+        .tuning(version)?
+        .unit_flying_retarget_rules
+        .iter()
+        .find(|r| r.rawcode == rawcode)
+        .copied()
+}
+
+pub(crate) fn unit_flying_retarget_rules_for_version(
+    version: MapVersion,
+) -> impl Iterator<Item = NativeUnitFlyingRetargetRule> {
+    catalog()
+        .tuning(version)
+        .into_iter()
+        .flat_map(|t| t.unit_flying_retarget_rules.iter().copied())
 }
 
 pub(crate) fn unit_death_rules_for_version(
