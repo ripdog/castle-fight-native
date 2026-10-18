@@ -4,6 +4,17 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0G3",
+      "unit_rawcode": "n02W",
+      "kind": "evasion",
+      "chance_per_10k": 1000,
+      "provenance": {
+        "ability": "A0G3",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A0GG",
       "unit_rawcode": "n02T",
       "kind": "mana-attack-orb",
