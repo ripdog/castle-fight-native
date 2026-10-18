@@ -33,6 +33,11 @@ impl Simulation {
         let caster = find_unit_index(units, source.id).expect("Parasite script caster");
         self.launch_native_parasite(source, units[caster].owner, units[target].id, p.parent);
         match p.child {
+            ParasiteChild::LocustSwarm(profile) => {
+                // The dummy appears at the Parasite target's position at cast time.
+                let center = units[target].position;
+                self.launch_locust_swarm(source, units[caster].owner, center, profile);
+            }
             ParasiteChild::LifeSteal {
                 minimum_delay_ticks,
                 maximum_delay_ticks,
@@ -73,6 +78,7 @@ impl Simulation {
             }
             units[caster].status.pending_parasite_script = None;
             match pending.child {
+                ParasiteChild::LocustSwarm(_) => {}
                 ParasiteChild::LifeSteal { maximum_life, .. } => {
                     let target = find_unit_index(units, pending.target);
                     let life = target.map_or(0, |index| units[index].health.max(0));

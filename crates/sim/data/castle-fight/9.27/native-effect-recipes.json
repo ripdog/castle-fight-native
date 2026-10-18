@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0H3","unit_rawcode":"n034","kind":"sphere"},
+    {"source_kind":"unit-ability","source_key":"A0H1","unit_rawcode":"n034","kind":"parasite-script"},
     {"source_kind":"ability-effect","source_key":"A0GD","unit_rawcode":"n032","kind":"native-target-debuff"},
     {"source_kind":"unit-ability","source_key":"A0KB","unit_rawcode":"n032","kind":"life-steal"},
     {"source_kind":"unit-ability","source_key":"A0G5","unit_rawcode":"n032","kind":"orb-spell-proc"},

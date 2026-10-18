@@ -25,7 +25,10 @@ pub use curse::CurseProfile;
 mod parasite_area_buff;
 mod parasite_script;
 pub use parasite_area_buff::ParasiteAreaBuffProfile;
-pub use parasite_script::{ParasiteChild, ParasiteScriptProfile, PendingParasiteScript};
+pub use parasite_script::{
+    LocustSwarmProfile, LocustSwarmState, LocustState, MAX_LOCUSTS, ParasiteChild,
+    ParasiteScriptProfile, PendingParasiteScript,
+};
 pub use travelling_mana_clap::TravellingManaClapProfile;
 pub(crate) use travelling_mana_clap::TravellingManaClapState;
 mod death_explosion;

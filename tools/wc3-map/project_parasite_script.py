@@ -35,6 +35,44 @@ def _life_steal(recipe, detail, number):
         'minimum_delay_ticks': number(delay[1], 30), 'maximum_delay_ticks': number(delay[2], 30)}}
 
 
+def _locust_swarm(recipe, detail, number, raw):
+    semantics, row = detail['semantics_row'], detail['mechanics_row']
+    parameters = detail['semantic_parameters']
+    handler = detail['functions'][row['handler_function']]
+    fields = detail['all_fields']
+    child = 'A0GM'
+    swarm = fields[child]
+    body_code = swarm['unitid1']
+    body, stats = detail['all_units'][body_code], detail['all_unit_stats'][body_code]
+    site = parameters['delivery_sites']
+    lifetime = re.search(r'dummyCastImmediateFrom1\(unit_getOwner\((\w+)\),%d,OrderId\("locustswarm"\),unit_getPos\((\w+)\),([\d.]+)\)orderCodeAttack\(\1\)end$' % raw(child), handler)
+    params = re.search(r'\((\w+),(\w+),(\w+)\)local (\w+)=nil local (\w+)=nil (\4)=\2 (\5)=\3 ', handler)
+    listener = detail['functions']['DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire']
+    structure = re.search(r'if\(\(unit_getTypeId\((\w+)\)==%d\)and unit_isType\((\w+),UNIT_TYPE_STRUCTURE\)\)then (\w+)=\(DamageEvent_getAmount\(\)\*([\d.]+)\)' % raw(body_code), listener)
+    structure = structure or re.search(r'unit_getTypeId\((\w+)\)==%d\)and unit_isType\((\w+),UNIT_TYPE_STRUCTURE\)\)then (\w+)=\(DamageEvent_getAmount\(\)\*([\d.]+)\)' % raw(body_code), listener)
+    if (detail['all_bases'][child] != 'AUls' or semantics['effect_rawcodes'] != child or len(site) != 1
+        or site[0]['callee'] != 'dummyCastImmediateFrom1' or lifetime is None or params is None
+        or lifetime[1] != params[4] or lifetime[2] != params[5]
+        # the Parasite handler's second argument is the caster, the third its target
+        or structure is None
+        or Decimal(lifetime[3]) != Decimal(swarm['dur1']) or Decimal(swarm['dur1']) != Decimal(swarm['herodur1'])
+        or body['base_rawcode'] != 'uloc' or body['move_type'] != 'fly' or stats.get('override_attack1_dice_number') is None
+        or set(body['attack1_targets'].split(',')) - {'air', 'debris', 'enemies', 'ground', 'structure'}
+        or body['attack1_type'] != 'spells'
+        or number(swarm['dataa1']) > 8 or number(swarm['datae1']) > (number(stats['override_attack1_base_damage']) + number(stats['override_attack1_dice_number']))):
+        raise ValueError('Harpy Swarm control flow changed: dummy-owned stationary swarm at the Parasite target')
+    tokens = set(body['attack1_targets'].split(','))
+    mask = sum(bit for token, bit in [('ground', 1), ('air', 2), ('structure', 4)] if token in tokens)
+    speed = number(stats['override_move_speed'], 1024) // 30
+    return {'LocustSwarm': {'ability': raw(child), 'body_rawcode': raw(body_code), 'count': number(swarm['dataa1']),
+        'release_interval_millis': number(swarm['datab1'], 1000), 'max_per_target': number(swarm['datac1']),
+        'duration_ticks': number(swarm['dur1'], 30), 'radius': number(swarm['area1'], 1024),
+        'base_damage': number(stats['override_attack1_base_damage']),
+        'dice_number': number(stats['override_attack1_dice_number']), 'dice_sides': number(stats['override_attack1_dice_sides']),
+        'attack_cooldown_ticks': number(body['attack1_cooldown'], 30), 'flight_speed_per_tick': speed,
+        'structure_damage_per_10k': number(structure[4], 10000), 'targets': mask}}
+
+
 def project(recipe, fields, unit, protected, detail):
     number, raw = _helpers()
     row, semantics = detail['mechanics_row'], detail['semantics_row']
@@ -49,6 +87,8 @@ def project(recipe, fields, unit, protected, detail):
     kind = semantics['semantic_kind']
     if kind == 'delayed-life-steal':
         child = _life_steal(recipe, detail, number)
+    elif kind == 'proxy-object-effect':
+        child = _locust_swarm(recipe, detail, number, raw)
     else:
         raise ValueError(f'unsupported Parasite script child {kind!r}')
     mana = lambda field, scale=1: 0 if unit[field].strip() in {'-', '_', ''} else number(unit[field], scale)

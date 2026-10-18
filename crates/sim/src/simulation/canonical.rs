@@ -701,6 +701,24 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u64(state.position_tick);
                         hash.write_u64(state.impact_tick);
                     }
+                    NativeAction::LocustSwarm(state) => {
+                        hash.write_u8(30);
+                        for word in state.profile.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                        hash.write_u64(state.source.0);
+                        hash.write_u8(state.owner.0);
+                        hash.write_u8(state.team.0);
+                        hash.write_i32(state.center.x);
+                        hash.write_i32(state.center.y);
+                        hash.write_u64(state.start_tick);
+                        hash.write_u64(state.expires_tick);
+                        for locust in state.locusts {
+                            hash_optional_u64(&mut hash, locust.target.map(|id| id.0));
+                            hash.write_u64(locust.strike_tick);
+                            hash.write_u64(locust.ready_tick);
+                        }
+                    }
                     NativeAction::Poison(state) => {
                         hash.write_u8(4);
                         hash.write_u64(state.source.0);

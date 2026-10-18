@@ -208,6 +208,7 @@ pub(crate) enum NativeAction {
     StasisTrap(StasisTrapState),
     AcidBomb(AcidBombMissileState),
     Poison(PoisonState),
+    LocustSwarm(super::LocustSwarmState),
     Ensnare(EnsnareMissileState),
     HealingWave(HealingWaveState),
     Bolt(NativeBoltState),
