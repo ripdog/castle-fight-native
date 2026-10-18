@@ -165,7 +165,7 @@ def project(recipe, fields, unit, protected, detail):
         'ability': raw(recipe['source_key']), 'child': child}
     return {'kind': 'scripted-automatic', 'source_kind': recipe['source_kind'], 'source_key': recipe['source_key'],
         'unit_rawcode': recipe['unit_rawcode'],
-        'spellcasting': {'mana': {'maximum': mana('mana_max'), 'starting': mana('mana_start'),
+        'spellcasting': {'mana': {'maximum': mana('mana_max'), 'starting': min(mana('mana_start'), mana('mana_max')),
             'regen_per_tick_per_10k': (1 << 31) | rate}, 'ability': {
             'id': raw(recipe['source_key']), 'mana_cost': number(protected.get('mana_cost', fields['cost1'])),
             'cooldown_ticks': number(protected.get('cooldown', fields['cool1']), 30),

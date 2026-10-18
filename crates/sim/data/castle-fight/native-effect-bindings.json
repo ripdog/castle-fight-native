@@ -1,6 +1,11 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A0GR","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Berserk carrier; its retained fields are consumed by the Ogre Lord rage Parasite script (A0GB) and it is never cast directly."},
+    {"source_kind":"unit-ability","source_key":"A093","implementation":"warcraft-spell-resistance-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0GU","implementation":"warcraft-bash-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0J7","implementation":"warcraft-pulverize-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0GB","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0AZ","implementation":"warcraft-spell-resistance-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0J6","implementation":"warcraft-pulverize-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0HQ","implementation":"warcraft-speed-aura-v1","valid_from":"9.27","valid_through":"9.27"},

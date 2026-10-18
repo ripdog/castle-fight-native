@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A093","unit_rawcode":"n02Y","kind":"spell-resistance"},
+    {"source_kind":"unit-ability","source_key":"A0GU","unit_rawcode":"n02Y","kind":"bash"},
+    {"source_kind":"unit-ability","source_key":"A0J7","unit_rawcode":"n02Y","kind":"pulverize"},
+    {"source_kind":"unit-ability","source_key":"A0GB","unit_rawcode":"n02Y","kind":"parasite-script"},
     {"source_kind":"unit-ability","source_key":"A0AZ","unit_rawcode":"n02X","kind":"spell-resistance"},
     {"source_kind":"unit-ability","source_key":"A0J6","unit_rawcode":"n02X","kind":"pulverize"},
     {"source_kind":"unit-ability","source_key":"A0HQ","unit_rawcode":"n035","kind":"speed-aura"},
