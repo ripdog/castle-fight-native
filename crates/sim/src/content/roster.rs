@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    Quillboar = 0x1000_007a => b"n02V",
     RaisedTentacle = 0x1000_0078 => b"n01C",
     RaisedTentaclePlain = 0x1000_0079 => b"n021",
     GhostOfSorrow = 0x1000_0077 => b"n03C",
@@ -157,6 +158,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    QuillboarYard = 0x2000_0077 => b"n036",
     DemonicStatue = 0x2000_0076 => b"h04U",
     HellsPortal = 0x2000_0075 => b"h04P",
     HellsGate = 0x2000_0074 => b"h04Q",

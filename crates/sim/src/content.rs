@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r151";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r152";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -365,6 +365,7 @@ impl CastleFightContentBundle {
                         CastleFightBuilderRace::Critter,
                         CastleFightBuilderRace::Chaos,
                         CastleFightBuilderRace::Corrupted,
+                        CastleFightBuilderRace::Desert,
                     ]
                 } else {
                     &[CastleFightBuilderRace::Human]
@@ -1906,6 +1907,9 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0G6") => {
+            0x4000_020c
+        }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A08H") => {
             0x4000_01c1
         }
@@ -4667,6 +4671,9 @@ struct ExtractedContent927 {
     corpses: BTreeMap<u32, ExtractedCorpse927>,
     repair_time_ticks: BTreeMap<u32, u32>,
     command_card_positions: BTreeMap<u32, CommandCardPosition>,
+    /// Retained button coordinates exactly as authored; an absent component inherits the Warcraft
+    /// III stock `Buttonpos` origin, which is only valid to resolve for buildings.
+    authored_button_components: BTreeMap<u32, (Option<u8>, Option<u8>)>,
     building_hotkeys: BTreeMap<u32, char>,
     upgrades: BTreeMap<u32, ExtractedUpgradeLinks927>,
     income_semantics: BTreeMap<u32, ExtractedIncomeSemantics927>,
@@ -4679,6 +4686,16 @@ struct ExtractedContent927 {
 }
 
 impl ExtractedContent927 {
+    /// Build-card position of a retained building. Map overrides record only coordinates that
+    /// differ from the stock origin, so a missing component resolves to zero.
+    fn building_command_card_position(&self, rawcode: u32) -> Option<CommandCardPosition> {
+        self.command_card_positions.get(&rawcode).copied().or_else(|| {
+            self.authored_button_components
+                .get(&rawcode)
+                .map(|&(x, y)| CommandCardPosition::new(x.unwrap_or(0), y.unwrap_or(0)))
+        })
+    }
+
     fn load() -> Result<Self, String> {
         validate_catalog_source_927()?;
         let mut buildings = BTreeMap::new();
@@ -4773,6 +4790,7 @@ impl ExtractedContent927 {
             .collect();
         let mut repair_time_ticks = BTreeMap::<u32, u32>::new();
         let mut command_card_positions = BTreeMap::new();
+        let mut authored_button_components = BTreeMap::new();
         let mut building_hotkeys = BTreeMap::new();
         let mut authored_builder_catalogs = BTreeMap::new();
         for object in supplement.objects {
@@ -4793,6 +4811,7 @@ impl ExtractedContent927 {
                     ));
                 }
             }
+            authored_button_components.insert(rawcode, (object.button_x, object.button_y));
             // Some archived unit rows expose only one button coordinate. Preserve the evidence
             // in the generated supplement, but only promote a complete pair into the native
             // command-card index.
@@ -5450,6 +5469,7 @@ impl ExtractedContent927 {
             corpses,
             repair_time_ticks,
             command_card_positions,
+            authored_button_components,
             building_hotkeys,
             upgrades,
             income_semantics,
@@ -6202,9 +6222,8 @@ fn extracted_tower_definition_927(
         }),
     }
     });
-    let command_card_position = *content
-        .command_card_positions
-        .get(&rawcode)
+    let command_card_position = content
+        .building_command_card_position(rawcode)
         .unwrap_or_else(|| panic!("tower {rawcode:#010x} missing command-card position"));
     let hotkey = *content
         .building_hotkeys
@@ -6564,9 +6583,8 @@ fn production_definition(
         .units
         .get(&rawcode)
         .unwrap_or_else(|| panic!("building {rawcode:#010x} missing retained 9.27 unit metadata"));
-    let command_card_position = *content
-        .command_card_positions
-        .get(&rawcode)
+    let command_card_position = content
+        .building_command_card_position(rawcode)
         .unwrap_or_else(|| panic!("building {rawcode:#010x} missing command-card position"));
     let hotkey = *content
         .building_hotkeys

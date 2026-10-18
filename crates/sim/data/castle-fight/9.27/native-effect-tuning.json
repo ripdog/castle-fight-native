@@ -4,6 +4,22 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0G6",
+      "unit_rawcode": "n02V",
+      "kind": "spiked-shell",
+      "profile": {
+        "ability": 1093682998,
+        "returned_damage_per_10k": 3500,
+        "received_damage_per_10k": 10000,
+        "armor_bonus_per_100": 0
+      },
+      "provenance": {
+        "ability": "A0G6",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A050",
       "unit_rawcode": "n01C",
       "kind": "critical-strike",
