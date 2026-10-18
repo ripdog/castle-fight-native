@@ -549,10 +549,13 @@ impl Simulation {
         if markers_for_version(code, version).1 {
             return false;
         }
-        !self.world.iter_entities().any(|e| {
-            e.get::<BuildingSpellTargetState>()
-                .is_some_and(|s| s.target == unit.id && s.selector_excluded)
-        })
+        // A missing query state means the component was never registered, so no entity has it.
+        let Some(mut target_states) = self.world.try_query::<&BuildingSpellTargetState>() else {
+            return true;
+        };
+        !target_states
+            .iter(&self.world)
+            .any(|s| s.target == unit.id && s.selector_excluded)
     }
 
     pub(super) fn check_negative_building_shield(
