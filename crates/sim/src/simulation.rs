@@ -7279,11 +7279,30 @@ fn deterministic_ability_target_rank(
     cast_sequence: u64,
     candidate: SimId,
 ) -> u64 {
+    ability_target_rank_for(
+        ability_target_rank_prefix(seed, caster, ability, cast_sequence),
+        candidate,
+    )
+}
+
+/// Caster/ability/sequence-invariant part of [`deterministic_ability_target_rank`]. Hoist this
+/// out of candidate loops and combine it with each candidate via [`ability_target_rank_for`].
+#[inline]
+fn ability_target_rank_prefix(
+    seed: u64,
+    caster: SimId,
+    ability: AbilityId,
+    cast_sequence: u64,
+) -> u64 {
     let state = splitmix64(seed ^ caster.0.rotate_left(31));
     let state = splitmix64(state ^ u64::from(ability.0).rotate_left(17));
     let state = splitmix64(state ^ RANDOM_PURPOSE_ABILITY_TARGET);
-    let state = splitmix64(state ^ cast_sequence);
-    splitmix64(state ^ candidate.0)
+    splitmix64(state ^ cast_sequence)
+}
+
+#[inline]
+fn ability_target_rank_for(prefix: u64, candidate: SimId) -> u64 {
+    splitmix64(prefix ^ candidate.0)
 }
 
 fn splitmix64(input: u64) -> u64 {

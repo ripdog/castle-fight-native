@@ -197,6 +197,61 @@ pub(super) fn native_building_trigger_unit_type(
         _ => true,
     }
 }
+/// Ability-invariant part of a native building trigger. Built once per evaluation so candidate
+/// loops only compare precomputed values instead of re-matching the ability each time.
+#[derive(Debug, Clone, Copy)]
+struct NativeTriggerFilter {
+    targets: AttackTargetMask,
+    invulnerable: bool,
+    spell_immune: bool,
+    /// True when a non-mechanical unit can never be a candidate.
+    mechanical_only: bool,
+    /// `(trigger_nonhero, trigger_sapper)` for Naga Tidal Wave, which filters by unit class.
+    tidal_wave: Option<(bool, bool)>,
+    range_sq: u64,
+}
+
+impl NativeTriggerFilter {
+    fn new(ability: AutomaticAbilityProfile) -> Option<Self> {
+        let (targets, invulnerable, spell_immune) = native_building_trigger(ability)?;
+        let tidal_wave = match ability.effect {
+            AbilityEffect::NagaTidalWave(p) => Some((p.trigger_nonhero, p.trigger_sapper)),
+            _ => None,
+        };
+        Some(Self {
+            targets,
+            invulnerable,
+            spell_immune,
+            // `native_building_trigger_unit_type(ability, m)` is `!mechanical_only || m`.
+            mechanical_only: !native_building_trigger_unit_type(ability, false),
+            tidal_wave,
+            range_sq: square_i32(ability.range),
+        })
+    }
+
+    /// Team, health, class and invulnerability/spell-immunity admission. Range is checked by the
+    /// caller because it depends on the source origin.
+    #[inline]
+    fn admits(
+        &self,
+        source_team: Team,
+        team: Team,
+        health: i32,
+        flags: UnitClassifications,
+    ) -> bool {
+        let native_class = self
+            .tidal_wave
+            .is_none_or(|(trigger_nonhero, trigger_sapper)| {
+                (!trigger_nonhero || !flags.hero) && (!trigger_sapper || flags.combat_sapper)
+            });
+        native_class
+            && health > 0
+            && team != source_team
+            && (!flags.invulnerable || self.invulnerable)
+            && (!flags.spell_immune || self.spell_immune)
+    }
+}
+
 impl Simulation {
     pub(super) fn has_negative_building_protection(&self, target: SimId) -> bool {
         self.world
@@ -256,21 +311,10 @@ impl Simulation {
         position: SimPoint,
         flags: UnitClassifications,
     ) -> bool {
-        let Some((_, invulnerable, spell_immune)) = native_building_trigger(ability) else {
-            return false;
-        };
-        let native_class = match ability.effect {
-            AbilityEffect::NagaTidalWave(p) => {
-                (!p.trigger_nonhero || !flags.hero) && (!p.trigger_sapper || flags.combat_sapper)
-            }
-            _ => true,
-        };
-        native_class
-            && health > 0
-            && team != source.team
-            && (!flags.invulnerable || invulnerable)
-            && (!flags.spell_immune || spell_immune)
-            && self.ability_source_distance_sq(source.origin, position) <= square_i32(ability.range)
+        NativeTriggerFilter::new(ability).is_some_and(|filter| {
+            filter.admits(source.team, team, health, flags)
+                && self.ability_source_distance_sq(source.origin, position) <= filter.range_sq
+        })
     }
 
     pub(super) fn native_building_trigger_target(
@@ -281,26 +325,30 @@ impl Simulation {
         units: &[UnitSnapshot],
         checks: &mut usize,
     ) -> Option<AbilityIntentTarget> {
-        let (targets, _, _) = native_building_trigger(ability)?;
-        let mut candidates = Vec::new();
+        let filter = NativeTriggerFilter::new(ability)?;
+        // Candidates are ranked by a key ending in the unique SimId, so the minimum is tracked
+        // in place. Visit order is therefore irrelevant and no candidate list is allocated.
+        let rank_prefix =
+            ability_target_rank_prefix(self.config.match_seed, source.id, ability.id, sequence);
+        let mut best: Option<((u64, SimId), AbilityIntentTarget)> = None;
+        let mut consider = |id: SimId, target: AbilityIntentTarget| {
+            let key = (ability_target_rank_for(rank_prefix, id), id);
+            if best.is_none_or(|(current, _)| key < current) {
+                best = Some((key, target));
+            }
+        };
         for (index, unit) in units.iter().enumerate() {
             *checks += 1;
-            if native_building_trigger_unit_type(ability, unit.mechanical)
-                && targets.can_target_unit(unit.target_movement_class())
-                && self.native_building_trigger_allowed(
-                    source,
-                    ability,
-                    unit.team,
-                    unit.health,
-                    unit.position,
-                    unit.classifications,
-                )
+            if (unit.mechanical || !filter.mechanical_only)
+                && filter.targets.can_target_unit(unit.target_movement_class())
+                && filter.admits(source.team, unit.team, unit.health, unit.classifications)
+                && self.ability_source_distance_sq(source.origin, unit.position) <= filter.range_sq
                 && unit.visible_to(source.team, self.next_tick)
             {
-                candidates.push((unit.id, AbilityIntentTarget::Unit { index, id: unit.id }));
+                consider(unit.id, AbilityIntentTarget::Unit { index, id: unit.id });
             }
         }
-        if targets.can_target_buildings()
+        if filter.targets.can_target_buildings()
             && let Some(mut buildings) = self.world.try_query::<(
                 &SimId,
                 &Team,
@@ -309,39 +357,19 @@ impl Simulation {
                 Option<&UnitClassifications>,
             )>()
         {
-            // Candidates are ranked by a key ending in the unique SimId, so visit order is moot.
             for (id, team, health, footprint, flags) in buildings.iter(&self.world) {
                 *checks += 1;
                 let position = footprint_center_point(*footprint, self.config.navigation_cell_size);
                 let flags = flags.copied().unwrap_or_default();
-                if self.native_building_trigger_allowed(
-                    source,
-                    ability,
-                    *team,
-                    health.current,
-                    position,
-                    flags,
-                ) && self.visible_teams(position) & (1 << source.team.0) != 0
+                if filter.admits(source.team, *team, health.current, flags)
+                    && self.ability_source_distance_sq(source.origin, position) <= filter.range_sq
+                    && self.visible_teams(position) & (1 << source.team.0) != 0
                 {
-                    candidates.push((*id, AbilityIntentTarget::Building { id: *id, position }));
+                    consider(*id, AbilityIntentTarget::Building { id: *id, position });
                 }
             }
         }
-        candidates
-            .into_iter()
-            .min_by_key(|(id, _)| {
-                (
-                    deterministic_ability_target_rank(
-                        self.config.match_seed,
-                        source.id,
-                        ability.id,
-                        sequence,
-                        *id,
-                    ),
-                    *id,
-                )
-            })
-            .map(|(_, target)| target)
+        best.map(|(_, target)| target)
     }
 
     fn building_spell_target_version(&self, entity: Entity) -> MapVersion {
