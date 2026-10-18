@@ -151,17 +151,17 @@ impl Simulation {
         units: &mut [UnitSnapshot],
         buildings: &mut [BuildingSnapshot],
     ) {
+        // Sorted below by the unique SimId, so the query's visit order is irrelevant.
         let mut actions = self
             .world
-            .iter_entities()
-            .filter_map(|entity| {
-                Some((
-                    *entity.get::<SimId>()?,
-                    entity.id(),
-                    entity.get::<NativeAction>()?.clone(),
-                ))
+            .try_query::<(&SimId, Entity, &NativeAction)>()
+            .map(|mut query| {
+                query
+                    .iter(&self.world)
+                    .map(|(id, entity, action)| (*id, entity, action.clone()))
+                    .collect::<Vec<_>>()
             })
-            .collect::<Vec<_>>();
+            .unwrap_or_default();
         actions.sort_unstable_by_key(|(id, _, _)| *id);
         let weather = actions
             .iter()
@@ -232,10 +232,16 @@ impl Simulation {
                     ref children,
                     expires_tick,
                 } => {
-                    let source_exists = self.world.iter_entities().any(|e| {
-                        e.get::<SimId>() == Some(&source)
-                            || e.get::<Corpse>().is_some_and(|c| c.source_unit == source)
-                    });
+                    // Existence only, so the query's visit order is irrelevant.
+                    let source_exists = self
+                        .world
+                        .try_query::<(Option<&SimId>, Option<&Corpse>)>()
+                        .is_some_and(|mut query| {
+                            query.iter(&self.world).any(|(id, corpse)| {
+                                id == Some(&source)
+                                    || corpse.is_some_and(|c| c.source_unit == source)
+                            })
+                        });
                     let source_lost_ability = find_unit_index(units, source).is_some_and(|i| {
                         units[i].abilities_disabled
                             || !(units[i]
