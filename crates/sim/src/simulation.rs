@@ -3734,165 +3734,181 @@ impl Simulation {
             &SpawnTick,
         )>();
         let default_collision_radius = self.default_collision_radius();
-        let mut units: Vec<_> = query
-            .iter(&self.world)
-            .filter(|(_, _, _, _, _, health, _, _, _, _, _, _, _, _)| {
-                include_dead || health.current > 0
-            })
-            .map(
-                |(
-                    entity,
-                    id,
-                    owner,
-                    team,
-                    position,
-                    health,
-                    attack,
-                    cooldown,
-                    target,
-                    retaliation,
-                    status,
-                    navigation,
-                    movement,
-                    spawn_tick,
-                )| {
-                    let entity_ref = self.world.entity(entity);
-                    let corpse = entity_ref.get::<CorpseProducer>().map(|corpse| corpse.0);
-                    let attack_sequence = entity_ref
-                        .get::<AttackSequence>()
-                        .expect("unit attack sequence missing")
-                        .0;
-                    let collision_radius = entity_ref.get::<CollisionRadius>().copied();
-                    let movement_class = *entity_ref
-                        .get::<MovementClass>()
-                        .expect("unit movement class missing");
-                    let mechanical = entity_ref.get::<MechanicalUnit>().is_some();
-                    let attack_targets = *entity_ref
-                        .get::<AttackTargetMask>()
-                        .expect("unit attack target mask missing");
-                    let secondary_attack = entity_ref.get::<SecondaryAttackProfile>().copied();
-                    let damage_type = *entity_ref
-                        .get::<DamageType>()
-                        .expect("unit damage type missing");
-                    let armor = *entity_ref
-                        .get::<ArmorProfile>()
-                        .expect("unit armor profile missing");
-                    let passive_effects = *entity_ref
-                        .get::<PassiveUnitEffects>()
-                        .expect("unit passive effects missing");
-                    let spellcasting = entity_ref.get::<SpellcastingProfile>().copied();
-                    let mana_current = entity_ref.get::<ManaState>().map(|mana| mana.current);
-                    let ability_state = entity_ref.get::<AutomaticAbilityState>().copied();
-                    debug_assert_eq!(
-                        spellcasting.is_some()
-                            || entity_ref.get::<ContentIdentity>().is_some_and(|c| {
-                                crate::content::native_mana_profile_for_version(
+        let mut keys: Vec<(SimId, Entity)> =
+            Vec::with_capacity(query.iter(&self.world).size_hint().1.unwrap_or(0));
+        keys.extend(
+            query
+                .iter(&self.world)
+                .filter(|(_, _, _, _, _, health, _, _, _, _, _, _, _, _)| {
+                    include_dead || health.current > 0
+                })
+                .map(|(entity, id, _, _, _, _, _, _, _, _, _, _, _, _)| (*id, entity)),
+        );
+        keys.sort_unstable_by_key(|&(id, _)| id);
+        let mut units: Vec<_> = Vec::with_capacity(keys.len());
+        units.extend(
+            keys.iter()
+                .map(|&(_, entity)| {
+                    query
+                        .get(&self.world, entity)
+                        .expect("unit snapshot entity missing")
+                })
+                .map(
+                    |(
+                        entity,
+                        id,
+                        owner,
+                        team,
+                        position,
+                        health,
+                        attack,
+                        cooldown,
+                        target,
+                        retaliation,
+                        status,
+                        navigation,
+                        movement,
+                        spawn_tick,
+                    )| {
+                        let entity_ref = self.world.entity(entity);
+                        let corpse = entity_ref.get::<CorpseProducer>().map(|corpse| corpse.0);
+                        let attack_sequence = entity_ref
+                            .get::<AttackSequence>()
+                            .expect("unit attack sequence missing")
+                            .0;
+                        let collision_radius = entity_ref.get::<CollisionRadius>().copied();
+                        let movement_class = *entity_ref
+                            .get::<MovementClass>()
+                            .expect("unit movement class missing");
+                        let mechanical = entity_ref.get::<MechanicalUnit>().is_some();
+                        let attack_targets = *entity_ref
+                            .get::<AttackTargetMask>()
+                            .expect("unit attack target mask missing");
+                        let secondary_attack = entity_ref.get::<SecondaryAttackProfile>().copied();
+                        let damage_type = *entity_ref
+                            .get::<DamageType>()
+                            .expect("unit damage type missing");
+                        let armor = *entity_ref
+                            .get::<ArmorProfile>()
+                            .expect("unit armor profile missing");
+                        let passive_effects = *entity_ref
+                            .get::<PassiveUnitEffects>()
+                            .expect("unit passive effects missing");
+                        let spellcasting = entity_ref.get::<SpellcastingProfile>().copied();
+                        let mana_current = entity_ref.get::<ManaState>().map(|mana| mana.current);
+                        let ability_state = entity_ref.get::<AutomaticAbilityState>().copied();
+                        debug_assert_eq!(
+                            spellcasting.is_some()
+                                || entity_ref.get::<ContentIdentity>().is_some_and(|c| {
+                                    crate::content::native_mana_profile_for_version(
+                                        c.map_version,
+                                        c.rawcode,
+                                    )
+                                    .is_some()
+                                }),
+                            mana_current.is_some()
+                        );
+                        debug_assert_eq!(spellcasting.is_some(), ability_state.is_some());
+                        let content = entity_ref.get::<ContentIdentity>();
+                        let death_heal = content.and_then(|c| {
+                            let p =
+                                crate::building_mechanics::death_heal_for_version(c.map_version)?;
+                            crate::content::unit_has_ability_for_version(
+                                c.rawcode,
+                                AbilityId(p.marker),
+                                c.map_version,
+                            )
+                            .then_some(
+                                death_healing::DeathHealSupport {
+                                    version: c.map_version,
+                                    active: false,
+                                    healing: 0,
+                                    radius: p.radius,
+                                    other_type_per_10k: p.other_type_per_10k,
+                                },
+                            )
+                        });
+                        UnitSnapshot {
+                            removed_without_death: false,
+                            air_attack_bonus_per_10k: content.map_or(0, |c| {
+                                crate::content::native_air_attack_bonus_for_version(
                                     c.map_version,
                                     c.rawcode,
                                 )
-                                .is_some()
                             }),
-                        mana_current.is_some()
-                    );
-                    debug_assert_eq!(spellcasting.is_some(), ability_state.is_some());
-                    let content = entity_ref.get::<ContentIdentity>();
-                    let death_heal = content.and_then(|c| {
-                        let p = crate::building_mechanics::death_heal_for_version(c.map_version)?;
-                        crate::content::unit_has_ability_for_version(
-                            c.rawcode,
-                            AbilityId(p.marker),
-                            c.map_version,
-                        )
-                        .then_some(death_healing::DeathHealSupport {
-                            version: c.map_version,
-                            active: false,
-                            healing: 0,
-                            radius: p.radius,
-                            other_type_per_10k: p.other_type_per_10k,
-                        })
-                    });
-                    UnitSnapshot {
-                        removed_without_death: false,
-                        air_attack_bonus_per_10k: content.map_or(0, |c| {
-                            crate::content::native_air_attack_bonus_for_version(
-                                c.map_version,
-                                c.rawcode,
-                            )
-                        }),
-                        damage_seed: self.config.match_seed,
-                        death_rule: content.and_then(|c| {
-                            crate::native_effects::unit_death_rule_for_version(
-                                c.map_version,
-                                c.rawcode,
-                            )
-                        }),
-                        death_rules: self.combat_rules.damage_rules,
-                        death_tick: self.next_tick,
-                        rawcode: content.map_or(0, |c| c.rawcode),
-                        death_heal,
-                        death_position: position.0,
-                        death_heal_visuals: 0,
-                        death_heal_visual_version: None,
-                        snow_damage_taken_per_10k: 10_000,
-                        detection_teams: self.fog.as_ref().map_or(0, |fog| {
-                            u8::from(fog.detects_invisible(Team(0), position.0))
-                                | (u8::from(fog.detects_invisible(Team(1), position.0)) << 1)
-                        }),
-                        map_version: entity_ref
-                            .get::<ContentIdentity>()
-                            .map(|content| content.map_version),
-                        visible_teams: self.visible_teams(position.0),
-                        entity,
-                        id: *id,
-                        owner: owner.0,
-                        team: *team,
-                        position: position.0,
-                        health: health.current,
-                        health_max: health.max,
-                        attack: native_actions::ensnare::ensnared_attack(
-                            *attack,
+                            damage_seed: self.config.match_seed,
+                            death_rule: content.and_then(|c| {
+                                crate::native_effects::unit_death_rule_for_version(
+                                    c.map_version,
+                                    c.rawcode,
+                                )
+                            }),
+                            death_rules: self.combat_rules.damage_rules,
+                            death_tick: self.next_tick,
+                            rawcode: content.map_or(0, |c| c.rawcode),
+                            death_heal,
+                            death_position: position.0,
+                            death_heal_visuals: 0,
+                            death_heal_visual_version: None,
+                            snow_damage_taken_per_10k: 10_000,
+                            detection_teams: self.fog.as_ref().map_or(0, |fog| {
+                                u8::from(fog.detects_invisible(Team(0), position.0))
+                                    | (u8::from(fog.detects_invisible(Team(1), position.0)) << 1)
+                            }),
+                            map_version: entity_ref
+                                .get::<ContentIdentity>()
+                                .map(|content| content.map_version),
+                            visible_teams: self.visible_teams(position.0),
+                            entity,
+                            id: *id,
+                            owner: owner.0,
+                            team: *team,
+                            position: position.0,
+                            health: health.current,
+                            health_max: health.max,
+                            attack: native_actions::ensnare::ensnared_attack(
+                                *attack,
+                                movement_class,
+                                *status,
+                            ),
+                            action_timing: *entity_ref
+                                .get::<ActionTimingProfile>()
+                                .expect("unit action timing missing"),
+                            cooldown_remaining: cooldown.remaining,
+                            attack_sequence,
+                            target: target.current,
+                            direct_retaliation_lock: target.direct_retaliation_lock,
+                            ally_defense_lock: target.ally_defense_lock,
+                            retaliation: *retaliation,
+                            status: *status,
+                            navigation: *navigation,
+                            movement: *movement,
+                            spawn_tick: spawn_tick.0,
+                            corpse,
+                            collision_radius: collision_radius
+                                .map_or(default_collision_radius, |radius| radius.0),
+                            collision_radius_override: collision_radius.map(|radius| radius.0),
                             movement_class,
-                            *status,
-                        ),
-                        action_timing: *entity_ref
-                            .get::<ActionTimingProfile>()
-                            .expect("unit action timing missing"),
-                        cooldown_remaining: cooldown.remaining,
-                        attack_sequence,
-                        target: target.current,
-                        direct_retaliation_lock: target.direct_retaliation_lock,
-                        ally_defense_lock: target.ally_defense_lock,
-                        retaliation: *retaliation,
-                        status: *status,
-                        navigation: *navigation,
-                        movement: *movement,
-                        spawn_tick: spawn_tick.0,
-                        corpse,
-                        collision_radius: collision_radius
-                            .map_or(default_collision_radius, |radius| radius.0),
-                        collision_radius_override: collision_radius.map(|radius| radius.0),
-                        movement_class,
-                        mechanical,
-                        classifications: entity_ref
-                            .get::<UnitClassifications>()
-                            .copied()
-                            .unwrap_or_default(),
-                        attack_targets,
-                        secondary_attack,
-                        damage_type,
-                        armor,
-                        passive_effects,
-                        attacks_disabled: false,
-                        abilities_disabled: false,
-                        orders_suspended: false,
-                        spellcasting,
-                        mana_current,
-                        ability_state,
-                    }
-                },
-            )
-            .collect();
-        units.sort_unstable_by_key(|unit| unit.id);
+                            mechanical,
+                            classifications: entity_ref
+                                .get::<UnitClassifications>()
+                                .copied()
+                                .unwrap_or_default(),
+                            attack_targets,
+                            secondary_attack,
+                            damage_type,
+                            armor,
+                            passive_effects,
+                            attacks_disabled: false,
+                            abilities_disabled: false,
+                            orders_suspended: false,
+                            spellcasting,
+                            mana_current,
+                            ability_state,
+                        }
+                    },
+                ),
+        );
         for unit in &mut units {
             self.project_building_spell_control(unit);
             unit.classifications.invulnerable |= unit
@@ -3919,97 +3935,112 @@ impl Simulation {
             Option<&AutomaticAbilityState>,
             Option<&StatusState>,
         )>();
-        let mut buildings: Vec<_> = query
-            .iter(&self.world)
-            .filter(|(_, _, _, _, health, _, _, _, _, _, _, _, _)| health.current > 0)
-            .map(
-                |(
-                    entity,
-                    id,
-                    team,
-                    footprint,
-                    health,
-                    attack,
-                    cooldown,
-                    target,
-                    spawn_tick,
-                    spellcasting,
-                    mana,
-                    ability_state,
-                    status,
-                )| {
-                    let entity_ref = self.world.entity(entity);
-                    let attack_targets = entity_ref.get::<AttackTargetMask>().copied();
-                    let damage_type = *entity_ref
-                        .get::<DamageType>()
-                        .expect("building damage type missing");
-                    let armor = *entity_ref
-                        .get::<ArmorProfile>()
-                        .expect("building armor profile missing");
-                    debug_assert_eq!(attack.is_some(), cooldown.is_some());
-                    debug_assert_eq!(attack.is_some(), target.is_some());
-                    debug_assert_eq!(attack.is_some(), spawn_tick.is_some());
-                    debug_assert_eq!(attack.is_some(), attack_targets.is_some());
-                    debug_assert_eq!(
-                        spellcasting.is_some()
-                            || (entity_ref.get::<BuildingConstruction>().is_none()
-                                && entity_ref.get::<ContentIdentity>().is_some_and(|c| {
-                                    crate::content::building_native_mana_profile(
-                                        c.map_version,
-                                        c.rawcode,
-                                    )
-                                    .is_some()
-                                })),
-                        mana.is_some()
-                    );
-                    debug_assert_eq!(spellcasting.is_some(), ability_state.is_some());
-                    debug_assert!(
-                        !(attack.is_some() || spellcasting.is_some()) || status.is_some()
-                    );
-                    BuildingSnapshot {
-                        death_heal_contribution: death_healing::building_contribution(&entity_ref),
-                        action_timing: entity_ref
-                            .get::<ActionTimingProfile>()
-                            .copied()
-                            .unwrap_or_default(),
-                        secondary_attack: entity_ref.get::<SecondaryAttackProfile>().copied(),
-                        passive_effects: entity_ref
-                            .get::<PassiveUnitEffects>()
-                            .copied()
-                            .unwrap_or_default(),
-                        snow_damage_taken_per_10k: 10_000,
-                        map_version: entity_ref
-                            .get::<ContentIdentity>()
-                            .map(|content| content.map_version),
-                        visible_teams: self.visible_teams(footprint_center_point(
-                            *footprint,
-                            self.config.navigation_cell_size,
-                        )),
+        let mut keys: Vec<(SimId, Entity)> =
+            Vec::with_capacity(query.iter(&self.world).size_hint().1.unwrap_or(0));
+        keys.extend(
+            query
+                .iter(&self.world)
+                .filter(|(_, _, _, _, health, _, _, _, _, _, _, _, _)| health.current > 0)
+                .map(|(entity, id, _, _, _, _, _, _, _, _, _, _, _)| (*id, entity)),
+        );
+        keys.sort_unstable_by_key(|&(id, _)| id);
+        let mut buildings: Vec<_> = Vec::with_capacity(keys.len());
+        buildings.extend(
+            keys.iter()
+                .map(|&(_, entity)| {
+                    query
+                        .get(&self.world, entity)
+                        .expect("building snapshot entity missing")
+                })
+                .map(
+                    |(
                         entity,
-                        id: *id,
-                        team: *team,
-                        footprint: *footprint,
-                        health: health.current,
-                        attack: attack.copied(),
-                        attack_targets,
-                        damage_type,
-                        armor,
-                        classifications: entity_ref
-                            .get::<UnitClassifications>()
-                            .copied()
-                            .unwrap_or_default(),
-                        cooldown_remaining: cooldown.map(|cooldown| cooldown.remaining),
-                        target: target.and_then(|target| target.current),
-                        spawn_tick: spawn_tick.map(|spawn_tick| spawn_tick.0),
-                        spellcasting: spellcasting.copied(),
-                        mana_current: mana.map(|mana| mana.current),
-                        ability_state: ability_state.copied(),
-                        status: status.copied(),
-                    }
-                },
-            )
-            .collect();
-        buildings.sort_unstable_by_key(|building| building.id);
+                        id,
+                        team,
+                        footprint,
+                        health,
+                        attack,
+                        cooldown,
+                        target,
+                        spawn_tick,
+                        spellcasting,
+                        mana,
+                        ability_state,
+                        status,
+                    )| {
+                        let entity_ref = self.world.entity(entity);
+                        let attack_targets = entity_ref.get::<AttackTargetMask>().copied();
+                        let damage_type = *entity_ref
+                            .get::<DamageType>()
+                            .expect("building damage type missing");
+                        let armor = *entity_ref
+                            .get::<ArmorProfile>()
+                            .expect("building armor profile missing");
+                        debug_assert_eq!(attack.is_some(), cooldown.is_some());
+                        debug_assert_eq!(attack.is_some(), target.is_some());
+                        debug_assert_eq!(attack.is_some(), spawn_tick.is_some());
+                        debug_assert_eq!(attack.is_some(), attack_targets.is_some());
+                        debug_assert_eq!(
+                            spellcasting.is_some()
+                                || (entity_ref.get::<BuildingConstruction>().is_none()
+                                    && entity_ref.get::<ContentIdentity>().is_some_and(|c| {
+                                        crate::content::building_native_mana_profile(
+                                            c.map_version,
+                                            c.rawcode,
+                                        )
+                                        .is_some()
+                                    })),
+                            mana.is_some()
+                        );
+                        debug_assert_eq!(spellcasting.is_some(), ability_state.is_some());
+                        debug_assert!(
+                            !(attack.is_some() || spellcasting.is_some()) || status.is_some()
+                        );
+                        BuildingSnapshot {
+                            death_heal_contribution: death_healing::building_contribution(
+                                &entity_ref,
+                            ),
+                            action_timing: entity_ref
+                                .get::<ActionTimingProfile>()
+                                .copied()
+                                .unwrap_or_default(),
+                            secondary_attack: entity_ref.get::<SecondaryAttackProfile>().copied(),
+                            passive_effects: entity_ref
+                                .get::<PassiveUnitEffects>()
+                                .copied()
+                                .unwrap_or_default(),
+                            snow_damage_taken_per_10k: 10_000,
+                            map_version: entity_ref
+                                .get::<ContentIdentity>()
+                                .map(|content| content.map_version),
+                            visible_teams: self.visible_teams(footprint_center_point(
+                                *footprint,
+                                self.config.navigation_cell_size,
+                            )),
+                            entity,
+                            id: *id,
+                            team: *team,
+                            footprint: *footprint,
+                            health: health.current,
+                            attack: attack.copied(),
+                            attack_targets,
+                            damage_type,
+                            armor,
+                            classifications: entity_ref
+                                .get::<UnitClassifications>()
+                                .copied()
+                                .unwrap_or_default(),
+                            cooldown_remaining: cooldown.map(|cooldown| cooldown.remaining),
+                            target: target.and_then(|target| target.current),
+                            spawn_tick: spawn_tick.map(|spawn_tick| spawn_tick.0),
+                            spellcasting: spellcasting.copied(),
+                            mana_current: mana.map(|mana| mana.current),
+                            ability_state: ability_state.copied(),
+                            status: status.copied(),
+                        }
+                    },
+                ),
+        );
         buildings
     }
 }

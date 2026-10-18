@@ -1124,49 +1124,79 @@ impl Simulation {
         let mut query = self
             .world
             .query::<(Entity, &SimId, &GuaranteedHitProjectile)>();
-        let mut projectiles: Vec<_> = query
-            .iter(&self.world)
-            .filter(|(_, _, projectile)| projectile.impact_tick <= self.next_tick)
-            .map(|(entity, id, projectile)| ProjectileSnapshot {
-                entity,
-                id: *id,
-                projectile: *projectile,
+        let mut keys: Vec<(SimId, Entity)> =
+            Vec::with_capacity(query.iter(&self.world).size_hint().1.unwrap_or(0));
+        keys.extend(
+            query
+                .iter(&self.world)
+                .filter(|(_, _, projectile)| projectile.impact_tick <= self.next_tick)
+                .map(|(entity, id, _)| (*id, entity)),
+        );
+        keys.sort_unstable_by_key(|&(id, _)| id);
+        keys.iter()
+            .map(|&(_, entity)| {
+                let (entity, id, projectile) = query
+                    .get(&self.world, entity)
+                    .expect("due projectile snapshot entity missing");
+                ProjectileSnapshot {
+                    entity,
+                    id: *id,
+                    projectile: *projectile,
+                }
             })
-            .collect();
-        projectiles.sort_unstable_by_key(|projectile| projectile.id);
-        projectiles
+            .collect()
     }
 
     pub(super) fn snapshot_due_reflected_projectiles(
         &mut self,
     ) -> Vec<ReflectedProjectileSnapshot> {
         let mut query = self.world.query::<(Entity, &SimId, &ReflectedProjectile)>();
-        let mut projectiles: Vec<_> = query
-            .iter(&self.world)
-            .filter(|(_, _, projectile)| projectile.impact_tick <= self.next_tick)
-            .map(|(entity, id, projectile)| ReflectedProjectileSnapshot {
-                entity,
-                id: *id,
-                projectile: *projectile,
+        let mut keys: Vec<(SimId, Entity)> =
+            Vec::with_capacity(query.iter(&self.world).size_hint().1.unwrap_or(0));
+        keys.extend(
+            query
+                .iter(&self.world)
+                .filter(|(_, _, projectile)| projectile.impact_tick <= self.next_tick)
+                .map(|(entity, id, _)| (*id, entity)),
+        );
+        keys.sort_unstable_by_key(|&(id, _)| id);
+        keys.iter()
+            .map(|&(_, entity)| {
+                let (entity, id, projectile) = query
+                    .get(&self.world, entity)
+                    .expect("due projectile snapshot entity missing");
+                ReflectedProjectileSnapshot {
+                    entity,
+                    id: *id,
+                    projectile: *projectile,
+                }
             })
-            .collect();
-        projectiles.sort_unstable_by_key(|projectile| projectile.id);
-        projectiles
+            .collect()
     }
 
     pub(super) fn snapshot_due_bounce_projectiles(&mut self) -> Vec<BounceProjectileSnapshot> {
         let mut query = self.world.query::<(Entity, &SimId, &BounceProjectile)>();
-        let mut projectiles: Vec<_> = query
-            .iter(&self.world)
-            .filter(|(_, _, projectile)| projectile.impact_tick <= self.next_tick)
-            .map(|(entity, id, projectile)| BounceProjectileSnapshot {
-                entity,
-                id: *id,
-                projectile: *projectile,
+        let mut keys: Vec<(SimId, Entity)> =
+            Vec::with_capacity(query.iter(&self.world).size_hint().1.unwrap_or(0));
+        keys.extend(
+            query
+                .iter(&self.world)
+                .filter(|(_, _, projectile)| projectile.impact_tick <= self.next_tick)
+                .map(|(entity, id, _)| (*id, entity)),
+        );
+        keys.sort_unstable_by_key(|&(id, _)| id);
+        keys.iter()
+            .map(|&(_, entity)| {
+                let (entity, id, projectile) = query
+                    .get(&self.world, entity)
+                    .expect("due projectile snapshot entity missing");
+                BounceProjectileSnapshot {
+                    entity,
+                    id: *id,
+                    projectile: *projectile,
+                }
             })
-            .collect();
-        projectiles.sort_unstable_by_key(|projectile| projectile.id);
-        projectiles
+            .collect()
     }
 
     pub(super) fn snapshot_due_ballistic_projectiles(
