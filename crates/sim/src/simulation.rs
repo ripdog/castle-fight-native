@@ -3956,21 +3956,45 @@ impl Simulation {
     }
 
     fn snapshot_units_with_dead(&mut self, include_dead: bool) -> Vec<UnitSnapshot> {
+        // Every component is fetched through the cached query state. Optional and
+        // required-but-checked components keep their original panic/default behaviour.
         let mut query = self.world.query::<(
-            Entity,
-            &SimId,
-            &Owner,
-            &Team,
-            &Position,
-            &Health,
-            &AttackProfile,
-            &AttackCooldown,
-            &TargetState,
-            &RetaliationState,
-            &StatusState,
-            &NavigationState,
-            &MovementProfile,
-            &SpawnTick,
+            (
+                Entity,
+                &SimId,
+                &Owner,
+                &Team,
+                &Position,
+                &Health,
+                &AttackProfile,
+                &AttackCooldown,
+                &TargetState,
+                &RetaliationState,
+                &StatusState,
+                &NavigationState,
+                &MovementProfile,
+                &SpawnTick,
+            ),
+            (
+                Option<&CorpseProducer>,
+                Option<&AttackSequence>,
+                Option<&CollisionRadius>,
+                Option<&MovementClass>,
+                Option<&MechanicalUnit>,
+                Option<&AttackTargetMask>,
+                Option<&SecondaryAttackProfile>,
+                Option<&DamageType>,
+            ),
+            (
+                Option<&ArmorProfile>,
+                Option<&PassiveUnitEffects>,
+                Option<&SpellcastingProfile>,
+                Option<&ManaState>,
+                Option<&AutomaticAbilityState>,
+                Option<&ContentIdentity>,
+                Option<&ActionTimingProfile>,
+                Option<&UnitClassifications>,
+            ),
         )>();
         let default_collision_radius = self.default_collision_radius();
         let mut keys: Vec<(SimId, Entity)> =
@@ -3978,10 +4002,10 @@ impl Simulation {
         keys.extend(
             query
                 .iter(&self.world)
-                .filter(|(_, _, _, _, _, health, _, _, _, _, _, _, _, _)| {
+                .filter(|((_, _, _, _, _, health, _, _, _, _, _, _, _, _), _, _)| {
                     include_dead || health.current > 0
                 })
-                .map(|(entity, id, _, _, _, _, _, _, _, _, _, _, _, _)| (*id, entity)),
+                .map(|((entity, id, ..), _, _)| (*id, entity)),
         );
         keys.sort_unstable_by_key(|&(id, _)| id);
         let mut units: Vec<_> = Vec::with_capacity(keys.len());
@@ -3994,51 +4018,62 @@ impl Simulation {
                 })
                 .map(
                     |(
-                        entity,
-                        id,
-                        owner,
-                        team,
-                        position,
-                        health,
-                        attack,
-                        cooldown,
-                        target,
-                        retaliation,
-                        status,
-                        navigation,
-                        movement,
-                        spawn_tick,
+                        (
+                            entity,
+                            id,
+                            owner,
+                            team,
+                            position,
+                            health,
+                            attack,
+                            cooldown,
+                            target,
+                            retaliation,
+                            status,
+                            navigation,
+                            movement,
+                            spawn_tick,
+                        ),
+                        (
+                            corpse_producer,
+                            attack_sequence,
+                            collision_radius,
+                            movement_class,
+                            mechanical,
+                            attack_targets,
+                            secondary_attack,
+                            damage_type,
+                        ),
+                        (
+                            armor,
+                            passive_effects,
+                            spellcasting,
+                            mana,
+                            ability_state,
+                            content,
+                            action_timing,
+                            classifications,
+                        ),
                     )| {
-                        let entity_ref = self.world.entity(entity);
-                        let corpse = entity_ref.get::<CorpseProducer>().map(|corpse| corpse.0);
-                        let attack_sequence = entity_ref
-                            .get::<AttackSequence>()
-                            .expect("unit attack sequence missing")
-                            .0;
-                        let collision_radius = entity_ref.get::<CollisionRadius>().copied();
-                        let movement_class = *entity_ref
-                            .get::<MovementClass>()
-                            .expect("unit movement class missing");
-                        let mechanical = entity_ref.get::<MechanicalUnit>().is_some();
-                        let attack_targets = *entity_ref
-                            .get::<AttackTargetMask>()
-                            .expect("unit attack target mask missing");
-                        let secondary_attack = entity_ref.get::<SecondaryAttackProfile>().copied();
-                        let damage_type = *entity_ref
-                            .get::<DamageType>()
-                            .expect("unit damage type missing");
-                        let armor = *entity_ref
-                            .get::<ArmorProfile>()
-                            .expect("unit armor profile missing");
-                        let passive_effects = *entity_ref
-                            .get::<PassiveUnitEffects>()
-                            .expect("unit passive effects missing");
-                        let spellcasting = entity_ref.get::<SpellcastingProfile>().copied();
-                        let mana_current = entity_ref.get::<ManaState>().map(|mana| mana.current);
-                        let ability_state = entity_ref.get::<AutomaticAbilityState>().copied();
+                        let corpse = corpse_producer.map(|corpse| corpse.0);
+                        let attack_sequence =
+                            attack_sequence.expect("unit attack sequence missing").0;
+                        let collision_radius = collision_radius.copied();
+                        let movement_class = *movement_class.expect("unit movement class missing");
+                        let mechanical = mechanical.is_some();
+                        let attack_targets =
+                            *attack_targets.expect("unit attack target mask missing");
+                        let secondary_attack = secondary_attack.copied();
+                        let damage_type = *damage_type.expect("unit damage type missing");
+                        let armor = *armor.expect("unit armor profile missing");
+                        let passive_effects =
+                            *passive_effects.expect("unit passive effects missing");
+                        let spellcasting = spellcasting.copied();
+                        let mana_current = mana.map(|mana| mana.current);
+                        let ability_state = ability_state.copied();
                         debug_assert_eq!(
                             spellcasting.is_some()
-                                || entity_ref.get::<ContentIdentity>().is_some_and(|c| {
+                                || content.is_some_and(|c| {
                                     crate::content::native_mana_profile_for_version(
                                         c.map_version,
                                         c.rawcode,
@@ -4048,7 +4083,6 @@ impl Simulation {
                             mana_current.is_some()
                         );
                         debug_assert_eq!(spellcasting.is_some(), ability_state.is_some());
-                        let content = entity_ref.get::<ContentIdentity>();
                         let death_heal = content.and_then(|c| {
                             let p =
                                 crate::building_mechanics::death_heal_for_version(c.map_version)?;
@@ -4094,9 +4128,7 @@ impl Simulation {
                                 u8::from(fog.detects_invisible(Team(0), position.0))
                                     | (u8::from(fog.detects_invisible(Team(1), position.0)) << 1)
                             }),
-                            map_version: entity_ref
-                                .get::<ContentIdentity>()
-                                .map(|content| content.map_version),
+                            map_version: content.map(|content| content.map_version),
                             visible_teams: self.visible_teams(position.0),
                             entity,
                             id: *id,
@@ -4110,9 +4142,7 @@ impl Simulation {
                                 movement_class,
                                 *status,
                             ),
-                            action_timing: *entity_ref
-                                .get::<ActionTimingProfile>()
-                                .expect("unit action timing missing"),
+                            action_timing: *action_timing.expect("unit action timing missing"),
                             cooldown_remaining: cooldown.remaining,
                             attack_sequence,
                             target: target.current,
@@ -4129,10 +4159,7 @@ impl Simulation {
                             collision_radius_override: collision_radius.map(|radius| radius.0),
                             movement_class,
                             mechanical,
-                            classifications: entity_ref
-                                .get::<UnitClassifications>()
-                                .copied()
-                                .unwrap_or_default(),
+                            classifications: classifications.copied().unwrap_or_default(),
                             attack_targets,
                             secondary_attack,
                             damage_type,
@@ -4160,27 +4187,40 @@ impl Simulation {
 
     fn snapshot_buildings(&mut self) -> Vec<BuildingSnapshot> {
         let mut query = self.world.query::<(
-            Entity,
-            &SimId,
-            &Team,
-            &BuildingFootprint,
-            &Health,
-            Option<&AttackProfile>,
-            Option<&AttackCooldown>,
-            Option<&TargetState>,
-            Option<&SpawnTick>,
-            Option<&SpellcastingProfile>,
-            Option<&ManaState>,
-            Option<&AutomaticAbilityState>,
-            Option<&StatusState>,
+            (
+                Entity,
+                &SimId,
+                &Team,
+                &BuildingFootprint,
+                &Health,
+                Option<&AttackProfile>,
+                Option<&AttackCooldown>,
+                Option<&TargetState>,
+                Option<&SpawnTick>,
+                Option<&SpellcastingProfile>,
+                Option<&ManaState>,
+                Option<&AutomaticAbilityState>,
+                Option<&StatusState>,
+            ),
+            (
+                Option<&AttackTargetMask>,
+                Option<&DamageType>,
+                Option<&ArmorProfile>,
+                Option<&ActionTimingProfile>,
+                Option<&SecondaryAttackProfile>,
+                Option<&PassiveUnitEffects>,
+                Option<&ContentIdentity>,
+                Option<&UnitClassifications>,
+                Option<&BuildingConstruction>,
+            ),
         )>();
         let mut keys: Vec<(SimId, Entity)> =
             Vec::with_capacity(query.iter(&self.world).size_hint().1.unwrap_or(0));
         keys.extend(
             query
                 .iter(&self.world)
-                .filter(|(_, _, _, _, health, _, _, _, _, _, _, _, _)| health.current > 0)
-                .map(|(entity, id, _, _, _, _, _, _, _, _, _, _, _)| (*id, entity)),
+                .filter(|((_, _, _, _, health, _, _, _, _, _, _, _, _), _)| health.current > 0)
+                .map(|((entity, id, ..), _)| (*id, entity)),
         );
         keys.sort_unstable_by_key(|&(id, _)| id);
         let mut buildings: Vec<_> = Vec::with_capacity(keys.len());
@@ -4193,36 +4233,44 @@ impl Simulation {
                 })
                 .map(
                     |(
-                        entity,
-                        id,
-                        team,
-                        footprint,
-                        health,
-                        attack,
-                        cooldown,
-                        target,
-                        spawn_tick,
-                        spellcasting,
-                        mana,
-                        ability_state,
-                        status,
+                        (
+                            entity,
+                            id,
+                            team,
+                            footprint,
+                            health,
+                            attack,
+                            cooldown,
+                            target,
+                            spawn_tick,
+                            spellcasting,
+                            mana,
+                            ability_state,
+                            status,
+                        ),
+                        (
+                            attack_targets,
+                            damage_type,
+                            armor,
+                            action_timing,
+                            secondary_attack,
+                            passive_effects,
+                            content,
+                            classifications,
+                            construction,
+                        ),
                     )| {
-                        let entity_ref = self.world.entity(entity);
-                        let attack_targets = entity_ref.get::<AttackTargetMask>().copied();
-                        let damage_type = *entity_ref
-                            .get::<DamageType>()
-                            .expect("building damage type missing");
-                        let armor = *entity_ref
-                            .get::<ArmorProfile>()
-                            .expect("building armor profile missing");
+                        let attack_targets = attack_targets.copied();
+                        let damage_type = *damage_type.expect("building damage type missing");
+                        let armor = *armor.expect("building armor profile missing");
                         debug_assert_eq!(attack.is_some(), cooldown.is_some());
                         debug_assert_eq!(attack.is_some(), target.is_some());
                         debug_assert_eq!(attack.is_some(), spawn_tick.is_some());
                         debug_assert_eq!(attack.is_some(), attack_targets.is_some());
                         debug_assert_eq!(
                             spellcasting.is_some()
-                                || (entity_ref.get::<BuildingConstruction>().is_none()
-                                    && entity_ref.get::<ContentIdentity>().is_some_and(|c| {
+                                || (construction.is_none()
+                                    && content.is_some_and(|c| {
                                         crate::content::building_native_mana_profile(
                                             c.map_version,
                                             c.rawcode,
@@ -4235,23 +4283,16 @@ impl Simulation {
                         debug_assert!(
                             !(attack.is_some() || spellcasting.is_some()) || status.is_some()
                         );
+                        let entity_ref = self.world.entity(entity);
                         BuildingSnapshot {
                             death_heal_contribution: death_healing::building_contribution(
                                 &entity_ref,
                             ),
-                            action_timing: entity_ref
-                                .get::<ActionTimingProfile>()
-                                .copied()
-                                .unwrap_or_default(),
-                            secondary_attack: entity_ref.get::<SecondaryAttackProfile>().copied(),
-                            passive_effects: entity_ref
-                                .get::<PassiveUnitEffects>()
-                                .copied()
-                                .unwrap_or_default(),
+                            action_timing: action_timing.copied().unwrap_or_default(),
+                            secondary_attack: secondary_attack.copied(),
+                            passive_effects: passive_effects.copied().unwrap_or_default(),
                             snow_damage_taken_per_10k: 10_000,
-                            map_version: entity_ref
-                                .get::<ContentIdentity>()
-                                .map(|content| content.map_version),
+                            map_version: content.map(|content| content.map_version),
                             visible_teams: self.visible_teams(footprint_center_point(
                                 *footprint,
                                 self.config.navigation_cell_size,
@@ -4265,10 +4306,7 @@ impl Simulation {
                             attack_targets,
                             damage_type,
                             armor,
-                            classifications: entity_ref
-                                .get::<UnitClassifications>()
-                                .copied()
-                                .unwrap_or_default(),
+                            classifications: classifications.copied().unwrap_or_default(),
                             cooldown_remaining: cooldown.map(|cooldown| cooldown.remaining),
                             target: target.and_then(|target| target.current),
                             spawn_tick: spawn_tick.map(|spawn_tick| spawn_tick.0),
