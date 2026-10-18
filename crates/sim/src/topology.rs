@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     cmp::Reverse,
     collections::{BinaryHeap, VecDeque},
 };
@@ -677,66 +678,64 @@ impl TopologyGrid {
         let Some(goal) = self.index(target) else {
             return (None, 0);
         };
-        let mut g_score = vec![u32::MAX; self.blocked.len()];
-        let mut came_from = vec![usize::MAX; self.blocked.len()];
-        let mut open = BinaryHeap::new();
 
-        g_score[start] = 0;
-        open.push(Reverse((
-            manhattan(from, target),
-            0u32,
-            -i64::from(bias) * i64::from(from.y),
-            -i64::from(bias) * i64::from(from.x),
-            start,
-        )));
+        with_a_star_scratch(self.blocked.len(), |scratch| {
+            scratch.relax(start, 0, usize::MAX);
+            scratch.open.push(Reverse((
+                manhattan(from, target),
+                0u32,
+                -i64::from(bias) * i64::from(from.y),
+                -i64::from(bias) * i64::from(from.x),
+                start,
+            )));
 
-        let mut expanded_nodes = 0usize;
-        while let Some(Reverse((_, cost, _, _, current))) = open.pop() {
-            if cost != g_score[current] {
-                continue;
-            }
-            expanded_nodes += 1;
-            if current == goal {
-                let mut step = goal;
-                while came_from[step] != start {
-                    let parent = came_from[step];
-                    if parent == usize::MAX {
-                        return (None, expanded_nodes);
+            let mut expanded_nodes = 0usize;
+            while let Some(Reverse((_, cost, _, _, current))) = scratch.open.pop() {
+                if cost != scratch.cost_of(current) {
+                    continue;
+                }
+                expanded_nodes += 1;
+                if current == goal {
+                    let mut step = goal;
+                    while scratch.parent_of(step) != start {
+                        let parent = scratch.parent_of(step);
+                        if parent == usize::MAX {
+                            return (None, expanded_nodes);
+                        }
+                        step = parent;
                     }
-                    step = parent;
+                    return (Some(self.cell_from_index(step)), expanded_nodes);
                 }
-                return (Some(self.cell_from_index(step)), expanded_nodes);
+
+                let cell = self.cell_from_index(current);
+                for neighbor in self.neighbors(cell).into_iter().flatten() {
+                    let Some(next) = self.index(neighbor) else {
+                        continue;
+                    };
+                    if self.blocked[next] || self.component[next] != self.component[start] {
+                        continue;
+                    }
+                    let next_cost = cost.checked_add(1).expect("navigation path cost overflow");
+                    if next_cost >= scratch.cost_of(next) {
+                        continue;
+                    }
+
+                    scratch.relax(next, next_cost, current);
+                    let estimate = next_cost
+                        .checked_add(manhattan(neighbor, target))
+                        .expect("navigation path estimate overflow");
+                    scratch.open.push(Reverse((
+                        estimate,
+                        next_cost,
+                        -i64::from(bias) * i64::from(neighbor.y),
+                        -i64::from(bias) * i64::from(neighbor.x),
+                        next,
+                    )));
+                }
             }
 
-            let cell = self.cell_from_index(current);
-            for neighbor in self.neighbors(cell).into_iter().flatten() {
-                let Some(next) = self.index(neighbor) else {
-                    continue;
-                };
-                if self.blocked[next] || self.component[next] != self.component[start] {
-                    continue;
-                }
-                let next_cost = cost.checked_add(1).expect("navigation path cost overflow");
-                if next_cost >= g_score[next] {
-                    continue;
-                }
-
-                g_score[next] = next_cost;
-                came_from[next] = current;
-                let estimate = next_cost
-                    .checked_add(manhattan(neighbor, target))
-                    .expect("navigation path estimate overflow");
-                open.push(Reverse((
-                    estimate,
-                    next_cost,
-                    -i64::from(bias) * i64::from(neighbor.y),
-                    -i64::from(bias) * i64::from(neighbor.x),
-                    next,
-                )));
-            }
-        }
-
-        (None, expanded_nodes)
+            (None, expanded_nodes)
+        })
     }
 
     fn a_star_first_step_with_radius(
@@ -761,63 +760,61 @@ impl TopologyGrid {
             return (None, 0);
         }
 
-        let mut g_score = vec![u32::MAX; self.blocked.len()];
-        let mut came_from = vec![usize::MAX; self.blocked.len()];
-        let mut open = BinaryHeap::new();
-        g_score[start] = 0;
-        open.push(Reverse((
-            manhattan(from, target),
-            0u32,
-            -i64::from(bias) * i64::from(from.y),
-            -i64::from(bias) * i64::from(from.x),
-            start,
-        )));
+        with_a_star_scratch(self.blocked.len(), |scratch| {
+            scratch.relax(start, 0, usize::MAX);
+            scratch.open.push(Reverse((
+                manhattan(from, target),
+                0u32,
+                -i64::from(bias) * i64::from(from.y),
+                -i64::from(bias) * i64::from(from.x),
+                start,
+            )));
 
-        let mut expanded_nodes = 0usize;
-        while let Some(Reverse((_, cost, _, _, current))) = open.pop() {
-            if cost != g_score[current] {
-                continue;
-            }
-            expanded_nodes += 1;
-            if current == goal {
-                let mut step = goal;
-                while came_from[step] != start {
-                    let parent = came_from[step];
-                    if parent == usize::MAX {
-                        return (None, expanded_nodes);
+            let mut expanded_nodes = 0usize;
+            while let Some(Reverse((_, cost, _, _, current))) = scratch.open.pop() {
+                if cost != scratch.cost_of(current) {
+                    continue;
+                }
+                expanded_nodes += 1;
+                if current == goal {
+                    let mut step = goal;
+                    while scratch.parent_of(step) != start {
+                        let parent = scratch.parent_of(step);
+                        if parent == usize::MAX {
+                            return (None, expanded_nodes);
+                        }
+                        step = parent;
                     }
-                    step = parent;
+                    return (Some(self.cell_from_index(step)), expanded_nodes);
                 }
-                return (Some(self.cell_from_index(step)), expanded_nodes);
-            }
 
-            let cell = self.cell_from_index(current);
-            for neighbor in self.neighbors(cell).into_iter().flatten() {
-                let Some(next) = self.index(neighbor) else {
-                    continue;
-                };
-                if !self.center_circle_ok(neighbor, radius, component, center_mask) {
-                    continue;
+                let cell = self.cell_from_index(current);
+                for neighbor in self.neighbors(cell).into_iter().flatten() {
+                    let Some(next) = self.index(neighbor) else {
+                        continue;
+                    };
+                    if !self.center_circle_ok(neighbor, radius, component, center_mask) {
+                        continue;
+                    }
+                    let next_cost = cost.checked_add(1).expect("navigation path cost overflow");
+                    if next_cost >= scratch.cost_of(next) {
+                        continue;
+                    }
+                    scratch.relax(next, next_cost, current);
+                    let estimate = next_cost
+                        .checked_add(manhattan(neighbor, target))
+                        .expect("navigation path estimate overflow");
+                    scratch.open.push(Reverse((
+                        estimate,
+                        next_cost,
+                        -i64::from(bias) * i64::from(neighbor.y),
+                        -i64::from(bias) * i64::from(neighbor.x),
+                        next,
+                    )));
                 }
-                let next_cost = cost.checked_add(1).expect("navigation path cost overflow");
-                if next_cost >= g_score[next] {
-                    continue;
-                }
-                g_score[next] = next_cost;
-                came_from[next] = current;
-                let estimate = next_cost
-                    .checked_add(manhattan(neighbor, target))
-                    .expect("navigation path estimate overflow");
-                open.push(Reverse((
-                    estimate,
-                    next_cost,
-                    -i64::from(bias) * i64::from(neighbor.y),
-                    -i64::from(bias) * i64::from(neighbor.x),
-                    next,
-                )));
             }
-        }
-        (None, expanded_nodes)
+            (None, expanded_nodes)
+        })
     }
 
     fn rebuild_components(&mut self) {
@@ -1034,6 +1031,74 @@ impl TopologyGrid {
         let x = index % self.width;
         NavCell::new(self.min.x + x as i32, self.min.y + y as i32)
     }
+}
+
+/// Open-set entry: (estimate, cost, bias-adjusted y, bias-adjusted x, index); min-heap order.
+type AStarOpenEntry = Reverse<(u32, u32, i64, i64, usize)>;
+
+/// Reusable A* working memory. Entries are valid only when their stamp equals `generation`, so a
+/// search never clears the full grid. Each worker thread keeps its own instance (movement runs in
+/// a rayon pool), and no search re-enters `with_a_star_scratch`.
+#[derive(Debug, Default)]
+struct AStarScratch {
+    g_score: Vec<u32>,
+    came_from: Vec<usize>,
+    stamp: Vec<u32>,
+    generation: u32,
+    open: BinaryHeap<AStarOpenEntry>,
+}
+
+impl AStarScratch {
+    fn begin(&mut self, len: usize) {
+        self.g_score.resize(len, u32::MAX);
+        self.came_from.resize(len, usize::MAX);
+        self.stamp.resize(len, 0);
+        self.generation = match self.generation.checked_add(1) {
+            Some(generation) => generation,
+            None => {
+                self.stamp.fill(0);
+                1
+            }
+        };
+        self.open.clear();
+    }
+
+    #[inline]
+    fn cost_of(&self, index: usize) -> u32 {
+        if self.stamp[index] == self.generation {
+            self.g_score[index]
+        } else {
+            u32::MAX
+        }
+    }
+
+    #[inline]
+    fn parent_of(&self, index: usize) -> usize {
+        if self.stamp[index] == self.generation {
+            self.came_from[index]
+        } else {
+            usize::MAX
+        }
+    }
+
+    #[inline]
+    fn relax(&mut self, index: usize, cost: u32, parent: usize) {
+        self.stamp[index] = self.generation;
+        self.g_score[index] = cost;
+        self.came_from[index] = parent;
+    }
+}
+
+thread_local! {
+    static A_STAR_SCRATCH: RefCell<AStarScratch> = RefCell::new(AStarScratch::default());
+}
+
+fn with_a_star_scratch<R>(len: usize, search: impl FnOnce(&mut AStarScratch) -> R) -> R {
+    A_STAR_SCRATCH.with(|scratch| {
+        let mut scratch = scratch.borrow_mut();
+        scratch.begin(len);
+        search(&mut scratch)
+    })
 }
 
 fn cell_rect_min_distance_sq(center: SimPoint, cell: NavCell, cell_size: i32) -> u64 {
