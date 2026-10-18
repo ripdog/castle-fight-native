@@ -6,12 +6,45 @@ use std::{
 
 use castle_fight_sim::{
     AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile,
-    AutomaticAbilityProfile, BuildingFootprint, BuildingSpawn, CastleFightProductionKind,
-    CastleFightUnitKind, CollisionRadius, CombatRules, ManaProfile, ModifierId, MovementProfile,
+    AutomaticAbilityProfile, BuildingFootprint, BuildingSpawn, CASTLE_FIGHT_SIMULATION_HZ,
+    CastleFightBuilderRace, CastleFightMatchConfig, CastleFightParticipantConfig,
+    CastleFightProductionKind, CastleFightUnitKind, CollisionRadius, CombatRules,
+    DebugStartingBuildings, ManaProfile, MapVersion, ModifierId, MovementProfile, PlayerId,
     ProductionProfile, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation, SimulationConfig,
     SpellcastingProfile, Team, TickResult, TickTimings, UnitSpawn, UnitTemplate,
-    castle_fight_damage_rules,
+    castle_fight_damage_rules, create_castle_fight_match,
 };
+
+/// Fixed seed so the all-buildings match is reproducible across runs.
+const ALL_BUILDINGS_MATCH_SEED: u64 = 1;
+/// Fixed seed for de-synchronizing spellcaster mana in the all-buildings scenario.
+const ALL_BUILDINGS_MANA_SEED: u64 = 0x5eed_0000_c0de_0001;
+/// Default game length for the all-buildings scenario when `--ticks` is not given.
+const ALL_BUILDINGS_GAME_SECONDS: u64 = 120;
+/// Width of each row in the all-buildings window breakdown.
+const TICK_WINDOW_SECONDS: u64 = 10;
+/// Number of slowest individual ticks listed after an all-buildings run.
+const SLOWEST_TICK_COUNT: usize = 10;
+
+const PHASE_COUNT: usize = 12;
+const PHASE_NAMES: [&str; PHASE_COUNT] = [
+    "topology",
+    "timers",
+    "production",
+    "snapshot_and_spatial",
+    "abilities",
+    "targeting",
+    "combat",
+    "movement_intent",
+    "crowd_and_collision",
+    "ballistic_impact",
+    "structural_commit",
+    "checksum",
+];
+const PHASE_SHORT_NAMES: [&str; PHASE_COUNT] = [
+    "topo", "timer", "prod", "spatial", "ability", "target", "combat", "intent", "collide",
+    "impact", "commit", "hash",
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Scenario {
@@ -34,6 +67,7 @@ enum Scenario {
     TrafficFlow,
     TrafficProduction,
     Mixed,
+    AllBuildings,
 }
 
 impl Scenario {
@@ -58,6 +92,28 @@ impl Scenario {
             Self::TrafficFlow => "traffic-flow",
             Self::TrafficProduction => "traffic-production",
             Self::Mixed => "mixed",
+            Self::AllBuildings => "all-buildings",
+        }
+    }
+}
+
+/// Developer-tool choices for the all-buildings scenario. Other scenarios ignore them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct AllBuildingsOptions {
+    /// Players per team, 1 through 3. Team 0 uses ids `0..N` and team 1 uses ids `6..6+N`.
+    players_per_team: usize,
+    /// Suppresses building health loss so castles and production survive a sustained run.
+    invulnerable_buildings: bool,
+    /// Randomizes spellcaster mana so spell buildings do not cast in lockstep.
+    randomize_mana: bool,
+}
+
+impl Default for AllBuildingsOptions {
+    fn default() -> Self {
+        Self {
+            players_per_team: 3,
+            invulnerable_buildings: true,
+            randomize_mana: true,
         }
     }
 }
@@ -67,8 +123,11 @@ struct Args {
     scenarios: Vec<Scenario>,
     units: Vec<usize>,
     workers: Vec<usize>,
-    ticks: u64,
-    warmup: u64,
+    /// `None` means the scenario's default; see `Args::run_length`.
+    ticks: Option<u64>,
+    /// `None` means the scenario's default; see `Args::run_length`.
+    warmup: Option<u64>,
+    all_buildings: AllBuildingsOptions,
 }
 
 impl Default for Args {
@@ -77,8 +136,25 @@ impl Default for Args {
             scenarios: vec![Scenario::Lane, Scenario::Cage, Scenario::Crowd],
             units: vec![700, 1_000, 5_000, 10_000],
             workers: vec![1, 2, 4],
-            ticks: 200,
-            warmup: 20,
+            ticks: None,
+            warmup: None,
+            all_buildings: AllBuildingsOptions::default(),
+        }
+    }
+}
+
+impl Args {
+    /// Returns `(ticks, warmup)` for one scenario. Explicit flags always win. The
+    /// all-buildings match defaults to `ALL_BUILDINGS_GAME_SECONDS` of game time with
+    /// no warmup; every other scenario defaults to 200 ticks after 20 warmup ticks.
+    fn run_length(&self, scenario: Scenario) -> (u64, u64) {
+        match scenario {
+            Scenario::AllBuildings => (
+                self.ticks
+                    .unwrap_or(ALL_BUILDINGS_GAME_SECONDS * simulation_hz()),
+                self.warmup.unwrap_or(0),
+            ),
+            _ => (self.ticks.unwrap_or(200), self.warmup.unwrap_or(20)),
         }
     }
 }
@@ -88,13 +164,18 @@ fn main() {
     println!("castle-fight deterministic simulation benchmark");
     println!(
         "scenarios={:?} units={:?} workers={:?} ticks={} warmup={}",
-        args.scenarios, args.units, args.workers, args.ticks, args.warmup
+        args.scenarios,
+        args.units,
+        args.workers,
+        optional_label(args.ticks),
+        optional_label(args.warmup),
     );
 
     let mut expected_checksums = BTreeMap::<(Scenario, usize), u64>::new();
     let mut mismatch = false;
 
     for &scenario in &args.scenarios {
+        let (ticks, warmup) = args.run_length(scenario);
         println!();
         println!("scenario={}", scenario.name());
         println!(
@@ -131,7 +212,7 @@ fn main() {
 
             for &workers in &args.workers {
                 assert!(workers > 0, "worker counts must be positive");
-                let result = run_case(scenario, units, workers, args.warmup, args.ticks);
+                let result = run_case(scenario, units, workers, warmup, ticks, args.all_buildings);
 
                 let expected = expected_checksums
                     .entry((scenario, units))
@@ -240,6 +321,9 @@ fn main() {
                         result.ally_defense_attackers_per_query,
                     );
                 }
+                if scenario == Scenario::AllBuildings {
+                    print_tick_profile(&result.tick_samples, warmup);
+                }
             }
         }
     }
@@ -343,6 +427,20 @@ struct BenchResult {
     traffic_lower_half_units: usize,
     traffic_upper_half_units: usize,
     checksum: u64,
+    /// Per-tick samples, recorded only for the all-buildings scenario.
+    tick_samples: Vec<TickSample>,
+}
+
+/// One measured `Simulation::step` call: wall time plus the tick's reported state.
+#[derive(Debug, Clone, Copy)]
+struct TickSample {
+    completed_tick: u64,
+    wall: Duration,
+    timings: TickTimings,
+    units_alive: usize,
+    buildings_alive: usize,
+    projectiles_alive: usize,
+    a_star_expanded_nodes: usize,
 }
 
 impl BenchResult {
@@ -397,13 +495,18 @@ impl ScenarioState {
     }
 }
 
-fn run_case(
+fn build_scenario(
     scenario: Scenario,
     units: usize,
     workers: usize,
-    warmup: u64,
-    ticks: u64,
-) -> BenchResult {
+    all_buildings: AllBuildingsOptions,
+) -> (Simulation, ScenarioState) {
+    if scenario == Scenario::AllBuildings {
+        return (
+            all_buildings_simulation(workers, all_buildings),
+            ScenarioState::Static,
+        );
+    }
     let mut simulation = Simulation::new_with_combat_rules(
         scenario_config(scenario),
         workers,
@@ -412,21 +515,107 @@ fn run_case(
             ..CombatRules::default()
         },
     );
-    let mut state = populate_scenario(scenario, &mut simulation, units);
+    let state = populate_scenario(scenario, &mut simulation, units);
+    (simulation, state)
+}
+
+/// Team 0 takes ids `0..N` and team 1 takes ids `6..6+N`, as the match validator requires.
+fn all_buildings_participants(players_per_team: usize) -> Vec<CastleFightParticipantConfig> {
+    let participant = |id: u8, team: u8| CastleFightParticipantConfig {
+        id: PlayerId(id),
+        team: Team(team),
+        builder_race: CastleFightBuilderRace::Human,
+    };
+    (0..players_per_team)
+        .map(|slot| participant(u8::try_from(slot).expect("player slot fits in u8"), 0))
+        .chain(
+            (0..players_per_team).map(|slot| {
+                participant(6 + u8::try_from(slot).expect("player slot fits in u8"), 1)
+            }),
+        )
+        .collect()
+}
+
+/// Builds the real Castle Fight 9.27 match with one completed copy of every implemented
+/// building for each player. The match is fully determined by `ALL_BUILDINGS_MATCH_SEED`, and
+/// the developer-tool options are applied in a fixed order after creation.
+fn all_buildings_simulation(workers: usize, options: AllBuildingsOptions) -> Simulation {
+    let mut config = CastleFightMatchConfig::development_subset_with_participants(
+        MapVersion::CASTLE_FIGHT_9_27,
+        "r1",
+        ALL_BUILDINGS_MATCH_SEED,
+        all_buildings_participants(options.players_per_team),
+    )
+    .expect("valid Castle Fight 9.27 participants");
+    config.rules.debug_starting_buildings = DebugStartingBuildings::All;
+    let mut simulation = create_castle_fight_match(config, workers)
+        .expect("registered Castle Fight 9.27 match")
+        .simulation;
+    if options.invulnerable_buildings {
+        simulation.debug_set_buildings_invulnerable(true);
+    }
+    let mana_randomized = if options.randomize_mana {
+        simulation.debug_randomize_spellcaster_mana(ALL_BUILDINGS_MANA_SEED)
+    } else {
+        0
+    };
+    println!(
+        "all-buildings setup: players-per-team={} invulnerable={} mana-randomized={} initial-units={} initial-buildings={}",
+        options.players_per_team,
+        if options.invulnerable_buildings {
+            "on"
+        } else {
+            "off"
+        },
+        mana_randomized,
+        simulation.unit_count(),
+        simulation.building_count(),
+    );
+    simulation
+}
+
+fn run_case(
+    scenario: Scenario,
+    units: usize,
+    workers: usize,
+    warmup: u64,
+    ticks: u64,
+    all_buildings: AllBuildingsOptions,
+) -> BenchResult {
+    let (mut simulation, mut state) = build_scenario(scenario, units, workers, all_buildings);
 
     for _ in 0..warmup {
         state.before_tick(&mut simulation);
         simulation.step();
     }
 
+    let record_samples = scenario == Scenario::AllBuildings;
+    let mut tick_samples = Vec::with_capacity(if record_samples {
+        usize::try_from(ticks).expect("tick count fits in usize")
+    } else {
+        0
+    });
     let start = Instant::now();
     let mut timings = TickTimings::default();
     let mut counters = BenchCounters::default();
     for _ in 0..ticks {
         state.before_tick(&mut simulation);
+        let tick_start = Instant::now();
         let result = simulation.step();
+        let wall = tick_start.elapsed();
         accumulate_timings(&mut timings, result.timings);
         accumulate_counters(&result, &mut counters);
+        if record_samples {
+            tick_samples.push(TickSample {
+                completed_tick: result.completed_tick,
+                wall,
+                timings: result.timings,
+                units_alive: result.units_alive,
+                buildings_alive: result.buildings_alive,
+                projectiles_alive: result.projectiles_alive,
+                a_star_expanded_nodes: result.a_star_expanded_nodes,
+            });
+        }
     }
     let elapsed = start.elapsed();
 
@@ -520,6 +709,138 @@ fn run_case(
         traffic_lower_half_units,
         traffic_upper_half_units,
         checksum: simulation.checksum(),
+        tick_samples,
+    }
+}
+
+fn simulation_hz() -> u64 {
+    u64::try_from(CASTLE_FIGHT_SIMULATION_HZ).expect("simulation tick rate is positive")
+}
+
+fn optional_label(value: Option<u64>) -> String {
+    value.map_or_else(|| "default".to_owned(), |value| value.to_string())
+}
+
+fn duration_ms(duration: Duration) -> f64 {
+    duration.as_secs_f64() * 1_000.0
+}
+
+fn phase_durations(timings: &TickTimings) -> [Duration; PHASE_COUNT] {
+    [
+        timings.topology,
+        timings.timers,
+        timings.production,
+        timings.snapshot_and_spatial,
+        timings.abilities,
+        timings.targeting,
+        timings.combat,
+        timings.movement_intent,
+        timings.crowd_and_collision,
+        timings.ballistic_impact,
+        timings.structural_commit,
+        timings.checksum,
+    ]
+}
+
+/// Prints per-window (10 game-second) timing and state, then the slowest individual ticks.
+fn print_tick_profile(samples: &[TickSample], warmup: u64) {
+    if samples.is_empty() {
+        return;
+    }
+    let hz = simulation_hz();
+    let window_ticks =
+        usize::try_from(TICK_WINDOW_SECONDS * hz).expect("window tick count fits in usize");
+
+    println!();
+    println!(
+        "all-buildings window breakdown: {TICK_WINDOW_SECONDS}s game-time windows ({window_ticks} ticks), warmup={warmup}"
+    );
+    let phase_header: String = PHASE_SHORT_NAMES
+        .iter()
+        .map(|name| format!(" {name:>7}"))
+        .collect();
+    println!(
+        "{:>11} {:>6} {:>9} {:>9}{phase_header} {:>7} {:>7} {:>7} {:>7} {:>9}",
+        "game-s", "ticks", "avg-ms", "max-ms", "units", "peak-u", "bldgs", "proj", "nodes/t",
+    );
+
+    for window in samples.chunks(window_ticks) {
+        let count = window.len();
+        let first = window[0].completed_tick;
+        let last = window[count - 1].completed_tick;
+        let wall_sum: Duration = window.iter().map(|sample| sample.wall).sum();
+        let max_wall = window
+            .iter()
+            .map(|sample| sample.wall)
+            .max()
+            .unwrap_or_default();
+        let mut phase_sums = [Duration::ZERO; PHASE_COUNT];
+        for sample in window {
+            for (sum, phase) in phase_sums.iter_mut().zip(phase_durations(&sample.timings)) {
+                *sum += phase;
+            }
+        }
+        let phase_cells: String = phase_sums
+            .iter()
+            .map(|sum| format!(" {:>7.3}", duration_ms(*sum) / count as f64))
+            .collect();
+        let nodes: usize = window
+            .iter()
+            .map(|sample| sample.a_star_expanded_nodes)
+            .sum();
+        let peak_units = window
+            .iter()
+            .map(|sample| sample.units_alive)
+            .max()
+            .unwrap_or_default();
+        let end = &window[count - 1];
+        println!(
+            "{:>11} {:>6} {:>9.3} {:>9.3}{phase_cells} {:>7} {:>7} {:>7} {:>7} {:>9.1}",
+            format!("{}-{}", first / hz, (last + 1) / hz),
+            count,
+            duration_ms(wall_sum) / count as f64,
+            duration_ms(max_wall),
+            end.units_alive,
+            peak_units,
+            end.buildings_alive,
+            end.projectiles_alive,
+            nodes as f64 / count as f64,
+        );
+    }
+
+    let mut slowest: Vec<&TickSample> = samples.iter().collect();
+    slowest.sort_by(|a, b| {
+        b.wall
+            .cmp(&a.wall)
+            .then(a.completed_tick.cmp(&b.completed_tick))
+    });
+    println!();
+    println!(
+        "slowest {} ticks (wall-clock per Simulation::step, top 3 phases by time)",
+        slowest.len().min(SLOWEST_TICK_COUNT)
+    );
+    println!(
+        "{:>4} {:>10} {:>10}  top phases (ms)",
+        "rank", "tick", "total-ms"
+    );
+    for (rank, sample) in slowest.iter().take(SLOWEST_TICK_COUNT).enumerate() {
+        let mut phases: Vec<(&str, Duration)> = PHASE_NAMES
+            .into_iter()
+            .zip(phase_durations(&sample.timings))
+            .collect();
+        phases.sort_by_key(|(_, duration)| std::cmp::Reverse(*duration));
+        let top: Vec<String> = phases
+            .iter()
+            .take(3)
+            .map(|(name, duration)| format!("{name}={:.3}", duration_ms(*duration)))
+            .collect();
+        println!(
+            "{:>4} {:>10} {:>10.3}  {}",
+            rank + 1,
+            sample.completed_tick,
+            duration_ms(sample.wall),
+            top.join(", "),
+        );
     }
 }
 
@@ -730,6 +1051,9 @@ fn populate_scenario(
         Scenario::TrafficFlow => populate_traffic_flow(simulation, units, false),
         Scenario::TrafficProduction => populate_production_fed_traffic(simulation, units),
         Scenario::Mixed => populate_mixed_battle(simulation, units),
+        Scenario::AllBuildings => {
+            unreachable!("all-buildings is built by the real match constructor")
+        }
     }
 
     match scenario {
@@ -1647,27 +1971,54 @@ fn parse_args() -> Args {
             }
             "--units" => args.units = parse_list(&next_value(&mut iter, "--units")),
             "--workers" => args.workers = parse_list(&next_value(&mut iter, "--workers")),
-            "--ticks" => args.ticks = parse_number(&next_value(&mut iter, "--ticks"), "--ticks"),
-            "--warmup" => {
-                args.warmup = parse_number(&next_value(&mut iter, "--warmup"), "--warmup");
+            "--ticks" => {
+                args.ticks = Some(parse_number(&next_value(&mut iter, "--ticks"), "--ticks"));
             }
+            "--warmup" => {
+                args.warmup = Some(parse_number(&next_value(&mut iter, "--warmup"), "--warmup"));
+            }
+            "--players-per-team" => {
+                let players: usize = parse_number(
+                    &next_value(&mut iter, "--players-per-team"),
+                    "--players-per-team",
+                );
+                assert!(
+                    (1..=3).contains(&players),
+                    "--players-per-team must be 1, 2, or 3"
+                );
+                args.all_buildings.players_per_team = players;
+            }
+            "--mortal-buildings" => args.all_buildings.invulnerable_buildings = false,
+            "--synced-mana" => args.all_buildings.randomize_mana = false,
             "-h" | "--help" => {
                 println!("Usage: cargo run --release -p castle-fight-sim-bench -- [options]");
                 println!(
-                    "  --scenario lane,cage,crowd,pathing,topology,production,projectile,ballistic,bounce,tower,ability,stun,slow,radius,traffic,traffic-flow,traffic-production,mixed"
+                    "  --scenario lane,cage,crowd,pathing,topology,production,projectile,ballistic,bounce,tower,ability,stun,slow,radius,traffic,traffic-flow,traffic-production,mixed,all-buildings"
                 );
                 println!("  --units 700,1000,5000,10000");
                 println!("  --workers 1,2,4,8");
-                println!("  --ticks 200");
-                println!("  --warmup 20");
+                println!("  --ticks 200 (all-buildings: 120 seconds of game time)");
+                println!("  --warmup 20 (all-buildings: 0)");
                 println!("Pathing is intentionally adversarial; start with smaller unit counts.");
+                println!(
+                    "all-buildings runs the real Castle Fight 9.27 match with every implemented building; --units is ignored."
+                );
+                println!("  --players-per-team 1|2|3 (all-buildings only; default 3, i.e. 3v3)");
+                println!(
+                    "  --mortal-buildings (all-buildings: buildings are invulnerable by default so production stays sustained)"
+                );
+                println!(
+                    "  --synced-mana (all-buildings: keep every spellcaster at its starting mana instead of a seeded random value)"
+                );
                 std::process::exit(0);
             }
             other => panic!("unknown argument: {other}"),
         }
     }
 
-    assert!(args.ticks > 0, "--ticks must be positive");
+    if let Some(ticks) = args.ticks {
+        assert!(ticks > 0, "--ticks must be positive");
+    }
     assert!(
         !args.scenarios.is_empty(),
         "at least one scenario is required"
@@ -1698,6 +2049,7 @@ fn parse_scenarios(value: &str) -> Vec<Scenario> {
             "traffic-flow" => Scenario::TrafficFlow,
             "traffic-production" => Scenario::TrafficProduction,
             "mixed" => Scenario::Mixed,
+            "all-buildings" => Scenario::AllBuildings,
             other => panic!("unknown scenario: {other}"),
         })
         .collect()
