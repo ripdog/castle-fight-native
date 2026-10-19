@@ -666,27 +666,27 @@ fn queue_wc3_particles(
                 stats.pending_texture_particles += 1;
                 continue;
             }
-            if extracted.experiment == RenderExperiment::ParticleCull {
-                let [x, y, z, scale] = particle.instance.position_scale;
-                // A camera-facing square fits inside this sphere at any camera angle.
-                // All three transparent blend modes leave the destination unchanged
-                // at exactly zero alpha. Keep their simulation/lifetime work intact.
-                if particle.instance.color[3] == 0.0 {
-                    stats.zero_alpha += 1;
-                    continue;
-                }
-                if frustum.is_some_and(|frustum| {
-                    !frustum.intersects_sphere(
-                        &Sphere {
-                            center: Vec3::new(x, y, z).into(),
-                            radius: scale.abs() * std::f32::consts::FRAC_1_SQRT_2,
-                        },
-                        false,
-                    )
-                }) {
-                    stats.outside += 1;
-                    continue;
-                }
+            // Zero-alpha and off-frustum particles contribute no pixels; cull them always
+            // (formerly the particle-cull render experiment).
+            let [x, y, z, scale] = particle.instance.position_scale;
+            // A camera-facing square fits inside this sphere at any camera angle.
+            // All three transparent blend modes leave the destination unchanged
+            // at exactly zero alpha. Keep their simulation/lifetime work intact.
+            if particle.instance.color[3] == 0.0 {
+                stats.zero_alpha += 1;
+                continue;
+            }
+            if frustum.is_some_and(|frustum| {
+                !frustum.intersects_sphere(
+                    &Sphere {
+                        center: Vec3::new(x, y, z).into(),
+                        radius: scale.abs() * std::f32::consts::FRAC_1_SQRT_2,
+                    },
+                    false,
+                )
+            }) {
+                stats.outside += 1;
+                continue;
             }
             stats.queued += 1;
             let particle_index = index as u32;
