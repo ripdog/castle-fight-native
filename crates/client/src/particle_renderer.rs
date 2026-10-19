@@ -1,14 +1,20 @@
 //! Dedicated renderer for transparent WC3 particle-emitter quads.
 //!
 //! Particles stay in a compact main-world resource instead of becoming Mesh3d
-//! entities. The render world still inserts one transparent phase item per
-//! particle so sorting remains interleaved with alpha-blended model geometry.
-//! After the phase is sorted, adjacent particles that share a texture slab are
-//! collapsed into a single instanced draw without changing that ordering. On
-//! hardware with non-uniform texture binding arrays, each slab holds up to 64
-//! particle textures, so texture changes within the run do not split draws.
+//! entities. By default the render world inserts one transparent phase item per
+//! emitter (per texture slab and blend mode), positioned at the batch centroid so
+//! it still interleaves with alpha-blended model geometry. Inside an item the
+//! particles keep exact back-to-front order. Warcraft III likewise draws a
+//! particle emitter as a unit instead of depth-sorting individual particles
+//! against other emitters; only interpenetrating emitters can look different.
+//! `--render-experiment particle-depth-sort` restores one item per particle.
+//! After the phase is sorted, adjacent items that share a texture slab and blend
+//! mode are collapsed into a single instanced draw without changing that
+//! ordering. On hardware with non-uniform texture binding arrays, each slab holds
+//! up to 64 particle textures, so texture changes within the run do not split
+//! draws.
 
-use std::{collections::HashMap, mem::size_of, num::NonZeroU32};
+use std::{collections::HashMap, mem::size_of, num::NonZeroU32, ops::Range};
 
 use bevy::{
     asset::AssetId,
@@ -88,6 +94,7 @@ impl Plugin for Wc3ParticleRenderPlugin {
             .init_resource::<Wc3ParticleGpuBuffer>()
             .init_resource::<Wc3ParticleTextureBindGroups>()
             .init_resource::<Wc3ParticleQueueStats>()
+            .init_resource::<Wc3ParticleBatches>()
             .add_systems(
                 RenderStartup,
                 (|mut commands: Commands| commands.init_resource::<Wc3ParticlePipeline>())
@@ -131,6 +138,8 @@ struct Wc3ParticleInstance {
 #[derive(Clone, Copy)]
 struct ExtractedWc3Particle {
     instance: Wc3ParticleInstance,
+    source: Entity,
+    emitter_index: u32,
     slab_entity: Entity,
     slab_index: u32,
     blend_mode: Wc3ParticleBlendMode,
@@ -166,6 +175,8 @@ fn extract_wc3_particles(
     let slab_size = pipeline.texture_slab_size();
     let mut texture_slots = HashMap::<Option<AssetId<Image>>, (usize, u32)>::new();
     for Wc3BillboardParticleRenderData {
+        source,
+        emitter_index,
         texture,
         blend_mode,
         position,
@@ -200,6 +211,8 @@ fn extract_wc3_particles(
                 texture_slot,
                 _padding: [0; 3],
             },
+            source,
+            emitter_index,
             slab_entity,
             slab_index: slab_index as u32,
             blend_mode,
@@ -260,8 +273,98 @@ fn particle_bindings_match(
         && cached.iter().copied().eq(resources)
 }
 
+/// Particle batches queued this frame (all views). A batch is one phase item
+/// whose particles were sorted back-to-front among themselves at queue time.
+#[derive(Resource, Default)]
+pub(crate) struct Wc3ParticleBatches {
+    /// Extracted-particle indices, grouped by batch and ordered back to front.
+    order: Vec<u32>,
+    /// Each batch's slice of `order`; the phase item's extra index selects one.
+    ranges: Vec<Range<u32>>,
+    /// Instance ranges of merged draws. A sorted phase advances over
+    /// `batch_range.len()` *items* per draw, so with multi-particle items the
+    /// instance range cannot live in `batch_range`; the draw item's extra index
+    /// selects an entry here instead.
+    runs: Vec<Range<u32>>,
+}
+
+impl Wc3ParticleBatches {
+    /// Instances drawn by a merged batched particle item, if it is one.
+    pub(crate) fn run_instances(&self, extra_index: &PhaseItemExtraIndex) -> Option<Range<u32>> {
+        let PhaseItemExtraIndex::DynamicOffset(run) = extra_index else {
+            return None;
+        };
+        self.runs.get(*run as usize).cloned()
+    }
+}
+
+/// How queued particles are grouped into phase items.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ParticleBatching {
+    /// Every particle is its own phase item, depth-sorted against all other
+    /// transparent geometry (adjacent compatible items are merged afterwards).
+    Individual,
+    /// One phase item per (emitter, texture slab, blend mode), positioned at the
+    /// batch centroid. Particles inside a batch keep exact back-to-front order.
+    Emitter,
+    /// As `Emitter`, but all emitters of one model instance share a batch.
+    Source,
+}
+
+impl ParticleBatching {
+    fn of(experiment: RenderExperiment) -> Self {
+        match experiment {
+            RenderExperiment::ParticleSourceBatching => Self::Source,
+            // These experiments inspect or rewrite individual depth-sorted particle
+            // items, so they keep the original per-particle path.
+            RenderExperiment::ParticleDepthSort
+            | RenderExperiment::ParticleOverlapAudit
+            | RenderExperiment::ParticleOverlapBatching
+            | RenderExperiment::ParticleSharedMesh
+            | RenderExperiment::ParticleSharedMeshPartialBindings => Self::Individual,
+            _ => Self::Emitter,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct ParticleBatchEntry {
+    /// (source entity bits, emitter index, slab and blend mode)
+    key: (u64, u32, u32),
+    distance: f32,
+    index: u32,
+}
+
+/// Orders entries by batch key, then back to front (ascending view distance,
+/// matching the transparent phase), then by extraction index so the result is
+/// independent of the unstable sort.
+fn sort_batch_entries(entries: &mut [ParticleBatchEntry]) {
+    entries.sort_unstable_by(|a, b| {
+        a.key
+            .cmp(&b.key)
+            .then(a.distance.total_cmp(&b.distance))
+            .then(a.index.cmp(&b.index))
+    });
+}
+
+/// Runs of equal batch keys in entries ordered by [`sort_batch_entries`].
+fn batch_ranges(entries: &[ParticleBatchEntry]) -> impl Iterator<Item = Range<usize>> + '_ {
+    let mut start = 0;
+    std::iter::from_fn(move || {
+        let first = entries.get(start)?;
+        let len = entries[start..]
+            .iter()
+            .take_while(|entry| entry.key == first.key)
+            .count();
+        let range = start..start + len;
+        start += len;
+        Some(range)
+    })
+}
+
 #[derive(Resource, Clone, Copy, Default)]
 pub(crate) struct Wc3ParticleQueueStats {
+    pub(crate) batches: usize,
     pub(crate) candidates: usize,
     pub(crate) queued: usize,
     pub(crate) zero_alpha: usize,
@@ -587,6 +690,19 @@ type Wc3ParticleQueuePipelines<'w> = (
     ResMut<'w, SpecializedRenderPipelines<Wc3ParticlePipeline>>,
 );
 
+type Wc3ParticleQueueViews<'w, 's> = (
+    Res<'w, ViewKeyCache>,
+    Query<
+        'w,
+        's,
+        (
+            &'static ExtractedView,
+            &'static Msaa,
+            Option<&'static Frustum>,
+        ),
+    >,
+);
+
 fn queue_wc3_particles(
     draw_functions: Res<DrawFunctions<Transparent3d>>,
     pipeline_state: Wc3ParticleQueuePipelines<'_>,
@@ -595,13 +711,19 @@ fn queue_wc3_particles(
         Res<RenderAssets<GpuImage>>,
         Local<Vec<u64>>,
     ),
+    mut batching: (ResMut<Wc3ParticleBatches>, Local<Vec<ParticleBatchEntry>>),
     mut phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
-    view_keys: Res<ViewKeyCache>,
-    views: Query<(&ExtractedView, &Msaa, Option<&Frustum>)>,
+    view_state: Wc3ParticleQueueViews,
     mut stats: ResMut<Wc3ParticleQueueStats>,
 ) {
+    let (view_keys, views) = view_state;
     let (pipeline_cache, pipeline, mut pipelines) = pipeline_state;
     let (extracted, images, mut pending_slots) = textures;
+    let (batches, entries) = &mut batching;
+    batches.order.clear();
+    batches.ranges.clear();
+    batches.runs.clear();
+    let batching_mode = ParticleBatching::of(extracted.experiment);
     // GPU images have been prepared before Queue. Resolve readiness once per slot,
     // and reject only that slot's particles, never a slab containing ready effects.
     pending_slots.clear();
@@ -657,6 +779,12 @@ fn queue_wc3_particles(
         let alpha_pipeline = pipeline_id(Wc3ParticleBlendMode::Alpha);
         let add_pipeline = pipeline_id(Wc3ParticleBlendMode::Add);
         let multiply_pipeline = pipeline_id(Wc3ParticleBlendMode::Multiply);
+        let pipeline_for = |blend_mode| match blend_mode {
+            Wc3ParticleBlendMode::Alpha => alpha_pipeline,
+            Wc3ParticleBlendMode::Add => add_pipeline,
+            Wc3ParticleBlendMode::Multiply => multiply_pipeline,
+        };
+        let rangefinder = view.rangefinder3d();
 
         for (index, particle) in extracted.particles.iter().enumerate() {
             stats.candidates += 1;
@@ -690,25 +818,33 @@ fn queue_wc3_particles(
             }
             stats.queued += 1;
             let particle_index = index as u32;
+            if batching_mode != ParticleBatching::Individual {
+                let emitter = match batching_mode {
+                    ParticleBatching::Emitter => particle.emitter_index,
+                    _ => 0,
+                };
+                entries.push(ParticleBatchEntry {
+                    key: (
+                        particle.source.to_bits(),
+                        emitter,
+                        (particle.slab_index << 2) | particle.blend_mode as u32,
+                    ),
+                    distance: rangefinder.distance(&Vec3::new(x, y, z)),
+                    index: particle_index,
+                });
+                continue;
+            }
             // Sorted phases require a unique (render entity, main entity) key.
             // The render entity identifies the texture slab; the synthetic main
             // entity only distinguishes particles within that transient slab item.
             let synthetic_main = Entity::from_bits(u64::from(particle_index) + 1);
             phase.add_transient(Transparent3d {
                 sorting_info: TransparentSortingInfo3d::Sorted {
-                    mesh_center: Vec3::new(
-                        particle.instance.position_scale[0],
-                        particle.instance.position_scale[1],
-                        particle.instance.position_scale[2],
-                    ),
+                    mesh_center: Vec3::new(x, y, z),
                     depth_bias: 0.0,
                 },
                 entity: (particle.slab_entity, MainEntity::from(synthetic_main)),
-                pipeline: match particle.blend_mode {
-                    Wc3ParticleBlendMode::Alpha => alpha_pipeline,
-                    Wc3ParticleBlendMode::Add => add_pipeline,
-                    Wc3ParticleBlendMode::Multiply => multiply_pipeline,
-                },
+                pipeline: pipeline_for(particle.blend_mode),
                 draw_function,
                 distance: 0.0,
                 batch_range: 0..1,
@@ -716,6 +852,46 @@ fn queue_wc3_particles(
                 indexed: false,
             });
         }
+
+        // Batched modes: one phase item per group, ordered back to front inside.
+        // Within a group the instance order is exact; only the group as a whole
+        // is sorted against the other transparent items, at its centroid.
+        sort_batch_entries(entries);
+        for range in batch_ranges(entries) {
+            let group = &entries[range];
+            let mut sum = Vec3::ZERO;
+            for entry in group {
+                let [x, y, z, _] = extracted.particles[entry.index as usize]
+                    .instance
+                    .position_scale;
+                sum += Vec3::new(x, y, z);
+            }
+            let first = &extracted.particles[group[0].index as usize];
+            let batch_index = batches.ranges.len() as u32;
+            let order_start = batches.order.len() as u32;
+            batches.order.extend(group.iter().map(|entry| entry.index));
+            batches
+                .ranges
+                .push(order_start..order_start + group.len() as u32);
+            stats.batches += 1;
+            phase.add_transient(Transparent3d {
+                sorting_info: TransparentSortingInfo3d::Sorted {
+                    mesh_center: sum / group.len() as f32,
+                    depth_bias: 0.0,
+                },
+                entity: (
+                    first.slab_entity,
+                    MainEntity::from(Entity::from_bits(u64::from(batch_index) + 1)),
+                ),
+                pipeline: pipeline_for(first.blend_mode),
+                draw_function,
+                distance: 0.0,
+                batch_range: 0..1,
+                extra_index: PhaseItemExtraIndex::DynamicOffset(batch_index),
+                indexed: false,
+            });
+        }
+        entries.clear();
     }
 }
 
@@ -894,11 +1070,14 @@ fn batch_and_upload_wc3_particles(
     mut phases: ResMut<ViewSortedRenderPhases<Transparent3d>>,
     mut gpu: ResMut<Wc3ParticleGpuBuffer>,
     mut stats: ResMut<Wc3ParticleQueueStats>,
+    mut batches: ResMut<Wc3ParticleBatches>,
     renderer: (Res<RenderDevice>, Res<RenderQueue>),
 ) {
     let (render_device, render_queue) = renderer;
     let draw_function = draw_functions.read().id::<DrawWc3BillboardParticles>();
     let (extracted, coverage, views) = sources;
+    let batches = &mut *batches;
+    let batched = ParticleBatching::of(extracted.experiment) != ParticleBatching::Individual;
     gpu.instances.clear();
 
     for view in &views {
@@ -991,16 +1170,36 @@ fn batch_and_upload_wc3_particles(
                 let PhaseItemExtraIndex::DynamicOffset(source_index) = candidate.extra_index else {
                     break;
                 };
-                let Some(source) = extracted.particles.get(source_index as usize) else {
-                    break;
-                };
-                gpu.instances.push(source.instance);
+                if batched {
+                    let Some(range) = batches.ranges.get(source_index as usize) else {
+                        break;
+                    };
+                    let range = range.start as usize..range.end as usize;
+                    for &particle in &batches.order[range] {
+                        gpu.instances
+                            .push(extracted.particles[particle as usize].instance);
+                    }
+                } else {
+                    let Some(source) = extracted.particles.get(source_index as usize) else {
+                        break;
+                    };
+                    gpu.instances.push(source.instance);
+                }
                 run_end += 1;
             }
 
             let gpu_end = gpu.instances.len() as u32;
-            phase.items[run_start].batch_range = gpu_start..gpu_end;
-            phase.items[run_start].extra_index = PhaseItemExtraIndex::None;
+            if batched {
+                // The representative must still span the merged items so the
+                // phase skips them; its instances are looked up by run.
+                phase.items[run_start].batch_range = 0..(run_end - run_start) as u32;
+                phase.items[run_start].extra_index =
+                    PhaseItemExtraIndex::DynamicOffset(batches.runs.len() as u32);
+                batches.runs.push(gpu_start..gpu_end);
+            } else {
+                phase.items[run_start].batch_range = gpu_start..gpu_end;
+                phase.items[run_start].extra_index = PhaseItemExtraIndex::None;
+            }
             for skipped in run_start + 1..run_end {
                 phase.items[skipped].batch_range = 0..0;
                 phase.items[skipped].extra_index = PhaseItemExtraIndex::None;
@@ -1252,6 +1451,7 @@ impl<P: PhaseItem> RenderCommand<P> for DrawWc3BillboardParticleCommand {
         SRes<Wc3ParticleGpuBuffer>,
         SRes<Wc3ParticleTextureBindGroups>,
         SRes<ExtractedWc3Particles>,
+        SRes<Wc3ParticleBatches>,
         <SetMeshBindGroup<2> as RenderCommand<Transparent3d>>::Param,
     );
     type ViewQuery = (
@@ -1271,7 +1471,11 @@ impl<P: PhaseItem> RenderCommand<P> for DrawWc3BillboardParticleCommand {
             Self::ViewQuery,
         >,
         _item_query: Option<ROQueryItem<'w, '_, Self::ItemQuery>>,
-        (gpu, texture_bind_groups, extracted, mesh_params): SystemParamItem<'w, '_, Self::Param>,
+        (gpu, texture_bind_groups, extracted, batches, mesh_params): SystemParamItem<
+            'w,
+            '_,
+            Self::Param,
+        >,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
         let gpu = gpu.into_inner();
@@ -1329,7 +1533,10 @@ impl<P: PhaseItem> RenderCommand<P> for DrawWc3BillboardParticleCommand {
             pass.set_bind_group(1, &texture_bind_group.bind_group, &[]);
         }
         pass.set_vertex_buffer(0, instance_buffer.slice(..));
-        pass.draw(0..6, item.batch_range().clone());
+        let instances = batches
+            .run_instances(&item.extra_index())
+            .unwrap_or_else(|| item.batch_range().clone());
+        pass.draw(0..6, instances);
         RenderCommandResult::Success
     }
 }
@@ -1345,6 +1552,73 @@ pub(crate) fn particle_draw_function_id(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn entry(
+        source: u64,
+        emitter: u32,
+        slab_blend: u32,
+        distance: f32,
+        index: u32,
+    ) -> ParticleBatchEntry {
+        ParticleBatchEntry {
+            key: (source, emitter, slab_blend),
+            distance,
+            index,
+        }
+    }
+
+    #[test]
+    fn batches_split_by_emitter_slab_and_blend_and_order_back_to_front() {
+        let mut entries = vec![
+            entry(7, 0, 0, -1.0, 0),
+            entry(7, 1, 0, -5.0, 1),
+            entry(7, 0, 0, -9.0, 2),
+            // Same emitter, different texture slab or blend mode: separate draws.
+            entry(7, 0, 1 << 2, -3.0, 3),
+            entry(7, 0, 1, -4.0, 4),
+            entry(3, 0, 0, -2.0, 5),
+            entry(7, 0, 0, -9.0, 6),
+        ];
+        sort_batch_entries(&mut entries);
+        let batches: Vec<Vec<u32>> = batch_ranges(&entries)
+            .map(|range| entries[range].iter().map(|entry| entry.index).collect())
+            .collect();
+        // Ascending distance is back to front; equal distances fall back to index.
+        assert_eq!(
+            batches,
+            vec![vec![5], vec![2, 6, 0], vec![4], vec![3], vec![1]]
+        );
+    }
+
+    #[test]
+    fn batch_ranges_cover_every_entry_exactly_once() {
+        assert_eq!(batch_ranges(&[]).count(), 0);
+        let mut entries = (0..10)
+            .map(|index| entry(u64::from(index % 3), 0, 0, -(index as f32), index))
+            .collect::<Vec<_>>();
+        sort_batch_entries(&mut entries);
+        let ranges = batch_ranges(&entries).collect::<Vec<_>>();
+        assert_eq!(ranges.first().map(|range| range.start), Some(0));
+        assert_eq!(ranges.last().map(|range| range.end), Some(entries.len()));
+        assert!(ranges.windows(2).all(|pair| pair[0].end == pair[1].start));
+        assert_eq!(ranges.len(), 3);
+    }
+
+    #[test]
+    fn default_path_batches_by_emitter_and_depth_sort_experiments_keep_per_particle_items() {
+        assert!(ParticleBatching::of(RenderExperiment::Baseline) == ParticleBatching::Emitter);
+        assert!(
+            ParticleBatching::of(RenderExperiment::ParticleSourceBatching)
+                == ParticleBatching::Source
+        );
+        for experiment in [
+            RenderExperiment::ParticleDepthSort,
+            RenderExperiment::ParticleOverlapBatching,
+            RenderExperiment::ParticleSharedMesh,
+        ] {
+            assert!(ParticleBatching::of(experiment) == ParticleBatching::Individual);
+        }
+    }
 
     #[test]
     fn pending_texture_slots_leave_ready_and_untextured_particles_drawable() {

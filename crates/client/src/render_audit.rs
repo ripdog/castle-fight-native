@@ -68,6 +68,8 @@ pub(crate) enum RenderExperiment {
     ColdEffectPools,
     ParticleOverlapAudit,
     ParticleOverlapBatching,
+    ParticleDepthSort,
+    ParticleSourceBatching,
 }
 
 impl RenderExperiment {
@@ -108,8 +110,10 @@ impl RenderExperiment {
             "cold-effect-pools" => Ok(Self::ColdEffectPools),
             "particle-overlap-audit" => Ok(Self::ParticleOverlapAudit),
             "particle-overlap-batching" => Ok(Self::ParticleOverlapBatching),
+            "particle-depth-sort" => Ok(Self::ParticleDepthSort),
+            "particle-source-batching" => Ok(Self::ParticleSourceBatching),
             _ => Err(format!(
-                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, bindless-auto, bindless-16, bindless-32, bindless-64, bindless-128, bindless-256, no-bindless, compact-material, compiled-event-tracks, skin-influences, particle-shared-view, particle-shared-mesh, particle-shared-mesh-partial-bindings, particle-cull, particle-partial-bindings, particle-uncached-bindings, cold-effect-pools, particle-overlap-audit, or particle-overlap-batching"
+                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, bindless-auto, bindless-16, bindless-32, bindless-64, bindless-128, bindless-256, no-bindless, compact-material, compiled-event-tracks, skin-influences, particle-shared-view, particle-shared-mesh, particle-shared-mesh-partial-bindings, particle-cull, particle-partial-bindings, particle-uncached-bindings, cold-effect-pools, particle-overlap-audit, particle-overlap-batching, particle-depth-sort, or particle-source-batching"
             )),
         }
     }
@@ -170,6 +174,13 @@ struct TransparentSample {
     command_changes: usize,
     particle_mesh_changes: usize,
     palette_bytes: usize,
+    /// Consecutive non-particle draws, classified by what separates them.
+    mesh_pairs_same_pipeline_and_mesh: usize,
+    mesh_pairs_same_pipeline_other_mesh: usize,
+    mesh_pairs_other_pipeline: usize,
+    /// Draws by mesh asset, most frequent first (asset, draws, distinct pipelines).
+    top_meshes: Vec<(String, usize, usize)>,
+    distinct_meshes: usize,
 }
 
 #[derive(Default)]
@@ -237,6 +248,7 @@ impl RenderAudit {
             writeln!(output, "  transparent phase: {} items, {} draw-function calls (latest sampled frame, all views)", sample.items, sample.draws).unwrap();
             writeln!(output, "  transparent submission: {} particle / {} mesh-or-other calls, {} particle instances, largest particle batch {}", sample.particle_draws, sample.draws - sample.particle_draws, sample.particle_instances, sample.max_particle_batch).unwrap();
             writeln!(output, "  transparent transitions: {} distinct pipelines, {} pipeline changes, {} command changes, {} particle/mesh changes (first binding per view excluded)", sample.pipelines, sample.pipeline_changes, sample.command_changes, sample.particle_mesh_changes).unwrap();
+            writeln!(output, "  transparent mesh census: consecutive mesh draws {} same pipeline+mesh (unbatched), {} same pipeline/other mesh, {} other pipeline; {} distinct meshes; top {:?}", sample.mesh_pairs_same_pipeline_and_mesh, sample.mesh_pairs_same_pipeline_other_mesh, sample.mesh_pairs_other_pipeline, sample.distinct_meshes, sample.top_meshes).unwrap();
             writeln!(
                 output,
                 "  skin palette staging: {} bytes uploaded/frame (latest sample)",
@@ -259,6 +271,12 @@ impl RenderAudit {
             writeln!(output, "  particle pending textures: {} slots, {} particles omitted (latest frame, all views)", particles.pending_texture_slots, particles.pending_texture_particles).unwrap();
             writeln!(output, "  particle texture availability capture: {} frames with pending particles, peak {} slots / {} omitted particles", measurements.pending_particle_texture_frames, measurements.peak_pending_particle_texture_slots, measurements.peak_pending_texture_particles).unwrap();
             writeln!(output, "  particle overlap audit: {} safe moves, {} overlap rejects, {} unknown barriers (latest frame)", particles.reorder_moves, particles.reorder_overlap_rejects, particles.reorder_barriers).unwrap();
+            writeln!(
+                output,
+                "  particle batching: {} batches for {} queued particles (latest frame)",
+                particles.batches, particles.queued
+            )
+            .unwrap();
             writeln!(
                 output,
                 "  particle mesh prefix: {} compatible batches, {} fallback batches (latest frame)",
@@ -445,13 +463,18 @@ fn sample_transparent_batches(
     draw_functions: Res<DrawFunctions<Transparent3d>>,
     skins: Res<SkinUniforms>,
     particles: Res<crate::particle_renderer::Wc3ParticleQueueStats>,
-    audit: Res<RenderAudit>,
+    batch_sources: (
+        Res<crate::particle_renderer::Wc3ParticleBatches>,
+        Res<bevy::pbr::RenderMeshInstances>,
+        Res<RenderAudit>,
+    ),
     controls: (
         Res<crate::compact_material::CompactMaterialStats>,
         Res<crate::skin_influences::SkinInfluenceStats>,
     ),
     mut last_sample: Local<Option<Instant>>,
 ) {
+    let (particle_batches, mesh_instances, audit) = batch_sources;
     let now = Instant::now();
     {
         // Availability gaps can last one frame; the expensive transparent census
@@ -474,9 +497,11 @@ fn sample_transparent_batches(
     let particle_draw = crate::particle_renderer::particle_draw_function_id(&draw_functions);
     let mut sample = TransparentSample::default();
     let mut pipelines = HashSet::new();
+    let mut mesh_census = HashMap::<_, (usize, HashSet<_>)>::new();
     for phase in phases.values() {
         sample.items += phase.items.len();
         let mut previous = None;
+        let mut previous_mesh = None;
         // Follow SortedRenderPhase::render_range: a batch's representative
         // advances over the instances it draws; empty ranges don't issue a call.
         let mut index = 0;
@@ -488,10 +513,31 @@ fn sample_transparent_batches(
                 sample.draws += 1;
                 sample.particle_draws += usize::from(particle);
                 if particle {
-                    sample.particle_instances += count;
-                    sample.max_particle_batch = sample.max_particle_batch.max(count);
+                    let instances = particle_batches
+                        .run_instances(&item.extra_index)
+                        .map_or(count, |range| range.len());
+                    sample.particle_instances += instances;
+                    sample.max_particle_batch = sample.max_particle_batch.max(instances);
                 }
                 pipelines.insert(item.pipeline);
+                if particle {
+                    previous_mesh = None;
+                } else {
+                    let mesh = mesh_instances.mesh_asset_id(item.entity.1);
+                    let entry = mesh_census.entry(mesh).or_default();
+                    entry.0 += 1;
+                    entry.1.insert(item.pipeline);
+                    if let Some((pipeline, previous_mesh_id)) = previous_mesh {
+                        if pipeline != item.pipeline {
+                            sample.mesh_pairs_other_pipeline += 1;
+                        } else if previous_mesh_id != mesh {
+                            sample.mesh_pairs_same_pipeline_other_mesh += 1;
+                        } else {
+                            sample.mesh_pairs_same_pipeline_and_mesh += 1;
+                        }
+                    }
+                    previous_mesh = Some((item.pipeline, mesh));
+                }
                 if let Some((pipeline, command, was_particle)) = previous {
                     sample.pipeline_changes += usize::from(pipeline != item.pipeline);
                     sample.command_changes += usize::from(command != item.draw_function);
@@ -503,6 +549,20 @@ fn sample_transparent_batches(
         }
     }
     sample.pipelines = pipelines.len();
+    sample.distinct_meshes = mesh_census.len();
+    let mut census = mesh_census.into_iter().collect::<Vec<_>>();
+    census.sort_by_key(|(_, (draws, _))| std::cmp::Reverse(*draws));
+    sample.top_meshes = census
+        .into_iter()
+        .take(6)
+        .map(|(mesh, (draws, pipelines))| {
+            (
+                mesh.map_or_else(|| "?".to_string(), |mesh| format!("{mesh:?}")),
+                draws,
+                pipelines.len(),
+            )
+        })
+        .collect();
     sample.palette_bytes = skins.current_staging_buffer.len() * size_of::<Mat4>();
     let mut measurements = audit.0.lock().expect("render audit mutex poisoned");
     measurements.transparent = Some(sample);
@@ -568,6 +628,8 @@ fn apply_render_experiment(
             | RenderExperiment::ColdEffectPools
             | RenderExperiment::ParticleOverlapAudit
             | RenderExperiment::ParticleOverlapBatching
+            | RenderExperiment::ParticleDepthSort
+            | RenderExperiment::ParticleSourceBatching
     ) {
         return;
     }
@@ -614,7 +676,9 @@ fn apply_render_experiment(
             | RenderExperiment::ParticleUncachedBindings
             | RenderExperiment::ColdEffectPools
             | RenderExperiment::ParticleOverlapAudit
-            | RenderExperiment::ParticleOverlapBatching => false,
+            | RenderExperiment::ParticleOverlapBatching
+            | RenderExperiment::ParticleDepthSort
+            | RenderExperiment::ParticleSourceBatching => false,
             RenderExperiment::FreezeBounds => {
                 if dynamic && has_bounds {
                     commands.entity(entity).remove::<DynamicSkinnedMeshBounds>();

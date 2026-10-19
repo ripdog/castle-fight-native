@@ -2774,6 +2774,10 @@ pub struct Wc3Particle {
 }
 
 struct Wc3BillboardParticle {
+    /// Emitting model entity and emitter slot; identifies the emitter for
+    /// renderer-side batching (never used for simulation).
+    source: Entity,
+    emitter_index: u32,
     position: Vec3,
     velocity: Vec3,
     gravity: f32,
@@ -2794,6 +2798,8 @@ struct Wc3BillboardParticle {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Wc3BillboardParticleRenderData {
+    pub(crate) source: Entity,
+    pub(crate) emitter_index: u32,
     pub(crate) texture: Option<AssetId<Image>>,
     pub(crate) blend_mode: Wc3ParticleBlendMode,
     pub(crate) position: Vec3,
@@ -2816,6 +2822,8 @@ impl Wc3BillboardParticles {
         self.particles
             .iter()
             .map(|particle| Wc3BillboardParticleRenderData {
+                source: particle.source,
+                emitter_index: particle.emitter_index,
                 texture: particle.texture.as_ref().map(Handle::id),
                 blend_mode: particle.blend_mode,
                 position: particle.position,
@@ -5433,6 +5441,8 @@ pub fn emit_wc3_particles(
                 if let Some(blend_mode) = compact_blend_mode {
                     let (color, alpha) = particle_lifecycle_color_alpha(&emitter.visual, 0.0);
                     billboard_particles.push(Wc3BillboardParticle {
+                        source: entity,
+                        emitter_index: emitter_index as u32,
                         position: origin,
                         velocity,
                         gravity,
@@ -8095,6 +8105,8 @@ mod tests {
         };
         let mut particles = Wc3BillboardParticles::default();
         particles.push(Wc3BillboardParticle {
+            source: Entity::PLACEHOLDER,
+            emitter_index: 0,
             position: Vec3::ZERO,
             velocity: Vec3::X * 4.0,
             gravity: 0.0,
