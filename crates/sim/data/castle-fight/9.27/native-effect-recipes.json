@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0H2","unit_rawcode":"n03M","kind":"speed-aura"},
     {"source_kind":"unit-ability","source_key":"A0GV","unit_rawcode":"h07S","kind":"spell-resistance"},
     {"source_kind":"unit-ability","source_key":"A0H9","unit_rawcode":"o00H","kind":"mana-attack-orb"},
     {"source_kind":"unit-ability","source_key":"A0H4","unit_rawcode":"n03I","kind":"damage-echo-step"},

@@ -491,7 +491,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         tokens = set(fields["targs1"].split(","))
         hostile_air = tokens == {"air", "enemies", "ward"}
         hostile_ground = tokens == {"enemies", "ward", "ground", "invulnerable", "vulnerable"}
-        hostile = hostile_air or hostile_ground
+        # Native hostile Endurance Aura (air and ground organic units, vulnerable only).
+        hostile_organic = tokens == {"air", "enemies", "ground", "organic"}
+        hostile = hostile_air or hostile_ground or hostile_organic
         friendly = tokens == {"ground", "friend", "air", "self", "invulnerable", "vulnerable", "ward"}
         if mechanics["native_base"] != "AOae" or not (hostile or friendly):
             raise ValueError("speed aura needs audited native hostile or friendly-unit semantics")
@@ -502,7 +504,7 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
             raise ValueError("speed aura must retain exactly one native buff family")
         effect.update(profile={"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
             "buff_rawcode": int.from_bytes(buffs[0].encode(), "big"), "radius": number("Area1", 1024),
-            "targets": 2 if hostile_air else 1 if hostile_ground else 3, "hostile": hostile, "organic_only": False,
+            "targets": 2 if hostile_air else 1 if hostile_ground else 3, "hostile": hostile, "organic_only": hostile_organic,
             "affects_invulnerable": friendly or hostile_ground,
             "movement_percent_delta": number("DataA1", 100), "attack_speed_percent_delta": number("DataB1", 100)})
     elif kind == "native-aura":

@@ -4,6 +4,27 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0H2",
+      "unit_rawcode": "n03M",
+      "kind": "speed-aura",
+      "profile": {
+        "ability": 1093683250,
+        "buff_rawcode": 1110454853,
+        "radius": 614400,
+        "targets": 3,
+        "hostile": true,
+        "organic_only": true,
+        "affects_invulnerable": false,
+        "movement_percent_delta": 0,
+        "attack_speed_percent_delta": -20
+      },
+      "provenance": {
+        "ability": "A0H2",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A0GV",
       "unit_rawcode": "h07S",
       "kind": "spell-resistance",
