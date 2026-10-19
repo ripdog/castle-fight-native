@@ -1,3 +1,4 @@
+use super::building_spells::NativeTriggerBuilding;
 use super::*;
 
 pub(super) fn native_fire_buff_active(status: &StatusState, ability: AbilityId, tick: u64) -> bool {
@@ -149,11 +150,20 @@ impl Simulation {
                 completing_windup: true,
             });
         }
+        let trigger_buildings = self.native_trigger_buildings();
         let additional_sources = self.additional_ability_sources(buildings, units);
         let additional_evaluations: Vec<_> = self.pool.install(|| {
             additional_sources
                 .par_iter()
-                .map(|source| self.evaluate_automatic_ability(*source, units, buildings, grid))
+                .map(|source| {
+                    self.evaluate_automatic_ability(
+                        *source,
+                        units,
+                        buildings,
+                        &trigger_buildings,
+                        grid,
+                    )
+                })
                 .collect()
         });
         let building_evaluations: Vec<_> = self.pool.install(|| {
@@ -178,6 +188,7 @@ impl Simulation {
                         },
                         units,
                         buildings,
+                        &trigger_buildings,
                         grid,
                     )
                 })
@@ -209,6 +220,7 @@ impl Simulation {
                         },
                         units,
                         buildings,
+                        &trigger_buildings,
                         grid,
                     )
                 })
@@ -1705,6 +1717,7 @@ impl Simulation {
         source: AbilitySourceSnapshot,
         units: &[UnitSnapshot],
         buildings: &[BuildingSnapshot],
+        trigger_buildings: &[NativeTriggerBuilding],
         grid: &SpatialGrid,
     ) -> AbilityEvaluation {
         let Some(spellcasting) = source.spellcasting else {
@@ -1755,6 +1768,7 @@ impl Simulation {
                 spellcasting.ability,
                 state.cast_sequence,
                 units,
+                trigger_buildings,
                 &mut candidate_checks,
             ),
             AbilityTargetPolicy::RandomEnemyUnit

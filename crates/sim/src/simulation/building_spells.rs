@@ -203,6 +203,16 @@ pub(super) fn native_building_trigger_unit_type(
         _ => true,
     }
 }
+/// One building as seen by native building triggers during an evaluation pass.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct NativeTriggerBuilding {
+    id: SimId,
+    team: Team,
+    health: i32,
+    flags: UnitClassifications,
+    position: SimPoint,
+}
+
 /// Ability-invariant part of a native building trigger. Built once per evaluation so candidate
 /// loops only compare precomputed values instead of re-matching the ability each time.
 #[derive(Debug, Clone, Copy)]
@@ -323,12 +333,41 @@ impl Simulation {
         })
     }
 
+    /// Live building fields read by native building triggers, gathered once per automatic-ability
+    /// evaluation pass. Nothing mutates the world while that pass evaluates casters, so every
+    /// caster sees the same values the per-caster query used to read.
+    pub(super) fn native_trigger_buildings(&self) -> Vec<NativeTriggerBuilding> {
+        let mut buildings = self
+            .world
+            .try_query::<(
+                &SimId,
+                &Team,
+                &Health,
+                &BuildingFootprint,
+                Option<&UnitClassifications>,
+            )>()
+            .expect("simulation component types are registered at world construction");
+        buildings
+            .iter(&self.world)
+            .map(
+                |(id, team, health, footprint, flags)| NativeTriggerBuilding {
+                    id: *id,
+                    team: *team,
+                    health: health.current,
+                    flags: flags.copied().unwrap_or_default(),
+                    position: footprint_center_point(*footprint, self.config.navigation_cell_size),
+                },
+            )
+            .collect()
+    }
+
     pub(super) fn native_building_trigger_target(
         &self,
         source: AbilitySourceSnapshot,
         ability: AutomaticAbilityProfile,
         sequence: u64,
         units: &[UnitSnapshot],
+        buildings: &[NativeTriggerBuilding],
         checks: &mut usize,
     ) -> Option<AbilityIntentTarget> {
         let filter = NativeTriggerFilter::new(ability)?;
@@ -355,25 +394,20 @@ impl Simulation {
             }
         }
         if filter.targets.can_target_buildings() {
-            let mut buildings = self
-                .world
-                .try_query::<(
-                    &SimId,
-                    &Team,
-                    &Health,
-                    &BuildingFootprint,
-                    Option<&UnitClassifications>,
-                )>()
-                .expect("simulation component types are registered at world construction");
-            for (id, team, health, footprint, flags) in buildings.iter(&self.world) {
+            for building in buildings {
                 *checks += 1;
-                let position = footprint_center_point(*footprint, self.config.navigation_cell_size);
-                let flags = flags.copied().unwrap_or_default();
-                if filter.admits(source.team, *team, health.current, flags)
+                let position = building.position;
+                if filter.admits(source.team, building.team, building.health, building.flags)
                     && self.ability_source_distance_sq(source.origin, position) <= filter.range_sq
                     && self.visible_teams(position) & (1 << source.team.0) != 0
                 {
-                    consider(*id, AbilityIntentTarget::Building { id: *id, position });
+                    consider(
+                        building.id,
+                        AbilityIntentTarget::Building {
+                            id: building.id,
+                            position,
+                        },
+                    );
                 }
             }
         }
