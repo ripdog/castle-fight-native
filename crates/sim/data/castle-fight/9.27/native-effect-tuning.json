@@ -4,6 +4,58 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0HG",
+      "unit_rawcode": "n03J",
+      "kind": "attack-whirlwind",
+      "chance_per_10k": 2000,
+      "trigger_targets": "air-ground-units-and-buildings",
+      "profile": {
+        "ability": 1093683271,
+        "damage": 175,
+        "radius": 163840,
+        "combat_sappers_only": true,
+        "targets": 1
+      },
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/production-unit-special-mechanics.tsv",
+        "script": "DamageListener_addListener_doAfter_Whirlwind_onEvent_addListener_doAfter_Whirlwind",
+        "marker": "A0HG"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0HF",
+      "unit_rawcode": "n03J",
+      "kind": "evasion",
+      "chance_per_10k": 2000,
+      "provenance": {
+        "ability": "A0HF",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0H7",
+      "unit_rawcode": "n03J",
+      "kind": "hardened-skin",
+      "profile": {
+        "ability": 1093683255,
+        "effect": {
+          "HardenedSkin": {
+            "chance_per_10k": 10000,
+            "minimum_damage": 0,
+            "ignored_damage": 30
+          }
+        }
+      },
+      "provenance": {
+        "ability": "A0H7",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A0GS",
       "unit_rawcode": "n03G",
       "kind": "hardened-skin",

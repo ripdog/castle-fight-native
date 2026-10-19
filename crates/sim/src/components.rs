@@ -575,6 +575,31 @@ pub enum TriggeredAttackEffect {
     Charm(OrbCharmProfile),
     /// Free native Acid Bomb cast by a landed orb attack; the missile is an independent action.
     AcidBomb(AcidBombProfile),
+    /// Script-authored area damage released at the damaged target when an attack lands.
+    Whirlwind(WhirlwindProfile),
+}
+
+/// A damage-listener spin: universal damage to every eligible unit around the damaged target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct WhirlwindProfile {
+    pub ability: AbilityId,
+    pub damage: i32,
+    pub radius: i32,
+    /// Recipients must satisfy the map's combat-sapper classification.
+    pub combat_sappers_only: bool,
+    /// Movement classes the spin may hit; the script excludes flying units.
+    pub targets: AttackTargetMask,
+}
+impl WhirlwindProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 5] {
+        [
+            u64::from(self.ability.0),
+            self.damage as u64,
+            self.radius as u64,
+            u64::from(self.combat_sappers_only),
+            u64::from(self.targets.bits()),
+        ]
+    }
 }
 
 /// Free native Charm invoked by a landed orb attack. Ownership-event behaviour is the versioned

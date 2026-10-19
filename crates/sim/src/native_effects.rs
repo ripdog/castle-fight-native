@@ -67,6 +67,7 @@ pub enum NativeEffectImplementationId {
     WarcraftCleaveV1,
     WarcraftFrostAttackV1,
     WarcraftPulverizeV1,
+    WarcraftScriptedAreaProcV1,
     WarcraftNativeAuraV1,
     WarcraftSpeedAuraV1,
     WarcraftSphereV1,
@@ -157,6 +158,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftCleaveV1 => 18,
             Self::WarcraftFrostAttackV1 => 20,
             Self::WarcraftPulverizeV1 => 21,
+            Self::WarcraftScriptedAreaProcV1 => 112,
             Self::WarcraftNativeAuraV1 => 22,
             Self::WarcraftSpeedAuraV1 => 69,
             Self::WarcraftSphereV1 => 70,
@@ -825,6 +827,18 @@ enum TuningEffect {
         half_radius_world: i32,
         targets: String,
     },
+    /// A script damage listener that releases a Whirlwind at the damaged target.
+    AttackWhirlwind {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        chance_per_10k: u16,
+        /// Attack targets that can trigger the listener.
+        trigger_targets: String,
+        profile: crate::WhirlwindProfile,
+        #[allow(dead_code)]
+        provenance: serde_json::Value,
+    },
     FrostAttack {
         source_kind: String,
         source_key: String,
@@ -1145,6 +1159,7 @@ impl TuningEffect {
             | Self::SpeedAura { source_kind, .. }
             | Self::NativeAura { source_kind, .. }
             | Self::Pulverize { source_kind, .. }
+            | Self::AttackWhirlwind { source_kind, .. }
             | Self::FrostAttack { source_kind, .. }
             | Self::ScriptedAutomatic { source_kind, .. }
             | Self::ElvenAutomatic { source_kind, .. }
@@ -1201,6 +1216,7 @@ impl TuningEffect {
             | Self::SpeedAura { source_key, .. }
             | Self::NativeAura { source_key, .. }
             | Self::Pulverize { source_key, .. }
+            | Self::AttackWhirlwind { source_key, .. }
             | Self::FrostAttack { source_key, .. }
             | Self::ScriptedAutomatic { source_key, .. }
             | Self::ElvenAutomatic { source_key, .. }
@@ -1246,6 +1262,7 @@ impl TuningEffect {
             | Self::SpeedAura { unit_rawcode, .. }
             | Self::NativeAura { unit_rawcode, .. }
             | Self::Pulverize { unit_rawcode, .. }
+            | Self::AttackWhirlwind { unit_rawcode, .. }
             | Self::FrostAttack { unit_rawcode, .. }
             | Self::ScriptedAutomatic { unit_rawcode, .. }
             | Self::ElvenAutomatic { unit_rawcode, .. }
@@ -1309,6 +1326,7 @@ impl TuningEffect {
             Self::Cleave { .. } => NativeEffectImplementationId::WarcraftCleaveV1,
             Self::FrostAttack { .. } => NativeEffectImplementationId::WarcraftFrostAttackV1,
             Self::Pulverize { .. } => NativeEffectImplementationId::WarcraftPulverizeV1,
+            Self::AttackWhirlwind { .. } => NativeEffectImplementationId::WarcraftScriptedAreaProcV1,
             Self::DeathSpawn { .. } => NativeEffectImplementationId::WarcraftDeathSpawnV1,
             Self::Poison { .. } => NativeEffectImplementationId::WarcraftPoisonV1,
             Self::DamageThreshold { .. } => NativeEffectImplementationId::WarcraftDamageThresholdV1,
@@ -1373,6 +1391,7 @@ impl TuningEffect {
             Self::Cleave { .. } => "cleave",
             Self::FrostAttack { .. } => "frost-attack",
             Self::Pulverize { .. } => "pulverize",
+            Self::AttackWhirlwind { .. } => "attack-whirlwind",
             Self::DeathSpawn { .. } => "death-spawn",
             Self::Poison { .. } => "poison",
             Self::DamageThreshold { .. } => "damage-threshold",
@@ -1704,6 +1723,7 @@ fn native_unit_mechanics_from_tuning(
                 | TuningEffect::SpeedAura { .. }
                 | TuningEffect::NativeAura { .. }
                 | TuningEffect::Pulverize { .. }
+                | TuningEffect::AttackWhirlwind { .. }
                 | TuningEffect::FrostAttack { .. }
                 | TuningEffect::Feedback { .. }
                 | TuningEffect::SpellResistance { .. }
@@ -2014,6 +2034,24 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             mana_regeneration_per_second_per_10k: *mana_regeneration_per_second_per_10k,
             suspend_during_spell_cooldown: false,
         }),
+        TuningEffect::AttackWhirlwind {
+            source_key,
+            chance_per_10k,
+            trigger_targets,
+            profile,
+            ..
+        } => {
+            assert!(*chance_per_10k <= 10_000 && profile.damage >= 0 && profile.radius >= 0);
+            PassiveUnitEffect::TriggeredSpellProc(TriggeredSpellProcProfile {
+                ability: AbilityId(rawcode(source_key).expect("validated Whirlwind marker")),
+                chance_per_10k: *chance_per_10k,
+                hero_chance_per_10k: None,
+                summoned_chance_per_10k: None,
+                targets: target_mask(trigger_targets),
+                cooldown_ticks: 0,
+                effect: TriggeredAttackEffect::Whirlwind(*profile),
+            })
+        }
         TuningEffect::Pulverize {
             source_key,
             chance_per_10k,

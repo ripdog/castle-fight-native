@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A0HG","implementation":"warcraft-scripted-area-proc-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0HF","implementation":"warcraft-evasion-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0H7","implementation":"warcraft-hardened-skin-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0GS","implementation":"warcraft-hardened-skin-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0GQ","implementation":"warcraft-critical-strike-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0GN","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},

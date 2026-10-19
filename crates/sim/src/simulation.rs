@@ -49,6 +49,7 @@ mod parasite_area_buff;
 mod parasite_script;
 mod permanent_grants;
 mod healing_spray;
+mod whirlwind;
 mod sand_cloud;
 mod starfall;
 mod training_variants;
@@ -6997,6 +6998,25 @@ fn apply_pending_attack_effects(
                 ..Default::default()
             };
         }
+        if let Some(TriggeredAttackEffect::Whirlwind(profile)) = effects.triggered_spell {
+            let center = footprint_center_point(buildings[index].footprint, navigation_cell_size);
+            result.native_debuff_casts[0] = Some(whirlwind::resolve(
+                center,
+                profile,
+                source,
+                &mut PendingAttackEffectState {
+                    navigation_cell_size,
+                    completed_tick,
+                    units,
+                    unit_health,
+                    buildings,
+                    building_health,
+                    damage_rules,
+                    retired_sources,
+                },
+            ));
+            return result;
+        }
         if let Some(TriggeredAttackEffect::EntanglingRoots(profile)) = effects.triggered_spell
             && profile.targets.can_target_buildings()
             && building_health[index] > 0
@@ -7015,6 +7035,25 @@ fn apply_pending_attack_effects(
         }
         return result;
     };
+    // The damage listener fires on the landed hit itself, even when that hit kills its target.
+    if let Some(TriggeredAttackEffect::Whirlwind(profile)) = effects.triggered_spell {
+        let center = units[index].position;
+        result.native_debuff_casts[0] = Some(whirlwind::resolve(
+            center,
+            profile,
+            source,
+            &mut PendingAttackEffectState {
+                navigation_cell_size,
+                completed_tick,
+                units,
+                unit_health,
+                buildings,
+                building_health,
+                damage_rules,
+                retired_sources,
+            },
+        ));
+    }
     if let Some(p) = effects.incinerate {
         incinerate::landed_hit(
             index,
@@ -7154,6 +7193,7 @@ fn apply_pending_attack_effects(
                 );
             }
             TriggeredAttackEffect::ConeWave(_) => {}
+            TriggeredAttackEffect::Whirlwind(_) => {}
             TriggeredAttackEffect::ChainLightning(profile) => {
                 let max_targets = usize::from(profile.maximum_targets).min(MAX_BOUNCE_HITS);
                 if max_targets > 0 {
