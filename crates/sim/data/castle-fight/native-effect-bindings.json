@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A0H4","implementation":"warcraft-echo-step-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0HC","implementation":"warcraft-hardened-skin-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0HH","implementation":"warcraft-native-aura-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0HA","implementation":"warcraft-critical-strike-v1","valid_from":"9.27","valid_through":"9.27"},

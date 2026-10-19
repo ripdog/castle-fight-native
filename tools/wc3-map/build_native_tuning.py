@@ -169,6 +169,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
             raise ValueError("death spawn requires a child identity and positive count")
         return {**recipe, "child_rawcode": int.from_bytes(child.encode("ascii"), "big"), "count": number("DataA1"),
             "provenance": {"source": "resolved/object-fields.tsv", "native_base": "Aspy"}}
+    if kind == "damage-echo-step":
+        from project_echo_step import project
+        return project(recipe, fields, unit, protected, mechanics)
     if kind == "attack-whirlwind":
         from project_attack_whirlwind import project
         return project(recipe, fields, unit, protected, mechanics)
@@ -885,6 +888,9 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
     whirlwinds = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "attack-proc-ground-whirlwind-aoe"}
+    echo_steps = {row["unit_rawcode"]: json.loads(row["parameters_json"])
+        for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
+        if row["mechanic_kind"] == "damage-triggered-echo-step-and-remnant"}
     lava_spawns = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "native-lava-spawn-split-with-child-conversion"}
@@ -1005,6 +1011,9 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             detail.update(improvement_handler=functions["improveSpecialBuilding"], improvement_cleanup=functions["yK"], improvement_cleanup_registration=re.search(r'_I\[_T\(\d+,"[0-9a-f]+"\)\]=yK',lua.decode()).group(), improvement_death=functions["fJ"], improvement_ui=ability_ui[source], git_tree=tree)
         if recipe["kind"] in {"building-weather", "native-weather-wave", "building-enchantment", "native-enchantment-grant", "source-damage-dispatcher", "building-script"}:
             detail.update(all_fields=abilities, all_bases=ability_bases, all_protected=protected, functions=functions, building_spell=building_spells.get(source), git_tree=tree, map_version=dict(zip(["major","minor"],map(int,release["map_version"].split(".")))))
+        if recipe["kind"] == "damage-echo-step":
+            detail.update(echo=echo_steps[recipe["unit_rawcode"]], functions=functions, all_fields=abilities,
+                all_bases=ability_bases, git_tree=tree)
         if recipe["kind"] == "attack-whirlwind":
             detail.update(whirlwind=whirlwinds[recipe["unit_rawcode"]], functions=functions, git_tree=tree)
         if recipe["kind"] == "fan-of-knives":

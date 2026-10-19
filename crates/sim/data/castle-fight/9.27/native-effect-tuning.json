@@ -4,6 +4,37 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0H4",
+      "unit_rawcode": "n03I",
+      "kind": "damage-echo-step",
+      "profile": {
+        "marker": 1093683252,
+        "trigger_range": 256000,
+        "blink_distance": 1228800,
+        "cooldown_ticks": 450,
+        "remnant": {
+          "ability": 1093683268,
+          "unit_rawcode": 1848652626,
+          "lifetime_ticks": 1800,
+          "activation_ticks": 23,
+          "detection_radius": 153600,
+          "trigger_targets": 1,
+          "damage": 150,
+          "radius": 307200,
+          "excluded_ability": 1093679176,
+          "excluded_unit_rawcode": 1747990082
+        }
+      },
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/production-unit-special-mechanics.tsv",
+        "fields": "resolved/object-fields.tsv",
+        "script": "DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire,fJ,UC",
+        "unit": "n03I"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A0HC",
       "unit_rawcode": "n03O",
       "kind": "hardened-skin",

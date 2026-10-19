@@ -1173,6 +1173,7 @@ impl Simulation {
                 | PassiveUnitEffect::SourceDamageDispatcher(_)
                 | PassiveUnitEffect::HealthScaledAftershock(_)
                 | PassiveUnitEffect::DamageRetaliation(_)
+                | PassiveUnitEffect::EchoStep(_)
                 | PassiveUnitEffect::LavaSpawn(_)
                 | PassiveUnitEffect::MirrorImage(_)
                 | PassiveUnitEffect::DamageThreshold(_)

@@ -1239,6 +1239,82 @@ pub enum PassiveUnitEffect {
     SpikedShell(SpikedShellProfile),
     LifeSteal(LifeStealProfile),
     HardenedSkin(NativeAbilityGrant),
+    EchoStep(EchoStepProfile),
+}
+
+/// Damage-listener Echo Step: when a nearby combat sapper damages the bearer it blinks toward its
+/// own castle and leaves a remnant that detonates on enemy proximity or expiry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct EchoStepProfile {
+    pub marker: AbilityId,
+    /// The damage source must be strictly closer than this to the bearer.
+    pub trigger_range: i32,
+    pub blink_distance: i32,
+    /// The script restarts the marker's cooldown with this value, not the protected one.
+    pub cooldown_ticks: u16,
+    pub remnant: EchoRemnantProfile,
+}
+
+impl EchoStepProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 16] {
+        let remnant = self.remnant.canonical_words();
+        let mut words = [0; 16];
+        words[0] = u64::from(self.marker.0);
+        words[1] = self.trigger_range as u64;
+        words[2] = self.blink_distance as u64;
+        words[3] = u64::from(self.cooldown_ticks);
+        words[4..].copy_from_slice(&remnant);
+        words
+    }
+}
+
+/// The remnant mine: armed after an activation delay, detonating when an eligible enemy comes
+/// within the detection radius, or when its timed life ends, as a magic area hit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct EchoRemnantProfile {
+    pub ability: AbilityId,
+    pub unit_rawcode: u32,
+    pub lifetime_ticks: u16,
+    pub activation_ticks: u16,
+    pub detection_radius: i32,
+    pub trigger_targets: AttackTargetMask,
+    pub damage: i32,
+    pub radius: i32,
+    /// Recipients carrying this marker ability (tentacle bodies) are never hurt.
+    pub excluded_ability: AbilityId,
+    pub excluded_unit_rawcode: u32,
+}
+
+impl EchoRemnantProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 12] {
+        [
+            u64::from(self.ability.0),
+            u64::from(self.unit_rawcode),
+            u64::from(self.lifetime_ticks),
+            u64::from(self.activation_ticks),
+            self.detection_radius as u64,
+            u64::from(self.trigger_targets.bits()),
+            self.damage as u64,
+            self.radius as u64,
+            u64::from(self.excluded_ability.0),
+            u64::from(self.excluded_unit_rawcode),
+            0,
+            0,
+        ]
+    }
+}
+
+/// An authoritative remnant. It outlives the bearer that created it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EchoRemnantState {
+    pub profile: EchoRemnantProfile,
+    pub source: SimId,
+    pub owner: PlayerId,
+    pub team: Team,
+    pub position: SimPoint,
+    pub created_tick: u64,
+    pub armed_tick: u64,
+    pub expires_tick: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -2347,6 +2423,8 @@ pub struct StatusState {
     /// Native lightning and the permanent grant survive generator death.
     pub mana_improvement_link: Option<ManaImprovementLink>,
     pub retaliation_sequence: u64,
+    /// Tick at which the Echo Step marker's script-restarted cooldown ends.
+    pub echo_step_ready_tick: u64,
     /// Completed tick of the last flying-attacker retarget order, throttling the next one.
     pub flying_retarget_tick: Option<u64>,
     pub orb_cooldowns: [Option<OrbCooldown>; 2],

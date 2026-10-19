@@ -712,6 +712,20 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u64(state.next_pulse_tick);
                         hash.write_u64(state.expires_tick);
                     }
+                    NativeAction::EchoRemnant(state) => {
+                        hash.write_u8(41);
+                        for word in state.profile.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                        hash.write_u64(state.source.0);
+                        hash.write_u8(state.owner.0);
+                        hash.write_u8(state.team.0);
+                        hash.write_i32(state.position.x);
+                        hash.write_i32(state.position.y);
+                        hash.write_u64(state.created_tick);
+                        hash.write_u64(state.armed_tick);
+                        hash.write_u64(state.expires_tick);
+                    }
                     NativeAction::HealingSpray(state) => {
                         hash.write_u8(40);
                         for word in state.profile.canonical_words() {
@@ -2172,6 +2186,7 @@ fn hash_status_state(hash: &mut Fnv64, status: &StatusState) {
         hash.write_u32(link.ability.0);
     }
     hash.write_u64(status.retaliation_sequence);
+    hash.write_u64(status.echo_step_ready_tick);
     hash_optional_u64(hash, status.flying_retarget_tick);
     for entry in status.orb_cooldowns {
         hash.write_u8(u8::from(entry.is_some()));
@@ -2721,6 +2736,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: &PassiveUnitEffects) {
             }
             PassiveUnitEffect::HealthScaledAftershock(profile) => {
                 hash.write_u8(22);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
+            PassiveUnitEffect::EchoStep(profile) => {
+                hash.write_u8(40);
                 for word in profile.canonical_words() {
                     hash.write_u64(word);
                 }

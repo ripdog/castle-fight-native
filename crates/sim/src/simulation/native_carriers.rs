@@ -496,6 +496,7 @@ fn cleanse_native_effects(
             PassiveUnitEffect::SourceDamageDispatcher(id) => Some(id),
             PassiveUnitEffect::HealthScaledAftershock(p) => Some(p.dispatcher),
             PassiveUnitEffect::DamageRetaliation(p) => Some(p.marker),
+            PassiveUnitEffect::EchoStep(p) => Some(p.marker),
             PassiveUnitEffect::LavaSpawn(_) => None,
             PassiveUnitEffect::MirrorImage(profile) => Some(profile.ability),
             PassiveUnitEffect::DamageCharge(profile) => Some(profile.marker),

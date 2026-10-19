@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 104;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 105;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -48,6 +48,7 @@ mod night_elf;
 mod parasite_area_buff;
 mod parasite_script;
 mod permanent_grants;
+mod echo_step;
 mod healing_spray;
 mod whirlwind;
 mod sand_cloud;
@@ -2201,6 +2202,11 @@ impl Simulation {
             + native_carriers.launches
             + attack_resolution.native_barrage_launches;
         let combat = phase_start.elapsed();
+        for (unit, position) in units.iter_mut().zip(positions.iter_mut()) {
+            if let Some(destination) = unit.pending_blink.take() {
+                *position = destination;
+            }
+        }
 
         let movement = timed!(
             spans,
@@ -4107,6 +4113,7 @@ impl Simulation {
                         });
                         UnitSnapshot {
                             removed_without_death: false,
+                            pending_blink: None,
                             air_attack_bonus_per_10k: content.map_or(0, |c| {
                                 crate::content::native_air_attack_bonus_for_version(
                                     c.map_version,
@@ -4349,6 +4356,8 @@ struct UnitSnapshot {
     position: SimPoint,
     /// Phase-local RemoveUnit directive. Never survives a completed step.
     removed_without_death: bool,
+    /// Phase-local blink destination, applied to the working positions after attack resolution.
+    pending_blink: Option<SimPoint>,
     health: i32,
     health_max: i32,
     attack: AttackProfile,
@@ -6651,6 +6660,14 @@ impl Simulation {
                         state.unit_positions,
                     );
                 }
+                self.observe_echo_step(
+                    source_id,
+                    index,
+                    completed_tick,
+                    state.units,
+                    state.unit_health,
+                    state.unit_positions,
+                );
                 damage_thresholds::observe_damage_event(
                     &mut state.units[index],
                     state.unit_health[index],
