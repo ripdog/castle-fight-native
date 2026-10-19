@@ -1968,7 +1968,7 @@ fn set_building_emitter_sequence(
     if !model.ribbons.is_empty() {
         commands
             .entity(model_root)
-            .insert(Wc3RibbonSource::with_asset_prefix_for_sequence(
+            .try_insert(Wc3RibbonSource::with_asset_prefix_for_sequence(
                 &model.ribbons,
                 "wc3/buildings",
                 sequence,
@@ -2276,7 +2276,7 @@ fn set_unit_emitter_sequence(
     if !model.ribbon_emitters.is_empty() {
         commands
             .entity(model_root)
-            .insert(Wc3RibbonSource::with_asset_prefix_for_sequence(
+            .try_insert(Wc3RibbonSource::with_asset_prefix_for_sequence(
                 &model.ribbon_emitters,
                 "wc3/units",
                 sequence,
