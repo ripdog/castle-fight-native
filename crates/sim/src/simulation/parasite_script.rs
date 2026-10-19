@@ -43,7 +43,8 @@ impl Simulation {
                 maximum_delay_ticks,
                 ..
             } => {
-                let span = u64::from(maximum_delay_ticks.saturating_sub(minimum_delay_ticks)).max(1);
+                let span =
+                    u64::from(maximum_delay_ticks.saturating_sub(minimum_delay_ticks)).max(1);
                 let roll = deterministic_random(
                     self.config.match_seed,
                     self.next_tick,
@@ -90,7 +91,11 @@ impl Simulation {
                 ParasiteChild::Berserk { berserk, .. } => {
                     let stunned = units[caster].status.is_stunned(self.next_tick);
                     if units[caster].health > 0 && !stunned {
-                        native_kill_effects::apply_berserk(&mut units[caster], berserk, self.next_tick);
+                        native_kill_effects::apply_berserk(
+                            &mut units[caster],
+                            berserk,
+                            self.next_tick,
+                        );
                         effects += 1;
                     }
                 }

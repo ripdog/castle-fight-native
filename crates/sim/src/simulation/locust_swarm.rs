@@ -5,7 +5,7 @@
 //! the retained release interval, flight speed and attack cooldown.
 use super::*;
 use crate::components::{
-    LocustSwarmProfile, LocustSwarmState, LocustState, MAX_LOCUSTS, NativeAction,
+    LocustState, LocustSwarmProfile, LocustSwarmState, MAX_LOCUSTS, NativeAction,
 };
 
 const RANDOM_PURPOSE_LOCUST: u64 = 0x4c4f_4355_5354_0001;
@@ -57,7 +57,8 @@ impl Simulation {
         let profile = state.profile;
         for index in 0..usize::from(profile.count) {
             let release = state.start_tick
-                + (index as u64 * u64::from(profile.release_interval_millis)
+                + (index as u64
+                    * u64::from(profile.release_interval_millis)
                     * CASTLE_FIGHT_SIMULATION_HZ as u64)
                     .div_ceil(1000);
             if tick < release {
@@ -127,11 +128,15 @@ impl Simulation {
                     && unit.team != state.team
                     && !unit.classifications.invulnerable
                     && !unit.classifications.locust
-                    && profile.targets.can_target_unit(unit.target_movement_class())
+                    && profile
+                        .targets
+                        .can_target_unit(unit.target_movement_class())
                     && unit.visible_to(state.team, self.next_tick)
             })
             .map(|unit| (state.center.distance_sq(unit.position), unit.id))
-            .filter(|(distance, id)| *distance <= radius_sq && assigned(*id) < usize::from(profile.max_per_target))
+            .filter(|(distance, id)| {
+                *distance <= radius_sq && assigned(*id) < usize::from(profile.max_per_target)
+            })
             .min();
         let buildings_best = profile
             .targets
@@ -156,13 +161,16 @@ impl Simulation {
                         )
                     })
                     .filter(|(distance, id)| {
-                        *distance <= radius_sq && assigned(*id) < usize::from(profile.max_per_target)
+                        *distance <= radius_sq
+                            && assigned(*id) < usize::from(profile.max_per_target)
                     })
                     .min()
             })
             .flatten();
         // Units are always preferred over structures, as in ordinary weapon acquisition.
-        units_best.or(buildings_best).map(|(distance, id)| (id, distance))
+        units_best
+            .or(buildings_best)
+            .map(|(distance, id)| (id, distance))
     }
 
     fn locust_strike(

@@ -45,9 +45,7 @@ pub(super) fn ability_damage_for_unit(
             targets,
             organic_only,
             ..
-        } if fan_of_knives_target_eligible(target, targets, organic_only) => {
-            damage
-        }
+        } if fan_of_knives_target_eligible(target, targets, organic_only) => damage,
         AbilityEffect::FrostNova {
             area_damage,
             targets,

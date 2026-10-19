@@ -46,7 +46,9 @@ impl Simulation {
         if count == 0 {
             return 0;
         }
-        let per_target = if damage.checked_mul(count).is_none_or(|total| total > maximum_total_damage)
+        let per_target = if damage
+            .checked_mul(count)
+            .is_none_or(|total| total > maximum_total_damage)
         {
             maximum_total_damage / count
         } else {

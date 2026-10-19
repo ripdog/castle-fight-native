@@ -4823,11 +4823,14 @@ impl ExtractedContent927 {
     /// Build-card position of a retained building. Map overrides record only coordinates that
     /// differ from the stock origin, so a missing component resolves to zero.
     fn building_command_card_position(&self, rawcode: u32) -> Option<CommandCardPosition> {
-        self.command_card_positions.get(&rawcode).copied().or_else(|| {
-            self.authored_button_components
-                .get(&rawcode)
-                .map(|&(x, y)| CommandCardPosition::new(x.unwrap_or(0), y.unwrap_or(0)))
-        })
+        self.command_card_positions
+            .get(&rawcode)
+            .copied()
+            .or_else(|| {
+                self.authored_button_components
+                    .get(&rawcode)
+                    .map(|&(x, y)| CommandCardPosition::new(x.unwrap_or(0), y.unwrap_or(0)))
+            })
     }
 
     fn load() -> Result<Self, String> {

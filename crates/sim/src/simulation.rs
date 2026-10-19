@@ -34,21 +34,21 @@ mod scripted_roots;
 mod support_orders;
 pub use death_healing::DeathHealVisualEvent;
 mod building_damage_procs;
+mod building_script;
 mod enchantments;
 mod forgotten_one;
 mod hostile_armor_auras;
 mod impale;
 mod incinerate;
+mod locust_swarm;
 mod naga;
 mod native_building_auras;
 mod native_immolation;
 mod night_elf;
 mod parasite_area_buff;
-mod locust_swarm;
-mod building_script;
-mod sand_cloud;
 mod parasite_script;
 mod permanent_grants;
+mod sand_cloud;
 mod starfall;
 mod training_variants;
 mod travelling_mana_clap;
@@ -83,10 +83,10 @@ mod content_lifecycle_tests;
 mod damage_charge;
 mod damage_retaliation;
 mod damage_thresholds;
-mod fan_of_knives;
-mod flying_retarget;
 mod death_spawns;
 mod economy;
+mod fan_of_knives;
+mod flying_retarget;
 mod forked_lightning;
 mod homing_splash;
 mod lava_spawns;
@@ -5285,7 +5285,9 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                 AbilityTargetPolicy::NativeBuildingSpellTrigger
             );
             match p.child {
-                crate::BuildingChild::Replenish { life, mana, .. } => assert!(life >= 0 && mana >= 0),
+                crate::BuildingChild::Replenish { life, mana, .. } => {
+                    assert!(life >= 0 && mana >= 0)
+                }
                 crate::BuildingChild::Hallucination { illusion_ticks, .. } => {
                     assert!(illusion_ticks > 0)
                 }
@@ -5405,7 +5407,9 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                     berserk,
                     minimum_delay_ticks,
                     maximum_delay_ticks,
-                } => assert!(berserk.duration_ticks > 0 && minimum_delay_ticks < maximum_delay_ticks),
+                } => {
+                    assert!(berserk.duration_ticks > 0 && minimum_delay_ticks < maximum_delay_ticks)
+                }
                 crate::ParasiteChild::SandCloud(cloud) => {
                     assert!(cloud.pulses > 0 && cloud.period_ticks > 0 && cloud.carrier_ticks > 0);
                     assert!(cloud.standard.radius > 0 && cloud.special.radius > 0);

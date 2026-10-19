@@ -100,16 +100,17 @@ impl Simulation {
         let version = source.map_version.unwrap_or(MapVersion::CASTLE_FIGHT_9_27);
         let mana_fraction = |unit: &UnitSnapshot| -> Option<(i32, i32)> {
             let current = unit.mana_current?;
-            let maximum = unit.spellcasting.map(|s| s.mana.maximum).filter(|m| *m > 0).or_else(|| {
-                crate::content::native_mana_maximum_for_version(version, unit.rawcode)
-            })?;
+            let maximum = unit
+                .spellcasting
+                .map(|s| s.mana.maximum)
+                .filter(|m| *m > 0)
+                .or_else(|| {
+                    crate::content::native_mana_maximum_for_version(version, unit.rawcode)
+                })?;
             (maximum > 0).then_some((current, maximum))
         };
         let tier = |unit: &UnitSnapshot| -> Option<u8> {
-            if unit.team != source.team
-                || unit.health <= 0
-                || !unit.classifications.combat_sapper
-            {
+            if unit.team != source.team || unit.health <= 0 || !unit.classifications.combat_sapper {
                 return None;
             }
             if unit.health_max - severe_missing_life > unit.health {
@@ -118,7 +119,8 @@ impl Simulation {
                 Some(1)
             } else if mana_fraction(unit).is_some_and(|(current, maximum)| {
                 current > 0
-                    && i64::from(current) * 10_000 < i64::from(maximum) * i64::from(mana_below_per_10k)
+                    && i64::from(current) * 10_000
+                        < i64::from(maximum) * i64::from(mana_below_per_10k)
             }) {
                 Some(2)
             } else {
@@ -187,7 +189,11 @@ impl Simulation {
                     && unit.health > 0
                     && unit.classifications.combat_sapper
                     && !unit.classifications.invulnerable
-                    && !crate::content::unit_has_ability_for_version(unit.rawcode, excluded, version)
+                    && !crate::content::unit_has_ability_for_version(
+                        unit.rawcode,
+                        excluded,
+                        version,
+                    )
             })
             .min_by_key(|(_, unit)| {
                 (
