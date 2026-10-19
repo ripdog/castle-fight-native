@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0H9","unit_rawcode":"o00H","kind":"mana-attack-orb"},
     {"source_kind":"unit-ability","source_key":"A0H4","unit_rawcode":"n03I","kind":"damage-echo-step"},
     {"source_kind":"unit-ability","source_key":"A0HC","unit_rawcode":"n03O","kind":"hardened-skin"},
     {"source_kind":"unit-ability","source_key":"A0HH","unit_rawcode":"n03O","kind":"native-aura"},

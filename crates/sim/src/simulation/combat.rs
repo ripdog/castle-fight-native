@@ -267,6 +267,7 @@ impl Simulation {
                                 && !units[i].classifications.invulnerable
                                 && !units[i].classifications.spell_immune
                                 && !units[i].classifications.locust
+                                && !(p.organic_only && units[i].mechanical)
                                 && p.primary_targets
                                     .can_target_unit(units[i].target_movement_class())
                         }
@@ -283,9 +284,11 @@ impl Simulation {
                             .damage
                             .checked_add(p.bonus_damage)
                             .expect("native orb damage overflow");
-                        intent.attack.delivery = AttackDelivery::RangedGuaranteedHit {
-                            speed_per_tick: p.speed_per_tick,
-                        };
+                        if !p.preserve_delivery {
+                            intent.attack.delivery = AttackDelivery::RangedGuaranteedHit {
+                                speed_per_tick: p.speed_per_tick,
+                            };
+                        }
                     }
                 }
             }
@@ -414,7 +417,9 @@ impl Simulation {
                         );
                     }
                 }
-                if let Some(p) = mana_orb {
+                if let Some(p) = mana_orb
+                    && !p.preserve_delivery
+                {
                     on_hit.splash_falloff = Some(p.splash);
                     on_hit.missile_ability = Some(p.ability);
                 }

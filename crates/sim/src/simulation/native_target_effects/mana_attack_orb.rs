@@ -16,6 +16,8 @@ fn profile() -> ManaAttackOrbProfile {
             outer_damage_per_10k: 2500,
             targets: AttackTargetMask::AIR_AND_GROUND,
         },
+        organic_only: false,
+        preserve_delivery: false,
     }
 }
 fn source(sim: &mut Simulation, mana: i32, windup: u16) -> SimId {

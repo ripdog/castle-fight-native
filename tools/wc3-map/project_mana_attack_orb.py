@@ -29,7 +29,33 @@ def project_searing_arrows(recipe, fields, unit, protected, detail):
         'protected_resources': protected, 'native_cast_range': fields['rng1'], 'missile_art': fields['missileart']}}
 
 
+def project_poison_arrows(recipe, fields, unit, protected, detail):
+    """Native AEpa: an organic-only default-active bonus-damage orb layered on the weapon's own delivery."""
+    def number(key, scale=1):
+        return int((Decimal(str(fields[key.lower()])) * scale).to_integral_value(rounding=ROUND_CEILING))
+    cost = int(Decimal(protected.get('mana_cost', fields['cost1'])))
+    cooldown = Decimal(protected.get('cooldown', fields['cool1']))
+    if (detail['default_active_alias'] != recipe['source_key']
+            or set(fields['targs1'].split(',')) != {'air', 'ground', 'organic'}
+            or number('levels') != 1 or cooldown != 0 or cost < 0 or number('cast1') != 0
+            or any(number(k) != 0 for k in ['datab1', 'datac1', 'datad1', 'datae1'])
+            or unit['attack1_weapon_type'] != 'artillery' or number('dataa1') < 0):
+        raise ValueError('native Poison Arrows requires its default-active free-cast organic orb, no poison payload and an artillery weapon')
+    p = {'primary_targets': 3, 'ability': int.from_bytes(recipe['source_key'].encode(), 'big'), 'mana_cost': cost,
+        'bonus_damage': number('dataa1'), 'speed_per_tick': int(Decimal(fields['missilespeed']) * 1024 / 30),
+        # The artillery weapon keeps its own delivery and splash bands; the orb adds only payload.
+        'splash': {'full_radius': 0, 'medium_radius': 0, 'outer_radius': 0,
+            'medium_damage_per_10k': 0, 'outer_damage_per_10k': 0, 'targets': 0},
+        'organic_only': True, 'preserve_delivery': True}
+    return {**recipe, 'profile': p, 'provenance': {'source': 'resolved/object-fields.tsv', 'native_base': detail['native_base'],
+        'default_active_alias': detail['default_active_alias'], 'targets': fields['targs1'],
+        'protected_resources': protected, 'native_cast_range': fields['rng1'], 'area_field_unused_by_native_base': fields['area1'],
+        'missile_art': fields['missileart']}}
+
+
 def project(recipe, fields, unit, protected, detail):
+    if detail['native_base'] == 'AEpa':
+        return project_poison_arrows(recipe, fields, unit, protected, detail)
     if detail['native_base'] == 'ACsa':
         return project_searing_arrows(recipe, fields, unit, protected, detail)
     def number(key, scale=1):

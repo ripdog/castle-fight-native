@@ -4,6 +4,41 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0H9",
+      "unit_rawcode": "o00H",
+      "kind": "mana-attack-orb",
+      "profile": {
+        "primary_targets": 3,
+        "ability": 1093683257,
+        "mana_cost": 50,
+        "bonus_damage": 300,
+        "speed_per_tick": 51200,
+        "splash": {
+          "full_radius": 0,
+          "medium_radius": 0,
+          "outer_radius": 0,
+          "medium_damage_per_10k": 0,
+          "outer_damage_per_10k": 0,
+          "targets": 0
+        },
+        "organic_only": true,
+        "preserve_delivery": true
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "AEpa",
+        "default_active_alias": "A0H9",
+        "targets": "air,ground,organic",
+        "protected_resources": {
+          "mana_cost": "50"
+        },
+        "native_cast_range": "1050",
+        "area_field_unused_by_native_base": "300",
+        "missile_art": "Abilities\\\\Spells\\\\Orc\\\\Shockwave\\\\ShockwaveMissile.mdl"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A0H4",
       "unit_rawcode": "n03I",
       "kind": "damage-echo-step",

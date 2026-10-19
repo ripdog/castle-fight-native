@@ -9,9 +9,15 @@ pub struct ManaAttackOrbProfile {
     pub speed_per_tick: i32,
     pub primary_targets: AttackTargetMask,
     pub splash: SplashFalloffProfile,
+    /// The native `organic` target token: mechanical targets neither pay nor receive the orb.
+    #[serde(default)]
+    pub organic_only: bool,
+    /// The orb adds its payload to the weapon without replacing its delivery or splash (artillery).
+    #[serde(default)]
+    pub preserve_delivery: bool,
 }
 impl ManaAttackOrbProfile {
-    pub(crate) fn canonical_words(self) -> [u64; 11] {
+    pub(crate) fn canonical_words(self) -> [u64; 12] {
         [
             u64::from(self.ability.0),
             self.mana_cost as u64,
@@ -24,6 +30,7 @@ impl ManaAttackOrbProfile {
             u64::from(self.splash.outer_damage_per_10k),
             u64::from(self.splash.targets.bits()),
             u64::from(self.primary_targets.bits()),
+            u64::from(self.organic_only) | u64::from(self.preserve_delivery) << 1,
         ]
     }
 }
