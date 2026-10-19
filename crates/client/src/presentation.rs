@@ -3544,6 +3544,7 @@ fn prewarm_timed_wc3_effects(
                         | AbilityEffect::BuildingAttackProxy(_)
                         | AbilityEffect::Hailstone(_)
                         | AbilityEffect::BuildingAura(_)
+                        | AbilityEffect::BuildingScript(_)
                         | AbilityEffect::BuildingStasis(_)
                         | AbilityEffect::NativeWeatherVisual { .. }
                         | AbilityEffect::BuildingWeather(_)

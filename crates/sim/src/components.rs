@@ -23,7 +23,9 @@ pub use native_summons::{
 mod curse;
 pub use curse::CurseProfile;
 mod parasite_area_buff;
+mod building_script;
 mod parasite_script;
+pub use building_script::{BuildingChild, BuildingScriptProfile, SandstormState};
 pub use parasite_area_buff::ParasiteAreaBuffProfile;
 pub use parasite_script::{
     LocustSwarmProfile, LocustSwarmState, LocustState, MAX_LOCUSTS, ParasiteChild,
@@ -1965,6 +1967,7 @@ pub enum AbilityEffect {
     TravellingManaClap(TravellingManaClapProfile),
     ParasiteAreaBuff(ParasiteAreaBuffProfile),
     ParasiteScript(ParasiteScriptProfile),
+    BuildingScript(BuildingScriptProfile),
     Curse(CurseProfile),
     ManaBurnVisual,
     NativeSummon(NativeSummonProfile),
@@ -1988,6 +1991,7 @@ impl AbilityEffect {
             Self::Curse(_) => 53,
             Self::ParasiteAreaBuff(_) => 52,
             Self::ParasiteScript(_) => 63,
+            Self::BuildingScript(_) => 64,
             Self::TravellingManaClap(_) => 50,
             Self::ManaBurnVisual => 51,
             Self::SirenPurge(_) => 45,

@@ -3,6 +3,159 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0GK",
+      "unit_rawcode": "n03A",
+      "spellcasting": {
+        "mana": {
+          "maximum": 50,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093683019,
+          "mana_cost": 40,
+          "cooldown_ticks": 240,
+          "range": 102398976,
+          "target_policy": "NativeBuildingSpellTrigger",
+          "effect": {
+            "BuildingScript": {
+              "ability": 1093683019,
+              "trigger_targets": 5,
+              "trigger_invulnerable": true,
+              "trigger_spell_immune": false,
+              "trigger_mechanical_only": false,
+              "child": {
+                "Sandstorm": {
+                  "debuff": {
+                    "ability": 1093682996,
+                    "buff": 1110454866,
+                    "targets": 3,
+                    "organic_only": false,
+                    "duration_ticks": 240,
+                    "hero_duration_ticks": 240,
+                    "movement_percent_delta": -30,
+                    "attack_speed_percent_delta": -30,
+                    "damage_bonus_per_10k": 0,
+                    "ethereal": null,
+                    "miss_chance_per_10k": 6500
+                  },
+                  "pulse_ability": 1093683011,
+                  "pulse_damage": 20,
+                  "pulse_interval_ticks": 30,
+                  "duration_ticks": 180,
+                  "targets": 3
+                }
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/building-spell-mechanics.tsv",
+        "fields": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "functions": "BuildingSpellClosure_registerBuildingSpell_RaceDesertAbilities_cast_registerBuildingSpell_RaceDesertAbilities2,CallbackSingle_doAfter_RaceDesertAbilities_call_doAfter_RaceDesertAbilities"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0GF",
+      "unit_rawcode": "h07A",
+      "spellcasting": {
+        "mana": {
+          "maximum": 22,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093683014,
+          "mana_cost": 15,
+          "cooldown_ticks": 30,
+          "range": 102398976,
+          "target_policy": "NativeBuildingSpellTrigger",
+          "effect": {
+            "BuildingScript": {
+              "ability": 1093683014,
+              "trigger_targets": 5,
+              "trigger_invulnerable": true,
+              "trigger_spell_immune": false,
+              "trigger_mechanical_only": false,
+              "child": {
+                "Hallucination": {
+                  "illusion_ability": 1095577721,
+                  "illusion_ticks": 1800,
+                  "damage_dealt_per_10k": 12500,
+                  "damage_taken_per_10k": 7500,
+                  "excluded_ability": 1093679176
+                }
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/building-spell-mechanics.tsv",
+        "fields": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "functions": "BuildingSpellClosure_registerBuildingSpell_RaceDesertAbilities_cast_registerBuildingSpell_RaceDesertAbilities1,spellPeyote"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0GE",
+      "unit_rawcode": "h079",
+      "spellcasting": {
+        "mana": {
+          "maximum": 18,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093683013,
+          "mana_cost": 5,
+          "cooldown_ticks": 30,
+          "range": 102398976,
+          "target_policy": "NativeBuildingSpellTrigger",
+          "effect": {
+            "BuildingScript": {
+              "ability": 1093683013,
+              "trigger_targets": 5,
+              "trigger_invulnerable": true,
+              "trigger_spell_immune": false,
+              "trigger_mechanical_only": false,
+              "child": {
+                "Replenish": {
+                  "life": 175,
+                  "mana": 40,
+                  "severe_missing_life": 200,
+                  "mana_below_per_10k": 9990
+                }
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/building-spell-mechanics.tsv",
+        "fields": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "functions": "BuildingSpellClosure_registerBuildingSpell_RaceDesertAbilities_cast_registerBuildingSpell_RaceDesertAbilities,spellReplenish"
+      }
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A0HX",
       "unit_rawcode": "n02Z",

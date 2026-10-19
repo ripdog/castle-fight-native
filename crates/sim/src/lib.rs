@@ -53,7 +53,7 @@ pub use components::{
     MovementProfile, NativeAbilityGrant, NativeAbilityGrantEffect, NativeAbilityGrants,
     NativeBoltProfile, NativeBuffIdentity, NativeDebuffProfile, NativeNovaProfile,
     NativeParasiteProfile, NativeSummonProfile, OrbCharmProfile, Owner, ParasiteAreaBuffProfile,
-    LocustSwarmProfile, LocustSwarmState, LocustState, MAX_LOCUSTS, ParasiteChild,
+    BuildingChild, BuildingScriptProfile, SandstormState, LocustSwarmProfile, LocustSwarmState, LocustState, MAX_LOCUSTS, ParasiteChild,
     ParasiteScriptProfile, PendingParasiteScript, SandCloudProfile, SandCloudState, SandCloudVariant,
     PassiveUnitEffect, PassiveUnitEffects, PendingAttackState, PendingCastState, PendingCastTarget,
     PermanentImmolationProfile, PlayerId, PoisonBuffStatus, PoisonProfile, PoisonStatus,

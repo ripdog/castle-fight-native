@@ -290,6 +290,9 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    TempleOfStorm = 0x2100_0036 => b"n03A",
+    SacredPeyote = 0x2100_0035 => b"h07A",
+    BeaconOfTheOasis = 0x2100_0034 => b"h079",
     BallistaTower = 0x2100_0033 => b"h07E",
     ForgottenOne = 0x2100_0032 => b"h04R",
     WellOfPain = 0x2100_0031 => b"h04K",

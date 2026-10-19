@@ -573,6 +573,7 @@ pub(super) fn apply_ability_effect_to_unit(
         | AbilityEffect::SpellSteal { .. }
         | AbilityEffect::WorldFreezer(_)
         | AbilityEffect::BuildingAura(_)
+        | AbilityEffect::BuildingScript(_)
         | AbilityEffect::BuildingStasis(_)
         | AbilityEffect::NativeWeatherVisual { .. }
         | AbilityEffect::ManaBurnVisual

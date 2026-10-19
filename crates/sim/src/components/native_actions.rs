@@ -210,6 +210,7 @@ pub(crate) enum NativeAction {
     Poison(PoisonState),
     LocustSwarm(super::LocustSwarmState),
     SandCloud(super::SandCloudState),
+    Sandstorm(super::SandstormState),
     Ensnare(EnsnareMissileState),
     HealingWave(HealingWaveState),
     Bolt(NativeBoltState),

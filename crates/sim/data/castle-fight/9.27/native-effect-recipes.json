@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0GK","unit_rawcode":"n03A","kind":"building-script"},
+    {"source_kind":"unit-ability","source_key":"A0GF","unit_rawcode":"h07A","kind":"building-script"},
+    {"source_kind":"unit-ability","source_key":"A0GE","unit_rawcode":"h079","kind":"building-script"},
     {"source_kind":"unit-ability","source_key":"A0HX","unit_rawcode":"n02Z","kind":"orb-spell-proc"},
     {"source_kind":"ability-effect","source_key":"A0HW","unit_rawcode":"n02Z","kind":"orb-acid-bomb"},
     {"source_kind":"unit-ability","source_key":"A093","unit_rawcode":"n02Y","kind":"spell-resistance"},

@@ -244,6 +244,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     if kind == "fan-of-knives":
         from project_fan_of_knives import project
         return project(recipe, fields, unit, protected, mechanics)
+    if kind == "building-script":
+        from project_building_script import project
+        return project(recipe, fields, unit, protected, mechanics)
     if kind == "life-steal":
         from project_life_steal import project
         return project(recipe, fields, unit, mechanics)
@@ -989,7 +992,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             detail["improvement_levels"] = ability_levels[child]
         if recipe["kind"] == "building-improvement":
             detail.update(improvement_handler=functions["improveSpecialBuilding"], improvement_cleanup=functions["yK"], improvement_cleanup_registration=re.search(r'_I\[_T\(\d+,"[0-9a-f]+"\)\]=yK',lua.decode()).group(), improvement_death=functions["fJ"], improvement_ui=ability_ui[source], git_tree=tree)
-        if recipe["kind"] in {"building-weather", "native-weather-wave", "building-enchantment", "native-enchantment-grant", "source-damage-dispatcher"}:
+        if recipe["kind"] in {"building-weather", "native-weather-wave", "building-enchantment", "native-enchantment-grant", "source-damage-dispatcher", "building-script"}:
             detail.update(all_fields=abilities, all_bases=ability_bases, all_protected=protected, functions=functions, building_spell=building_spells.get(source), git_tree=tree, map_version=dict(zip(["major","minor"],map(int,release["map_version"].split(".")))))
         if recipe["kind"] == "fan-of-knives":
             detail.update(fan_of_knives=fan_of_knives[recipe["unit_rawcode"]], functions=functions, git_tree=tree)

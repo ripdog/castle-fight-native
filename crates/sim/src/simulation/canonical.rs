@@ -701,6 +701,17 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u64(state.position_tick);
                         hash.write_u64(state.impact_tick);
                     }
+                    NativeAction::Sandstorm(state) => {
+                        hash.write_u8(32);
+                        hash.write_u64(state.source.0);
+                        hash.write_u8(state.team.0);
+                        hash.write_u32(state.ability.0);
+                        hash.write_i32(state.damage);
+                        hash.write_u8(state.targets.bits());
+                        hash.write_u16(state.interval_ticks);
+                        hash.write_u64(state.next_pulse_tick);
+                        hash.write_u64(state.expires_tick);
+                    }
                     NativeAction::SandCloud(state) => {
                         hash.write_u8(31);
                         hash.write_i32(state.variant.radius);
@@ -3136,6 +3147,11 @@ fn hash_automatic_ability(hash: &mut Fnv64, ability: &AutomaticAbilityProfile) {
             }
         }
         AbilityEffect::ParasiteScript(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
+        AbilityEffect::BuildingScript(p) => {
             for word in p.canonical_words() {
                 hash.write_u64(word);
             }

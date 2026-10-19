@@ -735,6 +735,14 @@ impl Simulation {
                     } else if let AbilityEffect::SilverGlade(p) = intent.ability.effect {
                         self.add_silver_charge(source.team, p);
                         metrics.effects += 1;
+                    } else if let AbilityEffect::BuildingScript(profile) = intent.ability.effect {
+                        metrics.effects += self.cast_building_script(
+                            source,
+                            profile,
+                            intent.cast_sequence,
+                            units,
+                        );
+                        emit_cast_visual = false;
                     } else if let AbilityEffect::BuildingAura(profile) = intent.ability.effect {
                         self.start_aura_carrier(source, profile, units, buildings);
                         metrics.effects += 1;
@@ -1132,6 +1140,14 @@ impl Simulation {
                     } else if let AbilityEffect::SilverGlade(p) = intent.ability.effect {
                         self.add_silver_charge(source.team, p);
                         metrics.effects += 1;
+                    } else if let AbilityEffect::BuildingScript(profile) = intent.ability.effect {
+                        metrics.effects += self.cast_building_script(
+                            source,
+                            profile,
+                            intent.cast_sequence,
+                            units,
+                        );
+                        emit_cast_visual = false;
                     } else if let AbilityEffect::BuildingAura(profile) = intent.ability.effect {
                         self.start_aura_carrier(source, profile, units, buildings);
                         metrics.effects += 1;

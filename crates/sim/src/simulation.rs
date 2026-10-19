@@ -45,6 +45,7 @@ mod native_immolation;
 mod night_elf;
 mod parasite_area_buff;
 mod locust_swarm;
+mod building_script;
 mod sand_cloud;
 mod parasite_script;
 mod permanent_grants;
@@ -5277,6 +5278,23 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                 spellcasting.ability.target_policy,
                 AbilityTargetPolicy::FriendlyUnitInCombat
             );
+        }
+        AbilityEffect::BuildingScript(p) => {
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::NativeBuildingSpellTrigger
+            );
+            match p.child {
+                crate::BuildingChild::Replenish { life, mana, .. } => assert!(life >= 0 && mana >= 0),
+                crate::BuildingChild::Hallucination { illusion_ticks, .. } => {
+                    assert!(illusion_ticks > 0)
+                }
+                crate::BuildingChild::Sandstorm {
+                    pulse_interval_ticks,
+                    duration_ticks,
+                    ..
+                } => assert!(pulse_interval_ticks > 0 && duration_ticks > 0),
+            }
         }
         AbilityEffect::BuildingAura(p) => {
             assert!(p.radius >= 0 && p.lifetime_ticks > 0);
