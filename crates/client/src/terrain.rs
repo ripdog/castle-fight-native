@@ -2,6 +2,7 @@ use std::{
     collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use bevy::{
@@ -24,14 +25,16 @@ const TERRAIN_SLOPE_SHADE_STRENGTH: f32 = 0.24;
 const TERRAIN_SLOPE_MIN_BRIGHTNESS: f32 = 0.84;
 const TERRAIN_SIDE_MASK_HEIGHT_OFFSET: f32 = 0.6;
 
+/// Immutable terrain geometry. Clones share the large height data, so background mesh rebuilds
+/// can own a snapshot without copying the map.
 #[derive(Resource, Debug, Clone)]
 pub struct TerrainSurface {
-    elevation: TerrainElevationMap,
+    elevation: Arc<TerrainElevationMap>,
     origin_world: Vec2,
     tile_world: f32,
     max_world: Vec2,
     /// Per-cell bicubic patches in row-major cell order, `width_tiles * height_tiles` entries.
-    height_cells: Vec<TerrainHeightCell>,
+    height_cells: Arc<[TerrainHeightCell]>,
 }
 
 /// Precomputed Catmull-Rom patch for one terrain cell.
@@ -149,8 +152,8 @@ impl TerrainSurface {
             origin_world: Vec2::new(origin.x as f32 / subunits, origin.y as f32 / subunits),
             tile_world: elevation.tile_size() as f32 / subunits,
             max_world: Vec2::new(maximum.x as f32 / subunits, maximum.y as f32 / subunits),
-            elevation,
-            height_cells,
+            elevation: Arc::new(elevation),
+            height_cells: height_cells.into(),
         }
     }
 
@@ -1045,7 +1048,7 @@ mod tests {
                 "../../../docs/original_map/extracted/terrain.json"
             ))
             .unwrap(),
-            rounded_ramp_terrain().elevation,
+            rounded_ramp_terrain().elevation.as_ref().clone(),
         ] {
             let terrain = TerrainSurface::new(elevation.clone());
             // Quarter-tile steps cover tile interiors, exact tile edges, and grid positions

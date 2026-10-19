@@ -27,6 +27,7 @@ use bevy::{
         view::{ColorGrading, ColorGradingGlobal, ColorGradingSection},
     },
     shader::ShaderRef,
+    tasks::{AsyncComputeTaskPool, Task, block_on, poll_once},
     time::Fixed,
     window::PrimaryWindow,
     world_serialization::{WorldAsset, WorldInstance, WorldInstanceSpawner},
@@ -56,7 +57,7 @@ use crate::{
         finish_presentation_profile, finish_scene_setup_profile, finish_transform_profile,
     },
     render_audit::RenderExperiment,
-    terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet},
+    terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureMesh, TerrainTextureSet},
     unit_models::{UnitAnimationClip, UnitAnimationSet, UnitModelAsset, UnitModelSet},
     wc3_effects::{
         Wc3AbilityVisualAnchor, Wc3AnimatedAlphaMaterial, Wc3AttachToNode, Wc3AttachmentOwner,
@@ -9934,10 +9935,44 @@ mod tests {
 #[derive(Component)]
 struct TerrainTextureLayer(usize);
 
+/// Orders snow rebuilds so that only the newest requested rebuild may publish its meshes.
+#[derive(Default, Debug, PartialEq, Eq)]
+struct SnowRebuildGenerations {
+    last_started: u64,
+    last_published: u64,
+}
+
+impl SnowRebuildGenerations {
+    fn start(&mut self) -> u64 {
+        self.last_started += 1;
+        self.last_started
+    }
+
+    /// Whether a finished rebuild may publish. A result is refused unless it was started by this
+    /// tracker and is newer than the last published one, so late results never overwrite newer
+    /// snow state.
+    fn accept(&mut self, generation: u64) -> bool {
+        if generation > self.last_published && generation <= self.last_started {
+            self.last_published = generation;
+            true
+        } else {
+            false
+        }
+    }
+}
+
+struct SnowRebuild {
+    generation: u64,
+    task: Task<Result<Vec<TerrainTextureMesh>, String>>,
+}
+
 #[derive(Default)]
 struct SnowTerrainCache {
+    /// Tile set of the most recently requested rebuild, which may still be in flight.
     tiles: Vec<(SimPoint, Team, i32, u32)>,
     materials: BTreeMap<usize, Handle<StandardMaterial>>,
+    generations: SnowRebuildGenerations,
+    rebuild: Option<SnowRebuild>,
 }
 
 type SnowTerrainLayers<'w, 's> = Query<
@@ -9965,6 +10000,9 @@ struct SnowTerrainResources<'w, 's> {
     cache: Local<'s, SnowTerrainCache>,
 }
 
+/// Rebuilds the snow terrain meshes on the async compute pool. The main thread only polls the
+/// in-flight rebuild, publishes it when it is the newest result, and starts a rebuild when the
+/// requested snow tiles change. Until a rebuild publishes, the previous snow state stays visible.
 fn update_snow_terrain(resources: SnowTerrainResources<'_, '_>) {
     let SnowTerrainResources {
         mut commands,
@@ -9978,45 +10016,98 @@ fn update_snow_terrain(resources: SnowTerrainResources<'_, '_>) {
         layers,
         mut cache,
     } = resources;
-    if cache.tiles == samples.current.snow_tiles || !textures.is_available() {
-        return;
+
+    // Publish a finished rebuild first so a newer tile set can start in the same frame.
+    let finished = cache.rebuild.as_mut().and_then(|rebuild| {
+        block_on(poll_once(&mut rebuild.task)).map(|result| (rebuild.generation, result))
+    });
+    if let Some((generation, result)) = finished {
+        cache.rebuild = None;
+        if cache.generations.accept(generation) {
+            match result {
+                Ok(generated) => {
+                    for (entity, layer, mesh, material) in &layers {
+                        cache
+                            .materials
+                            .entry(layer.0)
+                            .or_insert_with(|| material.0.clone());
+                        meshes.remove(mesh.0.id());
+                        commands.entity(entity).try_despawn();
+                    }
+                    for layer in generated {
+                        let material = cache
+                            .materials
+                            .entry(layer.palette_index)
+                            .or_insert_with(|| {
+                                let atlas = textures
+                                    .atlas(layer.palette_index)
+                                    .expect("validated snow atlas");
+                                materials.add(StandardMaterial {
+                                    base_color_texture: Some(
+                                        asset_server.load(atlas.asset_path().to_owned()),
+                                    ),
+                                    alpha_mode: AlphaMode::Blend,
+                                    unlit: true,
+                                    depth_bias: layer.palette_index as f32 + 1.0,
+                                    perceptual_roughness: 0.95,
+                                    ..default()
+                                })
+                            })
+                            .clone();
+                        commands.spawn((
+                            TerrainTextureLayer(layer.palette_index),
+                            Mesh3d(meshes.add(layer.mesh)),
+                            MeshMaterial3d(material),
+                            Transform::IDENTITY,
+                        ));
+                    }
+                }
+                Err(error) => {
+                    eprintln!("warning: failed to rebuild WC3 snow terrain: {error}");
+                }
+            }
+        }
     }
-    let updated = layout.with_snow_tiles(&terrain, &samples.current.snow_tiles);
-    let Ok(generated) = terrain.textured_meshes(&updated, &textures) else {
-        return;
-    };
-    for (entity, layer, mesh, material) in &layers {
-        cache
-            .materials
-            .entry(layer.0)
-            .or_insert_with(|| material.0.clone());
-        meshes.remove(mesh.0.id());
-        commands.entity(entity).try_despawn();
+
+    if cache.rebuild.is_none()
+        && cache.tiles != samples.current.snow_tiles
+        && textures.is_available()
+    {
+        cache.tiles.clone_from(&samples.current.snow_tiles);
+        let generation = cache.generations.start();
+        let tiles = samples.current.snow_tiles.clone();
+        let terrain = (*terrain).clone();
+        let layout = (*layout).clone();
+        let textures = (*textures).clone();
+        let task = AsyncComputeTaskPool::get().spawn(async move {
+            let updated = layout.with_snow_tiles(&terrain, &tiles);
+            terrain.textured_meshes(&updated, &textures)
+        });
+        cache.rebuild = Some(SnowRebuild { generation, task });
     }
-    for layer in generated {
-        let material = cache
-            .materials
-            .entry(layer.palette_index)
-            .or_insert_with(|| {
-                let atlas = textures
-                    .atlas(layer.palette_index)
-                    .expect("validated snow atlas");
-                materials.add(StandardMaterial {
-                    base_color_texture: Some(asset_server.load(atlas.asset_path().to_owned())),
-                    alpha_mode: AlphaMode::Blend,
-                    unlit: true,
-                    depth_bias: layer.palette_index as f32 + 1.0,
-                    perceptual_roughness: 0.95,
-                    ..default()
-                })
-            })
-            .clone();
-        commands.spawn((
-            TerrainTextureLayer(layer.palette_index),
-            Mesh3d(meshes.add(layer.mesh)),
-            MeshMaterial3d(material),
-            Transform::IDENTITY,
-        ));
+}
+
+#[cfg(test)]
+mod snow_rebuild_generation_tests {
+    use super::SnowRebuildGenerations;
+
+    #[test]
+    fn stale_snow_rebuild_never_publishes_after_a_newer_one() {
+        let mut generations = SnowRebuildGenerations::default();
+        let first = generations.start();
+        let second = generations.start();
+
+        assert!(generations.accept(second));
+        assert!(!generations.accept(first));
+        assert!(!generations.accept(second));
     }
-    cache.tiles.clone_from(&samples.current.snow_tiles);
+
+    #[test]
+    fn snow_rebuild_refuses_unstarted_generations() {
+        let mut generations = SnowRebuildGenerations::default();
+        assert!(!generations.accept(1));
+        let first = generations.start();
+        assert!(!generations.accept(first + 1));
+        assert!(generations.accept(first));
+    }
 }
