@@ -389,6 +389,31 @@ impl Simulation {
                 let (bonus_damage, mut on_hit, critical_strike) =
                     self.resolve_passive_attack_effects(&intent, units, completed_tick);
                 critical = critical_strike;
+                if let (AttackSourceIndex::Unit(source_index), Some(effect)) =
+                    (intent.source, on_hit.triggered_spell)
+                    && let Some(profile) =
+                        intent
+                            .passive_effects
+                            .iter()
+                            .find_map(|passive| match passive {
+                                PassiveUnitEffect::TriggeredSpellProc(profile)
+                                    if profile.effect == effect && profile.cooldown_ticks > 0 =>
+                                {
+                                    Some(profile)
+                                }
+                                _ => None,
+                            })
+                {
+                    // The child's own cooldown gates the proc and starts when it fires.
+                    if units[source_index].status.orb_ready_tick(profile.ability) > completed_tick {
+                        on_hit.triggered_spell = None;
+                    } else {
+                        units[source_index].status.start_orb_cooldown(
+                            profile.ability,
+                            completed_tick + u64::from(profile.cooldown_ticks),
+                        );
+                    }
+                }
                 if let Some(p) = mana_orb {
                     on_hit.splash_falloff = Some(p.splash);
                     on_hit.missile_ability = Some(p.ability);

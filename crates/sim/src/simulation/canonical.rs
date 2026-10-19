@@ -2159,6 +2159,13 @@ fn hash_status_state(hash: &mut Fnv64, status: &StatusState) {
     }
     hash.write_u64(status.retaliation_sequence);
     hash_optional_u64(hash, status.flying_retarget_tick);
+    for entry in status.orb_cooldowns {
+        hash.write_u8(u8::from(entry.is_some()));
+        if let Some(entry) = entry {
+            hash.write_u32(entry.ability.0);
+            hash.write_u64(entry.ready_tick);
+        }
+    }
     hash.write_u8(u8::from(status.pending_parasite_script.is_some()));
     if let Some(pending) = status.pending_parasite_script {
         for word in pending.canonical_words() {
@@ -2626,6 +2633,7 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: &PassiveUnitEffects) {
                 hash.write_u64(profile.hero_chance_per_10k.map_or(u64::MAX, u64::from));
                 hash.write_u64(profile.summoned_chance_per_10k.map_or(u64::MAX, u64::from));
                 hash.write_u8(profile.targets.bits());
+                hash.write_u16(profile.cooldown_ticks);
                 hash_triggered_attack_effect(hash, &profile.effect);
             }
             PassiveUnitEffect::BurningOil(profile) => {

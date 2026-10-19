@@ -54,17 +54,17 @@ pub use components::{
     MasterMoverProfile, MasterProjectileProfile, ModifierId, MovementClass, MovementProfile,
     NativeAbilityGrant, NativeAbilityGrantEffect, NativeAbilityGrants, NativeBoltProfile,
     NativeBuffIdentity, NativeDebuffProfile, NativeNovaProfile, NativeParasiteProfile,
-    NativeSummonProfile, OrbCharmProfile, Owner, ParasiteAreaBuffProfile, ParasiteChild,
-    ParasiteScriptProfile, PassiveUnitEffect, PassiveUnitEffects, PendingAttackState,
-    PendingCastState, PendingCastTarget, PendingParasiteScript, PermanentImmolationProfile,
-    PlayerId, PoisonBuffStatus, PoisonProfile, PoisonStatus, ProductionProfile,
-    PulverizeEffectProfile, PurgeProfile, PurgeState, ResolvedUnitDefinition, SandCloudProfile,
-    SandCloudState, SandCloudVariant, SandstormState, ScriptedRootsProfile, SecondaryAttackProfile,
-    SecondaryResurrectionState, SelfDestructProfile, SimId, SirenPurgeProfile, SpeedAuraProfile,
-    SpellcastingProfile, SphereAttachmentState, SphereProfile, SpikedShellProfile,
-    SplashFalloffProfile, StatusState, Team, TravellingManaClapProfile, TriggeredAttackEffect,
-    TriggeredSpellProcProfile, UnitClassifications, UnitGameplayProperties, UnitSpawn,
-    UnitTemplate,
+    NativeSummonProfile, OrbCharmProfile, OrbCooldown, Owner, ParasiteAreaBuffProfile,
+    ParasiteChild, ParasiteScriptProfile, PassiveUnitEffect, PassiveUnitEffects,
+    PendingAttackState, PendingCastState, PendingCastTarget, PendingParasiteScript,
+    PermanentImmolationProfile, PlayerId, PoisonBuffStatus, PoisonProfile, PoisonStatus,
+    ProductionProfile, PulverizeEffectProfile, PurgeProfile, PurgeState, ResolvedUnitDefinition,
+    SandCloudProfile, SandCloudState, SandCloudVariant, SandstormState, ScriptedRootsProfile,
+    SecondaryAttackProfile, SecondaryResurrectionState, SelfDestructProfile, SimId,
+    SirenPurgeProfile, SpeedAuraProfile, SpellcastingProfile, SphereAttachmentState, SphereProfile,
+    SpikedShellProfile, SplashFalloffProfile, StatusState, Team, TravellingManaClapProfile,
+    TriggeredAttackEffect, TriggeredSpellProcProfile, UnitClassifications, UnitGameplayProperties,
+    UnitSpawn, UnitTemplate,
 };
 pub use content::{
     CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION, CASTLE_FIGHT_CONTENT_REVISION_927,
@@ -553,6 +553,7 @@ mod tests {
         assert!(effects.iter().any(|effect| matches!(
                     effect,
                     PassiveUnitEffect::TriggeredSpellProc(TriggeredSpellProcProfile {
+cooldown_ticks: 0,
         hero_chance_per_10k: None, summoned_chance_per_10k: None,
                         ability: AbilityId(ability),
                         chance_per_10k: 1_000,
@@ -1063,6 +1064,7 @@ mod tests {
             UnitGameplayProperties {
                 passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::TriggeredSpellProc(
                     TriggeredSpellProcProfile {
+                        cooldown_ticks: 0,
                         hero_chance_per_10k: None,
                         summoned_chance_per_10k: None,
                         ability: AbilityId(u32::from_be_bytes(*b"ORBP")),
@@ -1129,6 +1131,7 @@ mod tests {
             UnitGameplayProperties {
                 passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::TriggeredSpellProc(
                     TriggeredSpellProcProfile {
+                        cooldown_ticks: 0,
                         hero_chance_per_10k: None,
                         summoned_chance_per_10k: None,
                         ability: AbilityId(u32::from_be_bytes(*b"ORBP")),
@@ -1217,6 +1220,7 @@ mod tests {
                 UnitGameplayProperties {
                     passive_effects: PassiveUnitEffects::single(
                         PassiveUnitEffect::TriggeredSpellProc(TriggeredSpellProcProfile {
+                            cooldown_ticks: 0,
                             hero_chance_per_10k: None,
                             summoned_chance_per_10k: None,
                             ability: AbilityId(u32::from_be_bytes(*b"ORBP")),
@@ -1282,6 +1286,7 @@ mod tests {
             UnitGameplayProperties {
                 passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::TriggeredSpellProc(
                     TriggeredSpellProcProfile {
+                        cooldown_ticks: 0,
                         hero_chance_per_10k: None,
                         summoned_chance_per_10k: None,
                         ability: AbilityId(u32::from_be_bytes(*b"ORBR")),

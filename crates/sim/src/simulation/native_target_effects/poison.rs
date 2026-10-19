@@ -62,6 +62,7 @@ fn lethal_triggered_weapon_spell_does_not_leave_a_poison_action() {
             passive_effects: PassiveUnitEffects::from_slice(&[
                 PassiveUnitEffect::Poison(profile()),
                 PassiveUnitEffect::TriggeredSpellProc(crate::TriggeredSpellProcProfile {
+                    cooldown_ticks: 0,
                     hero_chance_per_10k: None,
                     summoned_chance_per_10k: None,
                     ability: AbilityId(96),

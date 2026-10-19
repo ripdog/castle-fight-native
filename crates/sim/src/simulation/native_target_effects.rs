@@ -1010,6 +1010,7 @@ fn orb_child_nonhero_restriction_does_not_cancel_primary_hit_and_retains_hero_du
             UnitGameplayProperties {
                 passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::TriggeredSpellProc(
                     crate::TriggeredSpellProcProfile {
+                        cooldown_ticks: 0,
                         hero_chance_per_10k: None,
                         summoned_chance_per_10k: None,
                         ability: AbilityId(301),
@@ -1087,6 +1088,7 @@ fn frost_attack_retains_independent_orb_payload_and_live_hero_immunity_after_res
                         targets: AttackTargetMask::AIR_AND_GROUND,
                     }),
                     PassiveUnitEffect::TriggeredSpellProc(TriggeredSpellProcProfile {
+                        cooldown_ticks: 0,
                         hero_chance_per_10k: None,
                         summoned_chance_per_10k: None,
                         ability: AbilityId(22),
@@ -1600,6 +1602,7 @@ fn roots_can_disable_structure_weapons_and_dot_without_interrupting_spellcasting
         UnitGameplayProperties {
             passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::TriggeredSpellProc(
                 crate::TriggeredSpellProcProfile {
+                    cooldown_ticks: 0,
                     hero_chance_per_10k: None,
                     summoned_chance_per_10k: None,
                     ability: AbilityId(81),

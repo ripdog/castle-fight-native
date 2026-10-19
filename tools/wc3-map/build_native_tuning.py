@@ -328,9 +328,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         ticks = lambda field: int((Decimal(fields[field]) * 30).to_integral_value(rounding="ROUND_CEILING"))
         if mechanics["native_base"] not in ("Aven", "ACvs", "Aspo"):
             raise ValueError("unsupported native poison base")
-        # Slow Poison orders movement before attack speed; Envenomed Weapons/Spears order them the
-        # other way round (established with the Orc and Naga bodies, checked with unequal factors).
-        movement_field, attack_field = ("DataB1", "DataC1") if mechanics["native_base"] == "Aspo" else ("DataC1", "DataB1")
+        # The retained object metadata labels Poi2/Spo2 (DataB) as the movement factor and
+        # Poi3/Spo3 (DataC) as the attack-speed factor for Envenomed Weapons/Spears and Slow Poison alike.
+        movement_field, attack_field = "DataB1", "DataC1"
         buffs = [code for code in fields["buffid1"].split(",") if code not in ("", "_", "-", "0")]
         buff = buffs[min(1, len(buffs) - 1)]
         # Health resolution is whole points: a sub-point poison rate is a slow-only marker and its
@@ -594,7 +594,11 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
             if (unit["attack" + slot + "_enabled"] != "True"
                     and unit["attack" + slot + "_weapon_type"] not in {"_", "-", ""}):
                 raise ValueError("orb enables a usable disabled weapon requiring native attack projection")
-        effect.update(chance_per_10k=chances[0], effect_ability_rawcode=fields["unitid1"],
+        child = fields["unitid1"]
+        child_cooldown = mechanics.get("all_protected", {}).get(child, {}).get(
+            "cooldown", mechanics.get("all_fields", {}).get(child, {}).get("cool1", "0"))
+        effect.update(chance_per_10k=chances[0], effect_ability_rawcode=child,
+                      cooldown_ticks=int((Decimal(child_cooldown) * 30).to_integral_value(rounding="ROUND_CEILING")),
                       targets=unit_targets(fields["targs1"], allow_structures=True))
     elif kind == "chain-lightning":
         effect.update(initial_damage=number("DataA1"), maximum_targets=number("DataB1"),
@@ -997,6 +1001,8 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             detail.update(all_fields=abilities, all_bases=ability_bases, all_protected=protected, functions=functions, building_spell=building_spells.get(source), git_tree=tree, map_version=dict(zip(["major","minor"],map(int,release["map_version"].split(".")))))
         if recipe["kind"] == "fan-of-knives":
             detail.update(fan_of_knives=fan_of_knives[recipe["unit_rawcode"]], functions=functions, git_tree=tree)
+        if recipe["kind"] == "orb-spell-proc":
+            detail.update(all_fields=abilities, all_protected=protected)
         if recipe["kind"] in {"scripted-roots", "wind-walk", "native-heal", "orb-charm"}:
             detail.update(all_bases=ability_bases, functions=functions, git_tree=tree,
                 map_version=dict(zip(["major", "minor"], map(int, release["map_version"].split(".")))))

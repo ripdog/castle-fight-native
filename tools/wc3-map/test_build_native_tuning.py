@@ -281,7 +281,7 @@ class NativeTuningProjectionTest(unittest.TestCase):
             self.assertEqual(projected["provenance"]["native_base"], base)
         self.assertTrue(profile["stack_damage"])
         self.assertFalse(profile["can_kill"])
-        self.assertEqual((profile["hero_duration_ticks"], profile["movement_percent_delta"], profile["attack_speed_percent_delta"]), (8, -10, -15))
+        self.assertEqual((profile["hero_duration_ticks"], profile["movement_percent_delta"], profile["attack_speed_percent_delta"]), (8, -15, -10))
         slow_poison = native.project_effect(recipe, {**fields, "dataa1": "-19"}, None, {}, {"native_base": "Aspo"})["profile"]
         self.assertEqual((slow_poison["movement_percent_delta"], slow_poison["attack_speed_percent_delta"]), (-15, -10))
         self.assertEqual(slow_poison["damage_per_second"], 19)

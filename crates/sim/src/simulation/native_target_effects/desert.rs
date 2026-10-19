@@ -102,3 +102,58 @@ fn parasite_life_steal_heals_the_requested_amount_even_when_armor_reduces_the_da
     assert_eq!(units[c].health, 560);
     assert!(units[c].status.pending_parasite_script.is_none());
 }
+
+#[test]
+fn an_orb_childs_own_cooldown_gates_later_procs_and_starts_when_one_fires() {
+    let mut sim = simulation(1);
+    let mut spawn = unit(0, 20, 1, AttackDelivery::Melee);
+    spawn.attack.cooldown_ticks = 10;
+    let attacker = sim.spawn_unit_with_properties(
+        spawn,
+        UnitGameplayProperties {
+            passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::TriggeredSpellProc(
+                crate::TriggeredSpellProcProfile {
+                    cooldown_ticks: 100,
+                    hero_chance_per_10k: None,
+                    summoned_chance_per_10k: None,
+                    ability: AbilityId(960),
+                    chance_per_10k: 10_000,
+                    targets: AttackTargetMask::AIR_AND_GROUND,
+                    effect: TriggeredAttackEffect::NativeDebuff {
+                        parent: AbilityId(960),
+                        profile: crate::NativeDebuffProfile {
+                            ability: AbilityId(961),
+                            buff: 962,
+                            targets: AttackTargetMask::AIR_AND_GROUND,
+                            organic_only: false,
+                            duration_ticks: 30,
+                            hero_duration_ticks: 30,
+                            movement_percent_delta: -10,
+                            attack_speed_percent_delta: 0,
+                            damage_bonus_per_10k: 0,
+                            ethereal: None,
+                            miss_chance_per_10k: 0,
+                        },
+                    },
+                },
+            )),
+            ..Default::default()
+        },
+    );
+    sim.spawn_unit(unit(1, 21, 0, AttackDelivery::Melee));
+    let mut procs = Vec::new();
+    for _ in 0..130 {
+        sim.step();
+        procs.push(
+            sim.ability_casts_last_tick()
+                .iter()
+                .filter(|cast| cast.source == attacker && cast.ability == AbilityId(960))
+                .count(),
+        );
+    }
+    let first = procs.iter().position(|count| *count > 0).expect("a proc fires");
+    // Attacks land every ten ticks, yet the child cannot fire again until its cooldown elapses.
+    assert_eq!(procs.iter().sum::<usize>(), 2);
+    let second = procs.iter().rposition(|count| *count > 0).unwrap();
+    assert!((100..110).contains(&(second - first)), "{first} {second}");
+}

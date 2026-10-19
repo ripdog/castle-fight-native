@@ -747,6 +747,40 @@ pub struct TriggeredSpellProcProfile {
     pub chance_per_10k: u16,
     pub targets: AttackTargetMask,
     pub effect: TriggeredAttackEffect,
+    /// The child ability's protected cooldown, started when the proc fires.
+    #[serde(default)]
+    pub cooldown_ticks: u16,
+}
+
+/// Ready time of an orb child's own cooldown, keyed by the orb ability.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OrbCooldown {
+    pub ability: AbilityId,
+    pub ready_tick: u64,
+}
+
+impl StatusState {
+    #[must_use]
+    pub fn orb_ready_tick(&self, ability: AbilityId) -> u64 {
+        self.orb_cooldowns
+            .iter()
+            .flatten()
+            .find(|entry| entry.ability == ability)
+            .map_or(0, |entry| entry.ready_tick)
+    }
+
+    pub fn start_orb_cooldown(&mut self, ability: AbilityId, ready_tick: u64) {
+        let slot = self
+            .orb_cooldowns
+            .iter()
+            .position(|entry| entry.is_some_and(|entry| entry.ability == ability))
+            .or_else(|| self.orb_cooldowns.iter().position(Option::is_none))
+            .expect("orb cooldown capacity");
+        self.orb_cooldowns[slot] = Some(OrbCooldown {
+            ability,
+            ready_tick,
+        });
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -2237,6 +2271,7 @@ pub struct StatusState {
     pub retaliation_sequence: u64,
     /// Completed tick of the last flying-attacker retarget order, throttling the next one.
     pub flying_retarget_tick: Option<u64>,
+    pub orb_cooldowns: [Option<OrbCooldown>; 2],
     /// A Parasite child callback waiting for its authored delay.
     pub pending_parasite_script: Option<PendingParasiteScript>,
     pub hardened_skin_sequence: u64,

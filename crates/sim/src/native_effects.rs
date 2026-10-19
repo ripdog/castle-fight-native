@@ -976,6 +976,8 @@ enum TuningEffect {
         hero_chance_per_10k: Option<u16>,
         #[serde(default)]
         summoned_chance_per_10k: Option<u16>,
+        #[serde(default)]
+        cooldown_ticks: u16,
         effect_ability_rawcode: String,
         targets: String,
         #[allow(dead_code)]
@@ -2192,6 +2194,7 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             chance_per_10k,
             hero_chance_per_10k,
             summoned_chance_per_10k,
+            cooldown_ticks,
             effect_ability_rawcode,
             targets,
             ..
@@ -2223,6 +2226,7 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
                 hero_chance_per_10k: *hero_chance_per_10k,
                 summoned_chance_per_10k: *summoned_chance_per_10k,
                 targets: target_mask(targets),
+                cooldown_ticks: *cooldown_ticks,
                 effect: build_triggered_effect(
                     child,
                     AbilityId(rawcode(source_key).expect("validated orb rawcode")),
@@ -2765,6 +2769,7 @@ mod tests {
                 unit_flying_retarget_rules: Vec::new(),
                 map_version: "9.27".to_owned(),
                 effects: vec![TuningEffect::OrbSpellProc {
+                    cooldown_ticks: 0,
                     hero_chance_per_10k: None,
                     summoned_chance_per_10k: None,
                     source_kind: "ability-effect".to_owned(),

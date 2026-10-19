@@ -14,6 +14,7 @@ fn charm_attacker_with_delivery(
         UnitGameplayProperties {
             passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::TriggeredSpellProc(
                 crate::TriggeredSpellProcProfile {
+                    cooldown_ticks: 0,
                     ability: AbilityId(961),
                     chance_per_10k: 10_000,
                     hero_chance_per_10k: None,

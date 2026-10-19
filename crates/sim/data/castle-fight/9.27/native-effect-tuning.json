@@ -162,6 +162,7 @@
       "kind": "orb-spell-proc",
       "chance_per_10k": 3500,
       "effect_ability_rawcode": "A0HW",
+      "cooldown_ticks": 60,
       "targets": "air-ground-units",
       "provenance": {
         "ability": "A0HX",
@@ -588,6 +589,7 @@
       "kind": "orb-spell-proc",
       "chance_per_10k": 1600,
       "effect_ability_rawcode": "A0GD",
+      "cooldown_ticks": 3,
       "targets": "air-ground-units-and-buildings",
       "provenance": {
         "ability": "A0G5",
@@ -721,8 +723,8 @@
         "ability": 1093682994,
         "buff_rawcode": 1110454585,
         "damage_per_second": 0,
-        "movement_percent_delta": 0,
-        "attack_speed_percent_delta": -20,
+        "movement_percent_delta": -20,
+        "attack_speed_percent_delta": 0,
         "duration_ticks": 60,
         "hero_duration_ticks": 60,
         "targets": 3,
@@ -882,6 +884,7 @@
       "summoned_chance_per_10k": 1000,
       "chance_per_10k": 1000,
       "effect_ability_rawcode": "A04O",
+      "cooldown_ticks": 0,
       "targets": "air-ground-units",
       "provenance": {
         "ability": "A04N",
@@ -942,6 +945,7 @@
       "kind": "orb-spell-proc",
       "chance_per_10k": 10000,
       "effect_ability_rawcode": "A04X",
+      "cooldown_ticks": 1,
       "targets": "ground-units-and-buildings",
       "provenance": {
         "ability": "A04W",
@@ -1208,6 +1212,7 @@
       "kind": "orb-spell-proc",
       "chance_per_10k": 10000,
       "effect_ability_rawcode": "A0AB",
+      "cooldown_ticks": 0,
       "targets": "air-ground-units",
       "provenance": {
         "ability": "A0AC",
@@ -1368,6 +1373,7 @@
       "kind": "orb-spell-proc",
       "chance_per_10k": 10000,
       "effect_ability_rawcode": "A055",
+      "cooldown_ticks": 0,
       "targets": "air-ground-units",
       "provenance": {
         "ability": "A054",
@@ -1420,6 +1426,7 @@
       "kind": "orb-spell-proc",
       "chance_per_10k": 10000,
       "effect_ability_rawcode": "A04Q",
+      "cooldown_ticks": 0,
       "targets": "air-ground-units",
       "provenance": {
         "ability": "A04P",
@@ -3733,6 +3740,7 @@
       "unit_rawcode": "h03R",
       "chance_per_10k": 10000,
       "effect_ability_rawcode": "A0CK",
+      "cooldown_ticks": 3,
       "targets": "air-ground-units",
       "provenance": {
         "ability": "A0CI",
@@ -3746,6 +3754,7 @@
       "unit_rawcode": "h03R",
       "chance_per_10k": 10000,
       "effect_ability_rawcode": "A0F6",
+      "cooldown_ticks": 3,
       "targets": "buildings",
       "provenance": {
         "ability": "A0F0",
@@ -3822,6 +3831,7 @@
       "kind": "orb-spell-proc",
       "chance_per_10k": 10000,
       "effect_ability_rawcode": "A0CJ",
+      "cooldown_ticks": 3,
       "targets": "air-ground-units",
       "provenance": {
         "ability": "A0CH",
@@ -3835,6 +3845,7 @@
       "kind": "orb-spell-proc",
       "chance_per_10k": 10000,
       "effect_ability_rawcode": "A0F8",
+      "cooldown_ticks": 3,
       "targets": "buildings",
       "provenance": {
         "ability": "A0F7",
@@ -4073,6 +4084,7 @@
       "unit_rawcode": "h030",
       "chance_per_10k": 2000,
       "effect_ability_rawcode": "A0CN",
+      "cooldown_ticks": 1,
       "targets": "air-ground-units",
       "provenance": {
         "ability": "A0CM",
@@ -4576,6 +4588,7 @@
       "kind": "orb-spell-proc",
       "chance_per_10k": 1000,
       "effect_ability_rawcode": "A05X",
+      "cooldown_ticks": 0,
       "targets": "air-ground-units",
       "provenance": {
         "ability": "A01B",
@@ -4603,6 +4616,7 @@
       "kind": "orb-spell-proc",
       "chance_per_10k": 1000,
       "effect_ability_rawcode": "A03W",
+      "cooldown_ticks": 0,
       "targets": "air-ground-units",
       "provenance": {
         "ability": "A049",
@@ -4989,6 +5003,7 @@
       "kind": "orb-spell-proc",
       "chance_per_10k": 2500,
       "effect_ability_rawcode": "A0AA",
+      "cooldown_ticks": 0,
       "targets": "air-ground-units",
       "provenance": {
         "ability": "A0A9",
@@ -5016,6 +5031,7 @@
       "kind": "orb-spell-proc",
       "chance_per_10k": 3000,
       "effect_ability_rawcode": "A00L",
+      "cooldown_ticks": 0,
       "targets": "air-ground-units",
       "provenance": {
         "ability": "A00Z",
@@ -5195,6 +5211,7 @@
       "kind": "orb-spell-proc",
       "chance_per_10k": 500,
       "effect_ability_rawcode": "A03W",
+      "cooldown_ticks": 0,
       "targets": "air-ground-units",
       "provenance": {
         "ability": "A03X",
@@ -5208,6 +5225,7 @@
       "kind": "orb-spell-proc",
       "chance_per_10k": 1000,
       "effect_ability_rawcode": "A03W",
+      "cooldown_ticks": 0,
       "targets": "air-ground-units",
       "provenance": {
         "ability": "A0FM",
@@ -5236,6 +5254,7 @@
       "kind": "orb-spell-proc",
       "chance_per_10k": 1000,
       "effect_ability_rawcode": "A047",
+      "cooldown_ticks": 0,
       "targets": "air-ground-units",
       "provenance": {
         "ability": "A048",
@@ -5491,6 +5510,7 @@
       "kind": "orb-spell-proc",
       "chance_per_10k": 2000,
       "effect_ability_rawcode": "A045",
+      "cooldown_ticks": 0,
       "targets": "air-ground-units-and-buildings",
       "provenance": {
         "ability": "A046",

@@ -10,6 +10,7 @@ fn native_orb_class_probabilities_use_actual_hero_then_summoned_then_ordinary_ca
                 UnitGameplayProperties {
                     passive_effects: PassiveUnitEffects::single(
                         PassiveUnitEffect::TriggeredSpellProc(crate::TriggeredSpellProcProfile {
+                            cooldown_ticks: 0,
                             ability: AbilityId(951),
                             chance_per_10k: normal_chance,
                             hero_chance_per_10k: Some(hero_chance),
