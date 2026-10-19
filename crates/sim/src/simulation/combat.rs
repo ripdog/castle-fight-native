@@ -641,15 +641,13 @@ impl Simulation {
                         impact_radius,
                     } => {
                         // Orb Charm is carried to impact; other triggered spells stay unsupported.
-                        let unsupported_triggered_spell = on_hit
-                            .triggered_spell
-                            .filter(|spell| {
-                                !matches!(
-                                    spell,
-                                    TriggeredAttackEffect::Charm(_)
-                                        | TriggeredAttackEffect::AcidBomb(_)
-                                )
-                            });
+                        let unsupported_triggered_spell = on_hit.triggered_spell.filter(|spell| {
+                            !matches!(
+                                spell,
+                                TriggeredAttackEffect::Charm(_)
+                                    | TriggeredAttackEffect::AcidBomb(_)
+                            )
+                        });
                         assert_eq!(
                             (
                                 on_hit.stun_duration_ticks,

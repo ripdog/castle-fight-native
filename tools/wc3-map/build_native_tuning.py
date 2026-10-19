@@ -324,12 +324,13 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     if kind == "poison":
         mask = set(fields["targs1"].split(","))
         if mask not in ({"air", "ground", "organic"}, {"air", "ground"}) or number("DataD1") != 1:
-            raise ValueError("poison requires the audited unit mask and damage-only stacking flags")
+            raise ValueError("poison requires the audited organic mask (or the unrestricted air/ground unit mask) and damage-only stacking flags")
         ticks = lambda field: int((Decimal(fields[field]) * 30).to_integral_value(rounding="ROUND_CEILING"))
         if mechanics["native_base"] not in ("Aven", "ACvs", "Aspo"):
             raise ValueError("unsupported native poison base")
-        # Resolved metadata labels Poi2/Spo2 as movement and Poi3/Spo3 as attack speed for every base.
-        movement_field, attack_field = "DataB1", "DataC1"
+        # Slow Poison orders movement before attack speed; Envenomed Weapons/Spears order them the
+        # other way round (established with the Orc and Naga bodies, checked with unequal factors).
+        movement_field, attack_field = ("DataB1", "DataC1") if mechanics["native_base"] == "Aspo" else ("DataC1", "DataB1")
         buffs = [code for code in fields["buffid1"].split(",") if code not in ("", "_", "-", "0")]
         buff = buffs[min(1, len(buffs) - 1)]
         # Health resolution is whole points: a sub-point poison rate is a slow-only marker and its

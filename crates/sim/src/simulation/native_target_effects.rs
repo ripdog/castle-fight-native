@@ -19,6 +19,7 @@ mod curse;
 mod damage_charge;
 mod damage_threshold;
 mod death_explosion;
+mod desert;
 mod ensnare;
 mod heal;
 mod homing_splash;
