@@ -56,6 +56,9 @@ pub struct TopologyGrid {
     /// in-grid, not blocked, and reachable. Recomputed whenever `blocked`/`component` change.
     clearance: Vec<u16>,
     objective_distance: [Vec<u32>; 2],
+    /// Added to bias-adjusted cell coordinates so they pack into unsigned open-set key fields.
+    /// Every in-grid coordinate satisfies `|coord| <= open_key_offset`; checked at build.
+    open_key_offset: i64,
 }
 
 impl TopologyGrid {
@@ -78,6 +81,15 @@ impl TopologyGrid {
         let divisor = CellDivisor::new(cell_size);
         let objective = objectives
             .map(|point| NavCell::new(divisor.floor_div(point.x), divisor.floor_div(point.y)));
+        let open_key_offset = [min.x, min.y, max.x, max.y]
+            .into_iter()
+            .map(|coord| i64::from(coord).abs())
+            .max()
+            .unwrap_or(0);
+        assert!(
+            2 * open_key_offset <= i64::from(u32::MAX),
+            "navigation coordinates exceed open-set key range"
+        );
         let mut grid = Self {
             cell_size,
             divisor,
@@ -88,6 +100,7 @@ impl TopologyGrid {
             component: vec![UNREACHABLE; len],
             clearance: vec![0; len],
             objective_distance: [vec![UNREACHABLE; len], vec![UNREACHABLE; len]],
+            open_key_offset,
         };
 
         for footprint in buildings {
@@ -681,16 +694,14 @@ impl TopologyGrid {
 
         with_a_star_scratch(self.blocked.len(), |scratch| {
             scratch.relax(start, 0, usize::MAX);
-            scratch.open.push(Reverse((
-                manhattan(from, target),
-                0u32,
-                -i64::from(bias) * i64::from(from.y),
-                -i64::from(bias) * i64::from(from.x),
-                start,
-            )));
+            scratch
+                .open
+                .push(self.open_entry(manhattan(from, target), 0, from, bias));
 
             let mut expanded_nodes = 0usize;
-            while let Some(Reverse((_, cost, _, _, current))) = scratch.open.pop() {
+            while let Some(Reverse(key)) = scratch.open.pop() {
+                let cost = open_entry_cost(key);
+                let current = self.open_entry_index(key, bias);
                 if cost != scratch.cost_of(current) {
                     continue;
                 }
@@ -724,13 +735,9 @@ impl TopologyGrid {
                     let estimate = next_cost
                         .checked_add(manhattan(neighbor, target))
                         .expect("navigation path estimate overflow");
-                    scratch.open.push(Reverse((
-                        estimate,
-                        next_cost,
-                        -i64::from(bias) * i64::from(neighbor.y),
-                        -i64::from(bias) * i64::from(neighbor.x),
-                        next,
-                    )));
+                    scratch
+                        .open
+                        .push(self.open_entry(estimate, next_cost, neighbor, bias));
                 }
             }
 
@@ -762,16 +769,14 @@ impl TopologyGrid {
 
         with_a_star_scratch(self.blocked.len(), |scratch| {
             scratch.relax(start, 0, usize::MAX);
-            scratch.open.push(Reverse((
-                manhattan(from, target),
-                0u32,
-                -i64::from(bias) * i64::from(from.y),
-                -i64::from(bias) * i64::from(from.x),
-                start,
-            )));
+            scratch
+                .open
+                .push(self.open_entry(manhattan(from, target), 0, from, bias));
 
             let mut expanded_nodes = 0usize;
-            while let Some(Reverse((_, cost, _, _, current))) = scratch.open.pop() {
+            while let Some(Reverse(key)) = scratch.open.pop() {
+                let cost = open_entry_cost(key);
+                let current = self.open_entry_index(key, bias);
                 if cost != scratch.cost_of(current) {
                     continue;
                 }
@@ -804,13 +809,9 @@ impl TopologyGrid {
                     let estimate = next_cost
                         .checked_add(manhattan(neighbor, target))
                         .expect("navigation path estimate overflow");
-                    scratch.open.push(Reverse((
-                        estimate,
-                        next_cost,
-                        -i64::from(bias) * i64::from(neighbor.y),
-                        -i64::from(bias) * i64::from(neighbor.x),
-                        next,
-                    )));
+                    scratch
+                        .open
+                        .push(self.open_entry(estimate, next_cost, neighbor, bias));
                 }
             }
             (None, expanded_nodes)
@@ -1012,6 +1013,38 @@ impl TopologyGrid {
         .all(|side| self.center_circle_ok(side, radius, component, center_mask))
     }
 
+    /// Open-set entry for an in-grid `cell` reached with `estimate` and `cost`.
+    #[inline]
+    fn open_entry(&self, estimate: u32, cost: u32, cell: NavCell, bias: i32) -> AStarOpenEntry {
+        let sign = -i64::from(bias);
+        let by = self.biased_open_coord(sign * i64::from(cell.y));
+        let bx = self.biased_open_coord(sign * i64::from(cell.x));
+        Reverse(
+            (u128::from(estimate) << 96)
+                | (u128::from(cost) << 64)
+                | (u128::from(by) << 32)
+                | u128::from(bx),
+        )
+    }
+
+    /// Index of the cell named by a key produced by `open_entry` with the same `bias`.
+    #[inline]
+    fn open_entry_index(&self, key: u128, bias: i32) -> usize {
+        let sign = -i64::from(bias);
+        let by = i64::from((key >> 32) as u32) - self.open_key_offset;
+        let bx = i64::from(key as u32) - self.open_key_offset;
+        let cell = NavCell::new((sign * bx) as i32, (sign * by) as i32);
+        self.index(cell)
+            .expect("open-set key decodes to an in-grid cell")
+    }
+
+    #[inline]
+    fn biased_open_coord(&self, value: i64) -> u32 {
+        let biased = value + self.open_key_offset;
+        debug_assert!((0..=i64::from(u32::MAX)).contains(&biased));
+        biased as u32
+    }
+
     fn index(&self, cell: NavCell) -> Option<usize> {
         let local_x = cell.x - self.min.x;
         let local_y = cell.y - self.min.y;
@@ -1033,8 +1066,17 @@ impl TopologyGrid {
     }
 }
 
-/// Open-set entry: (estimate, cost, bias-adjusted y, bias-adjusted x, index); min-heap order.
-type AStarOpenEntry = Reverse<(u32, u32, i64, i64, usize)>;
+/// Open-set entry packing `(estimate, cost, bias-adjusted y, bias-adjusted x)` into one key whose
+/// integer order is the lexicographic order of that tuple (min-heap via `Reverse`). Each
+/// bias-adjusted coordinate is `-bias * coord + open_key_offset`, which is injective per search, so
+/// the key determines the cell and no separate index is needed. Two distinct cells never share a
+/// key, so equal keys are always duplicate pushes of one cell.
+type AStarOpenEntry = Reverse<u128>;
+
+#[inline]
+fn open_entry_cost(key: u128) -> u32 {
+    (key >> 64) as u32
+}
 
 /// Reusable A* working memory. Entries are valid only when their stamp equals `generation`, so a
 /// search never clears the full grid. Each worker thread keeps its own instance (movement runs in
