@@ -55,7 +55,9 @@ impl Simulation {
                         && unit.team == state.team
                         && !unit.classifications.locust
                         && !unit.classifications.invulnerable
-                        && profile.targets.can_target_unit(unit.target_movement_class())
+                        && profile
+                            .targets
+                            .can_target_unit(unit.target_movement_class())
                         && state.center.distance_sq(unit.position) <= radius_sq
                 })
                 .map(|(index, _)| index)

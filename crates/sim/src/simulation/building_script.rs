@@ -148,19 +148,27 @@ impl Simulation {
         let unit = &mut units[index];
         let burned = unit.mana_current.unwrap_or(0).min(cap);
         unit.mana_current = unit.mana_current.map(|mana| mana - burned);
-        let damage = self.combat_rules.damage_rules.apply_attack_with_armor_per_100(
-            burned.saturating_mul(damage_per_mana),
-            DamageType::Normal,
-            unit.armor.armor_type,
-            0,
-        );
+        let damage = self
+            .combat_rules
+            .damage_rules
+            .apply_attack_with_armor_per_100(
+                burned.saturating_mul(damage_per_mana),
+                DamageType::Normal,
+                unit.armor.armor_type,
+                0,
+            );
         let damage = scale_damage_per_10k(
             native_kill_effects::damage_after_native_incoming(unit, damage, self.next_tick),
             unit.snow_damage_taken_per_10k,
         );
         let before = unit.health;
         damage_thresholds::observe_damage_event(unit, before, damage);
-        death_healing::commit_health_from(units, index, before.saturating_sub(damage), Some(source.id));
+        death_healing::commit_health_from(
+            units,
+            index,
+            before.saturating_sub(damage),
+            Some(source.id),
+        );
         1
     }
 

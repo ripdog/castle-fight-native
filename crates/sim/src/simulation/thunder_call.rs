@@ -74,10 +74,14 @@ impl Simulation {
         };
         let source = &units[source_index];
         let team = usize::from(source.team.0);
-        let secondary_range = source.secondary_attack.map_or(0, |attack| attack.attack.range);
+        let secondary_range = source
+            .secondary_attack
+            .map_or(0, |attack| attack.attack.range);
         if team >= 2
             || state.charges[team] == 0
-            || state.guard.is_some_and(|(guard, at)| guard == source_id && at >= tick)
+            || state
+                .guard
+                .is_some_and(|(guard, at)| guard == source_id && at >= tick)
             || amount <= profile.minimum_event_damage_exclusive
             || source.classifications.invulnerable
             || source.attack.range <= profile.weapon_range_lower_exclusive

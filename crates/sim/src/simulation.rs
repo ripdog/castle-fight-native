@@ -35,8 +35,10 @@ mod support_orders;
 pub use death_healing::DeathHealVisualEvent;
 mod building_damage_procs;
 mod building_script;
+mod echo_step;
 mod enchantments;
 mod forgotten_one;
+mod healing_spray;
 mod hostile_armor_auras;
 mod impale;
 mod incinerate;
@@ -48,16 +50,14 @@ mod night_elf;
 mod parasite_area_buff;
 mod parasite_script;
 mod permanent_grants;
-mod echo_step;
-mod thunder_call;
-mod healing_spray;
-mod whirlwind;
 mod sand_cloud;
 mod starfall;
+mod thunder_call;
 mod training_variants;
 mod travelling_mana_clap;
 mod weather;
 mod well_of_pain;
+mod whirlwind;
 mod world_freezer;
 use world_freezer::WorldFreezerState;
 mod attack_proxy;
@@ -5307,7 +5307,8 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                 crate::BuildingChild::ThunderCharge(profile) => assert!(
                     profile.radius > 0
                         && profile.strike_maximum >= profile.strike_minimum
-                        && profile.weapon_range_upper_exclusive > profile.weapon_range_lower_exclusive
+                        && profile.weapon_range_upper_exclusive
+                            > profile.weapon_range_lower_exclusive
                 ),
                 crate::BuildingChild::ManaBurn {
                     cap,

@@ -1069,7 +1069,8 @@ impl Simulation {
                         // Multiple native critical multipliers roll separately, but
                         // only the highest successful multiplier contributes damage.
                         let extra = i32::try_from(extra).expect("critical bonus overflowed");
-                        critical_bonus = Some(critical_bonus.map_or(extra, |bonus: i32| bonus.max(extra)));
+                        critical_bonus =
+                            Some(critical_bonus.map_or(extra, |bonus: i32| bonus.max(extra)));
                     }
                 }
                 PassiveUnitEffect::Bash(profile) => {

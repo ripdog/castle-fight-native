@@ -1340,7 +1340,9 @@ impl TuningEffect {
             Self::Cleave { .. } => NativeEffectImplementationId::WarcraftCleaveV1,
             Self::FrostAttack { .. } => NativeEffectImplementationId::WarcraftFrostAttackV1,
             Self::Pulverize { .. } => NativeEffectImplementationId::WarcraftPulverizeV1,
-            Self::AttackWhirlwind { .. } => NativeEffectImplementationId::WarcraftScriptedAreaProcV1,
+            Self::AttackWhirlwind { .. } => {
+                NativeEffectImplementationId::WarcraftScriptedAreaProcV1
+            }
             Self::DamageEchoStep { .. } => NativeEffectImplementationId::WarcraftEchoStepV1,
             Self::DeathSpawn { .. } => NativeEffectImplementationId::WarcraftDeathSpawnV1,
             Self::Poison { .. } => NativeEffectImplementationId::WarcraftPoisonV1,

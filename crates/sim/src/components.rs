@@ -1083,7 +1083,9 @@ pub struct NativeHealProfile {
 }
 impl NativeHealProfile {
     pub(crate) fn canonical_words(self) -> [u64; 14] {
-        let spray = self.spray.map_or([0; 8], HealingSprayProfile::canonical_words);
+        let spray = self
+            .spray
+            .map_or([0; 8], HealingSprayProfile::canonical_words);
         [
             self.amount as u64,
             u64::from(self.targets.bits()),
@@ -1125,7 +1127,9 @@ impl HealingSprayProfile {
             self.radius as u64,
             self.amount as u64,
             self.maximum_total as u64,
-            u64::from(self.waves) | u64::from(self.interval_ticks) << 16 | u64::from(self.first_wave_ticks) << 32,
+            u64::from(self.waves)
+                | u64::from(self.interval_ticks) << 16
+                | u64::from(self.first_wave_ticks) << 32,
             u64::from(self.targets.bits()),
             u64::from(self.lifetime_ticks),
             1,

@@ -103,7 +103,9 @@ impl Projection {
         match hostile_native_targets(mask) {
             Ok(targets) => targets,
             Err(_) if class_free_enemy_mask(mask) => AttackTargetMask::ALL,
-            Err(reason) => panic!("native target qualifiers must be supported explicitly: {reason}"),
+            Err(reason) => {
+                panic!("native target qualifiers must be supported explicitly: {reason}")
+            }
         }
     }
 }

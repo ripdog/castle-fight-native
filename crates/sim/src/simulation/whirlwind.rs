@@ -15,7 +15,9 @@ pub(super) fn resolve(
             || unit.team == source.team
             || unit.classifications.invulnerable
             || (profile.combat_sappers_only && !unit.classifications.combat_sapper)
-            || !profile.targets.can_target_unit(unit.target_movement_class())
+            || !profile
+                .targets
+                .can_target_unit(unit.target_movement_class())
             || center.distance_sq(unit.position) > radius_sq
         {
             continue;
@@ -36,11 +38,7 @@ pub(super) fn resolve(
             },
             state.retired_sources,
         );
-        damage_thresholds::observe_damage_event(
-            &mut state.units[i],
-            state.unit_health[i],
-            damage,
-        );
+        damage_thresholds::observe_damage_event(&mut state.units[i], state.unit_health[i], damage);
         let after = state.unit_health[i].saturating_sub(damage);
         death_healing::commit_split_health_from(
             state.units,

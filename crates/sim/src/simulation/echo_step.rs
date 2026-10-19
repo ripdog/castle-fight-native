@@ -163,12 +163,15 @@ impl Simulation {
             {
                 continue;
             }
-            let damage = self.combat_rules.damage_rules.apply_attack_with_armor_per_100(
-                profile.damage,
-                DamageType::Normal,
-                unit.armor.armor_type,
-                0,
-            );
+            let damage = self
+                .combat_rules
+                .damage_rules
+                .apply_attack_with_armor_per_100(
+                    profile.damage,
+                    DamageType::Normal,
+                    unit.armor.armor_type,
+                    0,
+                );
             let damage = spell_damage_after_defend(*unit, damage, self.next_tick);
             let before = units[i].health;
             damage_thresholds::observe_damage_event(&mut units[i], before, damage);
