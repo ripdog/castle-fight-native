@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    SagepawSoulkeeper = 0x1000_0088 => b"n03T",
     SagepawMonk = 0x1000_0087 => b"n03E",
     LocustHarpy = 0x1000_0086 => b"u00G",
     Salamander = 0x1000_0085 => b"n02Z",
@@ -171,6 +172,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    SagepawSanctum = 0x2000_0084 => b"n03S",
     BambooDojo = 0x2000_0083 => b"n03D",
     SalamanderHatchery = 0x2000_0082 => b"n038",
     DenOfTheOgreLord = 0x2000_0081 => b"n02O",
