@@ -22,6 +22,18 @@ pub enum BuildingChild {
         /// Bodies carrying this ability (the tentacle marker) are never copied.
         excluded_ability: AbilityId,
     },
+    /// Burns the mana of a random hostile combat body and combusts it for a multiple of the burn,
+    /// preferring bodies holding more than the priority threshold.
+    ManaBurn {
+        /// Maximum mana burned by one cast.
+        cap: i32,
+        /// Bodies with strictly more mana than this are chosen first.
+        priority_above: i32,
+        /// Combustion damage per point of mana actually burned.
+        damage_per_mana: i32,
+        /// Bodies carrying this ability (the tentacle marker) are never chosen.
+        excluded_ability: AbilityId,
+    },
     /// A map-wide debuff plus a pulsing immolation on every hostile unit for a fixed time.
     Sandstorm {
         debuff: NativeDebuffProfile,
@@ -60,6 +72,18 @@ impl BuildingChild {
                 u64::from(illusion_ticks),
                 u64::from(damage_dealt_per_10k),
                 u64::from(damage_taken_per_10k),
+                u64::from(excluded_ability.0),
+            ],
+            Self::ManaBurn {
+                cap,
+                priority_above,
+                damage_per_mana,
+                excluded_ability,
+            } => vec![
+                4,
+                cap as u64,
+                priority_above as u64,
+                damage_per_mana as u64,
                 u64::from(excluded_ability.0),
             ],
             Self::Sandstorm {

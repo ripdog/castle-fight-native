@@ -45,6 +45,18 @@ impl Simulation {
                 ),
                 units,
             ),
+            BuildingChild::ManaBurn {
+                cap,
+                priority_above,
+                damage_per_mana,
+                excluded_ability,
+            } => self.cast_mana_burn(
+                source,
+                profile.ability,
+                sequence,
+                (cap, priority_above, damage_per_mana, excluded_ability),
+                units,
+            ),
             BuildingChild::Sandstorm {
                 debuff,
                 pulse_ability,
@@ -86,6 +98,66 @@ impl Simulation {
                 applied + 1
             }
         }
+    }
+
+    /// Withering Touch: a random hostile combat body, preferring high mana, loses mana and is
+    /// combusted for a multiple of the mana actually burned (sonic damage, no spell defenses).
+    fn cast_mana_burn(
+        &self,
+        source: AbilitySourceSnapshot,
+        ability: AbilityId,
+        sequence: u64,
+        (cap, priority_above, damage_per_mana, excluded): (i32, i32, i32, AbilityId),
+        units: &mut [UnitSnapshot],
+    ) -> usize {
+        let version = source.map_version.unwrap_or(MapVersion::CASTLE_FIGHT_9_27);
+        let eligible = |unit: &UnitSnapshot, above: i32| {
+            unit.team != source.team
+                && unit.health > 0
+                && unit.classifications.combat_sapper
+                && !unit.classifications.invulnerable
+                && unit.mana_current.is_some_and(|mana| mana > above)
+                && !crate::content::unit_has_ability_for_version(unit.rawcode, excluded, version)
+        };
+        let pick = |above: i32| {
+            units
+                .iter()
+                .enumerate()
+                .filter(|(_, unit)| eligible(unit, above))
+                .min_by_key(|(_, unit)| {
+                    (
+                        deterministic_ability_target_rank(
+                            self.config.match_seed,
+                            source.id,
+                            ability,
+                            sequence,
+                            unit.id,
+                        ),
+                        unit.id,
+                    )
+                })
+                .map(|(index, _)| index)
+        };
+        let Some(index) = pick(priority_above).or_else(|| pick(0)) else {
+            return 0;
+        };
+        let unit = &mut units[index];
+        let burned = unit.mana_current.unwrap_or(0).min(cap);
+        unit.mana_current = unit.mana_current.map(|mana| mana - burned);
+        let damage = self.combat_rules.damage_rules.apply_attack_with_armor_per_100(
+            burned.saturating_mul(damage_per_mana),
+            DamageType::Normal,
+            unit.armor.armor_type,
+            0,
+        );
+        let damage = scale_damage_per_10k(
+            native_kill_effects::damage_after_native_incoming(unit, damage, self.next_tick),
+            unit.snow_damage_taken_per_10k,
+        );
+        let before = unit.health;
+        damage_thresholds::observe_damage_event(unit, before, damage);
+        death_healing::commit_health_from(units, index, before.saturating_sub(damage), Some(source.id));
+        1
     }
 
     /// Random ally from the first non-empty tier: badly wounded, wounded, then partial mana.

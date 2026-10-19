@@ -5303,6 +5303,11 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                 crate::BuildingChild::Hallucination { illusion_ticks, .. } => {
                     assert!(illusion_ticks > 0)
                 }
+                crate::BuildingChild::ManaBurn {
+                    cap,
+                    damage_per_mana,
+                    ..
+                } => assert!(cap > 0 && damage_per_mana >= 0),
                 crate::BuildingChild::Sandstorm {
                     pulse_interval_ticks,
                     duration_ticks,

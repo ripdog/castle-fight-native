@@ -3,6 +3,52 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0H6",
+      "unit_rawcode": "h07T",
+      "spellcasting": {
+        "mana": {
+          "maximum": 15,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093683254,
+          "mana_cost": 12,
+          "cooldown_ticks": 30,
+          "range": 102398976,
+          "target_policy": "NativeBuildingSpellTrigger",
+          "effect": {
+            "BuildingScript": {
+              "ability": 1093683254,
+              "trigger_targets": 5,
+              "trigger_invulnerable": true,
+              "trigger_spell_immune": false,
+              "trigger_mechanical_only": false,
+              "child": {
+                "ManaBurn": {
+                  "cap": 200,
+                  "priority_above": 100,
+                  "damage_per_mana": 2,
+                  "excluded_ability": 1093679176
+                }
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/building-spell-mechanics.tsv",
+        "fields": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "functions": "BuildingSpellClosure_registerBuildingSpell_PandarenBuildings_cast_registerBuildingSpell_PandarenBuildings,spellWitheringTouch"
+      }
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A0H2",
       "unit_rawcode": "n03M",

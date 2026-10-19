@@ -46,6 +46,28 @@ def _hallucination(params, detail, number, raw):
         'excluded_ability': int(excluded[1])}}
 
 
+def _mana_burn(params, detail, number, raw):
+    functions = detail['functions']
+    body = functions['spellWitheringTouch']
+    first, second = params['target_filters'][0], params['target_filters'][1]
+    primary = functions[first['resolved_function']]
+    fallback = functions[second['resolved_function']]
+    excluded = re.search(r'GetUnitAbilityLevel\(\w+,(\d+)\)<=0', functions['isNotTentacle'])
+    threshold = re.search(r'\(\w+>([\d.]+)\)\)$', primary.strip().rsplit('end', 1)[0])
+    factor = re.search(r'=\(([\d.]+)\*\w+\)', body)
+    burn = re.search(r'if\(\w+<(\w+)\)then \w+=\w+ else \w+=\1 end', body)
+    if (params['attack_type'] != 'normal' or params['damage_type'] != 'sonic' or not params['attack_flag'] or params['ranged_flag']
+        or params['damage_formula'] != '2 * min(target_mana, %d)' % params['mana_burn_cap']
+        or first['symbol'] != 'G6' or second['symbol'] != 'F6' or threshold is None or factor is None or burn is None or excluded is None
+        or not all(token in primary for token in ('isAliveCombatSapper', 'unit_isEnemyOf', 'isVulnerable', 'isNotTentacle'))
+        or not all(token in fallback for token in ('isAliveCombatSapper', 'unit_isEnemyOf', 'isVulnerable', 'isNotTentacle'))
+        or '(L4q>0.0)' not in fallback.replace('L4q', 'L4q') or 'checkForShield(' not in body
+        or 'DAMAGE_TYPE_SONIC' not in body or 'bj_mapInitialPlayableArea' not in body):
+        raise ValueError('Withering Touch control flow changed: shield-checked priority-random mana burn with doubled sonic damage')
+    return {'ManaBurn': {'cap': params['mana_burn_cap'], 'priority_above': number(threshold[1]),
+        'damage_per_mana': number(factor[1]), 'excluded_ability': int(excluded[1])}}
+
+
 def _sandstorm(params, detail, number, raw):
     functions = detail['functions']
     handler = functions['BuildingSpellClosure_registerBuildingSpell_RaceDesertAbilities_cast_registerBuildingSpell_RaceDesertAbilities2']
@@ -84,6 +106,8 @@ def project(recipe, fields, unit, protected, detail):
         child = _replenish(params, detail, number, raw)
     elif kind == 'dummy-target-illusion':
         child = _hallucination(params, detail, number, raw)
+    elif kind == 'mana-burn-random-target':
+        child = _mana_burn(params, detail, number, raw)
     elif kind == 'global-weather-ability-carrier':
         child = _sandstorm(params, detail, number, raw)
     else:

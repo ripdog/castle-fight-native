@@ -309,6 +309,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    WitheringHall = 0x2100_0037 => b"h07T",
     TempleOfStorm = 0x2100_0036 => b"n03A",
     SacredPeyote = 0x2100_0035 => b"h07A",
     BeaconOfTheOasis = 0x2100_0034 => b"h079",
