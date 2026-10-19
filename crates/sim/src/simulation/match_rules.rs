@@ -387,6 +387,7 @@ impl Simulation {
 
     pub(super) fn finish_round(&mut self, outcome: MatchOutcome, completed_tick: u64) {
         self.reset_silver_charges();
+        self.reset_thunder_charges();
         if let MatchOutcome::Victory(team) = outcome {
             self.round_wins[usize::from(team.0)] += 1;
             if self.round_wins[usize::from(team.0)] >= self.config.match_rules.rounds_to_win {

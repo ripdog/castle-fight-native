@@ -214,6 +214,7 @@ pub(crate) enum NativeAction {
     Ensnare(EnsnareMissileState),
     HealingWave(HealingWaveState),
     HealingSpray(super::HealingSprayState),
+    ThunderCall(super::ThunderCallState),
     EchoRemnant(super::EchoRemnantState),
     Bolt(NativeBoltState),
     Hailstone(HailstoneState),

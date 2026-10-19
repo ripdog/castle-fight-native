@@ -68,6 +68,43 @@ def _mana_burn(params, detail, number, raw):
         'damage_per_mana': number(factor[1]), 'excluded_ability': int(excluded[1])}}
 
 
+def _thunder(params, detail, number, raw):
+    functions = detail['functions']
+    cast = functions['BuildingSpellClosure_registerBuildingSpell_ThunderpawSpire_cast_registerBuildingSpell_ThunderpawSpire']
+    listener = functions['DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire']
+    callback = functions['ForGroupCallback_forUnitsInRange_addListener_doAfter_ThunderpawSpire_callback_forUnitsInRange_addListener_doAfter_ThunderpawSpire']
+    watch = functions['Action_watch_doAfter_ThunderpawSpire_run_watch_doAfter_ThunderpawSpire']
+    special = params['special_source_ability_id']
+    gate = re.search(r'\(\(\(\(\(__wurst_ensureInt\(RS\[\w+\]\)>0\)and\(not\(\w+==QS\)\)\)and\(DamageEvent_getType\(\)==0\)\)and\(DamageEvent_getAmount\(\)>([\d.]+)\)\)and\(not unit_isInvulnerable\(\w+\)\)\)', listener)
+    ranges = re.search(r'\(\(\w+>([\d.]+)\)and\(\w+<([\d.]+)\)\)and\(\w+<([\d.]+)\)\)', listener)
+    strike = re.search(r'=max\(([\d.]+),min1\(([\d.]+),\(DamageEvent_getAmount\(\)\*([\d.]+)\)\)\)', listener)
+    if (params['attack_type'] != 'normal' or params['damage_type'] != 'universal' or params['charges_granted_per_cast'] != 1
+        or params['charges_consumed_per_proc'] != 1 or not params['round_end_signal_resets_all_charge_slots']
+        or gate is None or ranges is None or strike is None or ranges[2] != ranges[3]
+        or f'unit_hasAbility(' not in listener or f'{special})then' not in listener
+        or f'(F6n*{params["special_source_multiplier"]})' not in listener.replace('0.35', params['special_source_multiplier'])
+        or 'forUnitsInRange(' not in listener or ',%s.,false,' % params['effect_radius'] not in listener
+        or 'RS[' not in cast or '+1)' not in cast
+        or not all(token in callback for token in ('isCombatSapper', 'unit_isEnemyOf', 'unit_isAlive', 'UNIT_TYPE_FLYING', 'DAMAGE_TYPE_UNIVERSAL'))
+        or '*0.5' not in callback or 'RS[t6n]=0' not in watch.replace(' ', ' ')):
+        raise ValueError('Call of Thunder control flow changed: team charge cast and damage-listener lightning')
+    if (Decimal(strike[1]) != Decimal(params['minimum_damage']) or Decimal(strike[2]) != Decimal(params['maximum_damage'])
+        or Decimal(strike[3]) != Decimal(params['damage_multiplier'])
+        or Decimal(params['flying_recipient_multiplier']) != Decimal('0.5')):
+        raise ValueError('Call of Thunder constants disagree with the retained trace')
+    world = lambda value: number(value, 1024)
+    return {'ThunderCharge': {'ability': raw(params_ability(detail)),
+        'minimum_event_damage_exclusive': number(gate[1]), 'weapon_range_lower_exclusive': world(ranges[1]),
+        'weapon_range_upper_exclusive': world(ranges[2]), 'strike_minimum': number(strike[1]), 'strike_maximum': number(strike[2]),
+        'strike_multiplier': number(strike[3]), 'radius': world(params['effect_radius']),
+        'flying_per_10k': number(params['flying_recipient_multiplier'], 10000), 'special_source_ability': special,
+        'special_source_per_10k': number(params['special_source_multiplier'], 10000)}}
+
+
+def params_ability(detail):
+    return detail['building_spell']['ability_rawcode']
+
+
 def _sandstorm(params, detail, number, raw):
     functions = detail['functions']
     handler = functions['BuildingSpellClosure_registerBuildingSpell_RaceDesertAbilities_cast_registerBuildingSpell_RaceDesertAbilities2']
@@ -106,6 +143,8 @@ def project(recipe, fields, unit, protected, detail):
         child = _replenish(params, detail, number, raw)
     elif kind == 'dummy-target-illusion':
         child = _hallucination(params, detail, number, raw)
+    elif kind == 'armed-next-melee-attack-splash':
+        child = _thunder(params, detail, number, raw)
     elif kind == 'mana-burn-random-target':
         child = _mana_burn(params, detail, number, raw)
     elif kind == 'global-weather-ability-carrier':

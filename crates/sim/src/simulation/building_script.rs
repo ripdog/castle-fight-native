@@ -45,6 +45,10 @@ impl Simulation {
                 ),
                 units,
             ),
+            BuildingChild::ThunderCharge(thunder) => {
+                self.add_thunder_charge(source.team, thunder);
+                1
+            }
             BuildingChild::ManaBurn {
                 cap,
                 priority_above,

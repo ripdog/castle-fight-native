@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0GW","unit_rawcode":"h07R","kind":"building-script"},
     {"source_kind":"unit-ability","source_key":"A0H6","unit_rawcode":"h07T","kind":"building-script"},
     {"source_kind":"unit-ability","source_key":"A0H2","unit_rawcode":"n03M","kind":"speed-aura"},
     {"source_kind":"unit-ability","source_key":"A0GV","unit_rawcode":"h07S","kind":"spell-resistance"},

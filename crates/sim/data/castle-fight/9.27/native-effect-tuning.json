@@ -5,6 +5,59 @@
     {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
+      "source_key": "A0GW",
+      "unit_rawcode": "h07R",
+      "spellcasting": {
+        "mana": {
+          "maximum": 20,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093683031,
+          "mana_cost": 15,
+          "cooldown_ticks": 30,
+          "range": 102398976,
+          "target_policy": "NativeBuildingSpellTrigger",
+          "effect": {
+            "BuildingScript": {
+              "ability": 1093683031,
+              "trigger_targets": 5,
+              "trigger_invulnerable": true,
+              "trigger_spell_immune": false,
+              "trigger_mechanical_only": false,
+              "child": {
+                "ThunderCharge": {
+                  "ability": 1093683031,
+                  "minimum_event_damage_exclusive": 10,
+                  "weapon_range_lower_exclusive": 1024,
+                  "weapon_range_upper_exclusive": 131175,
+                  "strike_minimum": 75,
+                  "strike_maximum": 300,
+                  "strike_multiplier": 2,
+                  "radius": 307200,
+                  "flying_per_10k": 5000,
+                  "special_source_ability": 1093678925,
+                  "special_source_per_10k": 3500
+                }
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/building-spell-mechanics.tsv",
+        "fields": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "functions": "BuildingSpellClosure_registerBuildingSpell_ThunderpawSpire_cast_registerBuildingSpell_ThunderpawSpire,CallbackSingle_doAfter_ThunderpawSpire_call_doAfter_ThunderpawSpire,DamageListener_addListener_doAfter_ThunderpawSpire_onEvent_addListener_doAfter_ThunderpawSpire,CallbackSingle_doAfter_addListener_doAfter_ThunderpawSpire_call_doAfter_addListener_doAfter_ThunderpawSpire,ForGroupCallback_forUnitsInRange_addListener_doAfter_ThunderpawSpire_callback_forUnitsInRange_addListener_doAfter_ThunderpawSpire,Action_watch_doAfter_ThunderpawSpire_run_watch_doAfter_ThunderpawSpire"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
       "source_key": "A0H6",
       "unit_rawcode": "h07T",
       "spellcasting": {

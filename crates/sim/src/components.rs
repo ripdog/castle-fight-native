@@ -25,7 +25,9 @@ pub use curse::CurseProfile;
 mod building_script;
 mod parasite_area_buff;
 mod parasite_script;
-pub use building_script::{BuildingChild, BuildingScriptProfile, SandstormState};
+pub use building_script::{
+    BuildingChild, BuildingScriptProfile, SandstormState, ThunderCallProfile, ThunderCallState,
+};
 pub use parasite_area_buff::ParasiteAreaBuffProfile;
 pub use parasite_script::{
     LocustState, LocustSwarmProfile, LocustSwarmState, MAX_LOCUSTS, ParasiteChild,

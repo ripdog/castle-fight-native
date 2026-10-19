@@ -49,6 +49,7 @@ mod parasite_area_buff;
 mod parasite_script;
 mod permanent_grants;
 mod echo_step;
+mod thunder_call;
 mod healing_spray;
 mod whirlwind;
 mod sand_cloud;
@@ -5303,6 +5304,11 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                 crate::BuildingChild::Hallucination { illusion_ticks, .. } => {
                     assert!(illusion_ticks > 0)
                 }
+                crate::BuildingChild::ThunderCharge(profile) => assert!(
+                    profile.radius > 0
+                        && profile.strike_maximum >= profile.strike_minimum
+                        && profile.weapon_range_upper_exclusive > profile.weapon_range_lower_exclusive
+                ),
                 crate::BuildingChild::ManaBurn {
                     cap,
                     damage_per_mana,
@@ -6673,6 +6679,20 @@ impl Simulation {
                     state.unit_health,
                     state.unit_positions,
                 );
+                if matches!(
+                    kind,
+                    WeaponDamageKind::Melee | WeaponDamageKind::Ranged | WeaponDamageKind::Cleave
+                ) {
+                    self.observe_thunder_call(
+                        source_id,
+                        state.unit_positions[index],
+                        event_damage,
+                        completed_tick,
+                        state.units,
+                        state.unit_health,
+                        state.unit_positions,
+                    );
+                }
                 damage_thresholds::observe_damage_event(
                     &mut state.units[index],
                     state.unit_health[index],
@@ -6857,11 +6877,32 @@ impl Simulation {
                         .map_or(adjusted_damage, |factor| {
                             scale_damage_per_10k(adjusted_damage, factor)
                         });
-                    state.building_health[index] = state.building_health[index]
-                        .checked_sub(scale_damage_per_10k(
+                    let adjusted_damage = scale_damage_per_10k(
+                        adjusted_damage,
+                        state.buildings[index].snow_damage_taken_per_10k,
+                    );
+                    if matches!(
+                        kind,
+                        WeaponDamageKind::Melee
+                            | WeaponDamageKind::Ranged
+                            | WeaponDamageKind::Cleave
+                    ) {
+                        let center = footprint_center_point(
+                            state.buildings[index].footprint,
+                            state.navigation_cell_size,
+                        );
+                        self.observe_thunder_call(
+                            source_id,
+                            center,
                             adjusted_damage,
-                            state.buildings[index].snow_damage_taken_per_10k,
-                        ))
+                            completed_tick,
+                            state.units,
+                            state.unit_health,
+                            state.unit_positions,
+                        );
+                    }
+                    state.building_health[index] = state.building_health[index]
+                        .checked_sub(adjusted_damage)
                         .expect("building damage arithmetic overflowed validated bounds");
                 }
                 death_healing::refresh_support(

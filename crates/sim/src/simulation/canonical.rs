@@ -712,6 +712,20 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u64(state.next_pulse_tick);
                         hash.write_u64(state.expires_tick);
                     }
+                    NativeAction::ThunderCall(state) => {
+                        hash.write_u8(42);
+                        for word in state.profile.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                        for charge in state.charges {
+                            hash.write_u32(charge);
+                        }
+                        hash.write_u8(u8::from(state.guard.is_some()));
+                        if let Some((source, tick)) = state.guard {
+                            hash.write_u64(source.0);
+                            hash.write_u64(tick);
+                        }
+                    }
                     NativeAction::EchoRemnant(state) => {
                         hash.write_u8(41);
                         for word in state.profile.canonical_words() {

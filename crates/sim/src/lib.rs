@@ -46,7 +46,7 @@ pub use components::{
     DeathExplosionProfile, DefendEffectProfile, EnsnareProfile, EnsnareState,
     EntanglingRootsEffectProfile, EtherealEffectProfile, EvasionEffectProfile,
     FeedbackEffectProfile, ForkedLightningProfile, FrostAttackEffectProfile,
-    GameplayBundleIdentity, EchoRemnantProfile, EchoRemnantState, EchoStepProfile, HealingSprayProfile, WhirlwindProfile, HealingSprayState, HealingWaveProfile, HealthScaledAftershockProfile,
+    GameplayBundleIdentity, ThunderCallProfile, ThunderCallState, EchoRemnantProfile, EchoRemnantState, EchoStepProfile, HealingSprayProfile, WhirlwindProfile, HealingSprayState, HealingWaveProfile, HealthScaledAftershockProfile,
     HostileArmorAuraProfile, ImpaleFanProfile, ImpaleProfile, ImpaleStatus, IncinerateProfile,
     IncinerateStatus, KillBerserkProfile, LavaSpawnProfile, LavaSpawnState, LifeStealProfile,
     LocustState, LocustSwarmProfile, LocustSwarmState, MAX_AUTOMATIC_ABILITIES, MAX_LOCUSTS,
