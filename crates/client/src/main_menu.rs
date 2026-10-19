@@ -1031,6 +1031,7 @@ mod tests {
             builder_rawcodes: [None; 9],
             server: None,
             list_map_versions: false,
+            sim_workers: 1,
         }
     }
 

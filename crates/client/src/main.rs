@@ -503,18 +503,15 @@ fn main() {
         );
         std::process::exit(2);
     });
-    let mut demo = create_demo_world_for_match_config(
-        default_worker_count(),
-        options.stress_units,
-        match_config,
-    )
-    .unwrap_or_else(|error| {
-        eprintln!(
-            "cannot start Castle Fight {}/{}: {error}",
-            options.map_version, options.release_revision
-        );
-        std::process::exit(2);
-    });
+    let mut demo =
+        create_demo_world_for_match_config(options.sim_workers, options.stress_units, match_config)
+            .unwrap_or_else(|error| {
+                eprintln!(
+                    "cannot start Castle Fight {}/{}: {error}",
+                    options.map_version, options.release_revision
+                );
+                std::process::exit(2);
+            });
     if options.benchmark {
         let mana_randomized =
             apply_benchmark_setup(&mut demo.simulation, BenchmarkSetupOptions::default());
@@ -1169,6 +1166,8 @@ struct ClientOptions {
     builder_rawcodes: [Option<u32>; 9],
     server: Option<std::net::SocketAddr>,
     list_map_versions: bool,
+    /// Simulation worker threads for the offline match created at startup.
+    sim_workers: usize,
 }
 
 impl ClientOptions {
@@ -1203,6 +1202,7 @@ impl ClientOptions {
             builder_rawcodes: [None; 9],
             server: None,
             list_map_versions: false,
+            sim_workers: default_worker_count(),
         };
         let mut explicit_warmup = false;
         let mut explicit_duration = false;
@@ -1301,6 +1301,16 @@ impl ClientOptions {
                             .expect("--profile-until-tick requires a simulation tick number"),
                     );
                 }
+                "--sim-workers" => {
+                    let value = args
+                        .next()
+                        .expect("--sim-workers requires a positive worker count");
+                    options.sim_workers = value
+                        .parse()
+                        .ok()
+                        .filter(|workers| *workers >= 1)
+                        .expect("--sim-workers requires a positive worker count");
+                }
                 "--map-version" => {
                     let value = args
                         .next()
@@ -1360,7 +1370,7 @@ impl ClientOptions {
                 "--list-map-versions" => options.list_map_versions = true,
                 "-h" | "--help" => {
                     println!(
-                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--builder SLOT:RAWCODE] [--list-map-versions] [--stress-units N] [--stress-visual RAWCODE N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS] [--profile-until-tick TICK] [--profile-paused] [--profile] [--profile-screenshot PATH] [--benchmark] [--render-experiment baseline|freeze-bounds|hide-skinned|hide-particles|hide-transparent|legacy-team-color|legacy-geoset-visibility|legacy-attachment-search|legacy-attachment-index|legacy-effect-pooling|legacy-splat-updates|legacy-splat-material-state|legacy-animated-alpha-state|legacy-animated-texture-state|freeze-materials|freeze-poses|bindless-auto|bindless-64|bindless-128|bindless-256|no-bindless]"
+                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--builder SLOT:RAWCODE] [--list-map-versions] [--stress-units N] [--stress-visual RAWCODE N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS] [--profile-until-tick TICK] [--sim-workers N] [--profile-paused] [--profile] [--profile-screenshot PATH] [--benchmark] [--render-experiment baseline|freeze-bounds|hide-skinned|hide-particles|hide-transparent|legacy-team-color|legacy-geoset-visibility|legacy-attachment-search|legacy-attachment-index|legacy-effect-pooling|legacy-splat-updates|legacy-splat-material-state|legacy-animated-alpha-state|legacy-animated-texture-state|freeze-materials|freeze-poses|bindless-auto|bindless-64|bindless-128|bindless-256|no-bindless]"
                     );
                     std::process::exit(0);
                 }
