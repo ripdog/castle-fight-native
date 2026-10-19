@@ -92,7 +92,16 @@ fn intrinsic_speed_families_choose_each_strongest_delta_and_recover_without_ling
     assert_eq!(status.attack_speed_modifiers[0].percent_delta, -50);
     sim.world.despawn(entity(&sim, strong));
     let mut restored = wire_restored(&sim, 4);
-    assert_eq!(sim.step().checksum, restored.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
     assert_eq!(
         sim.unit(target).unwrap().status.movement_modifiers[0].percent_delta,
         -10
@@ -103,7 +112,16 @@ fn intrinsic_speed_families_choose_each_strongest_delta_and_recover_without_ling
         ..Default::default()
     });
     let mut restored = wire_restored(&sim, 2);
-    assert_eq!(sim.step().checksum, restored.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
     let status = sim.unit(target).unwrap().status;
     assert_eq!(status.movement_modifier_count, 0);
     assert_eq!(status.attack_speed_modifier_count, 0);
@@ -186,14 +204,32 @@ fn friendly_speed_aura_shared_family_never_stacks_and_expires_after_source_loss_
     assert_eq!(status.attack_speed_modifiers[0].percent_delta, 53);
     sim.world.despawn(entity(&sim, strong));
     let mut other = wire_restored(&sim, 4);
-    assert_eq!(sim.step().checksum, other.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            other.step();
+            other.checksum()
+        }
+    );
     assert_eq!(
         sim.unit(target).unwrap().status.attack_speed_modifiers[0].percent_delta,
         37
     );
     sim.world.despawn(entity(&sim, weak));
     other.world.despawn(entity(&other, weak));
-    assert_eq!(sim.step().checksum, other.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            other.step();
+            other.checksum()
+        }
+    );
     assert_eq!(
         sim.unit(target).unwrap().status.attack_speed_modifier_count,
         0

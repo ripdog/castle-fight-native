@@ -270,7 +270,16 @@ fn native_death_during_released_bolt_survives_wire_restore_and_has_recipient_vis
         crate::building_mechanics::death_heal_for_version(MapVersion::CASTLE_FIGHT_9_27).unwrap();
     let mut visual = false;
     for _ in 0..12 {
-        assert_eq!(s.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                s.step();
+                s.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
         assert_eq!(s.death_heals_last_tick(), restored.death_heals_last_tick());
         visual |= !s.death_heals_last_tick().is_empty();
     }
@@ -347,7 +356,16 @@ fn unfinished_support_is_inert_and_upgrade_preserves_one_registration_through_re
                 .unwrap();
         }
         for _ in 0..5 {
-            assert_eq!(s.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    s.step();
+                    s.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
             assert_eq!(current_support(&mut s, victim).healing, before);
         }
     }

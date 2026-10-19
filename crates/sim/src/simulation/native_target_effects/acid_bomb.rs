@@ -91,7 +91,16 @@ fn acid_bomb_splashes_at_the_recipient_with_independent_native_masks_and_hero_li
     sim.world.despawn(entity(&sim, source));
     let mut restored = wire_restored(&sim, 4);
     while sim.unit(primary).unwrap().status.acid_bomb.is_none() {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     let impact = sim.tick() - 1;
     assert_eq!(sim.unit(primary).unwrap().health, 983);
@@ -105,7 +114,16 @@ fn acid_bomb_splashes_at_the_recipient_with_independent_native_masks_and_hero_li
     }
     restored = wire_restored(&sim, 5);
     while sim.tick() <= impact + 25 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(primary).unwrap().health, 949);
     assert!(sim.unit(primary).unwrap().status.acid_bomb.is_none());
@@ -183,7 +201,16 @@ fn acid_bomb_replaces_one_native_family_and_full_removal_stops_its_damage() {
     );
     let mut restored = wire_restored(&sim, 6);
     for _ in 0..35 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(target).unwrap().health, 974);
     assert!(sim.unit(target).unwrap().status.acid_bomb.is_none());
@@ -213,7 +240,16 @@ fn acid_bomb_keeps_fixed_flight_but_resolves_the_live_recipient_and_rejects_live
         let mut restored = wire_restored(&sim, 4);
         let mut elapsed = 0;
         while sim.unit(target).unwrap().status.acid_bomb.is_none() {
-            assert_eq!(sim.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
             elapsed += 1;
             assert!(elapsed < 20);
         }
@@ -341,7 +377,16 @@ fn independent_native_parent_spends_resources_before_script_selection_and_child_
         assert_eq!(sim.unit(target).unwrap().negative_building_shield_level, 2);
         let mut restored = wire_restored(&sim, 4);
         for _ in 0..9 {
-            assert_eq!(sim.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
         }
         assert!(
             sim.building(caster)

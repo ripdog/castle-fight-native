@@ -1262,7 +1262,10 @@ mod tests {
         replica.debug_set_buildings_invulnerable(false);
         replica.restore_snapshot(&snapshot).unwrap();
         assert!(replica.debug_buildings_invulnerable());
-        let replay = server.authoritative.driver().export_replay();
+        let replay = server
+            .authoritative
+            .driver()
+            .export_replay(server.authoritative.simulation());
         replay.play_to_end(&mut replica, &mut driver).unwrap();
         assert_eq!(
             replica.checksum(),

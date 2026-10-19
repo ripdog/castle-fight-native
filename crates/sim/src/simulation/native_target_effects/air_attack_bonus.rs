@@ -180,7 +180,16 @@ fn promoted_air_bonus_applies_to_later_bounces_after_source_death_and_wire_resto
             expected
                 .entry(target)
                 .or_insert_with(|| raw * (10_000 + i32::from(bonus)) / 10_000);
-            assert_eq!(sim.step().checksum, copy.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    copy.step();
+                    copy.checksum()
+                }
+            );
         }
         assert_eq!(sim.projectile_count(), 0);
         assert_eq!(expected.len(), 3);
@@ -188,7 +197,16 @@ fn promoted_air_bonus_applies_to_later_bounces_after_source_death_and_wire_resto
             assert_eq!(sim.unit(target).unwrap().health, 999 - expected[&target]);
         }
         assert!(!sim.retired_damage_sources.contains_key(&source));
-        assert_eq!(sim.step().checksum, copy.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                copy.step();
+                copy.checksum()
+            }
+        );
     }
     assert!(matched > 0);
 }

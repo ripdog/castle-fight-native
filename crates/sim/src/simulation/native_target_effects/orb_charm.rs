@@ -71,7 +71,16 @@ fn orb_charm_converts_eligible_recipients_pierces_spell_immunity_and_skips_heroe
         );
         sim.step();
         let mut other = wire_restored(&sim, 4);
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
         let team = sim.unit(target).unwrap().team;
         assert_eq!(team == Team(0), converted, "{classes:?}");
     }

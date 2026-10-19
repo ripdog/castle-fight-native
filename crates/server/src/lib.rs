@@ -12,12 +12,13 @@ use castle_fight_sim::{
     AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION, CANONICAL_CHECKSUM_SCHEMA_VERSION, CanonicalStreamError,
     CanonicalStreamRecord, CastleFightMatch, CastleFightMatchConfig, CastleFightMatchSetupError,
     ClientCommandSequence, MatchControlEvent, MatchDriver, MatchLifecycle, MatchOutcome,
-    PlayerConnectionStatus, PlayerId, Simulation, Team, create_castle_fight_match,
+    PlayerConnectionStatus, PlayerId, SYNC_CHECKPOINT_INTERVAL_TICKS, Simulation, Team,
+    create_castle_fight_match, is_checkpoint_tick,
 };
 use constant_time_eq::constant_time_eq_32;
 
 pub const DEFAULT_GAME_PORT: u16 = 6112;
-pub const DEFAULT_CHECKPOINT_INTERVAL_TICKS: u64 = 30;
+pub const DEFAULT_CHECKPOINT_INTERVAL_TICKS: u64 = SYNC_CHECKPOINT_INTERVAL_TICKS;
 pub const DEFAULT_DISCONNECT_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -698,9 +699,7 @@ impl AuthoritativeMatch {
             }),
         ];
 
-        if tick.finalized.tick % self.options.checkpoint_interval_ticks
-            == self.options.checkpoint_interval_ticks - 1
-        {
+        if is_checkpoint_tick(tick.finalized.tick, self.options.checkpoint_interval_ticks) {
             let checkpoint = Checkpoint {
                 completed_tick: tick.finalized.tick,
                 checksum: self.game.simulation.checksum(),

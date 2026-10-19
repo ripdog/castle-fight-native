@@ -242,7 +242,7 @@ The concrete current classification and field-level coverage is maintained in `2
 
 The simulation MUST expose a reproducible state checksum for desync detection.
 
-Checksums SHOULD be computed periodically in production and MAY be computed every tick in tests/debug builds.
+Checksums are computed at synchronization checkpoints, once per `SYNC_CHECKPOINT_INTERVAL_TICKS` (one simulation second), and at boundary controls. `Simulation::step()` does not compute one; tools that need a checksum every tick MAY call `Simulation::checksum()` explicitly.
 
 The checksum mechanism MUST distinguish at least:
 

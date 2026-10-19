@@ -83,7 +83,16 @@ fn each_building_classification_is_hashed_and_restored_in_live_and_cold_state() 
         assert_ne!(live.checksum(), baseline.checksum(), "{flags:?}");
         let mut restored = wire_restore(&live, 4);
         assert_eq!(live_flags(&restored, id), flags);
-        assert_eq!(live.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                live.step();
+                live.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
 
         let mut cold = Simulation::new(SimulationConfig::default(), 1);
         let id = cold
@@ -107,7 +116,16 @@ fn each_building_classification_is_hashed_and_restored_in_live_and_cold_state() 
         assert_ne!(cold.checksum(), before, "cold-only flag {flags:?}");
         let mut restored = wire_restore(&cold, 4);
         for _ in 0..4 {
-            assert_eq!(cold.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    cold.step();
+                    cold.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
         }
         assert_eq!(live_flags(&restored, id), flags);
     }
@@ -211,7 +229,16 @@ fn upgrade_replaces_flags_but_cancellation_restores_the_actual_precursor_runtime
             assert_eq!(live_flags(&restored, id), acquired_source);
         } else {
             for _ in 0..4 {
-                assert_eq!(sim.step().checksum, restored.step().checksum);
+                assert_eq!(
+                    {
+                        sim.step();
+                        sim.checksum()
+                    },
+                    {
+                        restored.step();
+                        restored.checksum()
+                    }
+                );
             }
             assert_eq!(live_flags(&restored, id), target_flags);
         }

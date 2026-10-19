@@ -168,7 +168,16 @@ fn healing_does_not_mark_targets_and_native_enemy_trigger_is_separate_from_ally_
     );
     let mut other = restore(&sim);
     for _ in 0..4 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
         let status = sim.unit(target).unwrap().status;
         if status.native_grants.contains(profile().options[0].ability) {
             assert_eq!(effective_attack_cooldown_ticks(120, status), 100);
@@ -395,7 +404,16 @@ fn native_self_damage_and_periodic_source_survive_restore_but_dummy_damage_does_
         }
         let mut other = restore(&sim);
         for _ in 0..35 {
-            assert_eq!(sim.step().checksum, other.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    other.step();
+                    other.checksum()
+                }
+            );
         }
         assert_eq!(
             sim.unit(victim).unwrap().health,
@@ -456,7 +474,16 @@ fn released_native_damage_retains_the_casters_final_forge_state_after_death_and_
         );
         let mut other = restore(&sim);
         for _ in 0..65 {
-            assert_eq!(sim.step().checksum, other.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    other.step();
+                    other.checksum()
+                }
+            );
         }
         assert_eq!(
             sim.retired_damage_sources.contains_key(&source),

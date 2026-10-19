@@ -1957,7 +1957,16 @@ mod tests {
             }
         }
         for _ in 0..3 {
-            assert_eq!(original.step().checksum, parallel.step().checksum);
+            assert_eq!(
+                {
+                    original.step();
+                    original.checksum()
+                },
+                {
+                    parallel.step();
+                    parallel.checksum()
+                }
+            );
         }
         let units = original.units();
         assert!(units[0].position.distance_sq(units[1].position) >= 4);

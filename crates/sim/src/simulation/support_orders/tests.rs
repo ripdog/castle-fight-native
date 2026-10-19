@@ -184,7 +184,16 @@ fn wind_walk_fade_breaks_on_attack_start_and_backstab_survives_windup_wire_resto
     let mut restored = Simulation::new(SimulationConfig::default(), 4);
     restored.restore_snapshot(&snapshot).unwrap();
     for _ in 0..3 {
-        assert_eq!(s.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                s.step();
+                s.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(s.unit(victim).unwrap().health, 91);
     assert_eq!(

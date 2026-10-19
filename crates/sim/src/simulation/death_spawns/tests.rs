@@ -63,7 +63,16 @@ fn native_death_children_initialize_full_definitions_and_independent_fresh_state
     }
     let mut copy = restored(&sim);
     for _ in 0..4 {
-        assert_eq!(sim.step().checksum, copy.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                copy.step();
+                copy.checksum()
+            }
+        );
     }
 }
 
@@ -115,7 +124,16 @@ fn promoted_death_spawn_catalog_closes_children_and_splits_once_across_wire() {
             assert_eq!(child.status.summon_order_refresh_tick, None);
         }
         for _ in 0..4 {
-            assert_eq!(sim.step().checksum, copy.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    copy.step();
+                    copy.checksum()
+                }
+            );
         }
         let descendants: usize = sim
             .units()
@@ -142,7 +160,16 @@ fn promoted_death_spawn_catalog_closes_children_and_splits_once_across_wire() {
             "new children are not recursively killed in the same boundary"
         );
         for _ in 0..4 {
-            assert_eq!(sim.step().checksum, copy.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    copy.step();
+                    copy.checksum()
+                }
+            );
         }
     }
 }
@@ -218,14 +245,20 @@ fn combat_death_creates_children_in_the_commit_and_counts_them_once() {
         sim.step();
         let mut copy = restored(&sim);
         let tick = sim.step();
-        assert_eq!(tick.checksum, copy.step().checksum);
+        assert_eq!(sim.checksum(), {
+            copy.step();
+            copy.checksum()
+        });
         assert!(sim.unit(source).is_none());
         assert_eq!(tick.deaths, 1);
         assert_eq!(tick.units_spawned, expected);
         assert_eq!(tick.units_alive, expected + 1);
         assert_eq!(sim.unit_count(), expected + 1);
         let next = sim.step();
-        assert_eq!(next.checksum, copy.step().checksum);
+        assert_eq!(sim.checksum(), {
+            copy.step();
+            copy.checksum()
+        });
         assert_eq!(next.units_spawned, 0);
     }
 }

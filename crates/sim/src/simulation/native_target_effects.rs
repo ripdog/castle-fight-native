@@ -1904,7 +1904,16 @@ fn promoted_passive_units_keep_native_mana_without_an_automatic_spell() {
         sim.step();
         let mut copy = wire_restored(&sim, 4);
         for _ in 0..30 {
-            assert_eq!(sim.step().checksum, copy.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    copy.step();
+                    copy.checksum()
+                }
+            );
         }
         if (0..31)
             .map(|tick| profile.regeneration_at_tick(tick, 30))
@@ -1930,7 +1939,16 @@ fn promoted_passive_units_keep_native_mana_without_an_automatic_spell() {
             Some(profile.maximum.saturating_sub(6).max(0))
         );
         let mut copy = wire_restored(&sim, 4);
-        assert_eq!(sim.step().checksum, copy.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                copy.step();
+                copy.checksum()
+            }
+        );
     }
     assert!(matched > 0);
 }

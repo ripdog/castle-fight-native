@@ -85,10 +85,28 @@ fn attack_animation_anchors_ground_and_air_units_after_target_death_through_wire
         );
         let mut restored = wire_restore(&sim);
         for _ in 2..4 {
-            assert_eq!(sim.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
             assert_eq!(sim.unit(source).unwrap().position, origin);
         }
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
         assert!(
             sim.unit(source).unwrap().position.x > origin.x,
             "movement must resume on the exclusive expiry tick"
@@ -171,10 +189,28 @@ fn successful_cast_anchors_until_expiry_but_failed_cast_does_not() {
         );
         let mut restored = wire_restore(&sim);
         for _ in 1..4 {
-            assert_eq!(sim.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
             assert_eq!(sim.unit(source).unwrap().position, SimPoint::new(0, 0));
         }
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
         assert!(sim.unit(source).unwrap().position.x > 0);
     }
 }
@@ -211,13 +247,19 @@ fn cast_point_delays_effect_and_survives_wire_restore() {
 
     let mut restored = wire_restore(&sim);
     let windup = sim.step();
-    assert_eq!(windup.checksum, restored.step().checksum);
+    assert_eq!(sim.checksum(), {
+        restored.step();
+        restored.checksum()
+    });
     assert_eq!(windup.ability_casts, 0);
     assert!(sim.unit(victim).is_some());
     assert_eq!(sim.unit(source).unwrap().position, SimPoint::new(0, 0));
 
     let release = sim.step();
-    assert_eq!(release.checksum, restored.step().checksum);
+    assert_eq!(sim.checksum(), {
+        restored.step();
+        restored.checksum()
+    });
     assert_eq!(release.ability_casts, 1);
     assert!(
         sim.unit(victim).is_none(),
@@ -226,9 +268,27 @@ fn cast_point_delays_effect_and_survives_wire_restore() {
     assert!(sim.unit(source).unwrap().status.pending_cast.is_none());
     assert_eq!(sim.unit(source).unwrap().position, SimPoint::new(0, 0));
 
-    assert_eq!(sim.step().checksum, restored.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
     assert_eq!(sim.unit(source).unwrap().position, SimPoint::new(0, 0));
-    assert_eq!(sim.step().checksum, restored.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
     assert!(sim.unit(source).unwrap().position.x > 0);
 }
 
@@ -315,7 +375,16 @@ fn crowd_steering_reserves_acting_units_before_movers_regardless_of_id() {
             .begin_action_animation(ActionAnimationKind::Cast, 0, 4);
         let mut restored = wire_restore(&sim);
         for _ in 0..4 {
-            assert_eq!(sim.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
             let actor = sim.unit(actor_id).unwrap().position;
             assert_eq!(
                 actor,
@@ -367,12 +436,24 @@ fn attack_windup_precedes_damage_and_projectiles_without_extending_cadence() {
                 3
             );
             let mut restored = wire_restore(&sim);
-            assert_eq!(sim.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
             assert_eq!(sim.unit(source).unwrap().position, origin);
             assert_eq!(sim.unit(target).unwrap().health, victim.health);
             assert!(sim.attacks_last_tick().is_empty());
             let release = sim.step();
-            assert_eq!(release.checksum, restored.step().checksum);
+            assert_eq!(sim.checksum(), {
+                restored.step();
+                restored.checksum()
+            });
             assert_eq!(release.attacks_resolved, 1);
             assert_eq!(
                 sim.unit(source).unwrap().status.action_animation,
@@ -388,7 +469,10 @@ fn attack_windup_precedes_damage_and_projectiles_without_extending_cadence() {
             let mut releases = vec![release.completed_tick];
             while sim.tick() <= 15 {
                 let result = sim.step();
-                assert_eq!(result.checksum, restored.step().checksum);
+                assert_eq!(sim.checksum(), {
+                    restored.step();
+                    restored.checksum()
+                });
                 if sim
                     .attacks_last_tick()
                     .iter()
@@ -580,7 +664,10 @@ fn building_weapons_keep_separate_delivery_damage_and_windup_through_rejoin() {
         while sim.next_tick <= release_tick {
             let tick = sim.next_tick;
             let step = sim.step();
-            assert_eq!(step.checksum, restored.step().checksum);
+            assert_eq!(sim.checksum(), {
+                restored.step();
+                restored.checksum()
+            });
             assert_eq!(step.attacks_resolved, usize::from(tick == release_tick));
         }
         assert_eq!(
@@ -593,7 +680,16 @@ fn building_weapons_keep_separate_delivery_damage_and_windup_through_rejoin() {
                 500,
                 "the ground weapon has missile travel"
             );
-            assert_eq!(sim.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
         }
         let damage_type = if class == MovementClass::Air {
             DamageType::Normal

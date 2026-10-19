@@ -228,7 +228,16 @@ fn ordinary_landed_attack_runs_permanent_skin_and_restores_across_workers() {
         .native_grants = NativeAbilityGrants::from_slice(&wilderness(10000).grants);
     let mut restored = wire_restored(&sim, 4);
     for _ in 0..5 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(target).unwrap().health, 987);
     assert_eq!(sim.unit(target).unwrap().status.hardened_skin_sequence, 1);

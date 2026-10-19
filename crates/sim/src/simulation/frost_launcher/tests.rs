@@ -92,7 +92,16 @@ fn hailstone_is_delayed_survives_source_death_and_restores_in_flight_without_bas
     let impact = sim.projectiles()[0].impact_tick;
     let mut other = restored(&sim);
     while sim.next_tick <= impact {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     let victim = sim.building(target).unwrap();
     assert_eq!(
@@ -172,7 +181,16 @@ fn freeze_pauses_training_remaining_time_and_restores_without_catching_up() {
     sim.world.entity_mut(e).insert(status);
     let mut other = restored(&sim);
     for _ in 0..5 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     assert_eq!(
         sim.world.get::<ProductionState>(e).unwrap().next_spawn_tick,

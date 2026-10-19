@@ -72,7 +72,16 @@ fn permanent_immolation_samples_native_membership_and_pulses_across_wire_without
     }
     assert_eq!(sim.unit(eligible).unwrap().health, 1000);
     let mut other = wire_restored(&sim, 4);
-    assert_eq!(sim.step().checksum, other.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            other.step();
+            other.checksum()
+        }
+    );
     assert_eq!(
         sim.unit(eligible).unwrap().health,
         1000 - sim.combat_rules.damage_rules.apply_spell(
@@ -89,7 +98,16 @@ fn permanent_immolation_samples_native_membership_and_pulses_across_wire_without
     let mut other = wire_restored(&sim, 4);
     let health = sim.unit(eligible).unwrap().health;
     for _ in 0..6 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(eligible).unwrap().health, health);
     assert_eq!(sim.unit(eligible).unwrap().status.armor_modifier_count, 0);
@@ -171,7 +189,16 @@ fn locust_handles_do_not_become_weapon_targets_or_ordinary_aura_recipients() {
     );
     let mut other = wire_restored(&sim, 4);
     for _ in 0..6 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     assert_ne!(sim.unit(attacker).unwrap().target, Some(target));
     assert_eq!(sim.unit(target).unwrap().health, 1000);
@@ -206,7 +233,16 @@ fn locust_handles_do_not_block_ordinary_movement() {
     sim.spawn_unit(unit(1, 100, 0, AttackDelivery::Melee));
     let mut other = wire_restored(&sim, 4);
     for _ in 0..8 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     assert!(
         sim.unit(actor).unwrap().position.x > 24 * SUBUNITS_PER_WORLD_UNIT,

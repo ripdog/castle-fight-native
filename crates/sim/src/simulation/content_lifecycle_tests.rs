@@ -66,7 +66,16 @@ fn catalog_construction_round_trips_before_activation_and_continues_across_worke
 
         let duration = properties.construction_time_ticks.unwrap();
         for _ in 0..=duration + 2 {
-            assert_eq!(original.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    original.step();
+                    original.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
         }
         assert!(
             restored
@@ -169,7 +178,16 @@ fn catalog_upgrade_wire_restore_and_cancellation_preserve_the_precursor_definiti
                 source_properties.content
             );
             for _ in 0..3 {
-                assert_eq!(original.step().checksum, restored.step().checksum);
+                assert_eq!(
+                    {
+                        original.step();
+                        original.checksum()
+                    },
+                    {
+                        restored.step();
+                        restored.checksum()
+                    }
+                );
             }
         }
     }
@@ -298,7 +316,16 @@ fn catalog_type_caps_reserve_pending_upgrades_and_release_on_cancellation_or_dea
                     .unwrap();
             }
             for _ in 0..=target.construction_time_ticks {
-                assert_eq!(sim.step().checksum, restored.step().checksum);
+                assert_eq!(
+                    {
+                        sim.step();
+                        sim.checksum()
+                    },
+                    {
+                        restored.step();
+                        restored.checksum()
+                    }
+                );
             }
             assert!(!sim.building_type_limit_available_for_player(
                 PlayerId(0),

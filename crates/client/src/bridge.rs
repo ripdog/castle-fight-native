@@ -1202,7 +1202,16 @@ mod tests {
                 PresentationSnapshot::capture(&restored).buildings[&target].status
             );
             assert_eq!(original.checksum(), before);
-            assert_eq!(original.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    original.step();
+                    original.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
         }
         assert_eq!(
             PresentationSnapshot::capture(&original).buildings[&target]

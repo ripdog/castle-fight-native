@@ -145,7 +145,16 @@ fn damage_charge_contact_autocast_waits_for_cast_point_and_recovers_in_progress(
     assert!(deadline >= sim.tick());
     let mut restored = wire_restored(&sim, 4);
     while sim.tick() <= deadline {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert!(sim.unit(source).is_none());
     assert_eq!(sim.unit(target).unwrap().health, 900);

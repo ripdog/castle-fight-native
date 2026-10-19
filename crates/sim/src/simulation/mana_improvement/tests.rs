@@ -75,7 +75,16 @@ fn manual_improvement_is_identity_scoped_permanent_and_survives_generator_death(
     );
     let mut copy = restored(&sim);
     for _ in 0..600 {
-        assert_eq!(sim.step().checksum, copy.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                copy.step();
+                copy.checksum()
+            }
+        );
     }
     assert!(sim.building(target).unwrap().mana_current.unwrap() > 0);
 }
@@ -178,7 +187,16 @@ fn permanent_improvement_is_retained_across_upgrade_completion_and_cancellation(
                 .unwrap();
         }
         for _ in 0..5 {
-            assert_eq!(sim.step().checksum, other.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    other.step();
+                    other.checksum()
+                }
+            );
         }
         let after = sim.building(target).unwrap();
         assert!(after.construction_complete_tick.is_none());
@@ -217,7 +235,16 @@ fn permanent_regeneration_accumulates_fractional_mana_exactly_after_restore() {
     assert_eq!(sim.building(id).unwrap().mana_current, Some(1));
     let mut other = restored(&sim);
     for _ in 0..30 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     assert_eq!(sim.building(id).unwrap().mana_current, Some(3));
     assert_eq!(

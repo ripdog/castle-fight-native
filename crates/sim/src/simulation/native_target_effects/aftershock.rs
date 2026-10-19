@@ -118,7 +118,16 @@ fn aftershock_runs_on_pulverize_and_zero_damage_parent_hits_and_restores() {
     );
     sim.step();
     let mut restored = wire_restored(&sim, 4);
-    assert_eq!(sim.step().checksum, restored.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
     let rules = DamageRules::warcraft_frozen_throne();
     let bonus =
         rules.apply_attack_with_armor_per_100(80, DamageType::Siege, ArmorType::Unarmored, 0);

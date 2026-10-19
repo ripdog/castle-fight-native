@@ -102,7 +102,16 @@ fn healing_recovery_blocks_ordered_intents_but_not_pending_native_fire_and_survi
     let mut restored = wire_restore(&original);
     let recovery_end = status.order_recovery_until_tick;
     while original.next_tick <= recovery_end {
-        assert_eq!(original.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                original.step();
+                original.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
         let count = original
             .world
             .get::<AdditionalAutomaticAbilities>(source_entity)
@@ -197,7 +206,10 @@ fn primary_and_additional_native_fire_ignore_stun_recovery_and_script_orders_but
         let untouched = unit(&mut original, 1, 30, MovementClass::Ground, false);
         let mut restored = wire_restore(&original);
         let metrics = original.step();
-        assert_eq!(metrics.checksum, restored.step().checksum);
+        assert_eq!(original.checksum(), {
+            restored.step();
+            restored.checksum()
+        });
         assert_eq!(metrics.ability_casts, 0);
         assert_eq!(
             original.unit(target).unwrap().health,
@@ -313,6 +325,15 @@ fn an_order_recovery_deadline_is_authoritative_even_without_a_native_stun() {
     assert_eq!(original.unit(source).unwrap().status.stunned_until_tick, 0);
     let mut restored = wire_restore(&original);
     for _ in 0..20 {
-        assert_eq!(original.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                original.step();
+                original.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
 }

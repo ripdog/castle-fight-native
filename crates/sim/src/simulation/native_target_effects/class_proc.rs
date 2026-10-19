@@ -44,7 +44,16 @@ fn native_orb_class_probabilities_use_actual_hero_then_summoned_then_ordinary_ca
             );
             sim.step();
             let mut other = wire_restored(&sim, 4);
-            assert_eq!(sim.step().checksum, other.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    other.step();
+                    other.checksum()
+                }
+            );
             let chance = if hero {
                 hero_chance
             } else if summoned {

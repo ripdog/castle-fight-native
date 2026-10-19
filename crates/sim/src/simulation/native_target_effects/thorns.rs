@@ -68,7 +68,16 @@ fn thorns_uses_recipient_membership_and_post_armor_damage_without_reducing_the_h
     sim.step();
     assert_eq!(sim.unit(recipient).unwrap().status.armor_modifier_count, 1);
     let mut restored = wire_restored(&sim, 4);
-    assert_eq!(sim.step().checksum, restored.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
     let rules = DamageRules::default();
     let incoming = rules.apply_attack(
         100,
@@ -86,7 +95,16 @@ fn thorns_uses_recipient_membership_and_post_armor_damage_without_reducing_the_h
         simulation.world.despawn(entity(simulation, first));
         simulation.world.despawn(entity(simulation, second));
     }
-    assert_eq!(sim.step().checksum, restored.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
     assert_eq!(sim.unit(recipient).unwrap().status.armor_modifier_count, 0);
 }
 
@@ -261,7 +279,16 @@ fn thorns_is_blocked_by_spell_immunity_but_a_fatal_hit_still_returns_damage() {
         );
         sim.step();
         let mut restored = wire_restored(&sim, 4);
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
         assert!(sim.unit(recipient).is_none());
         assert_eq!(
             sim.unit(attacker).unwrap().health,
@@ -311,7 +338,10 @@ fn zero_speed_projectile_weapons_commit_attacks_without_inventing_impact_or_hit_
         let mut attacks = 0;
         for _ in 0..12 {
             let report = sim.step();
-            assert_eq!(report.checksum, restored.step().checksum);
+            assert_eq!(sim.checksum(), {
+                restored.step();
+                restored.checksum()
+            });
             attacks += report.attacks_resolved;
             assert_eq!(sim.projectile_count(), 0);
         }

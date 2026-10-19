@@ -362,7 +362,16 @@ mod tests {
             }),
         });
         let mut other = restored(&sim);
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
         assert_eq!(sim.building(source).unwrap().mana_current, Some(1));
         assert_eq!(sim.snow_tiles().len(), 5);
         assert!(
@@ -431,7 +440,16 @@ mod tests {
         assert_eq!(units[0].snow_damage_taken_per_10k, 10_000);
         let mut other = restored(&sim);
         for _ in 0..4 {
-            assert_eq!(sim.step().checksum, other.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    other.step();
+                    other.checksum()
+                }
+            );
         }
     }
     #[test]
@@ -462,7 +480,16 @@ mod tests {
                 Err(BuildingCommandError::AbilityOnCooldown)
             );
         }
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
         sim.place_snow(point, Team(0), VERSION);
         sim.finish_match_from_control(MatchOutcome::Draw);
         assert!(sim.snow_tiles().is_empty());

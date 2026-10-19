@@ -155,7 +155,16 @@ fn ring_has_six_friendly_bodies_around_the_ground_target_and_follows_the_artille
         // Timed life expires every body together.
         let mut other_sim = restored(&sim);
         for _ in 0..=profile().lifetime_ticks {
-            assert_eq!(sim.step().checksum, other_sim.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    other_sim.step();
+                    other_sim.checksum()
+                }
+            );
         }
         assert!(bodies(&mut sim, used).is_empty());
     }

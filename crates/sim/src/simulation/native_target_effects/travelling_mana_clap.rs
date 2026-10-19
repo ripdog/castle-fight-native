@@ -160,7 +160,16 @@ fn travelling_mana_clap_retains_release_point_and_independent_masks_after_source
     let outside = recipient(&mut sim, 86, sapper, false, MovementClass::Ground, 100);
     let mut other = wire_restored(&sim, 4);
     for _ in 0..2 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     for id in [
         shield,
@@ -175,7 +184,16 @@ fn travelling_mana_clap_retains_release_point_and_independent_masks_after_source
     ] {
         assert_eq!(sim.unit(id).unwrap().health, 1000);
     }
-    assert_eq!(sim.step().checksum, other.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            other.step();
+            other.checksum()
+        }
+    );
     let spell = sim
         .combat_rules
         .damage_rules

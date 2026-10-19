@@ -47,7 +47,16 @@ fn native_sphere_flies_independently_without_damage_and_restores_each_attachment
     sim.world.despawn(entity(&sim, source));
     let mut restored = wire_restored(&sim, 4);
     for _ in 0..16 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(target).unwrap().health, 993);
     assert!(sim.projectiles().is_empty());
@@ -114,7 +123,16 @@ fn zero_speed_native_sphere_preserves_attachment_recovery_without_inventing_a_fl
     assert!(sim.projectiles().is_empty());
     let mut other = wire_restored(&sim, 4);
     for _ in 0..3 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     assert_eq!(sim.next_id, target.0 + 1);
 }

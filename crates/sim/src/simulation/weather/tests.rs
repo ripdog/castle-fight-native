@@ -141,7 +141,16 @@ fn released_point_waves_sample_live_recipients_and_restore_every_deadline() {
     }
     let mut other = restore(&sim);
     for _ in 0..9 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(target).unwrap().health, 940);
     for id in [ally, air, immune, invul, outside] {
@@ -298,7 +307,16 @@ fn release_uses_selected_enemy_point_and_mode_then_survives_building_removal() {
         sim.world.despawn(entity(&sim, caster));
         let mut other = restore(&sim);
         for _ in 0..13 {
-            assert_eq!(sim.step().checksum, other.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    other.step();
+                    other.checksum()
+                }
+            );
         }
         assert_eq!(
             sim.unit(target).unwrap().health,
@@ -356,7 +374,16 @@ fn inert_choice_building_regenerates_and_preserves_its_pool_through_upgrade_or_c
                 .construction_complete_tick
                 .unwrap();
             while sim.next_tick <= finish {
-                assert_eq!(sim.step().checksum, other.step().checksum);
+                assert_eq!(
+                    {
+                        sim.step();
+                        sim.checksum()
+                    },
+                    {
+                        other.step();
+                        other.checksum()
+                    }
+                );
             }
             assert!(
                 sim.building(id)
@@ -368,7 +395,16 @@ fn inert_choice_building_regenerates_and_preserves_its_pool_through_upgrade_or_c
             assert_eq!(sim.building(id).unwrap().ability_cast_sequence, Some(0));
         }
         for _ in 0..5 {
-            assert_eq!(sim.step().checksum, other.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    other.step();
+                    other.checksum()
+                }
+            );
         }
     }
 }
@@ -415,7 +451,16 @@ fn air_weather_burn_starts_at_impact_refreshes_without_stacking_and_restores() {
     assert_eq!(burn.expires_tick, 9 + u64::from(p.duration_ticks));
     let mut other = restore(&sim);
     while sim.next_tick < 85 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     assert_eq!(
         sim.unit(target).unwrap().health,

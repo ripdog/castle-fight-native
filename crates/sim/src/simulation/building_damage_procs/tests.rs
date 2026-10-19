@@ -114,7 +114,16 @@ fn fresh_dummy_orders_have_independent_cooldowns_and_survive_source_removal_and_
     sim.world.despawn(entity(&sim, source));
     let mut other = restore(&sim);
     for _ in 0..5 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     assert_eq!(
         sim.unit(victim).unwrap().health,
@@ -195,7 +204,16 @@ fn released_weapon_retains_callback_until_impact_even_after_tower_death() {
     let mut other = restore(&sim);
     let mut saw_boulder = false;
     for _ in 0..15 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
         saw_boulder |= sim
             .world
             .iter_entities()
@@ -231,9 +249,27 @@ fn construction_grant_activates_once_at_completion_after_wire_restore() {
             e.get::<NativeAction>(),
             Some(NativeAction::BuildingDamageProc(_))
         )));
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
-    assert_eq!(sim.step().checksum, other.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            other.step();
+            other.checksum()
+        }
+    );
     assert_eq!(controller(&sim, source).1.event_sequence, 0);
     sim.start_building_damage_proc(entity(&sim, source));
     assert_eq!(

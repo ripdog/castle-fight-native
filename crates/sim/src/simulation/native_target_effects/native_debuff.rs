@@ -233,7 +233,16 @@ fn native_debuff_orb_payload_survives_source_death_and_wire_restore_until_impact
         .current = 0;
     let mut other = wire_restored(&sim, 4);
     for _ in 0..14 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     assert_eq!(
         sim.unit(target).unwrap().status.armor_modifiers[0].damage_bonus_per_10k,

@@ -21,7 +21,16 @@ fn acquisition_can_be_shorter_than_reach_without_blocking_retaliatory_attacks() 
         .unwrap() = unit(1, 200, 3, AttackDelivery::RangedInstant).attack;
     let mut restored = wire_restored(&sim, 4);
     for _ in 0..3 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(source).unwrap().target, Some(target));
     assert_eq!(sim.unit(target).unwrap().health, 989);
@@ -44,7 +53,16 @@ fn zero_range_melee_uses_contact_for_pursuit_and_release_after_wire_restore() {
     assert_eq!(sim.unit(target).unwrap().health, 1000);
     let mut restored = wire_restored(&sim, 4);
     for _ in 0..20 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(target).unwrap().health, 990);
     let source = sim.unit(source).unwrap();

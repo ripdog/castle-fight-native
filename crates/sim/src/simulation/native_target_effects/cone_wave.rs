@@ -58,7 +58,16 @@ fn cone_wave_is_fixed_heading_expands_hits_once_and_retains_aggregate_damage_bud
     assert_eq!(sim.unit(near).unwrap().health, 1000);
     let mut restored = wire_restored(&sim, 4);
     for _ in 0..12 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(near).unwrap().health, 970);
     assert_eq!(sim.unit(far).unwrap().health, 985);
@@ -152,7 +161,16 @@ fn native_ground_wave_reaches_structures_with_shared_budget_and_preserves_primar
     assert_eq!(wave.origin, point(10, 20));
     let mut other = wire_restored(&sim, 4);
     for _ in 0..10 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     assert!(sim.building(building).unwrap().health < 1000);
     assert_eq!(sim.unit(farther).unwrap().health, 975);
@@ -175,7 +193,16 @@ fn native_orb_wave_launch_state_enforces_shared_one_tick_child_cooldown_and_reco
     sim.launch_attack_cone_wave(first);
     assert_eq!(sim.projectile_count(), 1);
     let mut other = wire_restored(&sim, 4);
-    assert_eq!(sim.step().checksum, other.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            other.step();
+            other.checksum()
+        }
+    );
     let second = super::super::native_actions::cone_wave::new_state(
         SimId(777),
         Team(0),
@@ -187,7 +214,16 @@ fn native_orb_wave_launch_state_enforces_shared_one_tick_child_cooldown_and_reco
     sim.launch_attack_cone_wave(second.clone());
     other.launch_attack_cone_wave(second);
     assert_eq!(sim.projectile_count(), 2);
-    assert_eq!(sim.step().checksum, other.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            other.step();
+            other.checksum()
+        }
+    );
 }
 
 #[test]

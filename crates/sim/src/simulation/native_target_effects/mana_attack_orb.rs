@@ -68,7 +68,16 @@ fn mana_attack_orb_released_mode_owns_bonus_falloff_native_art_and_saved_payload
         .current = 0;
     let mut other = wire_restored(&sim, 4);
     for _ in 0..3 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     for (id, damage) in [
         (primary, 20),
@@ -103,7 +112,16 @@ fn mana_attack_orb_insufficient_mana_releases_ordinary_weapon_without_late_upgra
         .current = 50;
     let mut other = wire_restored(&sim, 4);
     for _ in 0..30 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(primary).unwrap().health, 988);
     assert_eq!(sim.unit(collateral).unwrap().health, 1000);
@@ -133,9 +151,27 @@ fn mana_attack_orb_commits_at_windup_release_and_spends_mana_even_if_evaded() {
         assert_eq!(sim.unit(source).unwrap().mana_current, Some(14));
         assert!(sim.unit(source).unwrap().status.pending_attack.is_some());
         let mut other = wire_restored(&sim, 4);
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
         assert_eq!(sim.unit(source).unwrap().mana_current, Some(14));
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
         assert_eq!(sim.unit(source).unwrap().mana_current, Some(7));
         assert_eq!(
             sim.projectiles().iter().any(|p| p.source == source),

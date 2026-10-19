@@ -230,7 +230,16 @@ fn selected_point_is_independent_of_trigger_and_native_masks_durations_survive_r
         .current = 0;
     let mut other = restored(&sim);
     for _ in 0..8 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     assert_eq!(
         sim.world
@@ -311,8 +320,26 @@ fn native_parent_structure_death_creates_independent_body_after_source_removal_a
         attack.cooldown_ticks = 1;
     }
     // Ordinary combat kills the target after snapshotting; the new attacker skips its birth tick.
-    assert_eq!(sim.step().checksum, other.step().checksum);
-    assert_eq!(sim.step().checksum, other.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            other.step();
+            other.checksum()
+        }
+    );
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            other.step();
+            other.checksum()
+        }
+    );
     let body = sim
         .snapshot_units()
         .into_iter()
@@ -324,7 +351,16 @@ fn native_parent_structure_death_creates_independent_body_after_source_removal_a
         body.classifications.summoned && body.mechanical && !body.classifications.combat_sapper
     );
     assert_eq!(body.attack_targets.bits(), 0);
-    assert_eq!(sim.step().checksum, other.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            other.step();
+            other.checksum()
+        }
+    );
     assert!(sim.unit(body.id).is_none());
 }
 
@@ -368,7 +404,16 @@ fn native_parent_impact_rechecks_immunity_and_zero_duration_uses_native_permanen
         );
         let mut other = restored(&sim);
         for _ in 0..4 {
-            assert_eq!(sim.step().checksum, other.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    other.step();
+                    other.checksum()
+                }
+            );
         }
     }
 }
@@ -440,7 +485,16 @@ fn native_charm_changes_ownership_without_replacing_identity_or_native_timed_lif
     assert_eq!(u.movement_class, MovementClass::Air);
     let mut other = restored(&s);
     for _ in 0..6 {
-        assert_eq!(s.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                s.step();
+                s.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     assert!(s.unit(id).is_none());
 }
@@ -526,7 +580,16 @@ fn charm_precast_shield_consumption_and_owner_event_rollback_are_distinct() {
             assert_eq!(u.negative_building_shield_level, 1);
         }
         let mut other = restored(&s);
-        assert_eq!(s.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                s.step();
+                s.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
 }
 #[test]
@@ -543,7 +606,16 @@ fn charm_defender_owner_callback_has_an_independent_deadline_and_survives_source
     s.world.despawn(entity(&s, src.id));
     let mut other = restored(&s);
     for _ in 0..4 {
-        assert_eq!(s.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                s.step();
+                s.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     assert!(!s.world.iter_entities().any(|e| matches!(
         e.get::<crate::components::NativeAction>(),
@@ -636,7 +708,16 @@ fn traveling_native_building_wave_has_independent_hero_selector_and_source_free_
     assert_eq!(sim.unit(trigger).unwrap().health, 1000);
     let mut copy = restored(&sim);
     for _ in 0..20 {
-        assert_eq!(sim.step().checksum, copy.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                copy.step();
+                copy.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(trigger).unwrap().health, 983); // Wave recipients need no combat-sapper flag.
     assert_eq!(sim.unit(selected).unwrap().health, 983); // Hero is legal for the independently selected child.

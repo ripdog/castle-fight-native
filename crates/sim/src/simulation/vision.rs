@@ -691,7 +691,16 @@ mod tests {
         let mut restored = fixture(4);
         restored.restore_snapshot(&snapshot).unwrap();
         for _ in 0..5 {
-            assert_eq!(sim.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
         }
         assert!(sim.fog.as_ref().unwrap().reveals.is_empty());
         assert!(!sim.fog.as_ref().unwrap().is_visible(Team(0), point(20)));
@@ -725,7 +734,16 @@ mod tests {
         restored.restore_snapshot(&snapshot).unwrap();
         assert!(visible(&mut restored, hidden));
         for _ in 0..3 {
-            assert_eq!(sim.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
         }
         assert!(!visible(&mut sim, hidden));
     }

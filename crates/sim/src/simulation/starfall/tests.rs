@@ -212,7 +212,16 @@ fn native_channel_uses_fixed_point_and_live_masks_after_source_death_and_wire_re
             .x = 300 * SUBUNITS_PER_WORLD_UNIT;
         let mut other = restored(&sim);
         for tick in 0..=7 {
-            assert_eq!(sim.step().checksum, other.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    other.step();
+                    other.checksum()
+                }
+            );
             let expected = 20 * (tick / 2).min(3);
             assert_eq!(sim.unit(immune).unwrap().health, 1000 - expected);
             assert_eq!(sim.unit(invulnerable).unwrap().health, 1000);
@@ -243,7 +252,16 @@ fn vision_cleanup_precedes_channel_expiry_without_detecting_invisible_units() {
     assert_eq!(sim.fog.as_ref().unwrap().reveals[0].expires_tick, 4);
     let mut other = restored(&sim);
     for _ in 0..=4 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
         assert!(!sim.fog.as_ref().unwrap().detects_invisible(Team(0), center));
         assert_eq!(
             sim.fog.as_ref().unwrap().reveals.is_empty(),

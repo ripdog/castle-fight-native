@@ -44,10 +44,28 @@ fn lava_split_waits_heals_and_replaces_child_using_default_health_and_provenance
     assert_eq!(state.split_tick, Some(5));
     let mut restored = wire_restored(&sim, 4);
     for _ in 0..2 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(sim.units().len(), 2);
-    assert_eq!(sim.step().checksum, restored.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
     assert_eq!(sim.unit(source).unwrap().health, 600);
     let child = sim
         .units()
@@ -62,7 +80,16 @@ fn lava_split_waits_heals_and_replaces_child_using_default_health_and_provenance
     assert_eq!(child.status.summon_order_refresh_tick, Some(7));
     let mut restored = wire_restored(&sim, 3);
     for _ in 0..12 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(
         sim.unit(source).unwrap().status.lava_spawn.unwrap().splits,

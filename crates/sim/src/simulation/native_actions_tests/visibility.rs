@@ -67,7 +67,16 @@ fn native_fire_requires_own_team_reveal_but_committed_flight_survives_reveal_exp
     }
     assert_eq!(original.step().ability_casts, 1);
     let mut restored = wire_restore(&original);
-    assert_eq!(original.step().checksum, restored.step().checksum);
+    assert_eq!(
+        {
+            original.step();
+            original.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
     let view = original.unit(target).unwrap();
     assert!(!view.status.is_revealed_to(Team(0), expiry));
     assert_eq!(
@@ -100,7 +109,16 @@ fn live_native_dot_immunity_advances_pulses_and_expiry_without_deferred_damage()
         // pre-hit immunity that would have prevented the buff from existing.
         let mut restored = wire_restore(&original);
         while original.next_tick <= expiry {
-            assert_eq!(original.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    original.step();
+                    original.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
             assert_eq!(original.unit(target).unwrap().health, before.health);
         }
         assert_eq!(
@@ -123,7 +141,10 @@ fn live_native_dot_immunity_advances_pulses_and_expiry_without_deferred_damage()
                 ..Default::default()
             });
         let metrics = original.step();
-        assert_eq!(metrics.checksum, restored.step().checksum);
+        assert_eq!(original.checksum(), {
+            restored.step();
+            restored.checksum()
+        });
         assert_eq!(
             metrics.ability_casts, 1,
             "expired native buff no longer excludes the vulnerable target"

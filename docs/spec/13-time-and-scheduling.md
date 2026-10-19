@@ -71,9 +71,10 @@ pub enum SimPhase {
     BallisticImpact,
     StructuralCommit,
     Victory,
-    Checksum,
 }
 ```
+
+The canonical checksum is not a per-tick phase, and `Simulation::step()` does not compute it. The match driver computes it at synchronization checkpoints, once per `SYNC_CHECKPOINT_INTERVAL_TICKS` (one simulation second) and at boundary controls; the server and clients compare checksums at the same cadence.
 
 The initial ordering is gameplay-significant: pre-attack stuns/disables suppress ordinary attacks; death suppresses all later actions by that entity; and ballistic/siege impact queries use post-movement positions. Units created in `Production` are marked as spawned this tick and cannot create an ordinary attack intent until a later tick.
 

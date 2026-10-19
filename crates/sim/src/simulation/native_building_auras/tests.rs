@@ -161,12 +161,30 @@ fn completed_sources_refresh_regeneration_and_unarmed_structure_armor_across_wir
     let mut restored = Simulation::new(sim.config.clone(), 4);
     restored.restore_snapshot(&snapshot).unwrap();
     for _ in 0..30 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert!(sim.unit(unit).unwrap().health > 500);
     assert!(sim.remove_building(aura));
     assert!(restored.remove_building(aura));
-    assert_eq!(sim.step().checksum, restored.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
     assert_eq!(sim.building(target).unwrap().status.armor_modifier_count, 0);
     assert_eq!(sim.unit(unit).unwrap().status.armor_modifier_count, 0);
 }

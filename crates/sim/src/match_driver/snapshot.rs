@@ -79,13 +79,16 @@ pub enum MatchSnapshotRestoreError {
     },
     AppliedSequenceMismatch,
     ReplayInitialConfigurationMismatch,
-    ReplayCheckpointCountMismatch {
-        history: usize,
-        checkpoints: usize,
+    ReplayCheckpointOutOfOrder {
+        previous: InputStreamPosition,
+        actual: InputStreamPosition,
     },
-    ReplayCheckpointMismatch {
-        expected_position: InputStreamPosition,
-        actual_position: InputStreamPosition,
+    ReplayCheckpointBeyondHistory {
+        position: InputStreamPosition,
+        history_len: usize,
+    },
+    ReplayCheckpointBoundaryMismatch {
+        stream_position: InputStreamPosition,
     },
     ReplayBoundaryStateMismatch,
 }
@@ -177,48 +180,62 @@ fn validate_driver_snapshot(
     {
         return Err(MatchSnapshotRestoreError::ReplayInitialConfigurationMismatch);
     }
-    if snapshot.replay_checkpoints.len() != snapshot.history.len() {
-        return Err(MatchSnapshotRestoreError::ReplayCheckpointCountMismatch {
-            history: snapshot.history.len(),
-            checkpoints: snapshot.replay_checkpoints.len(),
-        });
-    }
-    for (index, (record, checkpoint)) in snapshot
-        .history
-        .iter()
-        .zip(&snapshot.replay_checkpoints)
-        .enumerate()
-    {
-        let expected_position = InputStreamPosition(
-            u64::try_from(index).expect("checkpoint count was already validated against u64"),
-        );
-        let expected_boundary = match record {
+    // Checkpoints are sparse: sorted by position, each inside the history and matching the
+    // boundary of the record it refers to.
+    let history_len = snapshot.history.len();
+    let mut previous = None;
+    for checkpoint in &snapshot.replay_checkpoints {
+        let position = checkpoint.stream_position;
+        if u64::try_from(history_len)
+            .ok()
+            .is_none_or(|len| position.0 >= len)
+        {
+            return Err(MatchSnapshotRestoreError::ReplayCheckpointBeyondHistory {
+                position,
+                history_len,
+            });
+        }
+        if let Some(previous) = previous
+            && position <= previous
+        {
+            return Err(MatchSnapshotRestoreError::ReplayCheckpointOutOfOrder {
+                previous,
+                actual: position,
+            });
+        }
+        previous = Some(position);
+        let index = usize::try_from(position.0).expect("checkpoint position was validated");
+        let expected_boundary = match &snapshot.history[index] {
             CanonicalStreamRecord::Tick(tick) => Some(tick.tick),
             CanonicalStreamRecord::Control(control) => control.after_completed_tick,
         };
-        if checkpoint.stream_position != expected_position
-            || checkpoint.completed_tick != expected_boundary
-        {
-            return Err(MatchSnapshotRestoreError::ReplayCheckpointMismatch {
-                expected_position,
-                actual_position: checkpoint.stream_position,
-            });
+        if checkpoint.completed_tick != expected_boundary {
+            return Err(
+                MatchSnapshotRestoreError::ReplayCheckpointBoundaryMismatch {
+                    stream_position: position,
+                },
+            );
         }
     }
-    match snapshot.replay_checkpoints.last() {
-        Some(checkpoint)
-            if checkpoint.completed_tick != snapshot.simulation.completed_tick()
-                || checkpoint.checksum != snapshot.simulation.checksum() =>
+    // The live state must match the final record's checkpoint when that record has one; the
+    // initial state stands in when no records exist.
+    if let Some(last) = history_len.checked_sub(1) {
+        let last_position = InputStreamPosition(
+            u64::try_from(last).expect("history length was validated against u64"),
+        );
+        if let Some(checkpoint) = snapshot
+            .replay_checkpoints
+            .last()
+            .filter(|checkpoint| checkpoint.stream_position == last_position)
+            && (checkpoint.completed_tick != snapshot.simulation.completed_tick()
+                || checkpoint.checksum != snapshot.simulation.checksum())
         {
             return Err(MatchSnapshotRestoreError::ReplayBoundaryStateMismatch);
         }
-        None if snapshot.replay_initial_state.completed_tick()
-            != snapshot.simulation.completed_tick()
-            || snapshot.replay_initial_state.checksum() != snapshot.simulation.checksum() =>
-        {
-            return Err(MatchSnapshotRestoreError::ReplayBoundaryStateMismatch);
-        }
-        Some(_) | None => {}
+    } else if snapshot.replay_initial_state.completed_tick() != snapshot.simulation.completed_tick()
+        || snapshot.replay_initial_state.checksum() != snapshot.simulation.checksum()
+    {
+        return Err(MatchSnapshotRestoreError::ReplayBoundaryStateMismatch);
     }
 
     let current_players: BTreeSet<_> = simulation
@@ -384,8 +401,8 @@ mod tests {
             .unwrap();
         assert_eq!(original_result.executions, restored_result.executions);
         assert_eq!(
-            original_result.tick_result.checksum,
-            restored_result.tick_result.checksum
+            original.simulation.checksum(),
+            restored.simulation.checksum()
         );
         assert_eq!(
             original.simulation.player_resources_for(PlayerId(0)),

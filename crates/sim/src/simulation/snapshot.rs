@@ -1340,9 +1340,9 @@ mod tests {
         );
 
         for _ in 0..20 {
-            let original_tick = original.step();
-            let restored_tick = restored.step();
-            assert_eq!(original_tick.checksum, restored_tick.checksum);
+            original.step();
+            restored.step();
+            assert_eq!(original.checksum(), restored.checksum());
         }
     }
 

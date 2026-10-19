@@ -4,7 +4,9 @@ use crate::{
     CastleFightContentIdentity, MapVersion, SimulationSnapshot, SnapshotRestoreError,
 };
 
-pub const MATCH_REPLAY_SCHEMA_VERSION: u32 = 1;
+/// Version 2: checkpoints are sparse. A checkpoint exists for each boundary control, each
+/// synchronization tick, and the final record of an exported replay.
+pub const MATCH_REPLAY_SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReplayHeader {
@@ -19,6 +21,8 @@ pub struct ReplayHeader {
     pub initial_checksum: u64,
 }
 
+/// The verified state after the record at `stream_position`. Checkpoints are sparse and sorted by
+/// position; a record without one is applied without a checksum comparison.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ReplayCheckpoint {
     pub stream_position: InputStreamPosition,
@@ -81,13 +85,16 @@ pub enum ReplayError {
         actual: u64,
     },
     InitialSnapshotMismatch,
-    CheckpointCountMismatch {
-        records: usize,
-        checkpoints: usize,
-    },
-    CheckpointPositionMismatch {
-        expected: InputStreamPosition,
+    CheckpointOutOfOrder {
+        previous: InputStreamPosition,
         actual: InputStreamPosition,
+    },
+    CheckpointBeyondHistory {
+        position: InputStreamPosition,
+        available: InputStreamPosition,
+    },
+    MissingFinalCheckpoint {
+        end: InputStreamPosition,
     },
     CheckpointBoundaryMismatch {
         stream_position: InputStreamPosition,
@@ -104,6 +111,9 @@ pub enum ReplayError {
         available: InputStreamPosition,
     },
     SeekSnapshotHasPendingCommands,
+    SeekSnapshotUncheckpointed {
+        position: InputStreamPosition,
+    },
     SeekSnapshotBeyondHistory {
         position: InputStreamPosition,
         available: InputStreamPosition,
@@ -172,9 +182,10 @@ impl MatchReplay {
         let expected_checksum = if position.0 == 0 {
             self.initial_state.checksum()
         } else {
-            let index = usize::try_from(position.0 - 1)
-                .expect("validated replay stream position must fit record index");
-            self.checkpoints[index].checksum
+            // A seek snapshot can only be checked against a recorded checkpoint.
+            self.checkpoint_at(InputStreamPosition(position.0 - 1))
+                .ok_or(ReplayError::SeekSnapshotUncheckpointed { position })?
+                .checksum
         };
         let actual_checksum = snapshot.simulation().checksum();
         if expected_checksum != actual_checksum {
@@ -230,7 +241,9 @@ impl MatchReplay {
             let index = usize::try_from(position)
                 .expect("validated replay stream position must fit record index");
             driver.apply_stream_record(simulation, self.records[index].clone())?;
-            self.verify_checkpoint(index, simulation)?;
+            if let Some(checkpoint) = self.checkpoint_at(InputStreamPosition(position)) {
+                verify_checkpoint(*checkpoint, simulation)?;
+            }
         }
         simulation.clear_presentation_events();
         Ok(())
@@ -290,51 +303,88 @@ impl MatchReplay {
         {
             return Err(ReplayError::InitialSnapshotMismatch);
         }
-        if self.records.len() != self.checkpoints.len() {
-            return Err(ReplayError::CheckpointCountMismatch {
-                records: self.records.len(),
-                checkpoints: self.checkpoints.len(),
-            });
-        }
-        for (index, checkpoint) in self.checkpoints.iter().enumerate() {
-            let expected = InputStreamPosition(
-                u64::try_from(index).expect("replay checkpoint count exceeds u64"),
-            );
-            if checkpoint.stream_position != expected {
-                return Err(ReplayError::CheckpointPositionMismatch {
-                    expected,
-                    actual: checkpoint.stream_position,
+        let end = self.end_stream_position();
+        let mut previous = None;
+        for checkpoint in &self.checkpoints {
+            let position = checkpoint.stream_position;
+            if position.0 >= end.0 {
+                return Err(ReplayError::CheckpointBeyondHistory {
+                    position,
+                    available: end,
                 });
             }
+            if let Some(previous) = previous
+                && position <= previous
+            {
+                return Err(ReplayError::CheckpointOutOfOrder {
+                    previous,
+                    actual: position,
+                });
+            }
+            previous = Some(position);
+        }
+        // Playback must end with a checksum comparison of the final state.
+        if let Some(last) = end.0.checked_sub(1)
+            && self.checkpoint_at(InputStreamPosition(last)).is_none()
+        {
+            return Err(ReplayError::MissingFinalCheckpoint { end });
         }
         Ok(())
     }
 
-    fn verify_checkpoint(&self, index: usize, simulation: &Simulation) -> Result<(), ReplayError> {
-        let checkpoint = self.checkpoints[index];
-        let actual_boundary = simulation.tick().checked_sub(1);
-        if actual_boundary != checkpoint.completed_tick {
-            return Err(ReplayError::CheckpointBoundaryMismatch {
-                stream_position: checkpoint.stream_position,
-                expected: checkpoint.completed_tick,
-                actual: actual_boundary,
-            });
-        }
-        let actual_checksum = simulation.checksum();
-        if actual_checksum != checkpoint.checksum {
-            return Err(ReplayError::CheckpointChecksumMismatch {
-                stream_position: checkpoint.stream_position,
-                expected: checkpoint.checksum,
-                actual: actual_checksum,
-            });
-        }
-        Ok(())
+    fn checkpoint_at(&self, position: InputStreamPosition) -> Option<&ReplayCheckpoint> {
+        self.checkpoints
+            .binary_search_by_key(&position, |checkpoint| checkpoint.stream_position)
+            .ok()
+            .map(|index| &self.checkpoints[index])
     }
 }
 
+fn verify_checkpoint(
+    checkpoint: ReplayCheckpoint,
+    simulation: &Simulation,
+) -> Result<(), ReplayError> {
+    let actual_boundary = simulation.tick().checked_sub(1);
+    if actual_boundary != checkpoint.completed_tick {
+        return Err(ReplayError::CheckpointBoundaryMismatch {
+            stream_position: checkpoint.stream_position,
+            expected: checkpoint.completed_tick,
+            actual: actual_boundary,
+        });
+    }
+    let actual_checksum = simulation.checksum();
+    if actual_checksum != checkpoint.checksum {
+        return Err(ReplayError::CheckpointChecksumMismatch {
+            stream_position: checkpoint.stream_position,
+            expected: checkpoint.checksum,
+            actual: actual_checksum,
+        });
+    }
+    Ok(())
+}
+
 impl MatchDriver {
+    /// Exports the recorded history. `simulation` must be the state after the last recorded
+    /// record. When that record has no sparse checkpoint, its state is checksummed here so every
+    /// exported replay ends with a verified final state.
     #[must_use]
-    pub fn export_replay(&self) -> MatchReplay {
+    pub fn export_replay(&self, simulation: &Simulation) -> MatchReplay {
+        let mut checkpoints = self.replay_checkpoints.clone();
+        if let Some(last) = self.history.len().checked_sub(1) {
+            let last_position = InputStreamPosition(
+                u64::try_from(last).expect("replay history length exceeds u64"),
+            );
+            if checkpoints
+                .last()
+                .is_none_or(|checkpoint| checkpoint.stream_position != last_position)
+            {
+                checkpoints.push(ReplayCheckpoint {
+                    stream_position: last_position,
+                    completed_tick: completed_tick_boundary(simulation),
+                    checksum: simulation.checksum(),
+                });
+            }
+        }
         MatchReplay {
             header: ReplayHeader {
                 schema_version: MATCH_REPLAY_SCHEMA_VERSION,
@@ -349,7 +399,7 @@ impl MatchDriver {
             },
             initial_state: self.replay_initial_state.clone(),
             records: self.history.clone(),
-            checkpoints: self.replay_checkpoints.clone(),
+            checkpoints,
             seek_snapshots: Vec::new(),
         }
     }
@@ -397,7 +447,6 @@ mod tests {
         let mut original = match_927(1);
         let mut driver = MatchDriver::new(&original.simulation, original.content);
         driver.advance_local_tick(&mut original.simulation).unwrap();
-        let seek_snapshot = driver.capture_snapshot(&original.simulation);
         driver
             .emit_local_control(
                 &mut original.simulation,
@@ -407,6 +456,8 @@ mod tests {
                 },
             )
             .unwrap();
+        // Seek snapshots are only accepted at checkpointed positions; boundary controls are.
+        let seek_snapshot = driver.capture_snapshot(&original.simulation);
         driver
             .emit_local_control(
                 &mut original.simulation,
@@ -428,7 +479,7 @@ mod tests {
 
         let expected_checksum = original.simulation.checksum();
         let expected_history = driver.history().to_vec();
-        let replay_without_seek = driver.export_replay();
+        let replay_without_seek = driver.export_replay(&original.simulation);
 
         let mut replayed = match_927(4);
         let mut replay_driver = MatchDriver::new(&replayed.simulation, replayed.content);
@@ -445,7 +496,7 @@ mod tests {
         assert!(replayed.simulation.ability_casts_last_tick().is_empty());
         assert!(replayed.simulation.chain_lightnings_last_tick().is_empty());
 
-        let mut replay_with_seek = driver.export_replay();
+        let mut replay_with_seek = driver.export_replay(&original.simulation);
         replay_with_seek.add_seek_snapshot(seek_snapshot).unwrap();
         let mut seek_replayed = match_927(3);
         let mut seek_driver = MatchDriver::new(&seek_replayed.simulation, seek_replayed.content);

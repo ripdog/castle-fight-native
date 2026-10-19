@@ -78,7 +78,7 @@ Tick N state
     ├─15. Resolve due ballistic/siege impacts against post-movement positions
     ├─16. Resolve remaining deaths/despawns and deferred structural changes
     ├─17. Evaluate victory/game-mode state
-    ├─18. Emit authoritative tick summary/checksum inputs
+    ├─18. Emit authoritative tick summary (the canonical checksum is taken at synchronization checkpoints, not every tick)
     │
 Tick N+1 state
 ```

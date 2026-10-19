@@ -62,10 +62,28 @@ fn native_death_explosion_saves_post_death_delay_and_position_without_destroying
     }
     let mut other = wire_restored(&sim, 4);
     for _ in 0..3 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
         assert_eq!(sim.unit(full).unwrap().health, 1000);
     }
-    assert_eq!(sim.step().checksum, other.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            other.step();
+            other.checksum()
+        }
+    );
     assert_eq!(sim.unit(full).unwrap().health, 960);
     assert_eq!(sim.unit(partial).unwrap().health, 983);
     assert_eq!(sim.unit(outside).unwrap().health, 1000);

@@ -207,7 +207,16 @@ fn roots_commit_parent_resources_once_and_periodic_damage_survives_source_death_
     let mut restored = Simulation::new(SimulationConfig::default(), 4);
     restored.restore_snapshot(&decoded).unwrap();
     for _ in 0..65 {
-        assert_eq!(s.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                s.step();
+                s.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(s.unit(target).unwrap().health, 82);
     assert!(s.unit(target).unwrap().status.rooted_until_tick <= s.tick());

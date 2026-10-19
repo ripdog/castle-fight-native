@@ -116,7 +116,16 @@ fn hostile_armor_family_uses_only_the_strongest_in_range_and_falls_back_without_
         .unwrap()
         .0
         .x = 200 * SUBUNITS_PER_WORLD_UNIT;
-    assert_eq!(sim.step().checksum, other.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            other.step();
+            other.checksum()
+        }
+    );
     assert_eq!(armor(&sim, target), 0);
 }
 
@@ -132,7 +141,16 @@ fn zero_linger_hostile_armor_expires_on_the_next_boundary_after_source_death() {
         .unwrap()
         .current = 0;
     let mut other = wire_restored(&sim, 4);
-    assert_eq!(sim.step().checksum, other.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            other.step();
+            other.checksum()
+        }
+    );
     assert_eq!(armor(&sim, target), 0);
 }
 
@@ -172,7 +190,16 @@ fn building_sourced_hostile_aura_is_global_and_adds_spell_vulnerability_once_per
     let ally = sim.spawn_unit(unit(0, 400, 0, AttackDelivery::Melee));
     sim.step();
     let mut other = wire_restored(&sim, 4);
-    assert_eq!(sim.step().checksum, other.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            other.step();
+            other.checksum()
+        }
+    );
     assert_eq!(armor(&sim, enemy), -600);
     assert_eq!(armor(&sim, ally), 0);
     let view = sim.unit(enemy).unwrap();

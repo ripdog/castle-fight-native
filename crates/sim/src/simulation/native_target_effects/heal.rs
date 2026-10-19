@@ -85,13 +85,31 @@ fn heal_commits_once_and_restores_pending_attack_resume_across_workers() {
     )));
     let mut restored = wire_restored(&sim, 4);
     for _ in 0..3 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
         assert!(sim.world.iter_entities().any(|e| matches!(
             e.get::<NativeAction>(),
             Some(NativeAction::ResumeAttack { .. })
         )));
     }
-    assert_eq!(sim.step().checksum, restored.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
     assert!(!sim.world.iter_entities().any(|e| matches!(
         e.get::<NativeAction>(),
         Some(NativeAction::ResumeAttack { .. })

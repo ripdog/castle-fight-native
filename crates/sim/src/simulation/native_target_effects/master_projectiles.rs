@@ -248,7 +248,16 @@ fn master_fan_samples_live_source_position_then_stops_new_missiles_on_source_dea
         .unwrap()
         .0 = point(50, 20);
     let mut restored = wire_restored(&sim, 4);
-    assert_eq!(sim.step().checksum, restored.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
     let s = saved(&sim);
     assert_eq!(s.frost.len(), 1);
     assert_eq!(s.frost[0].position(), point(40, 20));
@@ -261,7 +270,16 @@ fn master_fan_samples_live_source_position_then_stops_new_missiles_on_source_dea
         .id();
     restored.world.despawn(e);
     for _ in 0..5 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert!(saved(&sim).fans.is_empty());
     assert!(saved(&sim).frost.is_empty());
@@ -372,7 +390,25 @@ fn native_parasite_death_window_keeps_inert_parent_payload_and_short_lived_nonco
     assert_eq!(sim.unit_count(), 1);
     let mut restored = wire_restored(&sim, 4);
     assert_eq!(sim.checksum(), restored.checksum());
-    assert_eq!(sim.step().checksum, restored.step().checksum);
-    assert_eq!(sim.step().checksum, restored.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
     assert!(saved(&sim).minions.is_empty());
 }

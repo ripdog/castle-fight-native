@@ -84,12 +84,30 @@ fn building_aura_activates_at_completion_and_refreshes_fractional_mana_across_wi
     assert_eq!(sim.building(building).unwrap().attack, None);
     let mut restored = wire_restored(&sim, 4);
     for _ in 0..7 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(target).unwrap().mana_current, Some(12));
     assert!(sim.remove_building(building));
     assert!(restored.remove_building(building));
-    assert_eq!(sim.step().checksum, restored.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
     assert_eq!(sim.unit(target).unwrap().status.armor_modifier_count, 0);
     assert_eq!(sim.unit(target).unwrap().mana_current, Some(12));
 }

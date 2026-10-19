@@ -55,7 +55,16 @@ fn shell_melee_reduction_and_return_have_independent_armor_and_no_recursion() {
         });
     sim.step();
     let mut copy = wire_restored(&sim, 4);
-    assert_eq!(sim.step().checksum, copy.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            copy.step();
+            copy.checksum()
+        }
+    );
     let rules = DamageRules::default();
     let base = rules.apply_attack(
         100,

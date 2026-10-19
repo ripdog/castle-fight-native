@@ -54,7 +54,16 @@ fn damage_retaliation_uses_native_melee_classification_before_fatal_health_commi
     assert_eq!(sim.unit(attacker).unwrap().health, 1000);
     let mut restored = wire_restored(&sim, 4);
     for _ in 0..4 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(attacker).unwrap().health, 970);
     assert!(sim.unit(attacker).unwrap().status.stunned_until_tick > sim.next_tick);
@@ -162,7 +171,16 @@ fn damage_retaliation_inclusive_percent_roll_has_distinct_per_event_sequence() {
         assert_eq!(sim.unit(victim).unwrap().status.retaliation_sequence, 1);
         let mut restored = wire_restored(&sim, 4);
         for _ in 0..6 {
-            assert_eq!(sim.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
         }
     }
 }
@@ -310,7 +328,16 @@ fn mutually_exclusive_orbs_apply_structure_fork_on_weapon_projectile_impact() {
     assert_eq!(sim.building(target).unwrap().health, 1000);
     let mut restored = wire_restored(&sim, 4);
     for _ in 0..4 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(sim.building(target).unwrap().health, 974);
 }

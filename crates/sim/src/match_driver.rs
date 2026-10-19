@@ -13,10 +13,27 @@ pub use snapshot::{
 
 use crate::CastleFightContentBundle;
 use crate::{
-    CommandAdmissionError, CommandOutcome, MatchLifecycle, MatchOutcome, PlayerCommand,
-    PlayerConnectionStatus, PlayerId, Simulation, TickResult, admit_player_command,
-    commands::execute_player_command,
+    CASTLE_FIGHT_SIMULATION_HZ, CommandAdmissionError, CommandOutcome, MatchLifecycle,
+    MatchOutcome, PlayerCommand, PlayerConnectionStatus, PlayerId, Simulation, TickResult,
+    admit_player_command, commands::execute_player_command,
 };
+
+/// Ticks between synchronization checkpoints: one second of simulation time. The canonical
+/// checksum is computed only at these ticks (and at boundary controls), never every tick.
+pub const SYNC_CHECKPOINT_INTERVAL_TICKS: u64 = CASTLE_FIGHT_SIMULATION_HZ as u64;
+
+/// Whether `completed_tick` closes a checkpoint interval of `interval_ticks`. The convention is
+/// the last tick of each interval, so a checkpoint covers a whole number of intervals.
+#[must_use]
+pub const fn is_checkpoint_tick(completed_tick: u64, interval_ticks: u64) -> bool {
+    completed_tick % interval_ticks == interval_ticks - 1
+}
+
+/// Whether `completed_tick` is a synchronization checkpoint at [`SYNC_CHECKPOINT_INTERVAL_TICKS`].
+#[must_use]
+pub const fn is_sync_checkpoint_tick(completed_tick: u64) -> bool {
+    is_checkpoint_tick(completed_tick, SYNC_CHECKPOINT_INTERVAL_TICKS)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ClientCommandSequence(pub u64);
@@ -476,11 +493,13 @@ impl MatchDriver {
         }
         let tick_result = simulation.step();
         self.last_executions.clone_from(&executions);
-        self.replay_checkpoints.push(ReplayCheckpoint {
-            stream_position: finalized.stream_position,
-            completed_tick: Some(tick_result.completed_tick),
-            checksum: tick_result.checksum,
-        });
+        if is_sync_checkpoint_tick(tick_result.completed_tick) {
+            self.replay_checkpoints.push(ReplayCheckpoint {
+                stream_position: finalized.stream_position,
+                completed_tick: Some(tick_result.completed_tick),
+                checksum: simulation.checksum(),
+            });
+        }
         self.history.push(CanonicalStreamRecord::Tick(finalized));
         self.advance_stream_position()?;
         Ok((executions, tick_result))

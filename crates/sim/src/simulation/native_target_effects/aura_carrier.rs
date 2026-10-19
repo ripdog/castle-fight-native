@@ -105,7 +105,16 @@ fn carrier_healing_uses_fixed_origin_live_organic_allies_and_exact_closing_inter
     );
     let mut restored = wire_restored(&sim, 4);
     while sim.tick() <= u64::from(profile().lifetime_ticks) {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     // Eight completed intervals at 1.5 HP/tick, including the closing interval at expiry.
     for id in [ground, protected_air] {
@@ -123,7 +132,16 @@ fn carrier_healing_uses_fixed_origin_live_organic_allies_and_exact_closing_inter
             .iter_entities()
             .any(|e| e.get::<SimId>() == Some(&aura))
     );
-    assert_eq!(sim.step().checksum, restored.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
     assert_eq!(sim.unit(ground).unwrap().health, 912);
 }
 
@@ -150,7 +168,16 @@ fn carrier_healing_resamples_membership_without_linger_and_clamps_full_health() 
     wound(&mut sim, full, 998);
     let mut restored = wire_restored(&sim, 3);
     for _ in 0..3 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(full).unwrap().health, 1000);
     assert_eq!(sim.unit(mover).unwrap().health, 905);
@@ -186,12 +213,30 @@ fn overlapping_carriers_share_one_native_buff_and_fall_back_after_stronger_expir
     assert_eq!(sim.unit(target).unwrap().status.armor_modifier_count, 1);
     let mut restored = wire_restored(&sim, 4);
     for _ in 0..2 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(target).unwrap().health, 903);
     assert_eq!(rate(&sim, target), weaker.regeneration_per_second_per_10k);
     while sim.tick() <= 6 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(target).unwrap().health, 907);
     assert_eq!(rate(&sim, target), 0);
@@ -233,7 +278,16 @@ fn carrier_native_aura_reapplies_after_removal_and_cannot_be_stolen() {
         status.attack_speed_modifier_count = 0;
         let mut restored = wire_restored(&sim, 4);
         for _ in 0..2 {
-            assert_eq!(sim.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
         }
         assert_eq!(
             sim.unit(donor).unwrap().health,
@@ -346,7 +400,16 @@ fn hostile_trigger_and_friendly_carrier_effect_commit_independently_and_survive_
             }
             let mut restored = wire_restored(&sim, 4);
             while sim.tick() <= u64::from(aura_profile.lifetime_ticks) {
-                assert_eq!(sim.step().checksum, restored.step().checksum);
+                assert_eq!(
+                    {
+                        sim.step();
+                        sim.checksum()
+                    },
+                    {
+                        restored.step();
+                        restored.checksum()
+                    }
+                );
             }
             assert_eq!(
                 sim.unit(target).unwrap().health,
@@ -442,7 +505,16 @@ fn speed_carrier_samples_air_mechanical_protected_allies_and_expires_without_lin
         }
         let mut restored = wire_restored(&sim, 4);
         while sim.tick() <= 6 {
-            assert_eq!(sim.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
         }
         assert!(sim.aura_carriers().is_empty());
         assert_eq!(sim.unit(ordinary).unwrap().health, 900);
@@ -518,7 +590,16 @@ fn native_speed_family_selects_each_stat_once_and_rekeys_after_representative_so
     assert_eq!(status.movement_modifiers[0].id.0, short.ability.0);
     let mut restored = wire_restored(&sim, 3);
     for _ in 0..3 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     let status = sim.unit(target).unwrap().status;
     assert_eq!(status.movement_modifier_count, 1);
@@ -533,7 +614,16 @@ fn native_speed_family_selects_each_stat_once_and_rekeys_after_representative_so
             .entity_mut(entity(simulation, target))
             .insert(Position(unit(0, 91, 0, AttackDelivery::Melee).position));
     }
-    assert_eq!(sim.step().checksum, restored.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
     assert_eq!(sim.unit(target).unwrap().status.movement_modifier_count, 0);
     assert_eq!(
         sim.unit(target).unwrap().status.attack_speed_modifier_count,
@@ -545,7 +635,16 @@ fn native_speed_family_selects_each_stat_once_and_rekeys_after_representative_so
             .entity_mut(entity(simulation, target))
             .insert(Position(unit(0, 90, 0, AttackDelivery::Melee).position));
     }
-    assert_eq!(sim.step().checksum, restored.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
     assert_eq!(
         sim.unit(target).unwrap().status.movement_modifiers[0].percent_delta,
         60
@@ -555,7 +654,16 @@ fn native_speed_family_selects_each_stat_once_and_rekeys_after_representative_so
         50
     );
     while sim.tick() <= 6 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(target).unwrap().status.armor_modifier_count, 0);
 }

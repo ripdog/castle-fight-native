@@ -113,8 +113,6 @@ define_spans! {
     ObjectiveOutcome => ("objective-outcome", "commit"),
     EconomyIncome => ("economy-income", "commit"),
     FogAndVision => ("fog-and-vision", "commit"),
-    // hash
-    Checksum => ("checksum", "hash"),
 }
 
 /// Accumulated time per [`Span`], indexed by the span's declaration order.

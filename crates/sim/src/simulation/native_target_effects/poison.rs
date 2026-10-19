@@ -311,7 +311,16 @@ fn distinct_poison_variants_keep_damage_clocks_and_fall_back_to_surviving_slows(
     let before = sim.unit(target).unwrap().health;
     let mut restored = wire_restored(&sim, 6);
     while sim.next_tick <= 30 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     let status = sim.unit(target).unwrap().status;
     assert_eq!(
@@ -326,7 +335,16 @@ fn distinct_poison_variants_keep_damage_clocks_and_fall_back_to_surviving_slows(
     assert_eq!(status.movement_modifiers[0].percent_delta, -5);
     assert_eq!(status.attack_speed_modifiers[0].percent_delta, -8);
     while sim.next_tick <= 95 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     let status = sim.unit(target).unwrap().status;
     assert!(status.poison.is_none());

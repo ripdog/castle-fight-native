@@ -350,7 +350,6 @@ pub struct TickTimings {
     pub crowd_and_collision: Duration,
     pub ballistic_impact: Duration,
     pub structural_commit: Duration,
-    pub checksum: Duration,
     pub total: Duration,
     /// Always-on sub-step breakdown; each span is also covered by one of the phases above.
     pub spans: SpanTimings,
@@ -399,7 +398,6 @@ pub struct TickResult {
     pub ally_defense_queries: usize,
     pub ally_defense_victim_candidates: usize,
     pub ally_defense_attacker_candidates: usize,
-    pub checksum: u64,
     pub timings: TickTimings,
 }
 
@@ -1754,7 +1752,6 @@ impl Simulation {
                 buildings_alive: self.building_count(),
                 corpses_alive: self.corpse_count(),
                 projectiles_alive: self.projectile_count(),
-                checksum: self.checksum(),
                 ..Default::default()
             };
         }
@@ -2612,38 +2609,6 @@ impl Simulation {
         });
         let structural_commit = phase_start.elapsed();
 
-        let phase_start = Instant::now();
-        let checksum = timed!(
-            spans,
-            Span::Checksum,
-            canonical_checksum(
-                &self.world,
-                CanonicalMatchState {
-                    shrine_death_generation: self.shrine_death_generation,
-                    retired_damage_sources: &self.retired_damage_sources,
-                    debug_buildings_invulnerable: self.debug_buildings_invulnerable,
-                    fog: self.fog.as_ref(),
-                    next_tick: self.next_tick,
-                    next_id: self.next_id,
-                    next_visual_id: self.next_visual_id,
-                    configuration_identity: self.configuration_identity,
-                    defense_alerts: &self.defense_alerts,
-                    players: &self.players,
-                    lifecycle: self.lifecycle,
-                    team_objectives: self.team_objectives,
-                    gjallarhorn_constructed_count: self.gjallarhorn_constructed_count,
-                    round_index: self.round_index,
-                    round_start_tick: self.round_start_tick,
-                    round_wins: self.round_wins,
-                    player_strikes: &self.player_strikes,
-                    pending_rescue_strikes: &self.pending_rescue_strikes,
-                    team_rescue_ready_ticks: self.team_rescue_ready_ticks,
-                    review_until_tick: self.review_until_tick,
-                    last_round_scoreboard: self.last_round_scoreboard.as_ref(),
-                },
-            )
-        );
-        let checksum_time = phase_start.elapsed();
         let timings = TickTimings {
             topology,
             timers,
@@ -2659,7 +2624,6 @@ impl Simulation {
             crowd_and_collision: movement.crowd_and_collision,
             ballistic_impact,
             structural_commit,
-            checksum: checksum_time,
             total: tick_start.elapsed(),
             spans,
         };
@@ -2724,7 +2688,6 @@ impl Simulation {
             ally_defense_queries: target_selection.ally_defense_queries,
             ally_defense_victim_candidates: target_selection.ally_defense_victim_candidates,
             ally_defense_attacker_candidates: target_selection.ally_defense_attacker_candidates,
-            checksum,
             timings,
         }
     }
@@ -2736,7 +2699,6 @@ impl Simulation {
             buildings_alive: self.building_count(),
             corpses_alive: self.corpse_count(),
             projectiles_alive: self.projectile_count(),
-            checksum: self.checksum(),
             ..TickResult::default()
         }
     }

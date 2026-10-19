@@ -173,7 +173,16 @@ fn selected_type_wipe_admits_air_immune_and_nonsapper_matches_but_keeps_other_ty
     );
     let mut other = restored(&s);
     for _ in 0..4 {
-        assert_eq!(s.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                s.step();
+                s.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
 }
 
@@ -207,7 +216,16 @@ fn strong_shield_is_removed_without_healing_and_weak_shield_does_not_intercept()
     );
     let mut other = restored(&s);
     for _ in 0..3 {
-        assert_eq!(s.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                s.step();
+                s.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
 }
 

@@ -53,7 +53,16 @@ fn support_version_survives_building_removal_and_wire_continuation_for_unlabelle
     assert_eq!(sim.golden_shrine_revive_chance(callback.team), 0);
     let mut wire_restored = restored(&sim);
     while sim.next_tick <= callback.due_tick {
-        assert_eq!(sim.step().checksum, wire_restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                wire_restored.step();
+                wire_restored.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit_count(), 1);
     assert_eq!(

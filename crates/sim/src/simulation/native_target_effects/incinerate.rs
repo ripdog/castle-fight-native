@@ -57,11 +57,29 @@ fn incinerate_landed_hits_stack_to_profile_limit_and_restart_after_expiry() {
     }
     let mut other = wire_restored(&sim, 4);
     for _ in 0..16 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     ready(&mut sim, source);
     ready(&mut other, source);
-    assert_eq!(sim.step().checksum, other.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            other.step();
+            other.checksum()
+        }
+    );
     assert_eq!(
         sim.unit(victim).unwrap().status.incinerate.unwrap().stacks,
         1
@@ -104,10 +122,28 @@ fn incinerate_fatal_weapon_hit_destroys_corpse_and_saved_delayed_explosion_uses_
         .current = 0;
     let mut other = wire_restored(&sim, 4);
     for _ in 0..3 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
         assert_eq!(sim.unit(inside).unwrap().health, 1000);
     }
-    assert_eq!(sim.step().checksum, other.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            other.step();
+            other.checksum()
+        }
+    );
     assert_eq!(sim.unit(inside).unwrap().health, 976);
     assert_eq!(sim.unit(half).unwrap().health, 989);
     assert_eq!(sim.unit(outside).unwrap().health, 1000);
@@ -136,7 +172,16 @@ fn incinerate_released_native_missile_keeps_payload_after_caster_death_and_clone
         .current = 0;
     let mut other = wire_restored(&sim, 4);
     for _ in 0..3 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(target).unwrap().health, 995);
     assert_eq!(

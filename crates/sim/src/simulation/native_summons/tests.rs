@@ -465,7 +465,16 @@ fn native_parent_flight_buff_ownership_and_timed_body_survive_wire_restore() {
     sim.world.despawn(entity(&sim, source));
     restored.world.despawn(entity(&restored, source));
     for _ in 0..2 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     for simulation in [&mut sim, &mut restored] {
         let attacker = body(simulation, Team(0), SimPoint::new(455, 200));
@@ -478,8 +487,26 @@ fn native_parent_flight_buff_ownership_and_timed_body_survive_wire_restore() {
         attack.cooldown_ticks = 1;
     }
     // The attacker cannot act on its creation tick. The following ordinary hit kills under the buff.
-    assert_eq!(sim.step().checksum, restored.step().checksum);
-    assert_eq!(sim.step().checksum, restored.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
     let child = sim
         .units()
         .into_iter()
@@ -493,7 +520,16 @@ fn native_parent_flight_buff_ownership_and_timed_body_survive_wire_restore() {
     let wire = sim.capture_snapshot().encode_wire().unwrap();
     let snapshot = SimulationSnapshot::decode_wire(&wire, bundle).unwrap();
     restored.restore_snapshot(&snapshot).unwrap();
-    assert_eq!(sim.step().checksum, restored.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
     assert!(sim.unit(child.id).is_none());
 
     let mut sim = Simulation::new(

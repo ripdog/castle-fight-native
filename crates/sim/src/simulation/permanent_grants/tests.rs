@@ -311,7 +311,16 @@ fn repeated_permanent_grants_do_not_stack_and_recover_independently_of_their_sou
     sim.world.despawn(entity(&sim, caster));
     let mut restored = restore(&sim, 4);
     for _ in 0..20 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(
         sim.unit(target).unwrap().status.native_grants,
@@ -459,7 +468,16 @@ fn granted_critical_and_evasion_use_native_passive_resolution_while_demolish_is_
         .native_grants = NativeAbilityGrants::default();
     let mut restored = restore(&sim, 3);
     for _ in 0..15 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(target).unwrap().health, 946);
 }

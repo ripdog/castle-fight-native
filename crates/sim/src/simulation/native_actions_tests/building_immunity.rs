@@ -87,7 +87,16 @@ fn declared_structure_immunity_blocks_launch_and_acquired_immunity_blocks_commit
             }
             let mut restored = wire_restore(&original);
             for _ in 0..10 {
-                assert_eq!(original.step().checksum, restored.step().checksum);
+                assert_eq!(
+                    {
+                        original.step();
+                        original.checksum()
+                    },
+                    {
+                        restored.step();
+                        restored.checksum()
+                    }
+                );
             }
             assert_eq!(restored.building(target).unwrap().health, 100);
             assert_eq!(status(&restored, target).damage_over_time_count, 0);
@@ -105,7 +114,16 @@ fn live_structure_dot_immunity_advances_deadlines_and_expires_without_deferred_d
         let mut restored = wire_restore(&original);
         while original.next_tick <= effect.expires_tick {
             let tick = original.next_tick;
-            assert_eq!(original.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    original.step();
+                    original.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
             assert_eq!(original.building(target).unwrap().health, 93);
             let state = status(&original, target);
             if tick < effect.expires_tick {
@@ -123,7 +141,10 @@ fn live_structure_dot_immunity_advances_deadlines_and_expires_without_deferred_d
                 .remove::<UnitClassifications>();
         }
         let metrics = original.step();
-        assert_eq!(metrics.checksum, restored.step().checksum);
+        assert_eq!(original.checksum(), {
+            restored.step();
+            restored.checksum()
+        });
         assert_eq!(metrics.ability_casts, 1);
         assert_eq!(original.building(target).unwrap().health, 93);
     }
@@ -137,7 +158,16 @@ fn temporary_structure_immunity_skips_only_covered_pulses_and_preserves_the_fina
         original.world.entity_mut(e).insert(immune(invulnerable));
         let mut restored = wire_restore(&original);
         while original.next_tick <= effect.next_pulse_tick {
-            assert_eq!(original.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    original.step();
+                    original.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
             assert_eq!(original.building(target).unwrap().health, 93);
         }
         assert_eq!(
@@ -153,7 +183,16 @@ fn temporary_structure_immunity_skips_only_covered_pulses_and_preserves_the_fina
         }
         while original.next_tick <= effect.expires_tick {
             let tick = original.next_tick;
-            assert_eq!(original.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    original.step();
+                    original.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
             let elapsed = (tick - effect.next_pulse_tick) / u64::from(effect.pulse_interval_ticks);
             assert_eq!(
                 original.building(target).unwrap().health,

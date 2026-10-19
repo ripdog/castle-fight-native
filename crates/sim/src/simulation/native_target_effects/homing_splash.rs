@@ -80,7 +80,16 @@ fn homing_splash_tracks_primary_and_keeps_primary_modifiers_out_of_collateral() 
     let old_center = sim.spawn_unit(unit(1, 60, 0, AttackDelivery::Melee));
     let mut copy = wire_restored(&sim, 4);
     while sim.projectile_count() > 0 {
-        assert_eq!(sim.step().checksum, copy.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                copy.step();
+                copy.checksum()
+            }
+        );
     }
     assert_eq!(
         sim.unit(primary).unwrap().health,
@@ -127,7 +136,16 @@ fn protected_primary_still_centers_splash_but_dead_primary_invalidates_the_missi
         }
         let mut copy = wire_restored(&sim, 4);
         while sim.projectile_count() > 0 {
-            assert_eq!(sim.step().checksum, copy.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    copy.step();
+                    copy.checksum()
+                }
+            );
         }
         assert_eq!(
             sim.unit(collateral).unwrap().health,
@@ -188,7 +206,16 @@ fn primary_structure_gets_one_direct_hit_and_collateral_uses_its_own_structure_b
         // The second footprint edge is in the medium ring; its center is outside it.
         let mut copy = wire_restored(&sim, 4);
         while sim.projectile_count() > 0 {
-            assert_eq!(sim.step().checksum, copy.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    copy.step();
+                    copy.checksum()
+                }
+            );
         }
         assert_eq!(sim.building(primary).unwrap().health, 900);
         assert_eq!(

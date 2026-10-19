@@ -146,7 +146,16 @@ fn activation_and_restoration_retain_carrier_and_regeneration_source_versions() 
             .unwrap();
         let mut restored = wire_restore(&simulation, 4);
         for _ in 0..3 {
-            assert_eq!(simulation.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    simulation.step();
+                    simulation.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
         }
         for entity in restored.world.iter_entities() {
             if let Some(state) = entity.get::<crate::native_carriers::NativeCarrierState>() {

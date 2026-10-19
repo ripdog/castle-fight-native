@@ -160,7 +160,16 @@ fn healing_wave_restoration_selects_lowest_live_health_not_nearest_and_keeps_res
     let mut restored = sim(4);
     restored.restore_snapshot(&snapshot).unwrap();
     for _ in 1..24 {
-        assert_eq!(s.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                s.step();
+                s.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(s.unit(far).unwrap().health, 20);
     assert_eq!(s.unit(near).unwrap().health, 55);
@@ -287,7 +296,16 @@ fn native_fire_ignores_stun_and_recovery_has_exact_final_pulse_and_buff_exclusio
         let mut restored = sim(4);
         restored.restore_snapshot(&snapshot).unwrap();
         for tick in 2..=121 {
-            assert_eq!(s.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    s.step();
+                    s.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
             let pulses = ((tick - 1) / 30).min(4);
             assert_eq!(
                 s.unit(target).unwrap().health,
@@ -334,7 +352,16 @@ fn native_fire_buildings_receive_all_pulses_and_are_excluded_until_buff_expiry()
     let mut restored = sim(4);
     restored.restore_snapshot(&snapshot).unwrap();
     for tick in impact + 1..=impact + 120 {
-        assert_eq!(s.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                s.step();
+                s.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
         assert_eq!(
             s.building(target).unwrap().health,
             93 - ((tick - impact) / 30) as i32 * 3
@@ -364,7 +391,16 @@ fn native_bolts_home_on_live_targets_restore_midflight_and_drop_dead_or_immune_t
     let mut restored = sim(4);
     restored.restore_snapshot(&snapshot).unwrap();
     for _ in 0..20 {
-        assert_eq!(s.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                s.step();
+                s.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(s.unit(target).unwrap().health, 93);
     for immune in [true, false] {
@@ -428,7 +464,16 @@ fn generated_per_second_mana_encoding_preserves_arbitrary_phase_and_snapshot_rem
     let mut restored = sim(4);
     restored.restore_snapshot(&snapshot).unwrap();
     for _ in 17..300 {
-        assert_eq!(s.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                s.step();
+                s.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(s.unit(c).unwrap().mana_current, Some(35));
 }
@@ -605,7 +650,16 @@ fn native_fire_building_has_no_mana_dependency_and_keeps_independent_released_bo
     let mut restored = sim(4);
     restored.restore_snapshot(&snapshot).unwrap();
     for _ in 0..80 {
-        assert_eq!(s.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                s.step();
+                s.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(s.unit(target).unwrap().health, 86);
     assert_eq!(

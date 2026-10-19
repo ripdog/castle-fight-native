@@ -98,7 +98,16 @@ fn callback_bolt_retains_flight_after_source_death_and_uses_live_hero_stun_on_re
         .current = 0;
     let mut other = restored(&sim);
     while sim.unit(target).unwrap().health == 1000 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     let view = sim.unit(target).unwrap();
     let impact = sim.next_tick - 1;
@@ -116,7 +125,16 @@ fn callback_bolt_retains_flight_after_source_death_and_uses_live_hero_stun_on_re
     assert_eq!(view.status.native_stun_ability, Some(p.bolt.ability));
     let mut other = restored(&sim);
     for _ in 0..5 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
 }
 #[test]
@@ -233,7 +251,16 @@ fn live_child_immunity_rejects_damage_and_stun_after_projectile_commitment() {
         .spell_immune = true;
     let mut other = restored(&sim);
     while sim.projectile_count() > 0 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(target).unwrap().health, 1000);
     assert_eq!(sim.unit(target).unwrap().status.native_stun_ability, None);

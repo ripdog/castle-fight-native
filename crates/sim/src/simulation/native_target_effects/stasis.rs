@@ -80,7 +80,16 @@ fn trap_arms_detects_then_samples_live_effect_recipients_at_its_own_origin() {
         .collect();
     let mut restored = wire_restored(&sim, 4);
     while sim.tick() <= 6 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(trigger).unwrap().status.native_stun_until_tick, 0);
     // The original detection recipient leaves before detonation; the trap still detonates.
@@ -91,7 +100,16 @@ fn trap_arms_detects_then_samples_live_effect_recipients_at_its_own_origin() {
             .entity_mut(e)
             .insert(Position(unit(1, 130, 0, AttackDelivery::Melee).position));
     }
-    assert_eq!(sim.step().checksum, restored.step().checksum);
+    assert_eq!(
+        {
+            sim.step();
+            sim.checksum()
+        },
+        {
+            restored.step();
+            restored.checksum()
+        }
+    );
     assert_eq!(sim.unit(outer).unwrap().status.native_stun_until_tick, 18);
     assert_eq!(sim.unit(hero).unwrap().status.native_stun_until_tick, 12);
     assert_eq!(
@@ -103,7 +121,16 @@ fn trap_arms_detects_then_samples_live_effect_recipients_at_its_own_origin() {
     }
     let mut restored = wire_restored(&sim, 2);
     while sim.tick() <= 18 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(outer).unwrap().health, 1000);
 }
@@ -126,7 +153,16 @@ fn trap_waits_for_eligible_detection_and_expires_without_stunning() {
         );
         let mut restored = wire_restored(&sim, 3);
         while sim.tick() <= 30 {
-            assert_eq!(sim.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
         }
         assert_eq!(sim.unit(target).unwrap().status.native_stun_until_tick, 0);
         assert!(
@@ -235,7 +271,16 @@ fn hostile_structure_trigger_spends_parent_resources_and_trap_survives_source_re
     sim.world.despawn(entity(&sim, caster));
     let mut restored = wire_restored(&sim, 4);
     while sim.tick() <= 7 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(target).unwrap().status.native_stun_until_tick, 18);
     assert_eq!(sim.unit(target).unwrap().negative_building_shield_level, 2);

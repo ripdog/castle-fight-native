@@ -159,7 +159,16 @@ fn outcome_table_distinguishes_explosion_damage_and_empty_rolls_with_parent_comm
         }
         let mut other = restored(&s);
         for _ in 0..3 {
-            assert_eq!(s.step().checksum, other.step().checksum);
+            assert_eq!(
+                {
+                    s.step();
+                    s.checksum()
+                },
+                {
+                    other.step();
+                    other.checksum()
+                }
+            );
         }
     }
 }
@@ -263,7 +272,16 @@ fn native_controls_survive_dummy_removal_and_failed_orders_still_reengage_across
             assert_eq!(state.callbacks[0].due_tick, 2);
             let mut other = restored(&s);
             for _ in 0..9 {
-                assert_eq!(s.step().checksum, other.step().checksum);
+                assert_eq!(
+                    {
+                        s.step();
+                        s.checksum()
+                    },
+                    {
+                        other.step();
+                        other.checksum()
+                    }
+                );
             }
             assert!(s.unit(target).unwrap().hex.is_none());
             assert!(
@@ -316,7 +334,16 @@ fn stun_retargets_ground_without_a_second_shield_check_and_uses_target_point_dum
     assert_eq!(s.unit(ground).unwrap().negative_building_shield_level, 1);
     let mut other = restored(&s);
     for _ in 0..2 {
-        assert_eq!(s.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                s.step();
+                s.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     assert_eq!(s.unit(ground).unwrap().health, 993);
     assert_eq!(s.unit(air).unwrap().health, 1000);
@@ -364,7 +391,16 @@ fn mutation_replacement_is_a_fresh_owned_cold_body_without_death_or_corpse() {
     assert!(cold.properties.corpse.is_none());
     let mut other = restored(&s);
     for _ in 0..4 {
-        assert_eq!(s.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                s.step();
+                s.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
 }
 
@@ -411,7 +447,16 @@ fn banish_expiry_does_not_cancel_defender_followups_or_disable_native_defend() {
     s.step();
     let mut other = restored(&s);
     for tick in 1..=6 {
-        assert_eq!(s.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                s.step();
+                s.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
         let state = s
             .world
             .iter_entities()

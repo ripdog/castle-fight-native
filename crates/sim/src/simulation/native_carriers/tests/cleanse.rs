@@ -138,7 +138,16 @@ fn positive_cleanse_restores_baseline_and_removes_shield_without_erasing_overhea
     restored.restore_snapshot(&snapshot).unwrap();
     let mut restore_visual = false;
     for _ in 0..40 {
-        assert_eq!(original.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                original.step();
+                original.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
         restore_visual |= original.last_building_spell_visuals.iter().any(|event| {
             event.target == target && event.kind == BuildingSpellVisualKind::HexRestore
         });
@@ -184,7 +193,16 @@ fn positive_cleanse_restores_baseline_and_removes_shield_without_erasing_overhea
             .any(|modifier| modifier.expires_tick == u64::MAX)
     );
     while original.next_tick <= 201 {
-        assert_eq!(original.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                original.step();
+                original.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
         if original.next_tick == 101 {
             let state = control(&original, target);
             assert!(!state.orders_suspended);
@@ -227,7 +245,16 @@ fn zero_damage_or_removed_source_does_not_cleanse_morph_shield_or_passive_baseli
         let callbacks = control(&original, target).callbacks.clone();
         let mut restored = restore(&original, 4);
         for _ in 0..40 {
-            assert_eq!(original.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    original.step();
+                    original.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
         }
         assert!(original.projectiles().is_empty());
         let state = control(&original, target);

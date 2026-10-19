@@ -196,7 +196,16 @@ fn registered_training_variants_replace_handles_with_fresh_bodies_and_clone_with
             );
             other.restore_snapshot(&snapshot).unwrap();
             for _ in 0..2 {
-                assert_eq!(sim.step().checksum, other.step().checksum);
+                assert_eq!(
+                    {
+                        sim.step();
+                        sim.checksum()
+                    },
+                    {
+                        other.step();
+                        other.checksum()
+                    }
+                );
             }
             if saw_clone && saw_grants {
                 break;
@@ -403,7 +412,16 @@ fn source_training_companions_receive_fresh_definitions_and_one_producer_cycle_a
     first.step();
     let mut second = restored(&first, 4);
     for _ in 0..3 {
-        assert_eq!(first.step().checksum, second.step().checksum);
+        assert_eq!(
+            {
+                first.step();
+                first.checksum()
+            },
+            {
+                second.step();
+                second.checksum()
+            }
+        );
     }
     assert_eq!(first.units().len(), 1 + p.twins_children.len());
     let bundle = crate::castle_fight_content_bundle(body.map_version).unwrap();
@@ -760,7 +778,16 @@ fn fractional_building_regeneration_survives_pending_upgrade_restore_and_cancell
         before
     );
     for _ in 0..8 {
-        assert_eq!(pending.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                pending.step();
+                pending.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     assert!(pending.building(id).unwrap().health > 900);
 }

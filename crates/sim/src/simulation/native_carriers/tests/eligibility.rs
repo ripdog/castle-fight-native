@@ -138,7 +138,16 @@ fn avul_acquired_during_native_flight_blocks_damage_buff_and_cleanse_across_wire
         // Keep the source live: otherwise the script's source-ability removal
         // predicate, rather than Avul, would independently explain no cleanse.
         while sim.next_tick <= due {
-            assert_eq!(sim.step().checksum, restored.step().checksum);
+            assert_eq!(
+                {
+                    sim.step();
+                    sim.checksum()
+                },
+                {
+                    restored.step();
+                    restored.checksum()
+                }
+            );
         }
         let after = sim.unit(target).unwrap();
         assert_eq!(after.health, before.health);

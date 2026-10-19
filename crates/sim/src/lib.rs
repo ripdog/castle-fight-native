@@ -97,7 +97,7 @@ pub use match_driver::{
     FinalizedTickInputs, InputStreamPosition, MATCH_DRIVER_SNAPSHOT_SCHEMA_VERSION,
     MATCH_REPLAY_SCHEMA_VERSION, MatchControlEvent, MatchDriver, MatchDriverSnapshot, MatchReplay,
     MatchSnapshotRestoreError, ReplayCheckpoint, ReplayError, ReplayHeader, ReplaySeekSnapshot,
-    ScheduledCommand,
+    SYNC_CHECKPOINT_INTERVAL_TICKS, ScheduledCommand, is_checkpoint_tick, is_sync_checkpoint_tick,
 };
 pub use match_setup::{
     CASTLE_FIGHT_REGISTERED_RELEASES, CastleFightMatch, CastleFightMatchConfig,
@@ -1250,10 +1250,11 @@ cooldown_ticks: 0,
         let mut single = build_sim(1);
         let mut parallel = build_sim(4);
         for tick in 0..20 {
-            let single_result = single.step();
-            let parallel_result = parallel.step();
+            single.step();
+            parallel.step();
             assert_eq!(
-                single_result.checksum, parallel_result.checksum,
+                single.checksum(),
+                parallel.checksum(),
                 "staged Chain Lightning diverged on tick {tick}"
             );
             assert_eq!(
@@ -3002,7 +3003,10 @@ cooldown_ticks: 0,
 
             let mut checksum = 0;
             for _ in 0..64 {
-                checksum = sim.step().checksum;
+                checksum = {
+                    sim.step();
+                    sim.checksum()
+                };
             }
             checksum
         }
@@ -6103,7 +6107,10 @@ cooldown_ticks: 0,
                 stronghold.gameplay_properties(),
             )
             .unwrap();
-            sim.step().checksum
+            {
+                sim.step();
+                sim.checksum()
+            }
         }
 
         assert_ne!(
@@ -9408,7 +9415,16 @@ cooldown_ticks: 0,
             );
             for _ in 0..70 {
                 assert_eq!(original.checksum(), restored.checksum());
-                assert_eq!(original.step().checksum, restored.step().checksum);
+                assert_eq!(
+                    {
+                        original.step();
+                        original.checksum()
+                    },
+                    {
+                        restored.step();
+                        restored.checksum()
+                    }
+                );
             }
             let (mut forward, builder, properties) = fixture(1, 4);
             let (mut reverse, _, _) = fixture(1, 4);

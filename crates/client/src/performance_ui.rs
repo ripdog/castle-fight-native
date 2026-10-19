@@ -951,7 +951,6 @@ fn update_performance_panel(
         writeln!(output, "  fallback ring max   {:>7}", fallback_max_ring).unwrap();
         push_timing(output, "ballistic", sim.ballistic_impact);
         push_timing(output, "commit", sim.structural_commit);
-        push_timing(output, "checksum", sim.checksum);
     } else {
         output.push_str("\nSIM  no completed tick in last 1s\n");
     }
@@ -1212,7 +1211,7 @@ fn one_percent_low_fps(frame_wall: &[Duration]) -> f64 {
     }
 }
 
-fn average_tick_timings(samples: &[(u64, TickTimings)]) -> [(&'static str, Duration); 15] {
+fn average_tick_timings(samples: &[(u64, TickTimings)]) -> [(&'static str, Duration); 14] {
     let mean = |select: fn(&TickTimings) -> Duration| {
         mean_duration(samples.iter().map(|(_, timings)| select(timings)))
     };
@@ -1240,7 +1239,6 @@ fn average_tick_timings(samples: &[(u64, TickTimings)]) -> [(&'static str, Durat
         ),
         ("ballistic", mean(|timings| timings.ballistic_impact)),
         ("commit", mean(|timings| timings.structural_commit)),
-        ("checksum", mean(|timings| timings.checksum)),
     ]
 }
 
@@ -1341,7 +1339,6 @@ fn average_sim_samples(
         total.crowd_and_collision += sample.crowd_and_collision;
         total.ballistic_impact += sample.ballistic_impact;
         total.structural_commit += sample.structural_commit;
-        total.checksum += sample.checksum;
         total.total += sample.total;
     }
 
@@ -1361,7 +1358,6 @@ fn average_sim_samples(
         crowd_and_collision: total.crowd_and_collision / divisor,
         ballistic_impact: total.ballistic_impact / divisor,
         structural_commit: total.structural_commit / divisor,
-        checksum: total.checksum / divisor,
         total: total.total / divisor,
         spans: SpanTimings::default(),
     })

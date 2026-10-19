@@ -65,7 +65,16 @@ fn mirror_image_waits_for_native_cast_point_and_split_then_recovers_and_expires(
     assert!(state.split_tick.is_none());
     let mut restored = wire_restored(&sim, 4);
     for _ in 0..5 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     let images: Vec<_> = sim
         .units()
@@ -83,7 +92,16 @@ fn mirror_image_waits_for_native_cast_point_and_split_then_recovers_and_expires(
     let expiry = image.status.illusion.unwrap().expires_tick;
     let mut restored = wire_restored(&sim, 3);
     while sim.tick() <= expiry {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     assert!(sim.unit(image.id).is_none());
     assert!(sim.corpses().is_empty());
@@ -140,7 +158,16 @@ fn native_mirror_split_is_invulnerable_and_suspends_orders_without_changing_intr
     );
     let mut restored = wire_restored(&sim, 4);
     for _ in 0..3 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     let units = sim.snapshot_units();
     let projected = units.iter().find(|unit| unit.id == source).unwrap();
@@ -257,7 +284,16 @@ fn missile_damage_orders_mirror_at_impact_and_stun_cancels_uncommitted_cast() {
         .stunned_until_tick = tick + 5;
     let mut restored = wire_restored(&sim, 4);
     for _ in 0..6 {
-        assert_eq!(sim.step().checksum, restored.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                restored.step();
+                restored.checksum()
+            }
+        );
     }
     let state = sim.unit(source).unwrap().status.mirror_image.unwrap();
     assert!(state.cast_tick.is_none() && state.split_tick.is_none());

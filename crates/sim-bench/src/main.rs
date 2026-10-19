@@ -26,7 +26,7 @@ const TICK_WINDOW_SECONDS: u64 = 10;
 /// Number of slowest individual ticks listed after an all-buildings run.
 const SLOWEST_TICK_COUNT: usize = 10;
 
-const PHASE_COUNT: usize = 12;
+const PHASE_COUNT: usize = 11;
 const PHASE_NAMES: [&str; PHASE_COUNT] = [
     "topology",
     "timers",
@@ -39,11 +39,10 @@ const PHASE_NAMES: [&str; PHASE_COUNT] = [
     "crowd_and_collision",
     "ballistic_impact",
     "structural_commit",
-    "checksum",
 ];
 const PHASE_SHORT_NAMES: [&str; PHASE_COUNT] = [
     "topo", "timer", "prod", "spatial", "ability", "target", "combat", "intent", "collide",
-    "impact", "commit", "hash",
+    "impact", "commit",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -182,7 +181,7 @@ fn main() {
         println!();
         println!("scenario={}", scenario.name());
         println!(
-            "{:>8} {:>7} {:>9} {:>9} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>8} {:>8} {:>10} {:>8} {:>8} {:>18}",
+            "{:>8} {:>7} {:>9} {:>9} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>7} {:>8} {:>8} {:>10} {:>8} {:>8} {:>18}",
             "units",
             "workers",
             "ms/tick",
@@ -198,7 +197,6 @@ fn main() {
             "collide",
             "impact",
             "commit",
-            "hash",
             "astar%",
             "cache%",
             "nodes/tick",
@@ -225,7 +223,7 @@ fn main() {
                 }
 
                 println!(
-                    "{:>8} {:>7} {:>9.3} {:>9.1} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.2} {:>7.2} {:>10.1} {:>8.2} {:>8.2} {:>18x}{}",
+                    "{:>8} {:>7} {:>9.3} {:>9.1} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.3} {:>7.2} {:>7.2} {:>10.1} {:>8.2} {:>8.2} {:>18x}{}",
                     units,
                     workers,
                     result.ms_per_tick,
@@ -241,7 +239,6 @@ fn main() {
                     result.phase_ms.crowd_and_collision,
                     result.phase_ms.ballistic_impact,
                     result.phase_ms.structural_commit,
-                    result.phase_ms.checksum,
                     result.a_star_fallback_percent(),
                     result.a_star_cache_hit_percent(),
                     result.a_star_nodes_per_tick,
@@ -353,7 +350,6 @@ struct PhaseMs {
     crowd_and_collision: f64,
     ballistic_impact: f64,
     structural_commit: f64,
-    checksum: f64,
 }
 
 #[derive(Debug, Default)]
@@ -750,7 +746,6 @@ fn phase_durations(timings: &TickTimings) -> [Duration; PHASE_COUNT] {
         timings.crowd_and_collision,
         timings.ballistic_impact,
         timings.structural_commit,
-        timings.checksum,
     ]
 }
 
@@ -1991,7 +1986,6 @@ fn accumulate_timings(total: &mut TickTimings, tick: TickTimings) {
     total.crowd_and_collision += tick.crowd_and_collision;
     total.ballistic_impact += tick.ballistic_impact;
     total.structural_commit += tick.structural_commit;
-    total.checksum += tick.checksum;
     total.total += tick.total;
     total.spans.accumulate(&tick.spans);
 }
@@ -2009,7 +2003,6 @@ fn average_phase_ms(total: TickTimings, ticks: u64) -> PhaseMs {
         crowd_and_collision: ms_per_tick(total.crowd_and_collision, ticks),
         ballistic_impact: ms_per_tick(total.ballistic_impact, ticks),
         structural_commit: ms_per_tick(total.structural_commit, ticks),
-        checksum: ms_per_tick(total.checksum, ticks),
     }
 }
 

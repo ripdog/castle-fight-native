@@ -159,7 +159,16 @@ fn impale_fan_uses_caster_origin_and_independent_lanes_with_damage_and_hero_stun
     ));
     assert_eq!(units[i].health, 1000);
     for tick in 3..=12 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
         for id in [north, west, south] {
             assert_eq!(
                 sim.unit(id).unwrap().health,
@@ -211,7 +220,16 @@ fn overlapping_impale_lanes_hit_once_and_released_waves_survive_source_death_and
     assert!(sim.unit(target).unwrap().classifications.invulnerable);
     let mut other = wire_restored(&sim, 4);
     for _ in 0..8 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(target).unwrap().health, 970);
     assert!(!sim.unit(target).unwrap().classifications.invulnerable);
@@ -293,7 +311,16 @@ fn impale_revalidates_native_parent_eligibility_at_windup_release_after_wire_res
         .hero = true;
     let mut other = wire_restored(&sim, 4);
     for _ in 0..5 {
-        assert_eq!(sim.step().checksum, other.step().checksum);
+        assert_eq!(
+            {
+                sim.step();
+                sim.checksum()
+            },
+            {
+                other.step();
+                other.checksum()
+            }
+        );
     }
     assert_eq!(sim.unit(source).unwrap().mana_current, Some(9));
     assert_eq!(sim.unit(target).unwrap().health, 1000);
