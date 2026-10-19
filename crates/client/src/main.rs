@@ -12,6 +12,7 @@ mod cursor;
 mod debug_menu;
 mod demo;
 mod doodads;
+mod fixed_catch_up;
 mod fog;
 mod game_menu;
 mod inspection;
@@ -50,7 +51,7 @@ use bevy::{
     ecs::system::SystemParam,
     prelude::*,
     tasks::{IoTaskPool, TaskPoolBuilder, available_parallelism},
-    time::Fixed,
+    time::{Fixed, Virtual},
     window::PresentMode,
 };
 use castle_fight_protocol::{
@@ -842,6 +843,13 @@ fn main() {
         );
     }
 
+    if !networked {
+        let timestep = app.world().resource::<Time<Fixed>>().timestep();
+        fixed_catch_up::limit_offline_catch_up(
+            app.world_mut().resource_mut::<Time<Virtual>>().as_mut(),
+            timestep,
+        );
+    }
     app.run();
 }
 

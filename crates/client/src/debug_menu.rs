@@ -1,10 +1,14 @@
-use bevy::{prelude::*, time::Fixed};
+use bevy::{
+    prelude::*,
+    time::{Fixed, Virtual},
+};
 use castle_fight_protocol::{DebugRequest, DebugSpeed, WireDebugCommand};
 use castle_fight_sim::{CASTLE_FIGHT_SIMULATION_HZ, PlayerId, SimId, Simulation};
 
 use crate::{
     AuthoritativeSimulation, SimulationPlayback, advance_authoritative_simulation_once,
     bridge::{PresentationSamples, PresentationSnapshot},
+    fixed_catch_up::limit_offline_catch_up,
     resource_ui::TOP_BAR_HEIGHT,
 };
 
@@ -267,6 +271,7 @@ fn handle_debug_buttons(
     mut state: ResMut<DebugMenuState>,
     mut playback: ResMut<SimulationPlayback>,
     mut fixed_time: ResMut<Time<Fixed>>,
+    mut virtual_time: ResMut<Time<Virtual>>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
     mut presentation: ResMut<PresentationSamples>,
 ) {
@@ -338,7 +343,7 @@ fn handle_debug_buttons(
             DebugRequest::SetPlayback { paused, speed } => {
                 playback.paused = paused;
                 state.speed = speed;
-                apply_debug_speed(&mut fixed_time, speed);
+                apply_debug_speed(&mut fixed_time, &mut virtual_time, speed);
                 state.status = if paused {
                     "Simulation paused. Single-step is now available.".into()
                 } else {
@@ -364,8 +369,15 @@ fn handle_debug_buttons(
     }
 }
 
-fn apply_debug_speed(fixed_time: &mut Time<Fixed>, speed: DebugSpeed) {
+/// Changes the simulation cadence. Only offline matches reach this path (networked speed is
+/// owned by the host), so the offline catch-up cap is re-derived from the new timestep.
+fn apply_debug_speed(
+    fixed_time: &mut Time<Fixed>,
+    virtual_time: &mut Time<Virtual>,
+    speed: DebugSpeed,
+) {
     fixed_time.set_timestep_hz(f64::from(CASTLE_FIGHT_SIMULATION_HZ) * speed.multiplier());
+    limit_offline_catch_up(virtual_time, fixed_time.timestep());
 }
 
 fn sync_control_vision(
@@ -644,14 +656,22 @@ mod tests {
     }
 
     #[test]
-    fn speed_presets_change_only_fixed_update_cadence() {
+    fn speed_presets_change_fixed_cadence_and_keep_catch_up_cap_at_two_steps() {
         let mut fixed_time = Time::<Fixed>::from_hz(f64::from(CASTLE_FIGHT_SIMULATION_HZ));
-        apply_debug_speed(&mut fixed_time, DebugSpeed::Quarter);
-        assert_fixed_hz(&fixed_time, 7.5);
-        apply_debug_speed(&mut fixed_time, DebugSpeed::Quadruple);
-        assert_fixed_hz(&fixed_time, 120.0);
-        apply_debug_speed(&mut fixed_time, DebugSpeed::Normal);
-        assert_fixed_hz(&fixed_time, 30.0);
+        let mut virtual_time = Time::<Virtual>::default();
+        for (speed, expected_hz) in [
+            (DebugSpeed::Quarter, 7.5),
+            (DebugSpeed::Quadruple, 120.0),
+            (DebugSpeed::Normal, 30.0),
+        ] {
+            apply_debug_speed(&mut fixed_time, &mut virtual_time, speed);
+            assert_fixed_hz(&fixed_time, expected_hz);
+            assert_eq!(
+                virtual_time.max_delta(),
+                fixed_time.timestep() * 2,
+                "{speed:?} must cap catch-up at two fixed steps"
+            );
+        }
     }
 
     #[test]
