@@ -2182,9 +2182,10 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
                 *chance_per_10k <= 10_000,
                 "Critical Strike chance exceeds 100%"
             );
+            // A multiplier below one is the native near miss, resolved as a reduction.
             assert!(
-                *damage_multiplier_per_10k >= 10_000,
-                "Critical Strike must not reduce damage"
+                *damage_multiplier_per_10k > 0,
+                "Critical Strike multiplier must be positive"
             );
             PassiveUnitEffect::CriticalStrike(CriticalStrikeEffectProfile {
                 ability: AbilityId(rawcode(source_key).expect("validated Critical Strike rawcode")),

@@ -5047,10 +5047,15 @@ impl ExtractedContent927 {
             let build_seconds = columns[8]
                 .parse::<u32>()
                 .map_err(|_| format!("unit {rawcode:#010x} has invalid build time"))?;
-            let health_regen_per_second_per_10k =
+            // The extraction marks a rate that neither the map nor the base object authors with a
+            // dash; that is no regeneration, not an absent record (an empty column stays absent).
+            let health_regen_per_second_per_10k = if columns[12].trim() == "-" {
+                Some(0)
+            } else {
                 parse_optional_decimal_scaled_i32_927(columns[12], 10_000).map_err(|error| {
                     format!("unit {rawcode:#010x} has invalid health regeneration: {error}")
-                })?;
+                })?
+            };
             let collision_world = columns[21]
                 .parse::<i32>()
                 .map_err(|_| format!("unit {rawcode:#010x} has invalid collision radius"))?;
@@ -8008,7 +8013,7 @@ mod tests {
             );
             let extracted_mechanical = row[classifications_column]
                 .split(',')
-                .any(|classification| classification == "mechanical");
+                .any(|classification| classification.eq_ignore_ascii_case("mechanical"));
             assert_eq!(definition.mechanical, extracted_mechanical);
         }
     }

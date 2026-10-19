@@ -36,6 +36,7 @@ mod master_projectiles;
 mod mirror_image;
 mod native_debuff;
 mod orb_charm;
+mod pandaren;
 mod parasite_buff;
 mod poison;
 mod resistant_skin;
