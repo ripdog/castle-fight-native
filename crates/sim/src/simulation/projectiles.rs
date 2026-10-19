@@ -838,6 +838,25 @@ impl Simulation {
                                 completed_tick,
                             );
                         }
+                        if let Some(acid) = snapshot.projectile.acid_bomb
+                            && let TargetIndex::Unit(index) = target
+                            && units[index].id == acid.target
+                            && unit_health[index] > 0
+                            && native_actions::acid_bomb::eligible(
+                                &units[index],
+                                snapshot.projectile.source_team,
+                                acid.profile,
+                            )
+                        {
+                            self.launch_acid_bomb(
+                                snapshot.projectile.source,
+                                snapshot.projectile.source_team,
+                                snapshot.projectile.launch_position,
+                                acid.target,
+                                units[index].position,
+                                acid.profile,
+                            );
+                        }
                     }
                 }
                 if let Some(profile) = snapshot.projectile.burning_oil {
@@ -965,6 +984,7 @@ impl Simulation {
                     splash_falloff: launch.splash_falloff,
                     frost: launch.frost,
                     charm: launch.charm,
+                    acid_bomb: launch.acid_bomb,
                     damage_type: launch.damage_type,
                     launch_position: launch.launch_position,
                     destination: launch.destination,

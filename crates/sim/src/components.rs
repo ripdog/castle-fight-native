@@ -302,6 +302,13 @@ pub(crate) struct BallisticOrbCharm {
     pub profile: OrbCharmProfile,
 }
 
+/// Orb Acid Bomb rolled at attack launch and cast when a ballistic attack lands on its original target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct BallisticOrbAcidBomb {
+    pub target: SimId,
+    pub profile: AcidBombProfile,
+}
+
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct BallisticProjectile {
     pub source: SimId,
@@ -312,6 +319,7 @@ pub(crate) struct BallisticProjectile {
     pub splash_falloff: Option<SplashFalloffProfile>,
     pub frost: Option<FrostAttackEffectProfile>,
     pub charm: Option<BallisticOrbCharm>,
+    pub acid_bomb: Option<BallisticOrbAcidBomb>,
     pub damage_type: DamageType,
     pub launch_position: SimPoint,
     pub destination: SimPoint,

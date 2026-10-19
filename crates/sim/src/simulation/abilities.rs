@@ -1407,6 +1407,7 @@ impl Simulation {
                                 splash_falloff: Some(splash),
                                 frost: None,
                                 charm: None,
+                                acid_bomb: None,
                                 damage_type: DamageType::Siege,
                                 launch_position,
                                 destination: position,

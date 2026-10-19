@@ -1343,6 +1343,16 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                     }
                     None => hash.write_u8(0),
                 }
+                match projectile.projectile.acid_bomb {
+                    Some(acid) => {
+                        hash.write_u8(1);
+                        hash.write_u64(acid.target.0);
+                        for word in acid.profile.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                    }
+                    None => hash.write_u8(0),
+                }
                 match projectile.projectile.burning_oil {
                     Some(profile) => {
                         hash.write_u8(1);

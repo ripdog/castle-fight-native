@@ -4791,6 +4791,7 @@ struct BallisticProjectileLaunch {
     splash_falloff: Option<crate::components::SplashFalloffProfile>,
     frost: Option<crate::components::FrostAttackEffectProfile>,
     charm: Option<crate::components::BallisticOrbCharm>,
+    acid_bomb: Option<crate::components::BallisticOrbAcidBomb>,
     damage_type: DamageType,
     launch_position: SimPoint,
     destination: SimPoint,

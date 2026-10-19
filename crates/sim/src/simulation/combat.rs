@@ -643,7 +643,13 @@ impl Simulation {
                         // Orb Charm is carried to impact; other triggered spells stay unsupported.
                         let unsupported_triggered_spell = on_hit
                             .triggered_spell
-                            .filter(|spell| !matches!(spell, TriggeredAttackEffect::Charm(_)));
+                            .filter(|spell| {
+                                !matches!(
+                                    spell,
+                                    TriggeredAttackEffect::Charm(_)
+                                        | TriggeredAttackEffect::AcidBomb(_)
+                                )
+                            });
                         assert_eq!(
                             (
                                 on_hit.stun_duration_ticks,
@@ -657,6 +663,15 @@ impl Simulation {
                         let charm = match on_hit.triggered_spell {
                             Some(TriggeredAttackEffect::Charm(profile)) => {
                                 Some(crate::components::BallisticOrbCharm {
+                                    target: intent.target_id,
+                                    profile,
+                                })
+                            }
+                            _ => None,
+                        };
+                        let acid_bomb = match on_hit.triggered_spell {
+                            Some(TriggeredAttackEffect::AcidBomb(profile)) => {
+                                Some(crate::components::BallisticOrbAcidBomb {
                                     target: intent.target_id,
                                     profile,
                                 })
@@ -677,6 +692,7 @@ impl Simulation {
                             splash_falloff: on_hit.splash_falloff,
                             frost: on_hit.frost,
                             charm,
+                            acid_bomb,
                             damage_type: intent.damage_type,
                             launch_position: intent.source_position,
                             destination: target_position,

@@ -8074,15 +8074,14 @@ mod tests {
         let coordinate = |rawcode: u32, field: &str| {
             let rawcode = rawcode.to_be_bytes();
             let rawcode = std::str::from_utf8(&rawcode).expect("rawcode must be ASCII");
-            let row = rows
-                .iter()
+            // Map overrides record only coordinates that differ from the stock origin.
+            rows.iter()
                 .find(|row| {
                     row[category_column] == "units"
                         && row[rawcode_column] == rawcode
                         && row[field_id_column] == field
                 })
-                .unwrap_or_else(|| panic!("missing extracted {field} for {rawcode}"));
-            parse_extracted_u8(row[recovered_column])
+                .map_or(0, |row| parse_extracted_u8(row[recovered_column]))
         };
         let extracted_position = |rawcode: u32| {
             CommandCardPosition::new(coordinate(rawcode, "ubpx"), coordinate(rawcode, "ubpy"))
