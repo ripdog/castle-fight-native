@@ -39,16 +39,112 @@ const HEADING_COLOR: Color = Color::srgb(0.92, 0.94, 0.98);
 const FRAME_COLOR: Color = Color::srgb(0.76, 0.80, 0.86);
 const SMOOTHING_WINDOW: Duration = Duration::from_secs(1);
 const MAX_SYSTEM_TIMINGS: usize = 10;
+const MAX_CAPTURE_SYSTEM_TIMINGS: usize = 40;
 
 #[derive(Default)]
 struct SystemTraceAccumulator {
     name: String,
+    // Drained by the rolling 1 s display window.
     busy_ns: AtomicU64,
     calls: AtomicU64,
+    // Accumulated since the last `SystemTraceSink::begin_capture`; never drained by the window.
+    capture_busy_ns: AtomicU64,
+    capture_calls: AtomicU64,
 }
 
 #[derive(Resource, Clone, Default)]
-struct SystemTraceSink(Arc<Mutex<Vec<Arc<SystemTraceAccumulator>>>>);
+pub(crate) struct SystemTraceSink(Arc<Mutex<Vec<Arc<SystemTraceAccumulator>>>>);
+
+impl SystemTraceSink {
+    fn accumulators(&self) -> Vec<Arc<SystemTraceAccumulator>> {
+        self.0
+            .lock()
+            .expect("system trace sink mutex poisoned")
+            .clone()
+    }
+
+    /// Restarts the whole-capture totals when a profile capture begins.
+    pub(crate) fn begin_capture(&self) {
+        for accumulator in self.accumulators() {
+            accumulator.capture_busy_ns.store(0, Ordering::Relaxed);
+            accumulator.capture_calls.store(0, Ordering::Relaxed);
+        }
+    }
+
+    /// Formats per-system CPU averaged over every frame of the capture.
+    #[must_use]
+    pub(crate) fn format_capture(&self, frames: usize) -> String {
+        let mut totals = BTreeMap::<String, (u64, u64)>::new();
+        for accumulator in self.accumulators() {
+            let busy_ns = accumulator.capture_busy_ns.load(Ordering::Relaxed);
+            let calls = accumulator.capture_calls.load(Ordering::Relaxed);
+            add_system_totals(&mut totals, &accumulator.name, busy_ns, calls);
+        }
+        if totals.is_empty() {
+            return "SYSTEM CPU  whole capture: no system spans (build with --features trace)\n"
+                .to_owned();
+        }
+        let rows = system_rows(totals, frames.max(1) as f64, MAX_CAPTURE_SYSTEM_TIMINGS);
+        let mut output = format!(
+            "SYSTEM CPU  whole capture avg/frame ({frames} frames, top {MAX_CAPTURE_SYSTEM_TIMINGS})\n"
+        );
+        push_system_rows(&mut output, &rows);
+        output
+    }
+}
+
+fn add_system_totals(
+    totals: &mut BTreeMap<String, (u64, u64)>,
+    name: &str,
+    busy_ns: u64,
+    calls: u64,
+) {
+    if busy_ns == 0 && calls == 0 {
+        return;
+    }
+    let total = totals.entry(name.to_owned()).or_default();
+    total.0 = total.0.saturating_add(busy_ns);
+    total.1 = total.1.saturating_add(calls);
+}
+
+/// Converts summed `(busy_ns, calls)` per system into rows averaged over `frames`, slowest first.
+fn system_rows(
+    totals: BTreeMap<String, (u64, u64)>,
+    frames: f64,
+    limit: usize,
+) -> Vec<SystemTraceRow> {
+    let mut rows = totals
+        .into_iter()
+        .map(|(name, (busy_ns, calls))| SystemTraceRow {
+            name,
+            average_per_frame: Duration::from_secs_f64(
+                Duration::from_nanos(busy_ns).as_secs_f64() / frames,
+            ),
+            calls_per_frame: calls as f64 / frames,
+        })
+        .collect::<Vec<_>>();
+    rows.sort_by(|left, right| {
+        right
+            .average_per_frame
+            .cmp(&left.average_per_frame)
+            .then_with(|| left.name.cmp(&right.name))
+    });
+    rows.truncate(limit);
+    rows
+}
+
+fn push_system_rows(output: &mut String, rows: &[SystemTraceRow]) {
+    for row in rows {
+        writeln!(
+            output,
+            "  {:<25} {:>7.3}ms {:>5.2}x",
+            compact_system_name(&row.name),
+            duration_ms(row.average_per_frame),
+            row.calls_per_frame,
+        )
+        .unwrap();
+    }
+}
 
 #[derive(Default)]
 struct SystemSpanState {
@@ -151,11 +247,13 @@ where
             return;
         };
         let elapsed_ns = started.elapsed().as_nanos().min(u128::from(u64::MAX)) as u64;
-        state
-            .accumulator
-            .busy_ns
+        let accumulator = &state.accumulator;
+        accumulator.busy_ns.fetch_add(elapsed_ns, Ordering::Relaxed);
+        accumulator.calls.fetch_add(1, Ordering::Relaxed);
+        accumulator
+            .capture_busy_ns
             .fetch_add(elapsed_ns, Ordering::Relaxed);
-        state.accumulator.calls.fetch_add(1, Ordering::Relaxed);
+        accumulator.capture_calls.fetch_add(1, Ordering::Relaxed);
     }
 }
 
@@ -181,16 +279,7 @@ impl SystemTraceDisplay {
             return "SYSTEM CPU  no samples\n".to_owned();
         }
         let mut output = String::from("SYSTEM CPU  top 1s avg/frame\n");
-        for row in &self.rows {
-            writeln!(
-                output,
-                "  {:<25} {:>7.3}ms {:>4.1}x",
-                compact_system_name(&row.name),
-                duration_ms(row.average_per_frame),
-                row.calls_per_frame,
-            )
-            .unwrap();
-        }
+        push_system_rows(&mut output, &self.rows);
         output
     }
 }
@@ -475,6 +564,11 @@ pub(crate) struct PerformanceReport {
 }
 
 impl PerformanceReport {
+    #[must_use]
+    pub(crate) fn frame_count(&self) -> usize {
+        self.frames.len()
+    }
+
     #[must_use]
     pub(crate) fn format(&self) -> String {
         let mut output = String::with_capacity(2_048);
@@ -887,16 +981,7 @@ fn update_performance_panel(
 
     if !diagnostics.trace_display.rows.is_empty() {
         output.push_str("\nSYSTEM CPU  top 1s avg/frame\n");
-        for row in &diagnostics.trace_display.rows {
-            writeln!(
-                output,
-                "  {:<25} {:>7.3}ms {:>4.1}x",
-                compact_system_name(&row.name),
-                duration_ms(row.average_per_frame),
-                row.calls_per_frame,
-            )
-            .unwrap();
-        }
+        push_system_rows(output, &diagnostics.trace_display.rows);
     }
 
     writeln!(
@@ -1010,21 +1095,11 @@ fn refresh_system_trace_display(
     }
     display.window_started = now;
 
-    let accumulators = sink
-        .0
-        .lock()
-        .expect("system trace sink mutex poisoned")
-        .clone();
     let mut totals = BTreeMap::<String, (u64, u64)>::new();
-    for accumulator in accumulators {
+    for accumulator in sink.accumulators() {
         let busy_ns = accumulator.busy_ns.swap(0, Ordering::Relaxed);
         let calls = accumulator.calls.swap(0, Ordering::Relaxed);
-        if busy_ns == 0 && calls == 0 {
-            continue;
-        }
-        let total = totals.entry(accumulator.name.clone()).or_default();
-        total.0 = total.0.saturating_add(busy_ns);
-        total.1 = total.1.saturating_add(calls);
+        add_system_totals(&mut totals, &accumulator.name, busy_ns, calls);
     }
 
     let Some(frame_wall) = frame_wall else {
@@ -1037,23 +1112,7 @@ fn refresh_system_trace_display(
         return;
     }
 
-    display.rows = totals
-        .into_iter()
-        .map(|(name, (busy_ns, calls))| SystemTraceRow {
-            name,
-            average_per_frame: Duration::from_secs_f64(
-                Duration::from_nanos(busy_ns).as_secs_f64() / frames_per_window,
-            ),
-            calls_per_frame: calls as f64 / frames_per_window,
-        })
-        .collect();
-    display.rows.sort_by(|left, right| {
-        right
-            .average_per_frame
-            .cmp(&left.average_per_frame)
-            .then_with(|| left.name.cmp(&right.name))
-    });
-    display.rows.truncate(MAX_SYSTEM_TIMINGS);
+    display.rows = system_rows(totals, frames_per_window, MAX_SYSTEM_TIMINGS);
 }
 
 fn compact_system_name(name: &str) -> String {

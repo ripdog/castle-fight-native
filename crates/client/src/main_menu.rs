@@ -1016,6 +1016,7 @@ mod tests {
             profile_shop: false,
             profile_warmup: std::time::Duration::ZERO,
             profile_duration: std::time::Duration::from_secs(1),
+            profile_until_tick: None,
             profile_paused: false,
             profile: false,
             benchmark: false,

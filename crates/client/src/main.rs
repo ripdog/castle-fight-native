@@ -47,6 +47,7 @@ use std::{
 use bevy::{
     asset::AssetPlugin,
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
+    ecs::system::SystemParam,
     prelude::*,
     tasks::{IoTaskPool, TaskPoolBuilder, available_parallelism},
     time::Fixed,
@@ -87,7 +88,8 @@ use lobby::{LobbyPlugin, LobbyState};
 use main_menu::{MainMenuPlugin, MainMenuState};
 use network::{NetworkClient, NetworkClientError, NetworkEvent};
 use performance_ui::{
-    PerformanceCounters, PerformanceUiPlugin, SystemTraceDisplay, performance_trace_layer,
+    PerformanceCounters, PerformanceUiPlugin, SystemTraceDisplay, SystemTraceSink,
+    performance_trace_layer,
 };
 use presentation::CastlePresentationPlugin;
 use render_audit::{
@@ -829,6 +831,7 @@ fn main() {
             source,
             warmup: options.profile_warmup,
             duration: options.profile_duration,
+            until_tick: options.profile_until_tick,
             warmup_started: None,
             capture_started: None,
             paused: options.profile_paused,
@@ -991,6 +994,8 @@ struct AutomatedProfileRun {
     source: String,
     warmup: Duration,
     duration: Duration,
+    /// When set, the capture ends at this simulation tick and `duration` is not used.
+    until_tick: Option<u64>,
     warmup_started: Option<Instant>,
     capture_started: Option<Instant>,
     paused: bool,
@@ -999,11 +1004,19 @@ struct AutomatedProfileRun {
     finished: Option<Instant>,
 }
 
+#[derive(SystemParam)]
+struct ProfileSystemTrace<'w> {
+    /// Rolling one-second per-system averages shown by the in-game panel.
+    window: Res<'w, SystemTraceDisplay>,
+    /// Absent when no trace layer is installed.
+    capture: Option<Res<'w, SystemTraceSink>>,
+}
+
 fn finish_automated_profile(
     mut run: ResMut<AutomatedProfileRun>,
     mut counters: ResMut<PerformanceCounters>,
     presentation: Res<PresentationSamples>,
-    trace_display: Res<SystemTraceDisplay>,
+    trace: ProfileSystemTrace,
     mut playback: ResMut<SimulationPlayback>,
     mut exit: MessageWriter<AppExit>,
     mut audit: (
@@ -1028,6 +1041,9 @@ fn finish_automated_profile(
         }
         playback.paused = run.paused;
         counters.start_capture();
+        if let Some(trace_sink) = trace.capture.as_deref() {
+            trace_sink.begin_capture();
+        }
         audit.0.start_capture();
         run.capture_started = Some(now);
         return;
@@ -1035,9 +1051,14 @@ fn finish_automated_profile(
     let capture_started = run
         .capture_started
         .expect("capture start is set after automated profile warmup");
-    if now.duration_since(capture_started) < run.duration || !counters.capture_has_frame_sample() {
+    let capture_finished = match run.until_tick {
+        Some(until_tick) => presentation.current.tick >= until_tick,
+        None => now.duration_since(capture_started) >= run.duration,
+    };
+    if !capture_finished || !counters.capture_has_frame_sample() {
         return;
     }
+    let capture_wall = now.duration_since(capture_started);
     let report = counters
         .finish_capture()
         .expect("automated profiling run must own an active performance capture");
@@ -1052,14 +1073,22 @@ fn finish_automated_profile(
         presentation.current.projectiles.len(),
     );
     println!(
-        "client-profile paused={} experiment={:?}",
-        run.paused, run.experiment
+        "client-profile paused={} experiment={:?} capture_wall={:.3}s until_tick={}",
+        run.paused,
+        run.experiment,
+        capture_wall.as_secs_f64(),
+        run.until_tick
+            .map_or_else(|| "none".to_owned(), |tick| tick.to_string()),
     );
     print!("{}", report.format());
     print!("{}", audit.0.format());
     print!("{}", audit.2.format());
     print!("{}", format_render_passes(&audit.1));
-    print!("{}", trace_display.format());
+    print!("{}", trace.window.format());
+    match trace.capture.as_deref() {
+        Some(trace_sink) => print!("{}", trace_sink.format_capture(report.frame_count())),
+        None => println!("SYSTEM CPU  whole capture: no trace sink"),
+    }
     run.finished = Some(now);
     if let Some(path) = run.screenshot.take() {
         use bevy::render::view::screenshot::{Screenshot, ScreenshotCaptured, save_to_disk};
@@ -1116,6 +1145,8 @@ struct ClientOptions {
     profile_quicksave: Option<PathBuf>,
     profile_warmup: Duration,
     profile_duration: Duration,
+    /// Ends the automated capture at this simulation tick instead of after `profile_duration`.
+    profile_until_tick: Option<u64>,
     profile_paused: bool,
     profile: bool,
     /// Offline all-buildings benchmark: runs the `sim-bench` match under the automated profile.
@@ -1154,6 +1185,7 @@ impl ClientOptions {
             profile_quicksave: None,
             profile_warmup: Duration::from_secs(5),
             profile_duration: Duration::from_secs(10),
+            profile_until_tick: None,
             profile_paused: false,
             profile: false,
             benchmark: false,
@@ -1259,6 +1291,16 @@ impl ClientOptions {
                         parse_profile_duration(&value).unwrap_or_else(|error| panic!("{error}"));
                     explicit_duration = true;
                 }
+                "--profile-until-tick" => {
+                    let value = args
+                        .next()
+                        .expect("--profile-until-tick requires a simulation tick number");
+                    options.profile_until_tick = Some(
+                        value
+                            .parse()
+                            .expect("--profile-until-tick requires a simulation tick number"),
+                    );
+                }
                 "--map-version" => {
                     let value = args
                         .next()
@@ -1318,7 +1360,7 @@ impl ClientOptions {
                 "--list-map-versions" => options.list_map_versions = true,
                 "-h" | "--help" => {
                     println!(
-                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--builder SLOT:RAWCODE] [--list-map-versions] [--stress-units N] [--stress-visual RAWCODE N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS] [--profile-paused] [--profile] [--profile-screenshot PATH] [--benchmark] [--render-experiment baseline|freeze-bounds|hide-skinned|hide-particles|hide-transparent|legacy-team-color|legacy-geoset-visibility|legacy-attachment-search|legacy-attachment-index|legacy-effect-pooling|legacy-splat-updates|legacy-splat-material-state|legacy-animated-alpha-state|legacy-animated-texture-state|freeze-materials|freeze-poses|bindless-auto|bindless-64|bindless-128|bindless-256|no-bindless]"
+                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--builder SLOT:RAWCODE] [--list-map-versions] [--stress-units N] [--stress-visual RAWCODE N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS] [--profile-until-tick TICK] [--profile-paused] [--profile] [--profile-screenshot PATH] [--benchmark] [--render-experiment baseline|freeze-bounds|hide-skinned|hide-particles|hide-transparent|legacy-team-color|legacy-geoset-visibility|legacy-attachment-search|legacy-attachment-index|legacy-effect-pooling|legacy-splat-updates|legacy-splat-material-state|legacy-animated-alpha-state|legacy-animated-texture-state|freeze-materials|freeze-poses|bindless-auto|bindless-64|bindless-128|bindless-256|no-bindless]"
                     );
                     std::process::exit(0);
                 }
@@ -1334,8 +1376,8 @@ impl ClientOptions {
             if !explicit_warmup {
                 options.profile_warmup = BENCHMARK_WARMUP;
             }
-            if !explicit_duration {
-                options.profile_duration = BENCHMARK_DURATION;
+            if !explicit_duration && options.profile_until_tick.is_none() {
+                options.profile_until_tick = Some(BENCHMARK_UNTIL_TICK);
             }
         }
         assert!(
@@ -1354,8 +1396,9 @@ impl ClientOptions {
                     && options.profile_select.is_none()
                     && !options.profile_items
                     && !options.profile_shop
-                    && options.stress_visual.is_none()),
-            "render experiments, --profile-paused, and --stress-visual require --profile, --profile-quicksave, or --benchmark",
+                    && options.stress_visual.is_none()
+                    && options.profile_until_tick.is_none()),
+            "render experiments, --profile-paused, --profile-until-tick, and --stress-visual require --profile, --profile-quicksave, or --benchmark",
         );
         options
     }
@@ -1364,7 +1407,7 @@ impl ClientOptions {
 /// Players per team in the `--benchmark` match, matching `sim-bench` all-buildings.
 const BENCHMARK_PLAYERS_PER_TEAM: usize = 3;
 const BENCHMARK_WARMUP: Duration = Duration::from_secs(2);
-const BENCHMARK_DURATION: Duration = Duration::from_secs(120);
+const BENCHMARK_UNTIL_TICK: u64 = 1350;
 
 fn parse_profile_rawcode(value: &str) -> Result<u32, String> {
     let bytes = value.as_bytes();
