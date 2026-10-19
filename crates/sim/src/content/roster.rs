@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    DrunkenBrewmaster = 0x1000_008b => b"n03O",
     IronpawGuardian = 0x1000_008a => b"n03J",
     IronpawMilitia = 0x1000_0089 => b"n03G",
     SagepawSoulkeeper = 0x1000_0088 => b"n03T",
@@ -174,6 +175,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    TempleOfTenThousandDrinks = 0x2000_0087 => b"n03P",
     FightingTavern = 0x2000_0086 => b"n03K",
     BrewHut = 0x2000_0085 => b"n03F",
     SagepawSanctum = 0x2000_0084 => b"n03S",

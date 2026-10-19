@@ -4,6 +4,59 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0HC",
+      "unit_rawcode": "n03O",
+      "kind": "hardened-skin",
+      "profile": {
+        "ability": 1093683267,
+        "effect": {
+          "HardenedSkin": {
+            "chance_per_10k": 10000,
+            "minimum_damage": 0,
+            "ignored_damage": 50
+          }
+        }
+      },
+      "provenance": {
+        "ability": "A0HC",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0HH",
+      "unit_rawcode": "n03O",
+      "kind": "native-aura",
+      "radius_world": 600,
+      "damage_bonus_per_10k": 2000,
+      "armor_bonus_per_100": 0,
+      "self_only": false,
+      "melee_life_steal_per_10k": 0,
+      "melee_damage_return_per_10k": 0,
+      "mana_regeneration_per_second_per_10k": 0,
+      "affects_melee": true,
+      "affects_ranged": true,
+      "linger_ticks": 0,
+      "provenance": {
+        "ability": "A0HH",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0HA",
+      "unit_rawcode": "n03O",
+      "kind": "critical-strike",
+      "chance_per_10k": 5000,
+      "damage_multiplier_per_10k": 1000,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A0HA",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A0HG",
       "unit_rawcode": "n03J",
       "kind": "attack-whirlwind",

@@ -508,7 +508,7 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         if not self_only and set(fields["targs1"].split(",")) != {"air", "ground", "friend", "self", "vuln", "invu"}:
             raise ValueError("native aura requires explicit target semantics")
         damage, armor, mana, returned, melee, ranged = 0, 0, 0, 0, True, True
-        if base == "AIar":
+        if base in {"AIar", "ACac"}:
             if number("DataD1") != 0 or number("DataB1") not in {0, 1} or number("DataC1") not in {0, 1}:
                 raise ValueError("native damage aura requires percent damage and explicit weapon classes")
             damage, melee, ranged = number("DataA1", 10_000), bool(number("DataB1")), bool(number("DataC1"))

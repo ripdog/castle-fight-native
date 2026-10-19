@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0HC","unit_rawcode":"n03O","kind":"hardened-skin"},
+    {"source_kind":"unit-ability","source_key":"A0HH","unit_rawcode":"n03O","kind":"native-aura"},
+    {"source_kind":"unit-ability","source_key":"A0HA","unit_rawcode":"n03O","kind":"critical-strike"},
     {"source_kind":"unit-ability","source_key":"A0HG","unit_rawcode":"n03J","kind":"attack-whirlwind"},
     {"source_kind":"unit-ability","source_key":"A0HF","unit_rawcode":"n03J","kind":"evasion"},
     {"source_kind":"unit-ability","source_key":"A0H7","unit_rawcode":"n03J","kind":"hardened-skin"},
