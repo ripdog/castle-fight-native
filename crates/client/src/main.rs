@@ -24,6 +24,7 @@ mod menu_focus;
 mod minimap;
 mod network;
 mod notifications;
+mod offscreen_animation;
 mod particle_renderer;
 mod performance_ui;
 mod presentation;
@@ -716,6 +717,7 @@ fn main() {
             CastlePresentationPlugin::new(options.health_bars),
             DoodadPresentationPlugin,
             skinned_bounds::SkinnedMeshBoundsPlugin,
+            offscreen_animation::OffscreenAnimationPlugin,
             BuildUiPlugin,
             CursorPresentationPlugin,
             ResourceUiPlugin,
