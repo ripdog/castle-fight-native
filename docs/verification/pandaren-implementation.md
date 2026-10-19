@@ -1,6 +1,6 @@
 # Pandaren implementation
 
-Retained Castle Fight 9.27/r1 extraction tree: `8ea806dca331ff254995e94e6f0baf225a14bf10`. Builder `n04Y`'s registration and the resolved `ubpx`/`ubpy` build-card coordinates define implementation order (an absent coordinate on a map-authored `npgr`/`hgtw`/`hhou` building is the stock origin). Complete each root and its entire upgrade chain before moving right, then the next row. Only completed entities become buildable. The order is Bamboo Dojo → Sagepaw Sanctum; Brew Hut → Fighting Tavern → Temple of Ten Thousand Drinks; Temple of the Wandering Spark; Pandaren Siege Workshop; Cloud Hangar; Jade Shrine; Withering Hall; Thunderpaw Spire; Poof Tower (already promoted as a shared tower); Celestial Chi Tower.
+Retained Castle Fight 9.27/r1 extraction tree: `8ea806dca331ff254995e94e6f0baf225a14bf10`. Builder `X07P`, registration `WK`, and the resolved `ubpx`/`ubpy` build-card coordinates define implementation order (an absent coordinate on a map-authored `npgr`/`hgtw`/`hhou` building is the stock origin). Complete each root and its entire upgrade chain before moving right, then the next row. Only completed entities become buildable. The order is Bamboo Dojo → Sagepaw Sanctum; Brew Hut → Fighting Tavern → Temple of Ten Thousand Drinks; Temple of the Wandering Spark; Pandaren Siege Workshop; Cloud Hangar; Jade Shrine; Withering Hall; Thunderpaw Spire; Poof Tower (already promoted as a shared tower); Celestial Chi Tower.
 
 ## Bamboo Dojo / Sagepaw Monk
 
