@@ -112,7 +112,7 @@ impl Simulation {
             fog.unveil_circle(reveal.team, reveal.position, reveal.radius, |_| true);
         }
         // Sources are sorted by their unique SimId below, so query visit order does not matter.
-        let mut sources = self
+        let mut query = self
             .world
             .try_query_filtered::<(
                 &SimId,
@@ -128,193 +128,164 @@ impl Simulation {
                 Option<&Owner>,
                 Option<&BuildingConstruction>,
             ), bevy_ecs::query::Without<Corpse>>()
-            .map(|mut query| {
-                query
-                    .iter(&self.world)
-                    .filter_map(
-                        |(
-                            id,
-                            team,
-                            health,
-                            building,
-                            builder,
-                            attack,
-                            position_component,
-                            content_identity,
-                            movement_class,
-                            status,
-                            owner,
-                            construction,
-                        )| {
-                            let (id, team) = (*id, *team);
-                            if health.is_some_and(|h| h.current <= 0) {
-                                return None;
-                            }
-                            let building = building.copied();
-                            // Projectiles, dummies and delayed effect entities have no ordinary vision source.
-                            if building.is_none() && builder.is_none() && attack.is_none() {
-                                return None;
-                            }
-                            let position = building
-                                .map(|footprint| {
-                                    footprint_center_point(
-                                        footprint,
-                                        self.config.navigation_cell_size,
-                                    )
-                                })
-                                .or_else(|| position_component.map(|p| p.0))?;
-                            let content = content_identity
-                                .copied()
-                                .or_else(|| builder.map(|b| b.appearance));
-                            let sight = content.map_or(rules.fallback_sight, |content| {
-                                crate::castle_fight_sight_for_version(
-                                    content.map_version,
-                                    content.rawcode,
-                                )
-                                .expect("map entity must have extracted day/night sight")
-                            });
-                            let flying = movement_class == Some(&MovementClass::Air);
-                            let revealed_teams = status.map_or(0, |status| {
-                                u8::from(status.is_revealed_to(Team(0), self.next_tick))
-                                    | (u8::from(status.is_revealed_to(Team(1), self.next_tick))
-                                        << 1)
-                            });
-                            Some((
-                                id,
-                                team,
-                                position,
-                                sight.radius(rules.is_night(self.next_tick)),
-                                flying,
-                                revealed_teams,
-                                building,
-                                content,
-                                owner.map(|owner| owner.0),
-                                construction.map(|construction| {
-                                    crate::fog::RememberedConstruction {
-                                        started_tick: construction.started_tick,
-                                        complete_tick: construction.complete_tick,
-                                        observed_tick: self.next_tick,
-                                    }
-                                }),
-                            ))
-                        },
-                    )
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-        if let Some(mut freezers) = self.world.try_query::<&WorldFreezerState>() {
-            for state in freezers.iter(&self.world) {
-                let sight = crate::castle_fight_sight_for_version(
-                    state.profile.map_version,
-                    state.profile.dummy_rawcode,
-                )
-                .expect("native orb retains ordinary day/night sight");
-                sources.extend(state.orbs.iter().map(|orb| {
-                    (
-                        orb.id,
-                        orb.team,
-                        orb.position(),
+            .expect("simulation component types are registered at world construction");
+        let mut sources = query
+            .iter(&self.world)
+            .filter_map(
+                |(
+                    id,
+                    team,
+                    health,
+                    building,
+                    builder,
+                    attack,
+                    position_component,
+                    content_identity,
+                    movement_class,
+                    status,
+                    owner,
+                    construction,
+                )| {
+                    let (id, team) = (*id, *team);
+                    if health.is_some_and(|h| h.current <= 0) {
+                        return None;
+                    }
+                    let building = building.copied();
+                    // Projectiles, dummies and delayed effect entities have no ordinary vision source.
+                    if building.is_none() && builder.is_none() && attack.is_none() {
+                        return None;
+                    }
+                    let position = building
+                        .map(|footprint| {
+                            footprint_center_point(footprint, self.config.navigation_cell_size)
+                        })
+                        .or_else(|| position_component.map(|p| p.0))?;
+                    let content = content_identity
+                        .copied()
+                        .or_else(|| builder.map(|b| b.appearance));
+                    let sight = content.map_or(rules.fallback_sight, |content| {
+                        crate::castle_fight_sight_for_version(content.map_version, content.rawcode)
+                            .expect("map entity must have extracted day/night sight")
+                    });
+                    let flying = movement_class == Some(&MovementClass::Air);
+                    let revealed_teams = status.map_or(0, |status| {
+                        u8::from(status.is_revealed_to(Team(0), self.next_tick))
+                            | (u8::from(status.is_revealed_to(Team(1), self.next_tick)) << 1)
+                    });
+                    Some((
+                        id,
+                        team,
+                        position,
                         sight.radius(rules.is_night(self.next_tick)),
-                        true,
-                        0,
-                        None,
-                        None,
-                        Some(orb.owner),
-                        None,
-                    )
-                }));
-            }
+                        flying,
+                        revealed_teams,
+                        building,
+                        content,
+                        owner.map(|owner| owner.0),
+                        construction.map(|construction| crate::fog::RememberedConstruction {
+                            started_tick: construction.started_tick,
+                            complete_tick: construction.complete_tick,
+                            observed_tick: self.next_tick,
+                        }),
+                    ))
+                },
+            )
+            .collect::<Vec<_>>();
+        let mut freezers = self
+            .world
+            .try_query::<&WorldFreezerState>()
+            .expect("simulation component types are registered at world construction");
+        for state in freezers.iter(&self.world) {
+            let sight = crate::castle_fight_sight_for_version(
+                state.profile.map_version,
+                state.profile.dummy_rawcode,
+            )
+            .expect("native orb retains ordinary day/night sight");
+            sources.extend(state.orbs.iter().map(|orb| {
+                (
+                    orb.id,
+                    orb.team,
+                    orb.position(),
+                    sight.radius(rules.is_night(self.next_tick)),
+                    true,
+                    0,
+                    None,
+                    None,
+                    Some(orb.owner),
+                    None,
+                )
+            }));
         }
-        if let Some(mut actions) = self
+        let mut actions = self
             .world
             .try_query::<(Option<&SimId>, &crate::components::NativeAction)>()
-        {
-            for (sim_id, action) in actions.iter(&self.world) {
-                if let crate::components::NativeAction::NativeSpellActor {
-                    flying,
-                    owner,
-                    team,
-                    map_version,
-                    rawcode,
-                    position,
-                    expires_tick,
-                } = action
-                    && self.next_tick < *expires_tick
-                {
-                    let sight = crate::castle_fight_sight_for_version(*map_version, *rawcode)
-                        .expect("native attack proxy sight");
-                    sources.push((
-                        *sim_id.expect("native actor identity"),
-                        *team,
-                        *position,
-                        sight.radius(rules.is_night(self.next_tick)),
-                        *flying,
-                        0,
-                        None,
-                        None,
-                        Some(*owner),
-                        None,
-                    ));
-                }
-                if let crate::components::NativeAction::TravellingManaClap(state) = action
-                    && self.next_tick
-                        < state.created_tick + u64::from(state.profile.mover_duration_ticks)
-                {
-                    let sight = crate::castle_fight_sight_for_version(
-                        state.profile.parent.map_version,
-                        state.profile.mover_rawcode,
-                    )
-                    .expect("native clap mover sight");
-                    sources.push((
-                        *sim_id.expect("native action identity"),
-                        state.team,
-                        state.position,
-                        sight.radius(rules.is_night(self.next_tick)),
-                        true,
-                        0,
-                        None,
-                        None,
-                        Some(state.owner),
-                        None,
-                    ));
-                }
-                let crate::components::NativeAction::MasterProjectiles(state) = action else {
-                    continue;
-                };
-                for (movers, profile) in [
-                    (&state.lightning, state.profile.lightning),
-                    (&state.frost, state.profile.frost),
-                ] {
-                    let sight =
-                        crate::castle_fight_sight_for_version(state.map_version, profile.rawcode)
-                            .expect("native mover sight");
-                    sources.extend(movers.iter().map(|m| {
-                        (
-                            m.id,
-                            m.team,
-                            m.position(),
-                            sight.radius(rules.is_night(self.next_tick)),
-                            true,
-                            0,
-                            None,
-                            None,
-                            Some(m.owner),
-                            None,
-                        )
-                    }));
-                }
+            .expect("simulation component types are registered at world construction");
+        for (sim_id, action) in actions.iter(&self.world) {
+            if let crate::components::NativeAction::NativeSpellActor {
+                flying,
+                owner,
+                team,
+                map_version,
+                rawcode,
+                position,
+                expires_tick,
+            } = action
+                && self.next_tick < *expires_tick
+            {
+                let sight = crate::castle_fight_sight_for_version(*map_version, *rawcode)
+                    .expect("native attack proxy sight");
+                sources.push((
+                    *sim_id.expect("native actor identity"),
+                    *team,
+                    *position,
+                    sight.radius(rules.is_night(self.next_tick)),
+                    *flying,
+                    0,
+                    None,
+                    None,
+                    Some(*owner),
+                    None,
+                ));
+            }
+            if let crate::components::NativeAction::TravellingManaClap(state) = action
+                && self.next_tick
+                    < state.created_tick + u64::from(state.profile.mover_duration_ticks)
+            {
                 let sight = crate::castle_fight_sight_for_version(
-                    state.map_version,
-                    state.profile.parasite_child_rawcode,
+                    state.profile.parent.map_version,
+                    state.profile.mover_rawcode,
                 )
-                .expect("native minion sight");
-                sources.extend(state.minions.iter().map(|m| {
+                .expect("native clap mover sight");
+                sources.push((
+                    *sim_id.expect("native action identity"),
+                    state.team,
+                    state.position,
+                    sight.radius(rules.is_night(self.next_tick)),
+                    true,
+                    0,
+                    None,
+                    None,
+                    Some(state.owner),
+                    None,
+                ));
+            }
+            let crate::components::NativeAction::MasterProjectiles(state) = action else {
+                continue;
+            };
+            for (movers, profile) in [
+                (&state.lightning, state.profile.lightning),
+                (&state.frost, state.profile.frost),
+            ] {
+                let sight =
+                    crate::castle_fight_sight_for_version(state.map_version, profile.rawcode)
+                        .expect("native mover sight");
+                sources.extend(movers.iter().map(|m| {
                     (
                         m.id,
                         m.team,
-                        m.position,
+                        m.position(),
                         sight.radius(rules.is_night(self.next_tick)),
-                        false,
+                        true,
                         0,
                         None,
                         None,
@@ -323,6 +294,25 @@ impl Simulation {
                     )
                 }));
             }
+            let sight = crate::castle_fight_sight_for_version(
+                state.map_version,
+                state.profile.parasite_child_rawcode,
+            )
+            .expect("native minion sight");
+            sources.extend(state.minions.iter().map(|m| {
+                (
+                    m.id,
+                    m.team,
+                    m.position,
+                    sight.radius(rules.is_night(self.next_tick)),
+                    false,
+                    0,
+                    None,
+                    None,
+                    Some(m.owner),
+                    None,
+                )
+            }));
         }
         sources.sort_unstable_by_key(|source| source.0);
         let terrain = self.combat_rules.terrain_elevation.as_ref();
@@ -615,6 +605,17 @@ mod tests {
         assert!(!fog.is_visible(Team(0), point(2)));
         assert!(fog.is_explored(Team(0), point(2)));
         assert!(fog.is_visible(Team(0), point(12)));
+    }
+
+    #[test]
+    fn fresh_world_vision_source_reveals_before_any_corpse_or_building_exists() {
+        // Nothing optional-component-shaped has ever been spawned here. Vision scans must still
+        // see the lone source rather than treating unregistered component types as an empty world.
+        let mut sim = fixture(1);
+        actor(&mut sim, Team(0), 0);
+        let fog = sim.fog_of_war().unwrap();
+        assert!(fog.is_visible(Team(0), point(2)));
+        assert!(!fog.is_visible(Team(1), point(2)));
     }
 
     #[test]

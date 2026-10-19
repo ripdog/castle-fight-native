@@ -260,13 +260,13 @@ impl NativeTriggerFilter {
 
 impl Simulation {
     pub(super) fn has_negative_building_protection(&self, target: SimId) -> bool {
-        self.world
+        let mut states = self
+            .world
             .try_query::<&BuildingSpellTargetState>()
-            .is_some_and(|mut states| {
-                states
-                    .iter(&self.world)
-                    .any(|state| state.target == target && state.anti_negative)
-            })
+            .expect("simulation component types are registered at world construction");
+        states
+            .iter(&self.world)
+            .any(|state| state.target == target && state.anti_negative)
     }
 
     /// Eraser calls Od/nd, which removes a strong shield without Vd's full heal.
@@ -354,15 +354,17 @@ impl Simulation {
                 consider(unit.id, AbilityIntentTarget::Unit { index, id: unit.id });
             }
         }
-        if filter.targets.can_target_buildings()
-            && let Some(mut buildings) = self.world.try_query::<(
-                &SimId,
-                &Team,
-                &Health,
-                &BuildingFootprint,
-                Option<&UnitClassifications>,
-            )>()
-        {
+        if filter.targets.can_target_buildings() {
+            let mut buildings = self
+                .world
+                .try_query::<(
+                    &SimId,
+                    &Team,
+                    &Health,
+                    &BuildingFootprint,
+                    Option<&UnitClassifications>,
+                )>()
+                .expect("simulation component types are registered at world construction");
             for (id, team, health, footprint, flags) in buildings.iter(&self.world) {
                 *checks += 1;
                 let position = footprint_center_point(*footprint, self.config.navigation_cell_size);
@@ -584,10 +586,10 @@ impl Simulation {
         if markers_for_version(code, version).1 {
             return false;
         }
-        // A missing query state means the component was never registered, so no entity has it.
-        let Some(mut target_states) = self.world.try_query::<&BuildingSpellTargetState>() else {
-            return true;
-        };
+        let mut target_states = self
+            .world
+            .try_query::<&BuildingSpellTargetState>()
+            .expect("simulation component types are registered at world construction");
         !target_states
             .iter(&self.world)
             .any(|s| s.target == unit.id && s.selector_excluded)
@@ -760,26 +762,22 @@ impl Simulation {
 
     pub(super) fn advance_building_spell_controls(&mut self) {
         // SimId keys are unique, so the map and the sorted state list do not depend on visit order.
-        let units: BTreeMap<_, _> = self
+        let mut unit_query = self
             .world
             .try_query::<(&SimId, Entity, &Health)>()
-            .map(|mut units| {
-                units
-                    .iter(&self.world)
-                    .map(|(id, entity, health)| (*id, (entity, health.current)))
-                    .collect()
-            })
-            .unwrap_or_default();
-        let mut states: Vec<_> = self
+            .expect("simulation component types are registered at world construction");
+        let units: BTreeMap<_, _> = unit_query
+            .iter(&self.world)
+            .map(|(id, entity, health)| (*id, (entity, health.current)))
+            .collect();
+        let mut state_query = self
             .world
             .try_query::<(&SimId, Entity, &BuildingSpellTargetState)>()
-            .map(|mut states| {
-                states
-                    .iter(&self.world)
-                    .map(|(id, entity, state)| (*id, entity, state.clone()))
-                    .collect()
-            })
-            .unwrap_or_default();
+            .expect("simulation component types are registered at world construction");
+        let mut states: Vec<_> = state_query
+            .iter(&self.world)
+            .map(|(id, entity, state)| (*id, entity, state.clone()))
+            .collect();
         states.sort_by_key(|(id, _, _)| *id);
         for (_, entity, mut state) in states {
             let Some(&(unit_entity, health)) = units.get(&state.target) else {

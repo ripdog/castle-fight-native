@@ -903,9 +903,11 @@ impl Simulation {
                 rules,
             )
         });
+        let mut world = World::new();
+        register_simulation_components(&mut world);
         Self {
             fog,
-            world: World::new(),
+            world,
             config,
             combat_rules,
             pool,
@@ -5010,6 +5012,30 @@ fn grouped_defense_victims(
         }
     }
     victims
+}
+
+/// Registers every component type named by a simulation query, including `Option<&T>` data and
+/// `With<T>` / `Without<T>` filters. `World::try_query*` returns `None` while any named type is
+/// unregistered, which would make a scan silently see an empty world. Registration only records
+/// component ids: it adds no entities and changes no archetype contents or iteration order.
+pub(crate) fn register_simulation_components(world: &mut World) {
+    world.register_component::<SimId>();
+    world.register_component::<Team>();
+    world.register_component::<Health>();
+    world.register_component::<Position>();
+    world.register_component::<Owner>();
+    world.register_component::<BuildingFootprint>();
+    world.register_component::<BuildingConstruction>();
+    world.register_component::<BuilderConfiguration>();
+    world.register_component::<AttackProfile>();
+    world.register_component::<MovementClass>();
+    world.register_component::<ContentIdentity>();
+    world.register_component::<StatusState>();
+    world.register_component::<UnitClassifications>();
+    world.register_component::<Corpse>();
+    world.register_component::<crate::components::NativeAction>();
+    world.register_component::<BuildingSpellTargetState>();
+    world.register_component::<WorldFreezerState>();
 }
 
 fn validate_player_configs(players: &[PlayerConfig]) -> Vec<PlayerConfig> {

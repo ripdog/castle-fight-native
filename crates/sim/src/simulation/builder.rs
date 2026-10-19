@@ -1043,14 +1043,20 @@ impl Simulation {
     fn builder_follow_target(&self, target_id: SimId) -> Option<BuilderFollowTargetSnapshot> {
         let default_collision_radius = self.default_collision_radius();
         // SimIds are unique, so the single match is found regardless of visit order.
-        let mut query = self.world.try_query::<(Entity, &SimId)>()?;
+        let mut query = self
+            .world
+            .try_query::<(Entity, &SimId)>()
+            .expect("simulation component types are registered at world construction");
         let (entity, _) = query.iter(&self.world).find(|(_, id)| **id == target_id)?;
         builder_follow_target_from_entity(self.world.entity(entity), default_collision_radius)
     }
 
     fn builder_repair_target(&self, target_id: SimId) -> Option<BuilderRepairTargetSnapshot> {
         // SimIds are unique, so the single match is found regardless of visit order.
-        let mut query = self.world.try_query::<(Entity, &SimId)>()?;
+        let mut query = self
+            .world
+            .try_query::<(Entity, &SimId)>()
+            .expect("simulation component types are registered at world construction");
         let (entity, _) = query.iter(&self.world).find(|(_, id)| **id == target_id)?;
         builder_repair_target_from_entity(self.world.entity(entity))
     }
@@ -1062,7 +1068,10 @@ impl Simulation {
         acquisition_range: i32,
     ) -> Option<SimId> {
         let max_distance_sq = square_i32(acquisition_range);
-        let mut query = self.world.try_query::<(Entity, &SimId, &Team, &Health)>()?;
+        let mut query = self
+            .world
+            .try_query::<(Entity, &SimId, &Team, &Health)>()
+            .expect("simulation component types are registered at world construction");
         query
             .iter(&self.world)
             // Team and health are cheap row checks, so only plausible candidates build snapshots.

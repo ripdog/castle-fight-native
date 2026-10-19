@@ -408,6 +408,7 @@ impl Simulation {
             .as_ref()
             .expect("prepared round template");
         let mut world = World::new();
+        register_simulation_components(&mut world);
         restore_entities(&mut world, &template.entities);
         super::building_spells::refresh_building_spell_controls(&mut world, start_tick);
         self.world = world;
@@ -546,6 +547,7 @@ impl Simulation {
             _ => return Err(SnapshotRestoreError::InvalidFogState),
         }
         let mut restored_world = World::new();
+        register_simulation_components(&mut restored_world);
         restore_entities(&mut restored_world, &snapshot.entities);
         let restored_checksum = canonical_checksum(
             &restored_world,

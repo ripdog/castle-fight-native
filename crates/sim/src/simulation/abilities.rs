@@ -52,26 +52,28 @@ impl Simulation {
             PendingCastTarget::Unit(id) => {
                 find_unit_index(units, id).map(|index| AbilityIntentTarget::Unit { index, id })
             }
-            PendingCastTarget::Building { id, position } => self
-                .world
-                .try_query_filtered::<(&SimId, &Health), bevy_ecs::query::With<BuildingFootprint>>()
-                .is_some_and(|mut buildings| {
-                    buildings
-                        .iter(&self.world)
-                        .any(|(entity_id, health)| *entity_id == id && health.current > 0)
-                })
-                .then_some(AbilityIntentTarget::Building { id, position }),
+            PendingCastTarget::Building { id, position } => {
+                let mut buildings = self
+                    .world
+                    .try_query_filtered::<(&SimId, &Health), bevy_ecs::query::With<BuildingFootprint>>()
+                    .expect("simulation component types are registered at world construction");
+                buildings
+                    .iter(&self.world)
+                    .any(|(entity_id, health)| *entity_id == id && health.current > 0)
+                    .then_some(AbilityIntentTarget::Building { id, position })
+            }
             PendingCastTarget::AllEnemyUnits => Some(AbilityIntentTarget::AllEnemyUnits),
             PendingCastTarget::AllFriendlyUnits => Some(AbilityIntentTarget::AllFriendlyUnits),
-            PendingCastTarget::Corpse { id, position } => self
-                .world
-                .try_query_filtered::<(&SimId, &Position), bevy_ecs::query::With<Corpse>>()
-                .is_some_and(|mut corpses| {
-                    corpses
-                        .iter(&self.world)
-                        .any(|(entity_id, actual)| *entity_id == id && actual.0 == position)
-                })
-                .then_some(AbilityIntentTarget::Corpse { id, position }),
+            PendingCastTarget::Corpse { id, position } => {
+                let mut corpses = self
+                    .world
+                    .try_query_filtered::<(&SimId, &Position), bevy_ecs::query::With<Corpse>>()
+                    .expect("simulation component types are registered at world construction");
+                corpses
+                    .iter(&self.world)
+                    .any(|(entity_id, actual)| *entity_id == id && actual.0 == position)
+                    .then_some(AbilityIntentTarget::Corpse { id, position })
+            }
             PendingCastTarget::Point(position) => Some(AbilityIntentTarget::Point { position }),
         }
     }
@@ -95,18 +97,19 @@ impl Simulation {
                             self.config.navigation_cell_size,
                         ) == position
                 }),
-            AbilityIntentTarget::Corpse { id, position } => self
-                .world
-                .try_query::<(&SimId, &Corpse, &Position)>()
-                .is_some_and(|mut corpses| {
-                    corpses
-                        .iter(&self.world)
-                        .any(|(entity_id, corpse, actual)| {
-                            *entity_id == id
-                                && corpse.is_usable_at(self.next_tick)
-                                && actual.0 == position
-                        })
-                }),
+            AbilityIntentTarget::Corpse { id, position } => {
+                let mut corpses = self
+                    .world
+                    .try_query::<(&SimId, &Corpse, &Position)>()
+                    .expect("simulation component types are registered at world construction");
+                corpses
+                    .iter(&self.world)
+                    .any(|(entity_id, corpse, actual)| {
+                        *entity_id == id
+                            && corpse.is_usable_at(self.next_tick)
+                            && actual.0 == position
+                    })
+            }
             AbilityIntentTarget::AllEnemyUnits
             | AbilityIntentTarget::AllFriendlyUnits
             | AbilityIntentTarget::Point { .. } => true,
@@ -1328,27 +1331,22 @@ impl Simulation {
                             metrics.effects += 1;
                         }
                     }
-                    let mut corpses = self
+                    let mut query = self
                         .world
                         .try_query::<(Entity, &SimId, &Corpse, &Position)>()
-                        .map(|mut query| {
-                            query
-                                .iter(&self.world)
-                                .filter_map(|(entity, id, corpse, corpse_position)| {
-                                    if !corpse.is_usable_at(self.next_tick)
-                                        || !crate::content::vessel_corpse_qualifies_927(
-                                            corpse.definition,
-                                        )
-                                    {
-                                        return None;
-                                    }
-                                    (position.distance_sq(corpse_position.0)
-                                        <= square_i32(consume_radius))
-                                    .then_some((*id, entity))
-                                })
-                                .collect::<Vec<_>>()
+                        .expect("simulation component types are registered at world construction");
+                    let mut corpses = query
+                        .iter(&self.world)
+                        .filter_map(|(entity, id, corpse, corpse_position)| {
+                            if !corpse.is_usable_at(self.next_tick)
+                                || !crate::content::vessel_corpse_qualifies_927(corpse.definition)
+                            {
+                                return None;
+                            }
+                            (position.distance_sq(corpse_position.0) <= square_i32(consume_radius))
+                                .then_some((*id, entity))
                         })
-                        .unwrap_or_default();
+                        .collect::<Vec<_>>();
                     // SimId keys are unique, so the sorted order does not depend on visit order.
                     corpses.sort_unstable_by_key(|(id, _)| *id);
                     for (_, entity) in corpses {
@@ -1876,35 +1874,34 @@ impl Simulation {
             AbilityTargetPolicy::RandomCorpse => {
                 let mut best = None;
                 // The minimum key ends in the unique SimId, so visit order does not matter.
-                if let Some(mut corpses) = self
+                let mut corpses = self
                     .world
                     .try_query::<(Option<&SimId>, &Corpse, &Position)>()
-                {
-                    for (sim_id, corpse, position) in corpses.iter(&self.world) {
-                        let position = position.0;
-                        if !corpse.is_usable_at(self.next_tick)
-                            || !crate::content::vessel_corpse_qualifies_927(corpse.definition)
-                        {
-                            continue;
-                        }
-                        if self.ability_source_distance_sq(source.origin, position)
-                            > square_i32(spellcasting.ability.range)
-                        {
-                            continue;
-                        }
-                        candidate_checks += 1;
-                        let id = *sim_id.expect("corpse missing id");
-                        let rank = deterministic_ability_target_rank(
-                            self.config.match_seed,
-                            source.id,
-                            spellcasting.ability.id,
-                            state.cast_sequence,
-                            id,
-                        );
-                        let key = (rank, id, position);
-                        if best.is_none_or(|current| key < current) {
-                            best = Some(key);
-                        }
+                    .expect("simulation component types are registered at world construction");
+                for (sim_id, corpse, position) in corpses.iter(&self.world) {
+                    let position = position.0;
+                    if !corpse.is_usable_at(self.next_tick)
+                        || !crate::content::vessel_corpse_qualifies_927(corpse.definition)
+                    {
+                        continue;
+                    }
+                    if self.ability_source_distance_sq(source.origin, position)
+                        > square_i32(spellcasting.ability.range)
+                    {
+                        continue;
+                    }
+                    candidate_checks += 1;
+                    let id = *sim_id.expect("corpse missing id");
+                    let rank = deterministic_ability_target_rank(
+                        self.config.match_seed,
+                        source.id,
+                        spellcasting.ability.id,
+                        state.cast_sequence,
+                        id,
+                    );
+                    let key = (rank, id, position);
+                    if best.is_none_or(|current| key < current) {
+                        best = Some(key);
                     }
                 }
                 best.map(|(_, id, position)| AbilityIntentTarget::Corpse { id, position })
@@ -2117,15 +2114,18 @@ impl Simulation {
         }
         if let AbilityEffect::PhoenixFire(profile) = ability.effect
             && profile.targets.can_target_buildings()
-            && let Some(mut buildings) = self.world.try_query::<(
-                &SimId,
-                &Team,
-                &Health,
-                &BuildingFootprint,
-                Option<&StatusState>,
-                Option<&UnitClassifications>,
-            )>()
         {
+            let mut buildings = self
+                .world
+                .try_query::<(
+                    &SimId,
+                    &Team,
+                    &Health,
+                    &BuildingFootprint,
+                    Option<&StatusState>,
+                    Option<&UnitClassifications>,
+                )>()
+                .expect("simulation component types are registered at world construction");
             for (id, team, health, footprint, status, flags) in buildings.iter(&self.world) {
                 *checks += 1;
                 let position = footprint_center_point(*footprint, self.config.navigation_cell_size);
@@ -2655,7 +2655,7 @@ impl Simulation {
                     else {
                         return false;
                     };
-                    return self
+                    let mut entities = self
                         .world
                         .try_query::<(
                             &SimId,
@@ -2663,56 +2663,54 @@ impl Simulation {
                             Option<&Health>,
                             Option<&UnitClassifications>,
                         )>()
-                        .is_some_and(|mut entities| {
-                            entities
-                                .iter(&self.world)
-                                .any(|(entity_id, team, health, flags)| {
-                                    *entity_id == id
-                                        && targets.can_target_buildings()
-                                        && self.visible_teams(position) & (1 << source.team.0) != 0
-                                        && self.native_building_trigger_allowed(
-                                            source,
-                                            ability,
-                                            team.copied().unwrap_or(source.team),
-                                            health.map_or(0, |h| h.current),
-                                            position,
-                                            flags.copied().unwrap_or_default(),
-                                        )
-                                })
+                        .expect("simulation component types are registered at world construction");
+                    return entities
+                        .iter(&self.world)
+                        .any(|(entity_id, team, health, flags)| {
+                            *entity_id == id
+                                && targets.can_target_buildings()
+                                && self.visible_teams(position) & (1 << source.team.0) != 0
+                                && self.native_building_trigger_allowed(
+                                    source,
+                                    ability,
+                                    team.copied().unwrap_or(source.team),
+                                    health.map_or(0, |h| h.current),
+                                    position,
+                                    flags.copied().unwrap_or_default(),
+                                )
                         });
                 }
                 ability.target_policy == AbilityTargetPolicy::RandomEnemyUnitOrBuilding
                     && self.visible_teams(position) & (1 << source.team.0) != 0
                     && self.ability_source_distance_sq(source.origin, position)
                         <= square_i32(ability.range)
-                    && self
-                        .world
-                        .try_query::<(
-                            &SimId,
-                            Option<&StatusState>,
-                            Option<&UnitClassifications>,
-                            &Team,
-                            &Health,
-                        )>()
-                        .is_some_and(|mut entities| {
-                            entities.iter(&self.world).any(
-                                |(entity_id, status, flags, team, health)| {
-                                    *entity_id == id
-                                        && !status.is_some_and(|status| {
-                                            native_fire_buff_active(
-                                                status,
-                                                ability.id,
-                                                self.next_tick,
-                                            )
-                                        })
-                                        && !flags.is_some_and(|flags| {
-                                            flags.spell_immune || flags.invulnerable
-                                        })
-                                        && *team != source.team
-                                        && health.current > 0
-                                },
-                            )
-                        })
+                    && {
+                        let mut entities = self
+                            .world
+                            .try_query::<(
+                                &SimId,
+                                Option<&StatusState>,
+                                Option<&UnitClassifications>,
+                                &Team,
+                                &Health,
+                            )>()
+                            .expect(
+                                "simulation component types are registered at world construction",
+                            );
+                        entities.iter(&self.world).any(
+                            |(entity_id, status, flags, team, health)| {
+                                *entity_id == id
+                                    && !status.is_some_and(|status| {
+                                        native_fire_buff_active(status, ability.id, self.next_tick)
+                                    })
+                                    && !flags.is_some_and(|flags| {
+                                        flags.spell_immune || flags.invulnerable
+                                    })
+                                    && *team != source.team
+                                    && health.current > 0
+                            },
+                        )
+                    }
             }
             AbilityIntentTarget::AllEnemyUnits => {
                 ability.target_policy == AbilityTargetPolicy::AllEnemyUnits
@@ -2724,22 +2722,20 @@ impl Simulation {
                 ability.target_policy == AbilityTargetPolicy::AllFriendlyUnits
             }
             AbilityIntentTarget::Corpse { id, position } => {
-                ability.target_policy == AbilityTargetPolicy::RandomCorpse
-                    && self
+                ability.target_policy == AbilityTargetPolicy::RandomCorpse && {
+                    let mut corpses = self
                         .world
                         .try_query::<(&SimId, &Corpse, &Position)>()
-                        .is_some_and(|mut corpses| {
-                            corpses
-                                .iter(&self.world)
-                                .any(|(entity_id, corpse, actual)| {
-                                    *entity_id == id
-                                        && corpse.is_usable_at(self.next_tick)
-                                        && crate::content::vessel_corpse_qualifies_927(
-                                            corpse.definition,
-                                        )
-                                        && actual.0 == position
-                                })
+                        .expect("simulation component types are registered at world construction");
+                    corpses
+                        .iter(&self.world)
+                        .any(|(entity_id, corpse, actual)| {
+                            *entity_id == id
+                                && corpse.is_usable_at(self.next_tick)
+                                && crate::content::vessel_corpse_qualifies_927(corpse.definition)
+                                && actual.0 == position
                         })
+                }
             }
             AbilityIntentTarget::Point { .. } => {
                 ability.target_policy == AbilityTargetPolicy::RandomEnemyBasePoint
