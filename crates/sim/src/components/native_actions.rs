@@ -213,6 +213,7 @@ pub(crate) enum NativeAction {
     Sandstorm(super::SandstormState),
     Ensnare(EnsnareMissileState),
     HealingWave(HealingWaveState),
+    HealingSpray(super::HealingSprayState),
     Bolt(NativeBoltState),
     Hailstone(HailstoneState),
     ImmediateSummonOrder {

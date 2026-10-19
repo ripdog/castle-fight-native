@@ -364,6 +364,7 @@ fn ethereal_target_blocks_physical_weapons_but_amplifies_magic_and_healing() {
                 nonancient_only: false,
                 affects_invulnerable: false,
                 resume_attack_ticks: 0,
+                spray: None,
             }),
             Team(1),
             sim.next_tick,

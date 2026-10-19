@@ -712,6 +712,18 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u64(state.next_pulse_tick);
                         hash.write_u64(state.expires_tick);
                     }
+                    NativeAction::HealingSpray(state) => {
+                        hash.write_u8(40);
+                        for word in state.profile.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                        hash.write_u64(state.source.0);
+                        hash.write_u8(state.team.0);
+                        hash.write_i32(state.center.x);
+                        hash.write_i32(state.center.y);
+                        hash.write_u64(state.started_tick);
+                        hash.write_u16(state.next_wave);
+                    }
                     NativeAction::SandCloud(state) => {
                         hash.write_u8(31);
                         hash.write_i32(state.variant.radius);

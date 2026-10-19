@@ -457,6 +457,14 @@ impl Simulation {
                                 .due_tick = due_tick;
                         }
                     }
+                    if let AbilityEffect::Heal(p) = intent.ability.effect
+                        && let Some(spray) = p.spray
+                        && let AbilityIntentTarget::Unit { index: target, .. } = intent.target
+                    {
+                        // The dummy appears at the caster and sprays the healed unit's position.
+                        let (team, center) = (units[index].team, units[target].position);
+                        self.launch_healing_spray(source.id, team, center, spray);
+                    }
                     if let AbilityEffect::Heal(p) = intent.ability.effect {
                         let id = self.allocate_id();
                         self.world.spawn((

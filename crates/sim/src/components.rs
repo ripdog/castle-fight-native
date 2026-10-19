@@ -1050,9 +1050,13 @@ pub struct NativeHealProfile {
     pub nonancient_only: bool,
     pub affects_invulnerable: bool,
     pub resume_attack_ticks: u16,
+    /// A script-cast area heal released at the healed unit's position by the same cast.
+    #[serde(default)]
+    pub spray: Option<HealingSprayProfile>,
 }
 impl NativeHealProfile {
-    pub(crate) fn canonical_words(self) -> [u64; 6] {
+    pub(crate) fn canonical_words(self) -> [u64; 14] {
+        let spray = self.spray.map_or([0; 8], HealingSprayProfile::canonical_words);
         [
             self.amount as u64,
             u64::from(self.targets.bits()),
@@ -1060,8 +1064,57 @@ impl NativeHealProfile {
             self.nonancient_only as u64,
             self.affects_invulnerable as u64,
             u64::from(self.resume_attack_ticks),
+            spray[0],
+            spray[1],
+            spray[2],
+            spray[3],
+            spray[4],
+            spray[5],
+            spray[6],
+            spray[7],
         ]
     }
+}
+
+/// Native Healing Spray (a Cluster Rockets copy with reversed damage): each wave heals every
+/// eligible friendly unit in the area, the per-wave total capped and shared proportionally.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct HealingSprayProfile {
+    pub ability: AbilityId,
+    pub radius: i32,
+    pub amount: i32,
+    pub maximum_total: i32,
+    pub waves: u16,
+    pub interval_ticks: u16,
+    pub first_wave_ticks: u16,
+    /// The recycled dummy is returned after this many ticks, ending the channel.
+    pub lifetime_ticks: u16,
+    pub targets: AttackTargetMask,
+}
+impl HealingSprayProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 8] {
+        [
+            u64::from(self.ability.0),
+            self.radius as u64,
+            self.amount as u64,
+            self.maximum_total as u64,
+            u64::from(self.waves) | u64::from(self.interval_ticks) << 16 | u64::from(self.first_wave_ticks) << 32,
+            u64::from(self.targets.bits()),
+            u64::from(self.lifetime_ticks),
+            1,
+        ]
+    }
+}
+
+/// A released spray: it outlives its caster and fires its waves at the retained cadence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HealingSprayState {
+    pub profile: HealingSprayProfile,
+    pub source: SimId,
+    pub team: Team,
+    pub center: SimPoint,
+    pub started_tick: u64,
+    pub next_wave: u16,
 }
 
 /// Intrinsic target classifications, independent of armor type or presentation.

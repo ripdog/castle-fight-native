@@ -315,6 +315,7 @@ impl Simulation {
                 NativeAction::Poison(state) => self.advance_poison(entity, state, units, buildings),
                 NativeAction::Sandstorm(state) => self.advance_sandstorm(entity, state, units),
                 NativeAction::SandCloud(state) => self.advance_sand_cloud(entity, state, units),
+                NativeAction::HealingSpray(state) => self.advance_healing_spray(entity, state, units),
                 NativeAction::LocustSwarm(state) => {
                     self.advance_locust_swarm(entity, state, units, buildings)
                 }

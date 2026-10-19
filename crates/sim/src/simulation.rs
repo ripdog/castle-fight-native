@@ -48,6 +48,7 @@ mod night_elf;
 mod parasite_area_buff;
 mod parasite_script;
 mod permanent_grants;
+mod healing_spray;
 mod sand_cloud;
 mod starfall;
 mod training_variants;
@@ -5223,6 +5224,10 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
         AbilityEffect::Heal(p) => {
             assert!(p.amount >= 0 && p.resume_attack_ticks > 0);
+            if let Some(spray) = p.spray {
+                assert!(spray.radius > 0 && spray.amount >= 0 && spray.maximum_total >= 0);
+                assert!(spray.waves > 0 && spray.interval_ticks > 0 && spray.lifetime_ticks > 0);
+            }
         }
         AbilityEffect::WindWalk(p) => {
             assert!(

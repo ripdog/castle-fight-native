@@ -5,6 +5,54 @@
     {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
+      "source_key": "A0GN",
+      "unit_rawcode": "n03E",
+      "spellcasting": {
+        "mana": {
+          "maximum": 80,
+          "starting": 40,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093683022,
+          "mana_cost": 30,
+          "cooldown_ticks": 330,
+          "range": 358400,
+          "target_policy": "WoundedFriendlyUnit",
+          "effect": {
+            "Heal": {
+              "amount": 50,
+              "targets": 3,
+              "organic_only": true,
+              "nonancient_only": true,
+              "affects_invulnerable": true,
+              "resume_attack_ticks": 3,
+              "spray": {
+                "ability": 1093683024,
+                "radius": 179200,
+                "amount": 40,
+                "maximum_total": 250,
+                "waves": 1,
+                "interval_ticks": 30,
+                "first_wave_ticks": 30,
+                "lifetime_ticks": 60,
+                "targets": 3
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "native": "resolved/object-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "semantics": "resolved/unit-spell-semantics.tsv"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
       "source_key": "A0GK",
       "unit_rawcode": "n03A",
       "spellcasting": {

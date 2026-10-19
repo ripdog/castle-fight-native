@@ -907,7 +907,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         if recipe["source_kind"] not in {"unit-ability", "ability-effect"}:
             raise ValueError("unsupported native recipe source kind")
         key = (recipe["source_kind"], recipe["source_key"])
-        if recipe["kind"] in {"damage-charge", "damage-retaliation", "health-scaled-aftershock"}:
+        if recipe["kind"] in {"damage-charge", "damage-retaliation", "health-scaled-aftershock", "native-heal"}:
             key += (recipe["unit_rawcode"],)
         if key in seen:
             raise ValueError(f"duplicate recipe source: {key}")
@@ -921,7 +921,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         if recipe["kind"] in {"inner-fire", "spell-steal", "native-curse"} and default_autocast.get(recipe.get("unit_rawcode")) != source:
             raise ValueError("native buff source must retain default-active autocast")
         spell = spell_mechanics.get("A02U" if recipe["kind"] == "siren-purge" else source)
-        if recipe['kind'] in {'travelling-mana-clap', 'parasite-area-buff', 'parasite-script', 'impale-fan', 'native-impale'}:
+        if recipe['kind'] in {'travelling-mana-clap', 'parasite-area-buff', 'parasite-script', 'impale-fan', 'native-impale', 'native-heal'}:
             spell = spell_mechanics_by_unit.get((recipe['unit_rawcode'], source)) or next(
                 row for row in spell_mechanics.values() if row['unit_rawcode'] == recipe['unit_rawcode'])
         if spell is None and recipe["kind"] in {"healing-wave", "solar-strike", "war-stomp", "howl-of-terror", "frost-nova", "ensnare"}:

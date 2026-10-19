@@ -1663,6 +1663,10 @@ fn native_unit_mechanics_from_tuning(
             .iter()
             .filter(|effect| effect.source().ok() == Some(source))
             .filter(|effect| !matches!(effect, TuningEffect::DamageCharge { unit_rawcode: code, .. } | TuningEffect::DamageRetaliation { unit_rawcode: code, .. } | TuningEffect::HealthScaledAftershock { unit_rawcode: code, .. } if rawcode(code).ok() != Some(unit_rawcode)))
+            // A scripted heal spray is selected per body: each body's script casts its own child.
+            .filter(|effect| !matches!(effect, TuningEffect::ScriptedAutomatic { unit_rawcode: code, spellcasting, .. }
+                if matches!(spellcasting.ability.effect, crate::AbilityEffect::Heal(p) if p.spray.is_some())
+                    && rawcode(code).ok() != Some(unit_rawcode)))
         {
             match effect {
                 TuningEffect::BuildingImprovement { .. } | TuningEffect::DeathSpawn { .. } => {},

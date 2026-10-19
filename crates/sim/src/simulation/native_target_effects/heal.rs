@@ -8,6 +8,7 @@ fn heal() -> NativeHealProfile {
         nonancient_only: true,
         affects_invulnerable: true,
         resume_attack_ticks: 4,
+        spray: None,
     }
 }
 #[test]

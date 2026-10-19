@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0GN","unit_rawcode":"n03E","kind":"native-heal"},
     {"source_kind":"unit-ability","source_key":"A0GK","unit_rawcode":"n03A","kind":"building-script"},
     {"source_kind":"unit-ability","source_key":"A0GF","unit_rawcode":"h07A","kind":"building-script"},
     {"source_kind":"unit-ability","source_key":"A0GE","unit_rawcode":"h079","kind":"building-script"},
