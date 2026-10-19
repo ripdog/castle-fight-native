@@ -24,6 +24,16 @@ impl NavCell {
     }
 }
 
+/// Inputs of a radius-aware pursuit step; the greedy first step depends only on these and the topology.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RadiusPursuit<'a> {
+    pub from: NavCell,
+    pub target: NavCell,
+    pub radius: i32,
+    pub bias: i32,
+    pub center_mask: Option<&'a [bool]>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct PursuitStep {
     pub next_cell: Option<NavCell>,
@@ -549,15 +559,47 @@ impl TopologyGrid {
         bias: i32,
         center_mask: Option<&[bool]>,
     ) -> PursuitStep {
+        self.pursuit_step_with_radius_memoized(
+            RadiusPursuit {
+                from,
+                target,
+                radius,
+                bias,
+                center_mask,
+            },
+            cached_fallback,
+            None,
+        )
+        .0
+    }
+
+    /// Computes the same step as `pursuit_step_with_radius`, with the greedy first step optionally
+    /// supplied by a memo. `known_greedy` must equal what `greedy_route_first_step_with_radius` returns
+    /// for this query on this topology. The second element is the greedy result computed by this call
+    /// (`None` when the memo answered it or the greedy stage was never reached), so callers can record it.
+    #[must_use]
+    pub(crate) fn pursuit_step_with_radius_memoized(
+        &self,
+        query: RadiusPursuit<'_>,
+        cached_fallback: Option<NavCell>,
+        known_greedy: Option<Option<NavCell>>,
+    ) -> (PursuitStep, Option<Option<NavCell>>) {
+        let RadiusPursuit {
+            from,
+            target,
+            radius,
+            bias,
+            center_mask,
+        } = query;
         debug_assert!(bias == -1 || bias == 1);
         if !self.same_component(from, target) {
-            return PursuitStep::none();
+            return (PursuitStep::none(), None);
         }
         let Some(component) = self.component_id(from) else {
-            return PursuitStep::none();
+            return (PursuitStep::none(), None);
         };
         if from == target {
-            return if self.center_circle_ok(from, radius, component, center_mask) {
+            let step = if self.center_circle_ok(from, radius, component, center_mask) {
                 PursuitStep {
                     next_cell: Some(from),
                     used_a_star: false,
@@ -567,17 +609,30 @@ impl TopologyGrid {
             } else {
                 PursuitStep::none()
             };
+            return (step, None);
         }
 
-        if let Some(greedy) =
-            self.greedy_route_first_step_with_radius(from, target, radius, bias, center_mask)
-        {
-            return PursuitStep {
+        let (greedy, computed) = match known_greedy {
+            Some(greedy) => (greedy, None),
+            None => {
+                let greedy = self.greedy_route_first_step_with_radius(
+                    from,
+                    target,
+                    radius,
+                    bias,
+                    center_mask,
+                );
+                (greedy, Some(greedy))
+            }
+        };
+        if let Some(greedy) = greedy {
+            let step = PursuitStep {
                 next_cell: Some(greedy),
                 used_a_star: false,
                 a_star_cache_hit: false,
                 a_star_expanded_nodes: 0,
             };
+            return (step, computed);
         }
 
         if let Some(next_cell) = cached_fallback
@@ -589,22 +644,24 @@ impl TopologyGrid {
                 center_mask,
             )
         {
-            return PursuitStep {
+            let step = PursuitStep {
                 next_cell: Some(next_cell),
                 used_a_star: true,
                 a_star_cache_hit: true,
                 a_star_expanded_nodes: 0,
             };
+            return (step, computed);
         }
 
         let (next_cell, a_star_expanded_nodes) =
             self.a_star_first_step_with_radius(from, target, radius, bias, center_mask);
-        PursuitStep {
+        let step = PursuitStep {
             next_cell,
             used_a_star: true,
             a_star_cache_hit: false,
             a_star_expanded_nodes,
-        }
+        };
+        (step, computed)
     }
 
     fn greedy_route_first_step(

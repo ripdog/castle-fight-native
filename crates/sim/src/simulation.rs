@@ -181,7 +181,7 @@ use crate::{
     math::{SUBUNITS_PER_WORLD_UNIT, SimPoint},
     spatial::{SpatialGrid, SpatialPartition, SpatialReservationGrid},
     terrain::TerrainElevationMap,
-    topology::{NavCell, PursuitStep, TopologyGrid},
+    topology::{NavCell, PursuitStep, RadiusPursuit, TopologyGrid},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -718,6 +718,7 @@ pub enum BuildingCommandError {
 }
 
 const PURSUIT_CACHE_CAPACITY: usize = 65_536;
+const GREEDY_ROUTE_MEMO_CAPACITY: usize = 65_536;
 
 pub struct Simulation {
     world: World,
@@ -732,6 +733,10 @@ pub struct Simulation {
     /// Derived from the topology per collision radius (see `TopologyGrid::center_traversable_mask`).
     /// Never hashed or serialized; cleared wherever `radius_objective_fields` is cleared.
     radius_center_masks: BTreeMap<i32, Vec<bool>>,
+    /// Memoized greedy first steps keyed by `(from, target, radius, route_bias)` on the current
+    /// topology. Derived and non-authoritative: never hashed or serialized; cleared wherever the
+    /// topology-derived caches are cleared.
+    greedy_route_memo: BTreeMap<(NavCell, NavCell, i32, i8), Option<NavCell>>,
     defense_alerts: Vec<DefenseAlert>,
     last_attacks: Vec<AttackEvent>,
     last_ability_casts: Vec<AbilityCastEvent>,
@@ -917,6 +922,7 @@ impl Simulation {
             pursuit_cache: BTreeMap::new(),
             radius_objective_fields: BTreeMap::new(),
             radius_center_masks: BTreeMap::new(),
+            greedy_route_memo: BTreeMap::new(),
             defense_alerts: Vec::new(),
             last_attacks: Vec::new(),
             last_ability_casts: Vec::new(),
@@ -3227,6 +3233,7 @@ impl Simulation {
         self.pursuit_cache.clear();
         self.radius_objective_fields.clear();
         self.radius_center_masks.clear();
+        self.greedy_route_memo.clear();
         true
     }
 

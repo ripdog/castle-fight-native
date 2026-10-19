@@ -71,6 +71,17 @@ impl Simulation {
             }
             self.pursuit_cache.insert(key, entry.next);
         }
+        for decision in &decisions {
+            let Some(entry) = decision.greedy_insert else {
+                continue;
+            };
+            if self.greedy_route_memo.len() >= GREEDY_ROUTE_MEMO_CAPACITY
+                && !self.greedy_route_memo.contains_key(&entry.key)
+            {
+                self.greedy_route_memo.clear();
+            }
+            self.greedy_route_memo.insert(entry.key, entry.next);
+        }
         let intent = intent_start.elapsed();
         let desired_positions: Vec<_> =
             decisions.iter().map(|decision| decision.position).collect();
@@ -408,6 +419,7 @@ impl Simulation {
         let a_star_cache_hit = route.a_star_cache_hit;
         let a_star_expanded_nodes = route.a_star_expanded_nodes;
         let cache_insert = route.cache_insert;
+        let greedy_insert = route.greedy_insert;
         let next_cell = route.next_cell;
         let Some(next_cell) = next_cell else {
             return MovementDecision {
@@ -420,6 +432,7 @@ impl Simulation {
                 a_star_cache_hit,
                 a_star_expanded_nodes,
                 cache_insert,
+                greedy_insert,
             };
         };
         let target_position =
@@ -485,6 +498,7 @@ impl Simulation {
             a_star_cache_hit,
             a_star_expanded_nodes,
             cache_insert,
+            greedy_insert,
         }
     }
 
@@ -507,19 +521,39 @@ impl Simulation {
         let route_bias_key = i8::try_from(route_bias).expect("route bias must fit signed byte");
         let cache_key = (source_cell, target_cell, collision_radius, route_bias_key);
         let cached_fallback = self.pursuit_cache.get(&cache_key).copied();
-        let result: PursuitStep = if let Some(radius) = collision_radius {
-            self.topology.pursuit_step_with_radius(
-                source_cell,
-                target_cell,
-                cached_fallback,
-                radius,
-                route_bias,
-                self.center_mask(collision_radius),
-            )
-        } else {
-            self.topology
-                .pursuit_step(source_cell, target_cell, cached_fallback, route_bias)
-        };
+        let (result, greedy_insert): (PursuitStep, Option<GreedyRouteInsert>) =
+            if let Some(radius) = collision_radius {
+                let greedy_key = (source_cell, target_cell, radius, route_bias_key);
+                let known_greedy = self.greedy_route_memo.get(&greedy_key).copied();
+                let (step, computed) = self.topology.pursuit_step_with_radius_memoized(
+                    RadiusPursuit {
+                        from: source_cell,
+                        target: target_cell,
+                        radius,
+                        bias: route_bias,
+                        center_mask: self.center_mask(collision_radius),
+                    },
+                    cached_fallback,
+                    known_greedy,
+                );
+                (
+                    step,
+                    computed.map(|next| GreedyRouteInsert {
+                        key: greedy_key,
+                        next,
+                    }),
+                )
+            } else {
+                (
+                    self.topology.pursuit_step(
+                        source_cell,
+                        target_cell,
+                        cached_fallback,
+                        route_bias,
+                    ),
+                    None,
+                )
+            };
         let cache_insert = if result.used_a_star && !result.a_star_cache_hit {
             result.next_cell.map(|next| PursuitCacheInsert {
                 from: source_cell,
@@ -538,6 +572,7 @@ impl Simulation {
             a_star_cache_hit: result.a_star_cache_hit,
             a_star_expanded_nodes: result.a_star_expanded_nodes,
             cache_insert,
+            greedy_insert,
         }
     }
 
@@ -593,6 +628,7 @@ impl Simulation {
                 a_star_cache_hit: false,
                 a_star_expanded_nodes: 0,
                 cache_insert: None,
+                greedy_insert: None,
             };
         }
 
@@ -676,6 +712,7 @@ impl Simulation {
                 a_star_cache_hit: false,
                 a_star_expanded_nodes: 0,
                 cache_insert: None,
+                greedy_insert: None,
             };
         }
 
@@ -701,6 +738,7 @@ impl Simulation {
                     a_star_cache_hit: false,
                     a_star_expanded_nodes: 0,
                     cache_insert: None,
+                    greedy_insert: None,
                 };
             }
         }
@@ -802,6 +840,7 @@ impl Simulation {
                 a_star_cache_hit: false,
                 a_star_expanded_nodes: 0,
                 cache_insert: None,
+                greedy_insert: None,
             };
         }
 
@@ -825,6 +864,7 @@ impl Simulation {
                 a_star_cache_hit: route.a_star_cache_hit,
                 a_star_expanded_nodes: route.a_star_expanded_nodes,
                 cache_insert: None,
+                greedy_insert: None,
             };
         };
         let route_target = if next_cell == target_cell {
@@ -862,6 +902,7 @@ impl Simulation {
             a_star_cache_hit: route.a_star_cache_hit,
             a_star_expanded_nodes: route.a_star_expanded_nodes,
             cache_insert: None,
+            greedy_insert: None,
         }
     }
 
@@ -1585,6 +1626,7 @@ struct NavigationRoute {
     a_star_cache_hit: bool,
     a_star_expanded_nodes: usize,
     cache_insert: Option<PursuitCacheInsert>,
+    greedy_insert: Option<GreedyRouteInsert>,
 }
 
 impl NavigationRoute {
@@ -1596,6 +1638,7 @@ impl NavigationRoute {
             a_star_cache_hit: false,
             a_star_expanded_nodes: 0,
             cache_insert: None,
+            greedy_insert: None,
         }
     }
 
@@ -1607,8 +1650,15 @@ impl NavigationRoute {
             a_star_cache_hit: false,
             a_star_expanded_nodes: 0,
             cache_insert: None,
+            greedy_insert: None,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct GreedyRouteInsert {
+    key: (NavCell, NavCell, i32, i8),
+    next: Option<NavCell>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -1631,6 +1681,7 @@ struct MovementDecision {
     a_star_cache_hit: bool,
     a_star_expanded_nodes: usize,
     cache_insert: Option<PursuitCacheInsert>,
+    greedy_insert: Option<GreedyRouteInsert>,
 }
 
 impl MovementDecision {
@@ -1645,6 +1696,7 @@ impl MovementDecision {
             a_star_cache_hit: false,
             a_star_expanded_nodes: 0,
             cache_insert: None,
+            greedy_insert: None,
         }
     }
 }

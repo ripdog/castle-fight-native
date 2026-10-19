@@ -436,6 +436,7 @@ impl Simulation {
         self.pursuit_cache.clear();
         self.radius_objective_fields.clear();
         self.radius_center_masks.clear();
+        self.greedy_route_memo.clear();
         self.topology_dirty = true;
         self.refresh_topology_if_dirty();
         self.refresh_vision();
@@ -615,6 +616,7 @@ impl Simulation {
         self.pursuit_cache.clear();
         self.radius_objective_fields.clear();
         self.radius_center_masks.clear();
+        self.greedy_route_memo.clear();
         self.topology_dirty = true;
         self.refresh_topology_if_dirty();
         if let Some(live) = self.fog_of_war()
