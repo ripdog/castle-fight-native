@@ -1027,10 +1027,17 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
     death_rules = project_death_rules(rows(retained("resolved/production-unit-special-mechanics.tsv")), functions)
     families = [{"source_key": key, "buff": buff_identity(abilities[key], positive=base != "ACff")}
         for key, base in sorted(ability_bases.items()) if base in {"Ainf", "ACf2", "ACff", "AIrr", "AEer", "Aenr"}]
-    from project_flying_retarget import project as project_flying_retarget
+    from project_flying_retarget import project as project_flying_retarget, project_structure_damage
+    # Swarm bodies are the unit types the shared listener rescales against structures.
+    swarm_bodies = sorted({
+        effect["spellcasting"]["ability"]["effect"]["ParasiteScript"]["child"]["LocustSwarm"]["body_rawcode"]
+        for effect in effects
+        if "LocustSwarm" in effect.get("spellcasting", {}).get("ability", {}).get("effect", {}).get("ParasiteScript", {}).get("child", {})})
+    structure_damage = project_structure_damage(functions, [code.to_bytes(4, "big").decode() for code in swarm_bodies])
     flying_retargets = project_flying_retarget(rows(retained("resolved/production-unit-special-mechanics.tsv")), functions)
     return {"schema_version": 3, "map_version": release["map_version"], "effects": effects,
         "unit_flying_retarget_rules": flying_retargets,
+        "unit_structure_damage_rules": structure_damage,
         "unit_death_rules": death_rules, "unit_death_rules_source": {"git_tree": tree, "path": "resolved/production-unit-special-mechanics.tsv", "function": "fJ"},
         "native_reference_source_sha256": reference["source_sha256"], "buff_families": families, "buff_family_source": {"git_tree": tree, "path": "resolved/object-fields.tsv"}}
 

@@ -775,6 +775,12 @@ impl Simulation {
                     })
             });
 
+        // A scripted order point overrides pursuit and the lane goal for flying bodies.
+        let goal = unit
+            .status
+            .support_order
+            .and_then(|order| order.move_point)
+            .unwrap_or(goal);
         if goal == current {
             return MovementDecision::stationary(current);
         }

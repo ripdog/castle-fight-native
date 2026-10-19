@@ -141,6 +141,12 @@
       "does_decay": true,
       "decay_start_ticks": 30,
       "lifetime_ticks": 840
+    },
+    {
+      "rawcode": "u00G",
+      "does_decay": false,
+      "decay_start_ticks": 30,
+      "lifetime_ticks": null
     }
   ],
   "production_handoffs": [

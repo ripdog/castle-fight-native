@@ -5418,7 +5418,7 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                 crate::ParasiteChild::LocustSwarm(swarm) => {
                     assert!(swarm.count > 0 && usize::from(swarm.count) <= crate::MAX_LOCUSTS);
                     assert!(swarm.max_per_target > 0 && swarm.duration_ticks > 0);
-                    assert!(swarm.radius > 0 && swarm.flight_speed_per_tick > 0);
+                    assert!(swarm.radius > 0);
                 }
             }
             assert!(p.parent.speed_per_tick > 0);
@@ -6821,6 +6821,18 @@ impl Simulation {
                             }
                         },
                     );
+                    // A shared damage listener rescales a unit type's final damage to structures.
+                    let adjusted_damage = find_unit_index(state.units, source_id)
+                        .and_then(|source| {
+                            let source = &state.units[source];
+                            crate::native_effects::unit_structure_damage_factor_for_version(
+                                source.map_version?,
+                                source.rawcode,
+                            )
+                        })
+                        .map_or(adjusted_damage, |factor| {
+                            scale_damage_per_10k(adjusted_damage, factor)
+                        });
                     state.building_health[index] = state.building_health[index]
                         .checked_sub(scale_damage_per_10k(
                             adjusted_damage,

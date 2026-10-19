@@ -1,4 +1,5 @@
 use super::*;
+use crate::MapVersion;
 use crate::components::{ParasiteChild, PendingParasiteScript};
 
 fn fan_caster(sim: &mut Simulation) -> SimId {
@@ -151,9 +152,85 @@ fn an_orb_childs_own_cooldown_gates_later_procs_and_starts_when_one_fires() {
                 .count(),
         );
     }
-    let first = procs.iter().position(|count| *count > 0).expect("a proc fires");
+    let first = procs
+        .iter()
+        .position(|count| *count > 0)
+        .expect("a proc fires");
     // Attacks land every ten ticks, yet the child cannot fire again until its cooldown elapses.
     assert_eq!(procs.iter().sum::<usize>(), 2);
     let second = procs.iter().rposition(|count| *count > 0).unwrap();
     assert!((100..110).contains(&(second - first)), "{first} {second}");
+}
+
+#[test]
+fn locusts_are_real_flying_bodies_that_fly_out_strike_on_contact_and_return() {
+    let version = MapVersion::CASTLE_FIGHT_9_27;
+    let AbilityEffect::ParasiteScript(script) = crate::CastleFightUnitKind::HarpiesMatriarch
+        .definition_for_version(version)
+        .unwrap()
+        .spellcasting
+        .unwrap()
+        .ability
+        .effect
+    else {
+        panic!("Matriarch swarm");
+    };
+    let crate::ParasiteChild::LocustSwarm(profile) = script.child else {
+        panic!("Matriarch swarm child");
+    };
+    let mut sim = simulation(1);
+    let caster = sim.spawn_unit(unit(0, 20, 0, AttackDelivery::Melee));
+    let victim = sim.spawn_unit(unit(1, 400, 0, AttackDelivery::Melee));
+    let center = SimPoint::new(20 * SUBUNITS_PER_WORLD_UNIT, 20 * SUBUNITS_PER_WORLD_UNIT);
+    let source = AbilitySourceSnapshot {
+        map_version: Some(version),
+        source: AbilitySourceIndex::Unit(0),
+        id: caster,
+        team: Team(0),
+        origin: AbilitySourceOrigin::Unit(center),
+        health: 1000,
+        stunned_until_tick: 0,
+        spellcasting: None,
+        mana_current: None,
+        ability_state: None,
+    };
+    sim.launch_locust_swarm(source, PlayerId(0), center, profile);
+    let bodies = |sim: &mut Simulation| {
+        sim.snapshot_units()
+            .into_iter()
+            .filter(|unit| unit.rawcode == profile.body_rawcode)
+            .collect::<Vec<_>>()
+    };
+    for _ in 0..8 {
+        sim.step();
+    }
+    let early = bodies(&mut sim);
+    assert!(
+        !early.is_empty() && early.len() < usize::from(profile.count),
+        "released over time"
+    );
+    assert_eq!(
+        sim.unit(victim).unwrap().health,
+        1000,
+        "nothing has touched the victim yet"
+    );
+    let mut struck_at = None;
+    let mut farthest = 0u64;
+    for tick in 0..400 {
+        sim.step();
+        for body in bodies(&mut sim) {
+            farthest = farthest.max(body.position.distance_sq(center));
+        }
+        if struck_at.is_none() && sim.unit(victim).unwrap().health < 1000 {
+            struck_at = Some(tick);
+        }
+    }
+    assert_eq!(bodies(&mut sim).len(), usize::from(profile.count));
+    let struck_at = struck_at.expect("locusts reach and strike the victim");
+    // The victim is about 380 world units away; a body flying at its retained speed needs time.
+    assert!(struck_at > 10, "struck after {struck_at} ticks");
+    assert!(
+        farthest > square_i32(200 * SUBUNITS_PER_WORLD_UNIT),
+        "bodies actually left the center"
+    );
 }

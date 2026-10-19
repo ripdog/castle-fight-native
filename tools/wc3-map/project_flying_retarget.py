@@ -48,3 +48,24 @@ def project(rows, functions):
     if seen != victim_types:
         raise ValueError('every listed retarget unit type needs a retained mechanic row')
     return sorted(result, key=lambda rule: rule['rawcode'])
+
+
+STRUCTURE_BRANCH = re.compile(
+    r'if\(\(unit_getTypeId\((?P<source>\w+)\)==(?P<unit>\d+)\)and unit_isType\((?P<victim>\w+),UNIT_TYPE_STRUCTURE\)\)then '
+    r'(?P<amount>\w+)=\(DamageEvent_getAmount\(\)\*(?P<factor>[\d.]+)\)DamageInstance_DamageInstance_setAmount\(\w+,(?P=amount)\)end')
+
+
+def project_structure_damage(functions, unit_rawcodes):
+    """Final damage a listed unit type deals to structures, rescaled by the shared listener."""
+    listener = functions[LISTENER]
+    result = []
+    for rawcode in unit_rawcodes:
+        raw = int.from_bytes(rawcode.encode(), 'big')
+        branch = next((m for m in STRUCTURE_BRANCH.finditer(listener) if int(m['unit']) == raw), None)
+        if branch is None:
+            raise ValueError(f'{rawcode} structure damage branch changed')
+        factor = Decimal(branch['factor'])
+        if not 0 < factor <= 1:
+            raise ValueError('structure damage reduction must be a fraction')
+        result.append({'rawcode': raw, 'factor_per_10k': int(factor * 10000)})
+    return result

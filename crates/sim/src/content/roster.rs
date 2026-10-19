@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    LocustHarpy = 0x1000_0086 => b"u00G",
     Salamander = 0x1000_0085 => b"n02Z",
     OgreLord = 0x1000_0084 => b"n02Y",
     Ogre = 0x1000_0083 => b"n02X",

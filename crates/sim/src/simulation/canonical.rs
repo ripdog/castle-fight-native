@@ -741,9 +741,11 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u64(state.start_tick);
                         hash.write_u64(state.expires_tick);
                         for locust in state.locusts {
+                            hash_optional_u64(&mut hash, locust.unit.map(|id| id.0));
+                            hash.write_u8(u8::from(locust.released));
                             hash_optional_u64(&mut hash, locust.target.map(|id| id.0));
-                            hash.write_u64(locust.strike_tick);
-                            hash.write_u64(locust.ready_tick);
+                            hash.write_u8(u8::from(locust.returning));
+                            hash.write_u64(locust.attack_sequence);
                         }
                     }
                     NativeAction::Poison(state) => {

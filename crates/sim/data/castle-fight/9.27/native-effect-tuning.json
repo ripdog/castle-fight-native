@@ -511,14 +511,7 @@
                   "release_interval_millis": 150,
                   "max_per_target": 2,
                   "duration_ticks": 450,
-                  "radius": 819200,
-                  "base_damage": 140,
-                  "dice_number": 2,
-                  "dice_sides": 3,
-                  "attack_cooldown_ticks": 30,
-                  "flight_speed_per_tick": 14506,
-                  "structure_damage_per_10k": 5000,
-                  "targets": 7
+                  "radius": 819200
                 }
               }
             }
@@ -6027,6 +6020,12 @@
     {
       "rawcode": 1848652372,
       "throttle_ticks": 75
+    }
+  ],
+  "unit_structure_damage_rules": [
+    {
+      "rawcode": 1966092359,
+      "factor_per_10k": 5000
     }
   ],
   "unit_death_rules": [

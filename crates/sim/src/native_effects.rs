@@ -593,6 +593,8 @@ struct TuningFile {
     unit_death_rules: Vec<NativeUnitDeathRule>,
     #[serde(default)]
     unit_flying_retarget_rules: Vec<NativeUnitFlyingRetargetRule>,
+    #[serde(default)]
+    unit_structure_damage_rules: Vec<NativeUnitStructureDamageRule>,
     effects: Vec<TuningEffect>,
 }
 
@@ -2767,6 +2769,7 @@ mod tests {
                 buff_families: Vec::new(),
                 unit_death_rules: Vec::new(),
                 unit_flying_retarget_rules: Vec::new(),
+                unit_structure_damage_rules: Vec::new(),
                 map_version: "9.27".to_owned(),
                 effects: vec![TuningEffect::OrbSpellProc {
                     cooldown_ticks: 0,
@@ -2858,6 +2861,7 @@ mod tests {
             buff_families: Vec::new(),
             unit_death_rules: Vec::new(),
             unit_flying_retarget_rules: Vec::new(),
+            unit_structure_damage_rules: Vec::new(),
             map_version: "9.27".to_owned(),
             effects: vec![frost("F002", 100), frost("F001", 100)],
         };
@@ -3051,6 +3055,34 @@ pub(crate) fn unit_death_rule_for_version(
 pub(crate) struct NativeUnitFlyingRetargetRule {
     pub rawcode: u32,
     pub throttle_ticks: u32,
+}
+
+/// A shared damage listener scaling the final damage a unit type deals to structures.
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+pub(crate) struct NativeUnitStructureDamageRule {
+    pub rawcode: u32,
+    pub factor_per_10k: u16,
+}
+
+pub(crate) fn unit_structure_damage_factor_for_version(
+    version: MapVersion,
+    rawcode: u32,
+) -> Option<u16> {
+    catalog()
+        .tuning(version)?
+        .unit_structure_damage_rules
+        .iter()
+        .find(|rule| rule.rawcode == rawcode)
+        .map(|rule| rule.factor_per_10k)
+}
+
+pub(crate) fn unit_structure_damage_rules_for_version(
+    version: MapVersion,
+) -> impl Iterator<Item = NativeUnitStructureDamageRule> {
+    catalog()
+        .tuning(version)
+        .into_iter()
+        .flat_map(|t| t.unit_structure_damage_rules.iter().copied())
 }
 
 pub(crate) fn unit_flying_retarget_rule_for_version(

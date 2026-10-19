@@ -107,7 +107,7 @@ impl PendingParasiteScript {
 
 pub const MAX_LOCUSTS: usize = 8;
 
-/// Retained Locust Swarm tuning plus the swarm body's weapon, as read from object data.
+/// Retained Locust Swarm tuning. The swarm bodies are ordinary flying units of `body_rawcode`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct LocustSwarmProfile {
     pub ability: AbilityId,
@@ -117,18 +117,12 @@ pub struct LocustSwarmProfile {
     pub max_per_target: u8,
     pub duration_ticks: u16,
     pub radius: i32,
-    pub base_damage: i32,
-    pub dice_number: u8,
-    pub dice_sides: u8,
-    pub attack_cooldown_ticks: u16,
-    pub flight_speed_per_tick: i32,
-    pub structure_damage_per_10k: u16,
-    pub targets: AttackTargetMask,
 }
 
 impl LocustSwarmProfile {
     pub(crate) fn canonical_words(self) -> [u64; 16] {
-        [
+        let mut words = [0; 16];
+        words[..8].copy_from_slice(&[
             2,
             u64::from(self.ability.0),
             u64::from(self.body_rawcode),
@@ -137,35 +131,33 @@ impl LocustSwarmProfile {
             u64::from(self.max_per_target),
             u64::from(self.duration_ticks),
             self.radius as u64,
-            self.base_damage as u64,
-            u64::from(self.dice_number),
-            u64::from(self.dice_sides),
-            u64::from(self.attack_cooldown_ticks),
-            self.flight_speed_per_tick as u64,
-            u64::from(self.structure_damage_per_10k),
-            u64::from(self.targets.bits()),
-            0,
-        ]
+        ]);
+        words
     }
 }
 
+/// Controller memory for one swarm body.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LocustState {
-    /// The enemy the locust is committed to, if any.
+    /// The released body; `None` before release and after the body is gone.
+    pub unit: Option<SimId>,
+    pub released: bool,
+    /// The enemy the body has been sent after.
     pub target: Option<SimId>,
-    /// Tick at which the committed attack lands; zero when none is in flight.
-    pub strike_tick: u64,
-    /// First tick at which the locust may commit to another target.
-    pub ready_tick: u64,
+    /// After a strike the body flies back to the swarm center before choosing again.
+    pub returning: bool,
+    /// The body's attack counter when it was last seen, to detect a launched strike.
+    pub attack_sequence: u64,
 }
 
-/// A stationary dummy-owned swarm. It outlives its caster and belongs to the caster's player.
+/// A stationary dummy-owned swarm controller. It outlives its caster and belongs to the caster's player.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LocustSwarmState {
     pub profile: LocustSwarmProfile,
     pub source: SimId,
     pub owner: PlayerId,
     pub team: Team,
+    pub map_version: crate::MapVersion,
     pub center: SimPoint,
     pub start_tick: u64,
     pub expires_tick: u64,
