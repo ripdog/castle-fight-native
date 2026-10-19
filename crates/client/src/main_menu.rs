@@ -581,6 +581,7 @@ mod tests {
             profile_duration: std::time::Duration::from_secs(1),
             profile_paused: false,
             profile: false,
+            benchmark: false,
             render_experiment: crate::render_audit::RenderExperiment::Baseline,
             map_version: castle_fight_sim::MapVersion::CASTLE_FIGHT_9_27,
             release_revision: "r1".to_owned(),

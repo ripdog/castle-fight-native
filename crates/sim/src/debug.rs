@@ -1,8 +1,80 @@
 //! Deterministic developer actions, applied through the canonical match stream.
 use crate::{
     BuildingFootprint, CastleFightBuilderRace, CastleFightBuildingKind, CastleFightContentBundle,
-    CastleFightProductionKind, CastleFightTowerKind, PlayerCommand, PlayerId, Simulation, Team,
+    CastleFightMatchConfig, CastleFightMatchSetupError, CastleFightParticipantConfig,
+    CastleFightProductionKind, CastleFightTowerKind, DebugStartingBuildings, MapVersion,
+    PlayerCommand, PlayerId, Simulation, Team,
 };
+
+/// Fixed seed so the benchmark match is reproducible across runs.
+pub const BENCHMARK_MATCH_SEED: u64 = 1;
+/// Fixed seed for de-synchronizing spellcaster mana in the benchmark match.
+pub const BENCHMARK_MANA_SEED: u64 = 0x5eed_0000_c0de_0001;
+/// Largest team the benchmark match supports; Castle Fight maps have three slots per team.
+const BENCHMARK_MAX_PLAYERS_PER_TEAM: usize = 3;
+
+/// Developer-tool choices applied to a benchmark match after it is created.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BenchmarkSetupOptions {
+    /// Suppresses building health loss so castles and production survive a sustained run.
+    pub invulnerable_buildings: bool,
+    /// Randomizes spellcaster mana so spell buildings do not cast in lockstep.
+    pub randomize_mana: bool,
+}
+
+impl Default for BenchmarkSetupOptions {
+    fn default() -> Self {
+        Self {
+            invulnerable_buildings: true,
+            randomize_mana: true,
+        }
+    }
+}
+
+/// Match configuration for the all-buildings benchmark: team 0 takes ids `0..N` and team 1
+/// takes ids `6..6+N`, every builder is Human, and every implemented building starts complete.
+pub fn castle_fight_benchmark_match_config(
+    version: MapVersion,
+    players_per_team: usize,
+    seed: u64,
+) -> Result<CastleFightMatchConfig, CastleFightMatchSetupError> {
+    if !(1..=BENCHMARK_MAX_PLAYERS_PER_TEAM).contains(&players_per_team) {
+        return Err(CastleFightMatchSetupError::UnsupportedParticipants);
+    }
+    let participant = |id: u8, team: u8| CastleFightParticipantConfig {
+        id: PlayerId(id),
+        team: Team(team),
+        builder_race: CastleFightBuilderRace::Human,
+    };
+    let participants =
+        (0..players_per_team)
+            .map(|slot| participant(u8::try_from(slot).expect("bounded slot fits in u8"), 0))
+            .chain((0..players_per_team).map(|slot| {
+                participant(6 + u8::try_from(slot).expect("bounded slot fits in u8"), 1)
+            }))
+            .collect();
+    let mut config = CastleFightMatchConfig::development_subset_with_participants(
+        version,
+        "r1",
+        seed,
+        participants,
+    )?;
+    config.rules.debug_starting_buildings = DebugStartingBuildings::All;
+    Ok(config)
+}
+
+/// Applies the benchmark developer setup to a freshly created match in a fixed order and
+/// returns the number of spellcasters whose mana was randomized.
+pub fn apply_benchmark_setup(simulation: &mut Simulation, options: BenchmarkSetupOptions) -> usize {
+    if options.invulnerable_buildings {
+        simulation.debug_set_buildings_invulnerable(true);
+    }
+    if options.randomize_mana {
+        simulation.debug_randomize_spellcaster_mana(BENCHMARK_MANA_SEED)
+    } else {
+        0
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DebugCommand {

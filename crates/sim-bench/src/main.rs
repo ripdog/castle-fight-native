@@ -7,18 +7,17 @@ use std::{
 use castle_fight_sim::{
     AbilityEffect, AbilityId, AbilityTargetPolicy, AttackDelivery, AttackProfile,
     AutomaticAbilityProfile, BuildingFootprint, BuildingSpawn, CASTLE_FIGHT_SIMULATION_HZ,
-    CastleFightBuilderRace, CastleFightMatchConfig, CastleFightParticipantConfig,
-    CastleFightProductionKind, CastleFightUnitKind, CollisionRadius, CombatRules,
-    DebugStartingBuildings, ManaProfile, MapVersion, ModifierId, MovementProfile, PlayerId,
-    ProductionProfile, SUBUNITS_PER_WORLD_UNIT, SimId, SimPoint, Simulation, SimulationConfig,
-    Span, SpanTimings, SpellcastingProfile, Team, TickResult, TickTimings, UnitSpawn, UnitTemplate,
-    castle_fight_damage_rules, create_castle_fight_match,
+    CastleFightProductionKind, CastleFightUnitKind, CollisionRadius, CombatRules, ManaProfile,
+    MapVersion, ModifierId, MovementProfile, ProductionProfile, SUBUNITS_PER_WORLD_UNIT, SimId,
+    SimPoint, Simulation, SimulationConfig, Span, SpanTimings, SpellcastingProfile, Team,
+    TickResult, TickTimings, UnitSpawn, UnitTemplate, castle_fight_damage_rules,
+    create_castle_fight_match,
+    debug::{
+        BENCHMARK_MATCH_SEED, BenchmarkSetupOptions, apply_benchmark_setup,
+        castle_fight_benchmark_match_config,
+    },
 };
 
-/// Fixed seed so the all-buildings match is reproducible across runs.
-const ALL_BUILDINGS_MATCH_SEED: u64 = 1;
-/// Fixed seed for de-synchronizing spellcaster mana in the all-buildings scenario.
-const ALL_BUILDINGS_MANA_SEED: u64 = 0x5eed_0000_c0de_0001;
 /// Default game length for the all-buildings scenario when `--ticks` is not given.
 const ALL_BUILDINGS_GAME_SECONDS: u64 = 120;
 /// Width of each row in the all-buildings window breakdown.
@@ -525,46 +524,26 @@ fn build_scenario(
     (simulation, state)
 }
 
-/// Team 0 takes ids `0..N` and team 1 takes ids `6..6+N`, as the match validator requires.
-fn all_buildings_participants(players_per_team: usize) -> Vec<CastleFightParticipantConfig> {
-    let participant = |id: u8, team: u8| CastleFightParticipantConfig {
-        id: PlayerId(id),
-        team: Team(team),
-        builder_race: CastleFightBuilderRace::Human,
-    };
-    (0..players_per_team)
-        .map(|slot| participant(u8::try_from(slot).expect("player slot fits in u8"), 0))
-        .chain(
-            (0..players_per_team).map(|slot| {
-                participant(6 + u8::try_from(slot).expect("player slot fits in u8"), 1)
-            }),
-        )
-        .collect()
-}
-
 /// Builds the real Castle Fight 9.27 match with one completed copy of every implemented
-/// building for each player. The match is fully determined by `ALL_BUILDINGS_MATCH_SEED`, and
-/// the developer-tool options are applied in a fixed order after creation.
+/// building for each player. The match and its developer-tool setup come from the shared
+/// benchmark helpers, so the client `--benchmark` mode runs the same battle.
 fn all_buildings_simulation(workers: usize, options: AllBuildingsOptions) -> Simulation {
-    let mut config = CastleFightMatchConfig::development_subset_with_participants(
+    let config = castle_fight_benchmark_match_config(
         MapVersion::CASTLE_FIGHT_9_27,
-        "r1",
-        ALL_BUILDINGS_MATCH_SEED,
-        all_buildings_participants(options.players_per_team),
+        options.players_per_team,
+        BENCHMARK_MATCH_SEED,
     )
     .expect("valid Castle Fight 9.27 participants");
-    config.rules.debug_starting_buildings = DebugStartingBuildings::All;
     let mut simulation = create_castle_fight_match(config, workers)
         .expect("registered Castle Fight 9.27 match")
         .simulation;
-    if options.invulnerable_buildings {
-        simulation.debug_set_buildings_invulnerable(true);
-    }
-    let mana_randomized = if options.randomize_mana {
-        simulation.debug_randomize_spellcaster_mana(ALL_BUILDINGS_MANA_SEED)
-    } else {
-        0
-    };
+    let mana_randomized = apply_benchmark_setup(
+        &mut simulation,
+        BenchmarkSetupOptions {
+            invulnerable_buildings: options.invulnerable_buildings,
+            randomize_mana: options.randomize_mana,
+        },
+    );
     println!(
         "all-buildings setup: players-per-team={} invulnerable={} mana-randomized={} initial-units={} initial-buildings={}",
         options.players_per_team,

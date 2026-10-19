@@ -55,6 +55,10 @@ use castle_fight_sim::{
     CommandExecution, CommandExecutionResult, CommandOutcome, CommandSubmission, DriverTickResult,
     InputStreamPosition, MapVersion, MatchDriver, PlayerCommand, PlayerId, Simulation,
     SimulationSnapshot, Team, castle_fight_registered_releases,
+    debug::{
+        BENCHMARK_MATCH_SEED, BenchmarkSetupOptions, apply_benchmark_setup,
+        castle_fight_benchmark_match_config,
+    },
 };
 
 #[cfg(test)]
@@ -403,6 +407,17 @@ fn main() {
         eprintln!("--profile-quicksave cannot be combined with --stress-visual");
         std::process::exit(2);
     }
+    if options.benchmark
+        && (options.server.is_some()
+            || options.stress_units.is_some()
+            || options.stress_visual.is_some()
+            || options.profile_quicksave.is_some())
+    {
+        eprintln!(
+            "--benchmark is an offline profile and cannot be combined with --server, --stress-units, --stress-visual, or --profile-quicksave"
+        );
+        std::process::exit(2);
+    }
     let match_config = client_match_config(&options).unwrap_or_else(|error| {
         eprintln!(
             "cannot configure Castle Fight {}/{}: {error}",
@@ -422,6 +437,16 @@ fn main() {
         );
         std::process::exit(2);
     });
+    if options.benchmark {
+        let mana_randomized =
+            apply_benchmark_setup(&mut demo.simulation, BenchmarkSetupOptions::default());
+        println!(
+            "client-benchmark setup: players-per-team={} mana-randomized={mana_randomized} initial-units={} initial-buildings={}",
+            options.team_size,
+            demo.simulation.unit_count(),
+            demo.simulation.building_count(),
+        );
+    }
     if let Some(path) = &options.profile_quicksave {
         let completed_tick = restore_simulation_quicksave(&mut demo.simulation, demo.content, path)
             .unwrap_or_else(|error| {
@@ -493,6 +518,7 @@ fn main() {
     let present_mode = if options.stress_units.is_some()
         || options.stress_visual.is_some()
         || options.profile_quicksave.is_some()
+        || options.benchmark
     {
         PresentMode::AutoNoVsync
     } else {
@@ -551,7 +577,8 @@ fn main() {
         })
         .insert_resource(authoritative)
         .insert_resource(SimulationPlayback {
-            paused: show_main_menu || options.is_profiling(),
+            // The benchmark runs the battle through warmup as well, so it is never paused.
+            paused: show_main_menu || (options.is_profiling() && !options.benchmark),
         })
         .insert_resource(PresentationSamples::new(initial_snapshot).with_observer(observer_team))
         .insert_resource(demo.metrics)
@@ -676,7 +703,9 @@ fn main() {
         app.add_plugins(RenderAuditPlugin);
         let source = options.profile_quicksave.as_ref().map_or_else(
             || {
-                if let Some(stress) = options.stress_visual {
+                if options.benchmark {
+                    "benchmark".to_owned()
+                } else if let Some(stress) = options.stress_visual {
                     let rawcode = stress.rawcode.to_be_bytes();
                     format!(
                         "stress-visual={}:{}",
@@ -844,6 +873,8 @@ struct ClientOptions {
     profile_duration: Duration,
     profile_paused: bool,
     profile: bool,
+    /// Offline all-buildings benchmark: runs the `sim-bench` match under the automated profile.
+    benchmark: bool,
     profile_screenshot: Option<PathBuf>,
     render_experiment: RenderExperiment,
     map_version: MapVersion,
@@ -872,6 +903,7 @@ impl ClientOptions {
             profile_duration: Duration::from_secs(10),
             profile_paused: false,
             profile: false,
+            benchmark: false,
             profile_screenshot: None,
             render_experiment: RenderExperiment::Baseline,
             map_version: MapVersion::CASTLE_FIGHT_9_27,
@@ -883,9 +915,12 @@ impl ClientOptions {
             server: None,
             list_map_versions: false,
         };
+        let mut explicit_warmup = false;
+        let mut explicit_duration = false;
         let mut args = std::env::args().skip(1);
         while let Some(arg) = args.next() {
             match arg.as_str() {
+                "--benchmark" => options.benchmark = true,
                 "--stress-units" => {
                     let value = args
                         .next()
@@ -939,6 +974,7 @@ impl ClientOptions {
                         .expect("--profile-warmup requires a non-negative number of seconds");
                     options.profile_warmup =
                         parse_profile_warmup(&value).unwrap_or_else(|error| panic!("{error}"));
+                    explicit_warmup = true;
                 }
                 "--profile-duration" => {
                     let value = args
@@ -946,6 +982,7 @@ impl ClientOptions {
                         .expect("--profile-duration requires a positive number of seconds");
                     options.profile_duration =
                         parse_profile_duration(&value).unwrap_or_else(|error| panic!("{error}"));
+                    explicit_duration = true;
                 }
                 "--map-version" => {
                     let value = args
@@ -1006,19 +1043,33 @@ impl ClientOptions {
                 "--list-map-versions" => options.list_map_versions = true,
                 "-h" | "--help" => {
                     println!(
-                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--builder SLOT:RAWCODE] [--list-map-versions] [--stress-units N] [--stress-visual RAWCODE N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS] [--profile-paused] [--profile] [--profile-screenshot PATH] [--render-experiment baseline|freeze-bounds|hide-skinned|hide-particles|hide-transparent|legacy-team-color|legacy-geoset-visibility|legacy-attachment-search|legacy-attachment-index|legacy-effect-pooling|legacy-splat-updates|legacy-splat-material-state|legacy-animated-alpha-state|legacy-animated-texture-state|freeze-materials|freeze-poses|bindless-auto|bindless-64|bindless-128|bindless-256|no-bindless]"
+                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--builder SLOT:RAWCODE] [--list-map-versions] [--stress-units N] [--stress-visual RAWCODE N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS] [--profile-paused] [--profile] [--profile-screenshot PATH] [--benchmark] [--render-experiment baseline|freeze-bounds|hide-skinned|hide-particles|hide-transparent|legacy-team-color|legacy-geoset-visibility|legacy-attachment-search|legacy-attachment-index|legacy-effect-pooling|legacy-splat-updates|legacy-splat-material-state|legacy-animated-alpha-state|legacy-animated-texture-state|freeze-materials|freeze-poses|bindless-auto|bindless-64|bindless-128|bindless-256|no-bindless]"
                     );
                     std::process::exit(0);
                 }
                 unknown => panic!("unknown client option: {unknown}"),
             }
         }
+        if options.benchmark {
+            // Matches `sim-bench --scenario all-buildings`: 3v3, fixed seed, the shared
+            // benchmark setup, and an automated profile run that exits after its report.
+            // --seed, --team-size, and --map-revision are fixed by the benchmark.
+            options.team_size = BENCHMARK_PLAYERS_PER_TEAM;
+            options.profile = true;
+            if !explicit_warmup {
+                options.profile_warmup = BENCHMARK_WARMUP;
+            }
+            if !explicit_duration {
+                options.profile_duration = BENCHMARK_DURATION;
+            }
+        }
         assert!(
             !options.profile
+                || options.benchmark
                 || options.stress_units.is_some()
                 || options.stress_visual.is_some()
                 || options.profile_quicksave.is_some(),
-            "--profile requires --stress-units, --stress-visual, or --profile-quicksave",
+            "--profile requires --stress-units, --stress-visual, --profile-quicksave, or --benchmark",
         );
         assert!(
             options.is_profiling()
@@ -1026,11 +1077,16 @@ impl ClientOptions {
                     && options.render_experiment == RenderExperiment::Baseline
                     && options.profile_screenshot.is_none()
                     && options.stress_visual.is_none()),
-            "render experiments, --profile-paused, and --stress-visual require --profile or --profile-quicksave",
+            "render experiments, --profile-paused, and --stress-visual require --profile, --profile-quicksave, or --benchmark",
         );
         options
     }
 }
+
+/// Players per team in the `--benchmark` match, matching `sim-bench` all-buildings.
+const BENCHMARK_PLAYERS_PER_TEAM: usize = 3;
+const BENCHMARK_WARMUP: Duration = Duration::from_secs(2);
+const BENCHMARK_DURATION: Duration = Duration::from_secs(120);
 
 fn parse_profile_rawcode(value: &str) -> Result<u32, String> {
     let bytes = value.as_bytes();
@@ -1065,6 +1121,13 @@ fn parse_profile_duration(value: &str) -> Result<Duration, String> {
 fn client_match_config(
     options: &ClientOptions,
 ) -> Result<CastleFightMatchConfig, CastleFightMatchSetupError> {
+    if options.benchmark {
+        return castle_fight_benchmark_match_config(
+            options.map_version,
+            options.team_size,
+            BENCHMARK_MATCH_SEED,
+        );
+    }
     let western = [0u8, 1, 2];
     let eastern = [6u8, 7, 8];
     let participants =
