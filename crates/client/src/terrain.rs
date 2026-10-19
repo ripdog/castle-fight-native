@@ -30,9 +30,33 @@ pub struct TerrainSurface {
     origin_world: Vec2,
     tile_world: f32,
     max_world: Vec2,
-    vertex_width: usize,
-    vertex_heights: Vec<f32>,
+    /// Per-cell bicubic patches in row-major cell order, `width_tiles * height_tiles` entries.
+    height_cells: Vec<TerrainHeightCell>,
 }
+
+/// Precomputed Catmull-Rom patch for one terrain cell.
+///
+/// The original sampler evaluated 20 clamped vertex lookups per query. Every row and column
+/// of that evaluation is a cubic polynomial in the in-cell fractions, so the whole patch
+/// collapses to a 4x4 polynomial in `(tx, ty)` that is computed once at construction.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct TerrainHeightCell {
+    /// `coefficients[n][m]` multiplies `ty^n * tx^m`.
+    coefficients: [[f32; 4]; 4],
+    /// Minimum and maximum of the cell's four corner vertices; the smoothed height is clamped to
+    /// this range so the bicubic patch never overshoots its corners.
+    minimum: f32,
+    maximum: f32,
+}
+
+/// Power-basis form of one uniform Catmull-Rom segment over `p0..p3`:
+/// the coefficient of `t^m` is `sum_k CATMULL_ROM_POWER_BASIS[m][k] * p[k]`.
+const CATMULL_ROM_POWER_BASIS: [[f64; 4]; 4] = [
+    [0.0, 1.0, 0.0, 0.0],
+    [-0.5, 0.0, 0.5, 0.0],
+    [1.0, -2.5, 2.0, -0.5],
+    [-0.5, 1.5, -1.5, 0.5],
+];
 
 #[derive(Resource, Debug, Clone)]
 pub struct TerrainTextureLayout {
@@ -120,23 +144,13 @@ impl TerrainSurface {
         let origin = elevation.origin();
         let maximum = elevation.max_point();
         let subunits = SUBUNITS_PER_WORLD_UNIT as f32;
-        let vertex_width =
-            usize::try_from(elevation.width_tiles()).expect("terrain width fits usize") + 1;
-        let vertex_height =
-            usize::try_from(elevation.height_tiles()).expect("terrain height fits usize") + 1;
-        let mut vertex_heights = Vec::with_capacity(vertex_width * vertex_height);
-        for y in 0..=elevation.height_tiles() {
-            for x in 0..=elevation.width_tiles() {
-                vertex_heights.push(sample_height(elevation.vertex_sample(x, y)));
-            }
-        }
+        let height_cells = build_height_cells(&elevation);
         Self {
             origin_world: Vec2::new(origin.x as f32 / subunits, origin.y as f32 / subunits),
             tile_world: elevation.tile_size() as f32 / subunits,
             max_world: Vec2::new(maximum.x as f32 / subunits, maximum.y as f32 / subunits),
             elevation,
-            vertex_width,
-            vertex_heights,
+            height_cells,
         }
     }
 
@@ -180,33 +194,8 @@ impl TerrainSurface {
         let cell_y = (clamped.y.floor() as u32).min(height - 1);
         let tx = (clamped.x - cell_x as f32).clamp(0.0, 1.0);
         let ty = (clamped.y - cell_y as f32).clamp(0.0, 1.0);
-
-        let mut rows = [0.0; 4];
-        for (row_index, offset_y) in (-1_i32..=2).enumerate() {
-            let y = cell_y as i32 + offset_y;
-            let p0 = self.vertex_height_clamped(cell_x as i32 - 1, y);
-            let p1 = self.vertex_height_clamped(cell_x as i32, y);
-            let p2 = self.vertex_height_clamped(cell_x as i32 + 1, y);
-            let p3 = self.vertex_height_clamped(cell_x as i32 + 2, y);
-            rows[row_index] = catmull_rom(p0, p1, p2, p3, tx);
-        }
-        let smoothed = catmull_rom(rows[0], rows[1], rows[2], rows[3], ty);
-
-        let corners = [
-            self.vertex_height_clamped(cell_x as i32, cell_y as i32),
-            self.vertex_height_clamped(cell_x as i32 + 1, cell_y as i32),
-            self.vertex_height_clamped(cell_x as i32, cell_y as i32 + 1),
-            self.vertex_height_clamped(cell_x as i32 + 1, cell_y as i32 + 1),
-        ];
-        let minimum = corners.into_iter().fold(f32::INFINITY, f32::min);
-        let maximum = corners.into_iter().fold(f32::NEG_INFINITY, f32::max);
-        smoothed.clamp(minimum, maximum)
-    }
-
-    fn vertex_height_clamped(&self, x: i32, y: i32) -> f32 {
-        let vertex_x = x.clamp(0, self.elevation.width_tiles() as i32) as usize;
-        let vertex_y = y.clamp(0, self.elevation.height_tiles() as i32) as usize;
-        self.vertex_heights[vertex_y * self.vertex_width + vertex_x]
+        let cell_index = cell_y as usize * width as usize + cell_x as usize;
+        self.height_cells[cell_index].height(tx, ty)
     }
 
     fn position_at_grid(&self, grid: Vec2) -> [f32; 3] {
@@ -771,13 +760,65 @@ fn terrain_slope_tint(normal: [f32; 3]) -> [f32; 4] {
     [brightness, brightness, brightness, 1.0]
 }
 
-fn catmull_rom(p0: f32, p1: f32, p2: f32, p3: f32, t: f32) -> f32 {
-    let t2 = t * t;
-    let t3 = t2 * t;
-    0.5 * ((2.0 * p1)
-        + (-p0 + p2) * t
-        + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2
-        + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3)
+/// Builds one [`TerrainHeightCell`] per tile. Vertex lookups clamp to the terrain grid so
+/// edge cells see the same replicated boundary samples as the per-query sampler did.
+fn build_height_cells(elevation: &TerrainElevationMap) -> Vec<TerrainHeightCell> {
+    let width = elevation.width_tiles();
+    let height = elevation.height_tiles();
+    let vertex = |x: i32, y: i32| {
+        let vertex_x = x.clamp(0, width as i32) as u32;
+        let vertex_y = y.clamp(0, height as i32) as u32;
+        sample_height(elevation.vertex_sample(vertex_x, vertex_y))
+    };
+    let mut cells = Vec::with_capacity(width as usize * height as usize);
+    for cell_y in 0..height as i32 {
+        for cell_x in 0..width as i32 {
+            // `patch[row][column]` covers the 4x4 vertex neighbourhood, offset -1..=2 on each axis.
+            let patch: [[f64; 4]; 4] = std::array::from_fn(|row| {
+                std::array::from_fn(|column| {
+                    f64::from(vertex(cell_x + column as i32 - 1, cell_y + row as i32 - 1))
+                })
+            });
+            let corners = [
+                vertex(cell_x, cell_y),
+                vertex(cell_x + 1, cell_y),
+                vertex(cell_x, cell_y + 1),
+                vertex(cell_x + 1, cell_y + 1),
+            ];
+            cells.push(TerrainHeightCell::new(&patch, corners));
+        }
+    }
+    cells
+}
+
+impl TerrainHeightCell {
+    fn new(patch: &[[f64; 4]; 4], corners: [f32; 4]) -> Self {
+        // Horizontal pass: power-basis coefficients of each row's curve in `tx`.
+        let row_coefficients: [[f64; 4]; 4] = std::array::from_fn(|m| {
+            std::array::from_fn(|row| dot4(&CATMULL_ROM_POWER_BASIS[m], &patch[row]))
+        });
+        // Vertical pass: combine the row curves into `ty` power-basis coefficients.
+        let coefficients = std::array::from_fn(|n| {
+            std::array::from_fn(|m| dot4(&CATMULL_ROM_POWER_BASIS[n], &row_coefficients[m]) as f32)
+        });
+        Self {
+            coefficients,
+            minimum: corners.into_iter().fold(f32::INFINITY, f32::min),
+            maximum: corners.into_iter().fold(f32::NEG_INFINITY, f32::max),
+        }
+    }
+
+    #[inline]
+    fn height(&self, tx: f32, ty: f32) -> f32 {
+        let row = |[c0, c1, c2, c3]: [f32; 4]| c0 + tx * (c1 + tx * (c2 + tx * c3));
+        let [r0, r1, r2, r3] = self.coefficients.map(row);
+        let smoothed = r0 + ty * (r1 + ty * (r2 + ty * r3));
+        smoothed.clamp(self.minimum, self.maximum)
+    }
+}
+
+fn dot4(a: &[f64; 4], b: &[f64; 4]) -> f64 {
+    a.iter().zip(b).map(|(a, b)| a * b).sum()
 }
 
 fn interpolate_quad_uv(uvs: [[f32; 2]; 4], fx: f32, fy: f32) -> [f32; 2] {
@@ -948,6 +989,80 @@ mod tests {
                     )
                 })
                 .collect(),
+        }
+    }
+
+    /// The per-query Catmull-Rom sampler that the precomputed cell patches replaced. It reads
+    /// vertices straight from the source map so the test checks the patch math, not a copy of it.
+    fn reference_height_at_grid(elevation: &TerrainElevationMap, grid: Vec2) -> f32 {
+        fn catmull_rom(p0: f32, p1: f32, p2: f32, p3: f32, t: f32) -> f32 {
+            let t2 = t * t;
+            let t3 = t2 * t;
+            0.5 * ((2.0 * p1)
+                + (-p0 + p2) * t
+                + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2
+                + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3)
+        }
+        let width = elevation.width_tiles();
+        let height = elevation.height_tiles();
+        let vertex = |x: i32, y: i32| {
+            let vertex_x = x.clamp(0, width as i32) as u32;
+            let vertex_y = y.clamp(0, height as i32) as u32;
+            sample_height(elevation.vertex_sample(vertex_x, vertex_y))
+        };
+        let clamped = grid.clamp(Vec2::ZERO, Vec2::new(width as f32, height as f32));
+        let cell_x = (clamped.x.floor() as u32).min(width - 1);
+        let cell_y = (clamped.y.floor() as u32).min(height - 1);
+        let tx = (clamped.x - cell_x as f32).clamp(0.0, 1.0);
+        let ty = (clamped.y - cell_y as f32).clamp(0.0, 1.0);
+
+        let mut rows = [0.0; 4];
+        for (row_index, offset_y) in (-1_i32..=2).enumerate() {
+            let y = cell_y as i32 + offset_y;
+            let p0 = vertex(cell_x as i32 - 1, y);
+            let p1 = vertex(cell_x as i32, y);
+            let p2 = vertex(cell_x as i32 + 1, y);
+            let p3 = vertex(cell_x as i32 + 2, y);
+            rows[row_index] = catmull_rom(p0, p1, p2, p3, tx);
+        }
+        let smoothed = catmull_rom(rows[0], rows[1], rows[2], rows[3], ty);
+
+        let corners = [
+            vertex(cell_x as i32, cell_y as i32),
+            vertex(cell_x as i32 + 1, cell_y as i32),
+            vertex(cell_x as i32, cell_y as i32 + 1),
+            vertex(cell_x as i32 + 1, cell_y as i32 + 1),
+        ];
+        let minimum = corners.into_iter().fold(f32::INFINITY, f32::min);
+        let maximum = corners.into_iter().fold(f32::NEG_INFINITY, f32::max);
+        smoothed.clamp(minimum, maximum)
+    }
+
+    #[test]
+    fn precomputed_height_patches_match_reference_sampler() {
+        for elevation in [
+            TerrainElevationMap::from_wc3_terrain_json(include_str!(
+                "../../../docs/original_map/extracted/terrain.json"
+            ))
+            .unwrap(),
+            rounded_ramp_terrain().elevation,
+        ] {
+            let terrain = TerrainSurface::new(elevation.clone());
+            // Quarter-tile steps cover tile interiors, exact tile edges, and grid positions
+            // beyond both terrain borders, which exercise the clamping paths.
+            let columns = (elevation.width_tiles() + 4) * 4;
+            let rows = (elevation.height_tiles() + 4) * 4;
+            for row in 0..=rows {
+                for column in 0..=columns {
+                    let grid = Vec2::new(-2.0 + column as f32 * 0.25, -2.0 + row as f32 * 0.25);
+                    let actual = terrain.height_at_grid(grid);
+                    let expected = reference_height_at_grid(&elevation, grid);
+                    assert!(
+                        (actual - expected).abs() <= 1e-3,
+                        "grid {grid:?}: precomputed {actual} differs from reference {expected}"
+                    );
+                }
+            }
         }
     }
 
