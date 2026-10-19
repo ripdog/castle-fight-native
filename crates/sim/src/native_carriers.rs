@@ -95,6 +95,26 @@ impl Projection {
         hostile_native_targets(self.fields[object]["atar"].as_str().unwrap())
             .expect("native target qualifiers must be supported explicitly")
     }
+
+    /// Barrage launches ordinary weapon missiles: an authored mask that names only the enemy
+    /// relation leaves the physical class to the firing weapon, which the launch intersects.
+    fn barrage_targets(&self, object: &str) -> AttackTargetMask {
+        let mask = self.fields[object]["atar"].as_str().unwrap();
+        match hostile_native_targets(mask) {
+            Ok(targets) => targets,
+            Err(_) if class_free_enemy_mask(mask) => AttackTargetMask::ALL,
+            Err(reason) => panic!("native target qualifiers must be supported explicitly: {reason}"),
+        }
+    }
+}
+
+/// Exactly the enemy relation, with no physical class and no other qualifier.
+fn class_free_enemy_mask(mask: &str) -> bool {
+    let mut tokens = mask.split(',').map(str::trim);
+    matches!(
+        (tokens.next(), tokens.next()),
+        (Some("enemy" | "enemies"), None)
+    )
 }
 
 /// This implementation supports hostile relation plus explicit physical target classes only.
@@ -185,7 +205,7 @@ pub(crate) fn barrage_for_ability(
         damage_per_target: p.number(code, "Efk1") as i32,
         maximum_total_damage: p.number(code, "Efk2") as i32,
         range: (p.number(code, "aare") * f64::from(SUBUNITS_PER_WORLD_UNIT)) as i32,
-        targets: p.targets(code),
+        targets: p.barrage_targets(code),
         speed_per_tick: (p.number(code, "amsp") * f64::from(SUBUNITS_PER_WORLD_UNIT)
             / f64::from(CASTLE_FIGHT_SIMULATION_HZ))
         .round() as i32,

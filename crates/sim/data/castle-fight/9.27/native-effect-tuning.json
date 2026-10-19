@@ -4,6 +4,17 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0GV",
+      "unit_rawcode": "h07S",
+      "kind": "spell-resistance",
+      "damage_taken_per_10k": 5500,
+      "provenance": {
+        "ability": "A0GV",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A0H9",
       "unit_rawcode": "o00H",
       "kind": "mana-attack-orb",

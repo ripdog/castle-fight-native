@@ -21,7 +21,7 @@ FIELDS = {
 }
 
 
-def validate_hostile_target_mask(mask):
+def validate_hostile_target_mask(mask, allow_class_free=False):
     """Reject evidence whose relation/class qualifiers the runtime would otherwise discard."""
     if not isinstance(mask, str):
         raise ValueError("hostile native target mask must be a string")
@@ -33,6 +33,9 @@ def validate_hostile_target_mask(mask):
         if token in seen:
             raise ValueError(f"duplicate hostile native target qualifier {token!r}")
         seen.add(token)
+    # Barrage fires ordinary weapon missiles: an enemy-only mask leaves the class to the weapon.
+    if allow_class_free and seen == {"enemy"}:
+        return
     if "enemy" not in seen or not seen.intersection({"ground", "air", "structure"}):
         raise ValueError("hostile native targeting requires enemy relation and a physical class")
 
@@ -78,8 +81,9 @@ def build(map_version="9.27", revision="r1", repo_root=ROOT, releases=None):
             fields.setdefault(row["rawcode"], {})[row["field_id"]] = json.loads(
                 row["recovered_value_json"]
             )
-    for object_id in barrage | {"A000"}:
-        validate_hostile_target_mask(fields[object_id]["atar"])
+    for object_id in barrage:
+        validate_hostile_target_mask(fields[object_id]["atar"], allow_class_free=True)
+    validate_hostile_target_mask(fields["A000"]["atar"])
     runtime = next(
         row for row in csv.DictReader(io.StringIO(sources[paths[1]].decode()), delimiter="\t")
         if row["system_id"] == "obelisk-of-light-cleansing-light"

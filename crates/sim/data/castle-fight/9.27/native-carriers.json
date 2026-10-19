@@ -3,6 +3,7 @@
     "e003": "A03N",
     "e004": "A03O",
     "h014": "A015",
+    "h07S": "A0GZ",
     "n02I": "A0FL"
   },
   "cleanse": {
@@ -258,6 +259,19 @@
       "amsp": 1100,
       "atar": "air,enemies,ground"
     },
+    "A0GZ": {
+      "Efk1": 72,
+      "Efk2": 630,
+      "Efk3": 1,
+      "aare": 530,
+      "acdn": 2,
+      "adur": 1,
+      "ahdu": 1,
+      "amac": 0.25,
+      "amat": "Abilities\\Spells\\Other\\StrongDrink\\BrewmasterMissile.mdl",
+      "amsp": 1200,
+      "atar": "enemies"
+    },
     "B01M": {
       "ftat": "",
       "ftip": "Ray of Light"
@@ -374,7 +388,7 @@
   ],
   "source_revision": "r1",
   "sources": {
-    "native-effect-bindings.json": "7c74c271eeeebf4b7057f7f90035a30644edd83872e28cd2157904ecce3cd692",
+    "native-effect-bindings.json": "d9e8006463d2b4eb0e42902370115cea196520ef6a49a30c5f79afd8c9658c0e",
     "object-fields.tsv": "01040f03e4a625ac1d960a0a2d43d0732d64b797e9357f4f40e8c2c0d6d9710d",
     "objects.tsv": "974d21575d4106609146f2e228b99ec5494732462a1e40735f48e63e7cdae96d",
     "runtime-system-mechanics.tsv": "436cbff2586e2d540d06c86ca7b403f4d5f0d9b37ee27d68d31f896c3b0f412e",

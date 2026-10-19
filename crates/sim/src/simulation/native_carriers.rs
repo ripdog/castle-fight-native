@@ -109,6 +109,7 @@ impl Simulation {
                     && profile
                         .targets
                         .can_target_unit(unit.target_movement_class())
+                    && intent.attack_targets.can_target_unit(unit.target_movement_class())
                     && intent.source_position.distance_sq(unit.position)
                         <= square_i32(profile.range)
             })

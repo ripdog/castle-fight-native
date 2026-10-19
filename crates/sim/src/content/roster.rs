@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    CloudShip = 0x1000_008e => b"h07S",
     BrewshockCatapult = 0x1000_008d => b"o00H",
     EchofootMystic = 0x1000_008c => b"n03I",
     DrunkenBrewmaster = 0x1000_008b => b"n03O",
@@ -177,6 +178,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    CloudHangar = 0x2000_008a => b"n03Q",
     PandarenSiegeWorkshop = 0x2000_0089 => b"n03N",
     TempleOfTheWanderingSpark = 0x2000_0088 => b"n03H",
     TempleOfTenThousandDrinks = 0x2000_0087 => b"n03P",
