@@ -40,6 +40,7 @@ const FRAME_COLOR: Color = Color::srgb(0.76, 0.80, 0.86);
 const SMOOTHING_WINDOW: Duration = Duration::from_secs(1);
 const MAX_SYSTEM_TIMINGS: usize = 10;
 const MAX_CAPTURE_SYSTEM_TIMINGS: usize = 40;
+const MAX_WORST_SYSTEM_TIMINGS: usize = 15;
 
 #[derive(Default)]
 struct SystemTraceAccumulator {
@@ -50,6 +51,8 @@ struct SystemTraceAccumulator {
     // Accumulated since the last `SystemTraceSink::begin_capture`; never drained by the window.
     capture_busy_ns: AtomicU64,
     capture_calls: AtomicU64,
+    // Longest single call since the last capture start (the spike, not the average).
+    capture_max_ns: AtomicU64,
 }
 
 #[derive(Resource, Clone, Default)]
@@ -68,6 +71,7 @@ impl SystemTraceSink {
         for accumulator in self.accumulators() {
             accumulator.capture_busy_ns.store(0, Ordering::Relaxed);
             accumulator.capture_calls.store(0, Ordering::Relaxed);
+            accumulator.capture_max_ns.store(0, Ordering::Relaxed);
         }
     }
 
@@ -89,6 +93,34 @@ impl SystemTraceSink {
             "SYSTEM CPU  whole capture avg/frame ({frames} frames, top {MAX_CAPTURE_SYSTEM_TIMINGS})\n"
         );
         push_system_rows(&mut output, &rows);
+        output.push_str(&self.format_capture_worst());
+        output
+    }
+
+    /// Formats the longest single call of each system, which exposes frame spikes that the
+    /// per-frame averages hide.
+    fn format_capture_worst(&self) -> String {
+        let mut worst = BTreeMap::<String, u64>::new();
+        for accumulator in self.accumulators() {
+            let max_ns = accumulator.capture_max_ns.load(Ordering::Relaxed);
+            if max_ns > 0 {
+                let entry = worst.entry(accumulator.name.clone()).or_default();
+                *entry = (*entry).max(max_ns);
+            }
+        }
+        let mut rows = worst.into_iter().collect::<Vec<_>>();
+        rows.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0)));
+        rows.truncate(MAX_WORST_SYSTEM_TIMINGS);
+        let mut output = String::from("SYSTEM CPU  worst single call over the capture\n");
+        for (name, max_ns) in rows {
+            writeln!(
+                output,
+                "  {:<25} {:>7.3}ms",
+                compact_system_name(&name),
+                duration_ms(Duration::from_nanos(max_ns)),
+            )
+            .unwrap();
+        }
         output
     }
 }
@@ -254,6 +286,9 @@ where
             .capture_busy_ns
             .fetch_add(elapsed_ns, Ordering::Relaxed);
         accumulator.capture_calls.fetch_add(1, Ordering::Relaxed);
+        accumulator
+            .capture_max_ns
+            .fetch_max(elapsed_ns, Ordering::Relaxed);
     }
 }
 
