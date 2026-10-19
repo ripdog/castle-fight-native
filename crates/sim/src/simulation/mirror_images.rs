@@ -101,7 +101,12 @@ impl Simulation {
         {
             return 0;
         }
-        let units = self.snapshot_units();
+        // Only mirror-image sources and their illusions can change here. Any illusion whose
+        // source is absent from this subset is either dead or lacks a mirror image, which
+        // the removal check treats the same as a present source without one.
+        let units = self.snapshot_units_where(|status| {
+            status.mirror_image.is_some() || status.illusion.is_some()
+        });
         // Native replacement/removal is unsummoning, without corpse or death-trigger effects.
         let removals: Vec<_> = units
             .iter()

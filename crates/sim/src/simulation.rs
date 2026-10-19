@@ -3940,6 +3940,22 @@ impl Simulation {
     }
 
     fn snapshot_units_with_dead(&mut self, include_dead: bool) -> Vec<UnitSnapshot> {
+        self.snapshot_units_filtered(include_dead, |_| true)
+    }
+
+    /// Snapshots living units whose status satisfies `keep`, in the same id order and
+    /// with the same per-unit projection as `snapshot_units`. Units rejected by `keep`
+    /// are absent from the result, so callers must only use it when every unit they
+    /// inspect is guaranteed to satisfy the predicate or to be absent-equivalent.
+    fn snapshot_units_where(&mut self, keep: impl Fn(&StatusState) -> bool) -> Vec<UnitSnapshot> {
+        self.snapshot_units_filtered(false, keep)
+    }
+
+    fn snapshot_units_filtered(
+        &mut self,
+        include_dead: bool,
+        keep: impl Fn(&StatusState) -> bool,
+    ) -> Vec<UnitSnapshot> {
         // Every component is fetched through the cached query state. Optional and
         // required-but-checked components keep their original panic/default behaviour.
         let mut query = self.world.query::<(
@@ -3986,9 +4002,11 @@ impl Simulation {
         keys.extend(
             query
                 .iter(&self.world)
-                .filter(|((_, _, _, _, _, health, _, _, _, _, _, _, _, _), _, _)| {
-                    include_dead || health.current > 0
-                })
+                .filter(
+                    |((_, _, _, _, _, health, _, _, _, _, status, _, _, _), _, _)| {
+                        (include_dead || health.current > 0) && keep(status)
+                    },
+                )
                 .map(|((entity, id, ..), _, _)| (*id, entity)),
         );
         keys.sort_unstable_by_key(|&(id, _)| id);
