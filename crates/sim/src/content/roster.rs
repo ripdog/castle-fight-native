@@ -309,6 +309,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    CelestialChiTower = 0x2100_0039 => b"h07V",
     ThunderpawSpire = 0x2100_0038 => b"h07R",
     WitheringHall = 0x2100_0037 => b"h07T",
     TempleOfStorm = 0x2100_0036 => b"n03A",
