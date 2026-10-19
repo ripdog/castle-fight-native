@@ -33,6 +33,7 @@ mod resource_ui;
 mod scoreboard_ui;
 mod settings_menu;
 mod skin_influences;
+mod skinned_bounds;
 mod terrain;
 mod ui_icons;
 mod unit_models;
@@ -714,6 +715,7 @@ fn main() {
             console::ConsolePlugin,
             CastlePresentationPlugin::new(options.health_bars),
             DoodadPresentationPlugin,
+            skinned_bounds::SkinnedMeshBoundsPlugin,
             BuildUiPlugin,
             CursorPresentationPlugin,
             ResourceUiPlugin,
