@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-use bevy::{ecs::system::SystemParam, input::InputSystems, prelude::*, window::PrimaryWindow};
+use bevy::{ecs::system::SystemParam, prelude::*, window::PrimaryWindow};
 use castle_fight_sim::{
     BuildingFootprint, CastleFightBuildingKind, CastleFightContentBundle,
     CastleFightProductionDefinition, CommandCardPosition, CommandSubmission, NavCell,
@@ -431,7 +431,14 @@ impl Plugin for BuildUiPlugin {
             )
             .insert_resource(UiIconAssets::load_for_version(map_version))
             .add_systems(Startup, setup_action_panel)
-            .add_systems(PreUpdate, capture_action_panel_hotkeys.after(InputSystems))
+            // Reads the simulation, so it runs once the simulation thread has been joined back
+            // (see `sim_thread`) rather than in `PreUpdate`.
+            .add_systems(
+                RunFixedMainLoop,
+                capture_action_panel_hotkeys
+                    .in_set(RunFixedMainLoopSystems::AfterFixedMainLoop)
+                    .after(crate::sim_thread::SimJoin),
+            )
             .add_systems(
                 Update,
                 (

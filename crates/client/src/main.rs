@@ -33,6 +33,7 @@ mod render_tuning;
 mod resource_ui;
 mod scoreboard_ui;
 mod settings_menu;
+mod sim_thread;
 mod skin_influences;
 mod skinned_bounds;
 mod terrain;
@@ -100,6 +101,7 @@ use render_audit::{
 };
 use render_tuning::StandardMaterialBindlessSlabPlugin;
 use resource_ui::ResourceUiPlugin;
+use sim_thread::{Movable, SimThreadPlugin};
 use terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet, client_asset_root};
 use view_state::{
     ViewState, ViewStatePersistence, persist_view_state, sync_cursor_grab, toggle_fullscreen,
@@ -140,8 +142,11 @@ struct SnapshotCatchUp {
 
 #[derive(Resource)]
 pub(crate) struct AuthoritativeSimulation {
-    simulation: Simulation,
-    driver: MatchDriver,
+    /// Absent while the offline simulation thread owns it; see `sim_thread`.
+    simulation: Movable<Simulation>,
+    driver: Movable<MatchDriver>,
+    /// Fixed steps counted since the last launch of the simulation thread (offline only).
+    due_ticks: u32,
     pending_feedback: Vec<CommandExecution>,
     pending_build_commands: build_orders::PendingBuildCommands,
     pending_status: Vec<String>,
@@ -163,8 +168,9 @@ impl AuthoritativeSimulation {
     fn new(simulation: Simulation, content: &'static CastleFightContentBundle) -> Self {
         let driver = MatchDriver::new(&simulation, content);
         Self {
-            simulation,
-            driver,
+            simulation: Movable::new(simulation, "simulation"),
+            driver: Movable::new(driver, "driver"),
+            due_ticks: 0,
             pending_feedback: Vec::new(),
             pending_build_commands: default(),
             pending_status: Vec::new(),
@@ -190,8 +196,9 @@ impl AuthoritativeSimulation {
     ) -> Self {
         let driver = MatchDriver::new(&simulation, content);
         Self {
-            simulation,
-            driver,
+            simulation: Movable::new(simulation, "simulation"),
+            driver: Movable::new(driver, "driver"),
+            due_ticks: 0,
             pending_feedback: Vec::new(),
             pending_build_commands: default(),
             pending_status: Vec::new(),
@@ -441,7 +448,9 @@ impl SimulationPlayback {
         } else if self.paused {
             1.0
         } else {
-            fixed_time.overstep_fraction()
+            samples
+                .render_overstep()
+                .unwrap_or_else(|| fixed_time.overstep_fraction())
         }
     }
 }
@@ -764,7 +773,7 @@ fn main() {
                 .after(bevy::app::AnimationSystems)
                 .before(bevy::transform::TransformSystems::Propagate),
         )
-        .add_systems(FixedUpdate, advance_authoritative_simulation);
+        .add_plugins(SimThreadPlugin);
 
     if interactive_frontend {
         app.add_plugins((
@@ -1697,7 +1706,8 @@ fn perform_quickload(
             selected_match.content,
             &path,
         )?;
-        authoritative.driver = MatchDriver::new(&authoritative.simulation, selected_match.content);
+        let driver = MatchDriver::new(&authoritative.simulation, selected_match.content);
+        authoritative.driver.set(driver);
         authoritative.pending_feedback.clear();
         authoritative.expected_execution_batch = None;
         authoritative.catch_up = None;
@@ -1764,57 +1774,6 @@ fn update_simulation_pause_ui(
     } else {
         Visibility::Hidden
     };
-}
-
-fn advance_authoritative_simulation(
-    playback: Res<SimulationPlayback>,
-    mut authoritative: ResMut<AuthoritativeSimulation>,
-    mut presentation: ResMut<PresentationSamples>,
-    mut selected_match: ResMut<SelectedMatch>,
-    mut performance: Option<ResMut<PerformanceCounters>>,
-) {
-    let fixed_started = std::time::Instant::now();
-
-    if authoritative.is_networked() {
-        let revision = presentation.revision();
-        let result = process_network_events(
-            &mut authoritative,
-            presentation.bypass_change_detection(),
-            &mut selected_match,
-            performance.as_deref_mut(),
-        );
-        if presentation.revision() != revision {
-            presentation.set_changed();
-        }
-        if let Some(performance) = performance.as_deref_mut() {
-            performance.record_fixed_update_wall(fixed_started.elapsed());
-        }
-        if let Err(error) = result {
-            panic!("network canonical stream invariant failed: {error}");
-        }
-        return;
-    }
-    if playback.paused {
-        return;
-    }
-    match advance_authoritative_simulation_once(&mut authoritative, &mut presentation) {
-        Ok(result) => {
-            if let Some(performance) = performance.as_deref_mut() {
-                performance.record_sim_tick(
-                    result.tick_result.completed_tick,
-                    result.tick_result.timings,
-                    result.tick_result.collision_fallback_searches,
-                    result.tick_result.collision_fallback_candidate_checks,
-                    result.tick_result.collision_fallback_max_ring,
-                );
-            }
-        }
-        Err(CanonicalStreamError::MatchNotRunning(_)) => {}
-        Err(error) => panic!("local canonical stream invariant failed: {error:?}"),
-    }
-    if let Some(performance) = performance.as_deref_mut() {
-        performance.record_fixed_update_wall(fixed_started.elapsed());
-    }
 }
 
 fn advance_network_presentation(
@@ -2333,8 +2292,10 @@ fn apply_network_lobby_roster(
         config.clone(),
     )
     .map_err(|error| format!("invalid server lobby roster: {error}"))?;
-    authoritative.driver = MatchDriver::new(&demo.simulation, demo.content);
-    authoritative.simulation = demo.simulation;
+    authoritative
+        .driver
+        .set(MatchDriver::new(&demo.simulation, demo.content));
+    authoritative.simulation.set(demo.simulation);
     authoritative.pending_feedback.clear();
     authoritative.expected_execution_batch = None;
     presentation.reset(PresentationSnapshot::capture(&authoritative.simulation));
@@ -2468,11 +2429,12 @@ fn append_snapshot_chunk(
             .simulation
             .restore_snapshot(&snapshot)
             .map_err(|error| format!("could not restore authoritative snapshot: {error:?}"))?;
-        authoritative.driver = MatchDriver::new_replica_from_snapshot(
+        let replica_driver = MatchDriver::new_replica_from_snapshot(
             &authoritative.simulation,
             content,
             InputStreamPosition(catch_up.begin.snapshot_stream_position),
         );
+        authoritative.driver.set(replica_driver);
         authoritative.simulation.clear_presentation_events();
         authoritative.expected_execution_batch = None;
         authoritative.pending_feedback.clear();
@@ -3310,7 +3272,7 @@ mod tests {
         .add_systems(
             Update,
             (
-                advance_authoritative_simulation,
+                sim_thread::advance_network_simulation,
                 advance_network_presentation,
                 count_publications,
             )
@@ -3404,7 +3366,19 @@ mod tests {
                 direct_buildings: Vec::new(),
                 local_player: PlayerId(0),
             })
-            .add_systems(Update, advance_authoritative_simulation);
+            .init_resource::<sim_thread::SimWorker>()
+            .insert_resource(Time::<Fixed>::from_hz(f64::from(
+                CASTLE_FIGHT_SIMULATION_HZ,
+            )))
+            .add_systems(
+                Update,
+                (
+                    sim_thread::count_due_sim_ticks,
+                    sim_thread::launch_sim_ticks,
+                    sim_thread::join_sim_ticks,
+                )
+                    .chain(),
+            );
 
         app.update();
         assert_eq!(

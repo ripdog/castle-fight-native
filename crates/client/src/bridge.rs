@@ -472,6 +472,11 @@ pub struct PresentationSamples {
     network: Option<NetworkTimeline>,
     revision: u64,
     tick_advanced: bool,
+    /// Fixed-timestep overstep fraction that matches the published samples. Offline play
+    /// publishes ticks one frame after the fixed clock counted them, so this is the fraction
+    /// recorded when those ticks were launched rather than the current clock's. `None` means
+    /// the live fixed clock is authoritative for interpolation.
+    render_overstep: Option<f32>,
 }
 
 impl PresentationSamples {
@@ -484,7 +489,20 @@ impl PresentationSamples {
             network: None,
             revision: 0,
             tick_advanced: false,
+            render_overstep: None,
         }
+    }
+
+    pub(crate) fn render_overstep(&self) -> Option<f32> {
+        self.render_overstep
+    }
+
+    pub(crate) fn set_render_overstep(&mut self, overstep: Option<f32>) {
+        self.render_overstep = overstep;
+    }
+
+    pub(crate) fn observer(&self) -> Option<ObserverVision> {
+        self.observer
     }
 
     pub fn with_observer(self, team: Option<Team>) -> Self {
@@ -575,7 +593,7 @@ impl PresentationSamples {
 }
 
 impl PresentationSnapshot {
-    fn restrict_to_observer(&mut self, observer: ObserverVision) {
+    pub(crate) fn restrict_to_observer(&mut self, observer: ObserverVision) {
         if self.observer == Some(observer) {
             return;
         }
