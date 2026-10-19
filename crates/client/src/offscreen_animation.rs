@@ -21,7 +21,7 @@ use bevy::{
     prelude::*,
 };
 
-use crate::wc3_effects::Wc3VisualAnimationController;
+use crate::{render_audit::RenderExperiment, wc3_effects::Wc3VisualAnimationController};
 
 const HAS_MESH: u8 = 1;
 const VISIBLE_MESH: u8 = 2;
@@ -87,21 +87,30 @@ fn record_animation_player_mesh_states(
 type TransitionPlayers<'w, 's> = Query<
     'w,
     's,
-    (Entity, &'static mut AnimationPlayer),
     (
-        With<AnimationTransitions>,
-        Without<Wc3VisualAnimationController>,
+        Entity,
+        &'static mut AnimationPlayer,
+        Has<Wc3VisualAnimationController>,
     ),
+    With<AnimationTransitions>,
 >;
 
 fn pause_offscreen_animation_weights(
     recorded: Res<AnimationPlayerMeshStates>,
+    experiment: Option<Res<RenderExperiment>>,
     mut players: TransitionPlayers,
 ) {
     if !recorded.recorded {
         return;
     }
-    for (entity, mut player) in &mut players {
+    // Effect players also drive emitters and attachments, so freezing their offscreen poses is
+    // not exact; it stays behind an experiment until it is proven visually negligible.
+    let include_effects = experiment
+        .is_some_and(|experiment| *experiment == RenderExperiment::OffscreenEffectAnimation);
+    for (entity, mut player, is_effect) in &mut players {
+        if is_effect && !include_effects {
+            continue;
+        }
         let state = recorded
             .states
             .get(entity.index_u32() as usize)
@@ -183,5 +192,22 @@ mod tests {
         let player = spawn_player_with_mesh(&mut app, None);
         app.update();
         assert_eq!(weight(&app, player), 1.0);
+    }
+
+    #[test]
+    fn effect_players_pause_only_under_the_offscreen_effect_experiment() {
+        for (experiment, expected) in [
+            (RenderExperiment::Baseline, 1.0),
+            (RenderExperiment::OffscreenEffectAnimation, 0.0),
+        ] {
+            let mut app = pause_app();
+            app.insert_resource(experiment);
+            let player = spawn_player_with_mesh(&mut app, Some(ViewVisibility::HIDDEN));
+            app.world_mut()
+                .entity_mut(player)
+                .insert(Wc3VisualAnimationController);
+            app.update();
+            assert_eq!(weight(&app, player), expected);
+        }
     }
 }
