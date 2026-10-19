@@ -1011,7 +1011,7 @@ impl Simulation {
         let mut bonus_damage = 0i32;
         let mut on_hit = PendingAttackEffects::default();
         let mut critical = false;
-        let mut critical_bonus = 0;
+        let mut critical_bonus: Option<i32> = None;
         let granted = match intent.source {
             AttackSourceIndex::Unit(index) if !units[index].abilities_disabled => {
                 Some(&units[index].status.native_grants)
@@ -1055,14 +1055,16 @@ impl Simulation {
                         intent.attack_sequence,
                     ) % u64::from(ATTACK_PROC_CHANCE_SCALE);
                     if roll < u64::from(profile.chance_per_10k) {
-                        critical = true;
+                        // A multiplier below one is the native near miss: it scales the
+                        // weapon down and is not a critical strike.
                         let extra = i64::from(intent.attack.damage)
-                            * i64::from(profile.damage_multiplier_per_10k - 10_000)
+                            * (i64::from(profile.damage_multiplier_per_10k) - 10_000)
                             / 10_000;
+                        critical |= extra > 0;
                         // Multiple native critical multipliers roll separately, but
                         // only the highest successful multiplier contributes damage.
-                        critical_bonus = critical_bonus
-                            .max(i32::try_from(extra).expect("critical bonus overflowed"));
+                        let extra = i32::try_from(extra).expect("critical bonus overflowed");
+                        critical_bonus = Some(critical_bonus.map_or(extra, |bonus: i32| bonus.max(extra)));
                     }
                 }
                 PassiveUnitEffect::Bash(profile) => {
@@ -1233,7 +1235,7 @@ impl Simulation {
             .expect("Demolish bonus overflowed");
         (
             bonus_damage
-                .checked_add(critical_bonus)
+                .checked_add(critical_bonus.unwrap_or(0))
                 .expect("passive attack damage overflowed"),
             on_hit,
             critical,

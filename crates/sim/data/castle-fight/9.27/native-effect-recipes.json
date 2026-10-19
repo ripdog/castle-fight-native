@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0GS","unit_rawcode":"n03G","kind":"hardened-skin"},
+    {"source_kind":"unit-ability","source_key":"A0GQ","unit_rawcode":"n03G","kind":"critical-strike"},
     {"source_kind":"unit-ability","source_key":"A0GN","unit_rawcode":"n03T","kind":"native-heal"},
     {"source_kind":"unit-ability","source_key":"A0GN","unit_rawcode":"n03E","kind":"native-heal"},
     {"source_kind":"unit-ability","source_key":"A0GK","unit_rawcode":"n03A","kind":"building-script"},

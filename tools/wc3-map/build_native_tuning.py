@@ -439,7 +439,7 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     elif kind == "spell-resistance":
         effect["damage_taken_per_10k"] = 10_000 - number("DataB1", 10_000)
     elif kind == "hardened-skin":
-        if mechanics.get("native_base") != "Assk" or set(fields["targs1"].split(",")) != {"enemy", "ally"} or number("DataD1") != 1 or number("DataE1") != 1:
+        if mechanics.get("native_base") != "Assk" or set(fields["targs1"].split(",")) not in ({"enemy", "ally"}, {"air", "enemies", "ground"}) or number("DataD1") != 1 or number("DataE1") != 1:
             raise ValueError("Hardened Skin requires its native ranged/melee flags and incoming mask")
         effect["profile"] = {"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
             "effect": {"HardenedSkin": {"chance_per_10k": number("DataA1", 100),

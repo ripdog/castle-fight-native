@@ -3,6 +3,39 @@
   "map_version": "9.27",
   "effects": [
     {
+      "source_kind": "unit-ability",
+      "source_key": "A0GS",
+      "unit_rawcode": "n03G",
+      "kind": "hardened-skin",
+      "profile": {
+        "ability": 1093683027,
+        "effect": {
+          "HardenedSkin": {
+            "chance_per_10k": 10000,
+            "minimum_damage": 0,
+            "ignored_damage": 15
+          }
+        }
+      },
+      "provenance": {
+        "ability": "A0GS",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0GQ",
+      "unit_rawcode": "n03G",
+      "kind": "critical-strike",
+      "chance_per_10k": 2000,
+      "damage_multiplier_per_10k": 1000,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A0GQ",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
       "source_key": "A0GN",
