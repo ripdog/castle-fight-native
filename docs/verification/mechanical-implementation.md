@@ -66,3 +66,9 @@ Retained Castle Fight 9.27/r1 extraction tree: `8ea806dca331ff254995e94e6f0baf22
 - Complete inventory/control flow: `A0CV` is the shared hidden Channel marker and `A0FZ` (`Amnx`, "Grand Finale") the native post-death area damage, with its own retained radii and amounts; no script grant, proxy or hidden marker exists. The same primitive as the Lunatic's `A0A3`: after the retained 0.3 s post-death delay, spell damage with the universal armor table to hostile ground units and structures at the death position.
 - `onUnitTrained` additionally calls `SetUnitExploded(true)` for this body (`train-event-set-exploded-flag`). The flag selects the exploding death animation only; it has no gameplay effect and is left to presentation.
 - State: the shared in-flight death explosion action.
+
+## Gun Smith / Flamegunner
+
+- Identity/source: runtime r196; `h05T` (`hbla`) produces `z002` (`zcso`) in the last slot of the top row and upgrades to the Arsenal. Protected life, armor, movement and the Chaos line weapon (ground and structures; the retained range and projectile speed) come from the catalogs. The line weapon's spill distance, spill radius, minimum range and damage retention are projected from the retained unit fields into the catalog supplement (the shared line-weapon primitive: the missile hits its target, then a travelling spill hits ground units and structures behind it at the retained fraction). The second weapon is disabled and unavailable.
+- Complete inventory/control flow: the only object ability is the shared hidden Channel marker `A0CV`. No script grant, proxy or hidden marker exists. The tooltip's "Flamethrower" is the line weapon itself, not an ability.
+- State: the shared in-flight line projectile state.
