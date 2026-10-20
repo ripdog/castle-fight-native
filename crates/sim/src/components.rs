@@ -30,7 +30,8 @@ pub use building_script::{
 };
 pub use parasite_area_buff::ParasiteAreaBuffProfile;
 pub use parasite_script::{
-    LocustState, LocustSwarmProfile, LocustSwarmState, MAX_LOCUSTS, ParasiteChild,
+    LandMineProfile, LandMineState, LocustState, LocustSwarmProfile, LocustSwarmState,
+    MAX_LOCUSTS, ParasiteChild,
     ParasiteScriptProfile, PendingParasiteScript, SandCloudProfile, SandCloudState,
     SandCloudVariant,
 };

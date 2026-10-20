@@ -3,6 +3,83 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A095",
+      "unit_rawcode": "h06U",
+      "spellcasting": {
+        "mana": {
+          "maximum": 50,
+          "starting": 12,
+          "regen_per_tick_per_10k": 2147506648
+        },
+        "ability": {
+          "id": 1093679413,
+          "mana_cost": 25,
+          "cooldown_ticks": 0,
+          "range": 102398976,
+          "target_policy": "RandomEnemyUnit",
+          "effect": {
+            "ParasiteScript": {
+              "parent": {
+                "buff_rawcode": 1110454612,
+                "map_version": {
+                  "major": 9,
+                  "minor": 27
+                },
+                "speed_per_tick": 64853,
+                "affects_invulnerable": true,
+                "duration_ticks": 1,
+                "hero_duration_ticks": 0,
+                "body_rawcode": 1852203634,
+                "count": 1,
+                "body_duration_ticks": 1
+              },
+              "parent_targets": 1,
+              "parent_organic_only": false,
+              "parent_nonhero_only": false,
+              "ability": 1093679413,
+              "child": {
+                "LandMine": {
+                  "ability": 1093679416,
+                  "minimum_distance": 51200,
+                  "maximum_distance": 225280,
+                  "carrier_speed_per_second": 716800,
+                  "activation_ticks": 150,
+                  "detection_radius": 179200,
+                  "trigger_targets": 1,
+                  "explosion": {
+                    "ability": 1093679415,
+                    "full_radius": 153600,
+                    "full_damage": 250,
+                    "partial_radius": 384000,
+                    "partial_damage": 125,
+                    "delay_ticks": 9,
+                    "targets": 5
+                  },
+                  "initial_mana_minimum_10k": 2000,
+                  "initial_mana_maximum_10k": 300000
+                }
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 23000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "semantics": "resolved/unit-spell-semantics.tsv",
+        "functions": [
+          "UnitSpellClosure_registerUnitSpellWithTargetOrderEffect_RaceMechAbilities_cast_registerUnitSpellWithTargetOrderEffect_RaceMechAbilities",
+          "CallbackSingle_doAfter_RaceMechAbilities_call_doAfter_RaceMechAbilities3"
+        ]
+      }
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A0A0",
       "unit_rawcode": "h06T",

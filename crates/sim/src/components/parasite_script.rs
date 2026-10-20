@@ -21,6 +21,9 @@ pub enum ParasiteChild {
         minimum_delay_ticks: u16,
         maximum_delay_ticks: u16,
     },
+    /// A hidden land mine planted at a random offset around the caster once a dummy carrier
+    /// has flown there.
+    LandMine(LandMineProfile),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -70,6 +73,7 @@ impl ParasiteChild {
                 ]);
                 words
             }
+            Self::LandMine(p) => p.canonical_words(),
         }
     }
 }
@@ -103,6 +107,59 @@ impl PendingParasiteScript {
         words.extend(self.child.canonical_words());
         words
     }
+}
+
+/// Retained Mine Layer script: placement geometry, the planted mine's native trigger (`Amin`) and
+/// its native death explosion (`Amnx`), and the train-time random mana the same script grants.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct LandMineProfile {
+    /// The native mine ability carried by the planted body.
+    pub ability: AbilityId,
+    pub minimum_distance: i32,
+    pub maximum_distance: i32,
+    /// Dummy carrier speed in subunits per second; the mine appears when it has flown there.
+    pub carrier_speed_per_second: i32,
+    pub activation_ticks: u16,
+    pub detection_radius: i32,
+    pub trigger_targets: AttackTargetMask,
+    pub explosion: DeathExplosionProfile,
+    /// The caster's mana when trained is uniform in this closed range, in 1/10000 mana.
+    pub initial_mana_minimum_10k: u32,
+    pub initial_mana_maximum_10k: u32,
+}
+
+impl LandMineProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 16] {
+        let explosion = self.explosion.canonical_words();
+        let mut words = [0; 16];
+        words[..9].copy_from_slice(&[
+            5,
+            u64::from(self.ability.0),
+            self.minimum_distance as u64,
+            self.maximum_distance as u64,
+            self.carrier_speed_per_second as u64,
+            u64::from(self.activation_ticks) | u64::from(self.trigger_targets.bits()) << 32,
+            self.detection_radius as u64,
+            u64::from(self.initial_mana_minimum_10k)
+                | u64::from(self.initial_mana_maximum_10k) << 32,
+            0,
+        ]);
+        words[9..].copy_from_slice(&explosion);
+        words
+    }
+}
+
+/// A planted mine. It outlives its planter and has no lifetime of its own.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LandMineState {
+    pub profile: LandMineProfile,
+    pub source: SimId,
+    pub owner: PlayerId,
+    pub team: Team,
+    pub position: SimPoint,
+    /// When the carrier arrives and the mine comes into existence.
+    pub placed_tick: u64,
+    pub armed_tick: u64,
 }
 
 pub const MAX_LOCUSTS: usize = 8;

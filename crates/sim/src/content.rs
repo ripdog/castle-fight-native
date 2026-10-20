@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r189";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r190";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -1939,6 +1939,9 @@ fn stable_ability_id(
         }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0A0") => {
             0x4000_023c
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A095") => {
+            0x4000_023d
         }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0GN") => {
             0x4000_022a
@@ -6974,6 +6977,15 @@ pub(crate) fn native_mana_profile_for_version(
 pub(crate) fn building_has_production(version: MapVersion, rawcode: u32) -> bool {
     version == MapVersion::CASTLE_FIGHT_9_27
         && extracted_content_927().production.contains_key(&rawcode)
+}
+
+/// Whether a native death-spawn body is one of the unarmed originals this primitive can build.
+/// Armed vanilla bodies (the inert building Parasite parents' unmodified base) are not modeled.
+pub(crate) fn is_native_noncombat_summon(version: MapVersion, rawcode: u32) -> bool {
+    version == MapVersion::CASTLE_FIGHT_9_27
+        && extracted_content_927()
+            .native_noncombat_summons
+            .contains(&rawcode)
 }
 
 /// Original noncombat native summon bodies consume retained unit fields, without setupUnit.

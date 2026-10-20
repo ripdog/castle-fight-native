@@ -123,6 +123,54 @@ def _sand_cloud(recipe, detail, number, raw):
         'standard': profiles[0], 'special': profiles[1]}}
 
 
+def _landmine(recipe, detail, number, raw):
+    row, parameters = detail['mechanics_row'], detail['semantic_parameters']
+    functions = detail['functions']
+    handler = functions[row['direct_calls']]
+    callback = functions[row['delayed_callback_functions']]
+    trained = functions['onUnitTrained']
+    mine, carrier = parameters['landmine_unit_rawcode'], parameters['carrier_unit_rawcode']
+    unit = int.from_bytes(recipe['unit_rawcode'].encode(), 'big')
+    distance = re.search(r'GetRandomReal\(([\d.]+),([\d.]+)\)Osr=tupleCopy1\(vec2_polarOffset\(Msr,real_asAngleDegrees\(GetRandomReal\(([\d.]+),([\d.]+)\)\),Nsr\)\)', handler)
+    speed = re.search(r'Rsr=\(Nsr/([\d.]+)\)', handler)
+    mine_code, carrier_code = (int(parameters[key].encode().hex(), 16) for key in ('landmine_unit_rawcode', 'carrier_unit_rawcode'))
+    if (row['mechanic_kind'] != 'delegated-helper' or row['direct_calls'] != 'mineLayerSpell'
+        or distance is None or speed is None
+        or [Decimal(distance[1]), Decimal(distance[2])] != [Decimal(parameters['placement_distance_min']), Decimal(parameters['placement_distance_max'])]
+        or [Decimal(distance[3]), Decimal(distance[4])] != [Decimal(parameters['placement_angle_degrees'][0]), Decimal(parameters['placement_angle_degrees'][1])]
+        or Decimal(speed[1]) != Decimal(parameters['carrier_speed'])
+        or f'createUnit(Lsr,{carrier_code},Msr,{{0.}})' not in handler
+        or 'unit_issuePointOrderById(Psr,851984,Osr)' not in handler
+        or 'doAfter(Rsr,Qsr)' not in handler
+        or f'createUnit(Yrn.p,{mine_code},Yrn.minePos,{{0.}})' not in callback.replace(' ', '')):
+        raise ValueError('Mine Layer control flow changed: random-offset carrier, travel-time delay and mine creation')
+    units = detail['all_units']
+    abilities = units[mine]['abilities'].split(',')
+    explosion_code, mine_code_ability = abilities[1], abilities[2]
+    if (abilities[0] != 'Aloc' or len(abilities) != 3 or detail['all_bases'][explosion_code] != 'Amnx'
+        or detail['all_bases'][mine_code_ability] != 'Amin'
+        or units[carrier]['abilities'].split(',') != ['Aloc', 'Avul']):
+        raise ValueError('Landmine inventory changed: locust body with native mine and death explosion')
+    explosion_fields = dict(detail['all_fields'][explosion_code])
+    if set(explosion_fields['targs1'].split(',')) != {'ground', 'structure', 'debris', 'enemy'}:
+        raise ValueError('Landmine explosion needs its audited ground/structure enemy mask')
+    explosion_fields['targs1'] = 'ground,enemies,structure,debris,ward'
+    from project_death_explosion import project as project_explosion
+    explosion = project_explosion({'source_key': explosion_code}, explosion_fields, 'Amnx')['profile']
+    trigger = detail['all_fields'][mine_code_ability]
+    train = detail.get('train_mana')
+    if (train is None or train['mana_random_distribution'] != 'uniform-real'
+        or f'elseif(unit_getTypeId(cgs)=={unit})then fgs=cgs ggs=UNIT_STATE_MANA hgs=GetRandomReal(.20,30.)__wurst_safe_SetUnitState(fgs,ggs,hgs)' not in trained
+        or [Decimal(str(train['mana_random_min'])), Decimal(str(train['mana_random_max']))] != [Decimal('0.2'), Decimal('30')]):
+        raise ValueError('Mine Layer train-event random initial mana changed')
+    return {'LandMine': {'ability': raw(mine_code_ability), 'minimum_distance': number(distance[1], 1024),
+        'maximum_distance': number(distance[2], 1024), 'carrier_speed_per_second': number(speed[1], 1024),
+        'activation_ticks': number(trigger['dataa1'], 30), 'detection_radius': number(trigger['rng1'], 1024),
+        'trigger_targets': 1, 'explosion': explosion,
+        'initial_mana_minimum_10k': number(train['mana_random_min'], 10000),
+        'initial_mana_maximum_10k': number(train['mana_random_max'], 10000)}}
+
+
 def project(recipe, fields, unit, protected, detail):
     number, raw = _helpers()
     row, semantics = detail['mechanics_row'], detail['semantics_row']
@@ -130,11 +178,17 @@ def project(recipe, fields, unit, protected, detail):
         raise ValueError('Parasite script parent must be the native Parasite ability')
     tokens = set(fields['targs1'].split(','))
     movement = tokens & {'air', 'ground'}
-    if (not {'enemy', 'enemies'} & tokens or not movement or tokens - {'air', 'ground', 'enemy', 'enemies', 'organic', 'neutral', 'nonhero'}
+    kind = semantics['semantic_kind']
+    allowed = {'air', 'ground', 'enemy', 'enemies', 'organic', 'neutral', 'nonhero'}
+    if kind == 'random-offset-landmine-placement':
+        # The Mine Layer's autocast mask also names structures, mechanical bodies and invulnerable
+        # targets. The parent fires on the unit set below; the discrepancy is recorded in the
+        # race's implementation notes rather than silently flattened.
+        allowed |= {'invulnerable', 'mechanical', 'structure'}
+    if (not {'enemy', 'enemies'} & tokens or not movement or tokens - allowed
         or number(fields['levels']) != 1):
         raise ValueError('Parasite script parent needs an audited hostile unit mask')
     detail = dict(detail, semantic_parameters=__import__('json').loads(semantics['parameters_json']))
-    kind = semantics['semantic_kind']
     if kind == 'delayed-life-steal':
         child = _life_steal(recipe, detail, number)
     elif kind == 'delayed-berserk-rage':
@@ -143,6 +197,8 @@ def project(recipe, fields, unit, protected, detail):
         child = _sand_cloud(recipe, detail, number, raw)
     elif kind == 'proxy-object-effect':
         child = _locust_swarm(recipe, detail, number, raw)
+    elif kind == 'random-offset-landmine-placement':
+        child = _landmine(recipe, detail, number, raw)
     else:
         raise ValueError(f'unsupported Parasite script child {kind!r}')
     mana = lambda field, scale=1: 0 if unit[field].strip() in {'-', '_', ''} else number(unit[field], scale)

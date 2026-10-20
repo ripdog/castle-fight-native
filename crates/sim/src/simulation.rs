@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 105;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 106;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -36,6 +36,7 @@ pub use death_healing::DeathHealVisualEvent;
 mod building_damage_procs;
 mod building_script;
 mod echo_step;
+mod land_mine;
 mod enchantments;
 mod forgotten_one;
 mod healing_spray;
@@ -3120,6 +3121,9 @@ impl Simulation {
                 AdditionalAutomaticAbilities::from_definitions(definitions, self.next_tick)
             });
         let id = self.allocate_id();
+        let trained_mana = spellcasting
+            .as_ref()
+            .and_then(|profile| self.trained_land_mine_mana(profile, id));
         let mut entity = self.world.spawn((
             id,
             unit.team,
@@ -3190,12 +3194,16 @@ impl Simulation {
             entity.insert(secondary_attack);
         }
         if let Some(spellcasting) = spellcasting {
-            entity.insert((
-                spellcasting,
-                ManaState {
+            // A trained body may roll its initial mana (the Mine Layer's train-event script).
+            let initial_mana = spawn_building
+                .and_then(|_| trained_mana)
+                .unwrap_or(ManaState {
                     current: spellcasting.mana.starting,
                     regen_remainder_per_10k: 0,
-                },
+                });
+            entity.insert((
+                spellcasting,
+                initial_mana,
                 AutomaticAbilityState {
                     ready_tick: self.next_tick,
                     cast_sequence: 0,
@@ -5480,6 +5488,16 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                 crate::ParasiteChild::SandCloud(cloud) => {
                     assert!(cloud.pulses > 0 && cloud.period_ticks > 0 && cloud.carrier_ticks > 0);
                     assert!(cloud.standard.radius > 0 && cloud.special.radius > 0);
+                }
+                crate::ParasiteChild::LandMine(mine) => {
+                    assert!(
+                        0 < mine.minimum_distance
+                            && mine.minimum_distance <= mine.maximum_distance
+                            && mine.carrier_speed_per_second > 0
+                            && mine.detection_radius > 0
+                    );
+                    assert!(mine.initial_mana_minimum_10k <= mine.initial_mana_maximum_10k);
+                    assert!(mine.explosion.delay_ticks > 0 && mine.explosion.partial_radius > 0);
                 }
                 crate::ParasiteChild::LocustSwarm(swarm) => {
                     assert!(swarm.count > 0 && usize::from(swarm.count) <= crate::MAX_LOCUSTS);

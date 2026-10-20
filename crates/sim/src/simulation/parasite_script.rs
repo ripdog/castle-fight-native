@@ -65,6 +65,11 @@ impl Simulation {
                 let rawcode = units[caster].rawcode;
                 self.launch_sand_cloud(source, units[caster].owner, rawcode, center, profile);
             }
+            ParasiteChild::LandMine(profile) => {
+                // The carrier is created at the caster, not at the Parasite target.
+                let (owner, origin) = (units[caster].owner, units[caster].position);
+                self.plant_land_mine(source, owner, origin, profile);
+            }
             ParasiteChild::LocustSwarm(profile) => {
                 // The dummy appears at the Parasite target's position at cast time.
                 let center = units[target].position;
@@ -87,7 +92,9 @@ impl Simulation {
             }
             units[caster].status.pending_parasite_script = None;
             match pending.child {
-                ParasiteChild::LocustSwarm(_) | ParasiteChild::SandCloud(_) => {}
+                ParasiteChild::LocustSwarm(_)
+                | ParasiteChild::SandCloud(_)
+                | ParasiteChild::LandMine(_) => {}
                 ParasiteChild::Berserk { berserk, .. } => {
                     let stunned = units[caster].status.is_stunned(self.next_tick);
                     if units[caster].health > 0 && !stunned {

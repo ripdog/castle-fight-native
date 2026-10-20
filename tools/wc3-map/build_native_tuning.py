@@ -893,6 +893,9 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
     echo_steps = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "damage-triggered-echo-step-and-remnant"}
+    train_mana = {row["unit_rawcode"]: json.loads(row["parameters_json"])
+        for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
+        if row["mechanic_kind"] == "train-event-random-initial-mana"}
     lava_spawns = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "native-lava-spawn-split-with-child-conversion"}
@@ -949,6 +952,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             detail.update(all_fields=abilities, all_bases=ability_bases, all_units=units,
                 all_unit_fields=unit_fields, all_unit_stats=unit_stats,
                 all_protected=protected, functions=functions, git_tree=tree,
+                train_mana=train_mana.get(recipe['unit_rawcode']),
                 map_version=dict(zip(['major', 'minor'], map(int, release['map_version'].split('.')))))
         if recipe["kind"] in {"siren-purge", "feral-spirit"}:
             parent = "A02U"

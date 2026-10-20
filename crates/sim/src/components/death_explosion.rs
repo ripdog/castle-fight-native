@@ -1,7 +1,7 @@
 use super::*;
 
 /// Native Amnx/Adda death AOE. Duration is the post-death delay, not a buff lifetime.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct DeathExplosionProfile {
     pub ability: AbilityId,
     pub full_radius: i32,

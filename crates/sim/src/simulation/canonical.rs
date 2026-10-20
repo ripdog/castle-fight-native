@@ -740,6 +740,19 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u64(state.armed_tick);
                         hash.write_u64(state.expires_tick);
                     }
+                    NativeAction::LandMine(state) => {
+                        hash.write_u8(43);
+                        for word in state.profile.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                        hash.write_u64(state.source.0);
+                        hash.write_u8(state.owner.0);
+                        hash.write_u8(state.team.0);
+                        hash.write_i32(state.position.x);
+                        hash.write_i32(state.position.y);
+                        hash.write_u64(state.placed_tick);
+                        hash.write_u64(state.armed_tick);
+                    }
                     NativeAction::HealingSpray(state) => {
                         hash.write_u8(40);
                         for word in state.profile.canonical_words() {

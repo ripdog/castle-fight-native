@@ -479,6 +479,15 @@ impl Simulation {
             .collect();
         deaths.sort_unstable_by_key(|(id, ..)| *id);
         for (_, entity, p, position) in deaths {
+            // A Parasite whose retained body is an armed vanilla unit (the building parents'
+            // unmodified base) has no body the engine can build: it ends without a spawn.
+            if !crate::content::is_native_noncombat_summon(
+                p.profile.map_version,
+                p.profile.body_rawcode,
+            ) {
+                self.world.despawn(entity);
+                continue;
+            }
             let definition = crate::content::native_noncombat_summon_for_version(
                 p.profile.body_rawcode,
                 p.profile.map_version,
