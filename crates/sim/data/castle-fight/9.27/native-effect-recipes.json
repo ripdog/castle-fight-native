@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A092","unit_rawcode":"n024","kind":"pulverize"},
     {"source_kind":"unit-ability","source_key":"A08Z","unit_rawcode":"n01X","kind":"bash"},
     {"source_kind":"unit-ability","source_key":"A091","unit_rawcode":"n01X","kind":"pulverize"},
     {"source_kind":"ability-effect","source_key":"A09E","unit_rawcode":"z003","kind":"travelling-mana-clap"},

@@ -4,6 +4,21 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A092",
+      "unit_rawcode": "n024",
+      "kind": "pulverize",
+      "chance_per_10k": 4000,
+      "damage": 150,
+      "full_radius_world": 150,
+      "half_radius_world": 250,
+      "targets": "ground-units",
+      "provenance": {
+        "ability": "A092",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A08Z",
       "unit_rawcode": "n01X",
       "kind": "bash",
