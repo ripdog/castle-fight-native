@@ -3,6 +3,36 @@
   "map_version": "9.27",
   "effects": [
     {
+      "source_kind": "unit-ability",
+      "source_key": "A08Z",
+      "unit_rawcode": "n01X",
+      "kind": "bash",
+      "chance_per_10k": 1500,
+      "bonus_damage": 40,
+      "stun_duration_millis": 2000,
+      "hero_stun_duration_millis": 1000,
+      "targets": "ground-units",
+      "provenance": {
+        "ability": "A08Z",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A091",
+      "unit_rawcode": "n01X",
+      "kind": "pulverize",
+      "chance_per_10k": 2500,
+      "damage": 60,
+      "full_radius_world": 150,
+      "half_radius_world": 250,
+      "targets": "ground-units",
+      "provenance": {
+        "ability": "A091",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
       "kind": "scripted-automatic",
       "source_kind": "ability-effect",
       "source_key": "A09E",
