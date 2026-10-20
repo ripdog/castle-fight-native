@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r200";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r201";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -4706,6 +4706,7 @@ struct CatalogSupplement927 {
     bounce_weapons: Vec<CatalogBounceWeapon927>,
     line_weapons: Vec<CatalogLineWeapon927>,
     secondary_artillery_weapons: Vec<CatalogSecondaryArtilleryWeapon927>,
+    secondary_missile_weapons: Vec<CatalogSecondaryMissileWeapon927>,
     sight_profiles: Vec<CatalogSightProfile927>,
     fog_rules: CatalogFogRules927,
     spell_reveals: Vec<CatalogSpellReveal927>,
@@ -4949,6 +4950,13 @@ impl CatalogSecondaryArtilleryWeapon927 {
     }
 }
 
+/// Secondary missile weapon: its own projectile speed, never the primary weapon's.
+#[derive(Debug, Deserialize)]
+struct CatalogSecondaryMissileWeapon927 {
+    rawcode: String,
+    projectile_speed_world_per_second: i32,
+}
+
 #[derive(Debug, Deserialize)]
 struct CatalogLineWeapon927 {
     rawcode: String,
@@ -4989,6 +4997,7 @@ struct ExtractedContent927 {
     bounce_weapons: BTreeMap<u32, CatalogBounceWeapon927>,
     line_weapons: BTreeMap<u32, CatalogLineWeapon927>,
     secondary_artillery_weapons: BTreeMap<u32, CatalogSecondaryArtilleryWeapon927>,
+    secondary_missile_weapons: BTreeMap<u32, i32>,
     damage_rules: DamageRules,
 }
 
@@ -5086,6 +5095,16 @@ impl ExtractedContent927 {
             .secondary_artillery_weapons
             .into_iter()
             .map(|weapon| (parse_rawcode(&weapon.rawcode), weapon))
+            .collect();
+        let secondary_missile_weapons = supplement
+            .secondary_missile_weapons
+            .into_iter()
+            .map(|weapon| {
+                (
+                    parse_rawcode(&weapon.rawcode),
+                    weapon.projectile_speed_world_per_second,
+                )
+            })
             .collect();
         let bounce_weapons = supplement
             .bounce_weapons
@@ -5799,6 +5818,7 @@ impl ExtractedContent927 {
             bounce_weapons,
             line_weapons,
             secondary_artillery_weapons,
+            secondary_missile_weapons,
             damage_rules,
         })
     }
@@ -6815,9 +6835,14 @@ fn extracted_unit_definition_927(
         let delivery = match second.weapon_kind {
             ExtractedWeaponKind927::Instant => AttackDelivery::RangedInstant,
             ExtractedWeaponKind927::Missile => AttackDelivery::RangedGuaranteedHit {
-                speed_per_tick: unit
-                    .projectile_speed_per_tick
-                    .expect("secondary missile speed"),
+                speed_per_tick: projectile_speed(
+                    *content
+                        .secondary_missile_weapons
+                        .get(&rawcode)
+                        .unwrap_or_else(|| {
+                            panic!("unit {rawcode:#010x} secondary missile lacks retained speed")
+                        }),
+                ),
             },
             ExtractedWeaponKind927::Artillery => {
                 let weapon = content

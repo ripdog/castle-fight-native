@@ -394,6 +394,7 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
     bounce_weapons = []
     line_weapons = []
     secondary_artillery_weapons = []
+    secondary_missile_weapons = []
     unit_rows = csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree, "resolved/units.tsv").decode()), delimiter="\t")
     for unit in unit_rows:
         if unit["is_building"] == "1" and unit["attack2_enabled"] == "True":
@@ -418,6 +419,11 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
                 "full_world": bands[0], "medium_world": bands[1], "outer_world": bands[2],
                 "medium_damage_per_10k": factors[0], "outer_damage_per_10k": factors[1],
                 "splash_targets": fields["ua2p"],
+            })
+        if unit["is_building"] != "1" and unit["attack2_enabled"] == "True" and unit["attack2_weapon_type"] == "missile":
+            secondary_missile_weapons.append({
+                "rawcode": unit["rawcode"],
+                "projectile_speed_world_per_second": _line_world_integer(secondary_missile_speeds[unit["rawcode"]]),
             })
         if unit["attack1_weapon_type"] in {"mline", "aline"}:
             fields = line_fields[unit["rawcode"]]
@@ -533,6 +539,7 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
         "bounce_weapons": sorted(bounce_weapons, key=lambda weapon: weapon["rawcode"]),
         "line_weapons": sorted(line_weapons, key=lambda weapon: weapon["rawcode"]),
         "secondary_artillery_weapons": sorted(secondary_artillery_weapons, key=lambda weapon: weapon["rawcode"]),
+        "secondary_missile_weapons": sorted(secondary_missile_weapons, key=lambda weapon: weapon["rawcode"]),
         "map_version": release["map_version"],
         "release_revision": release["revision"],
         "extraction_git_tree": git_tree,

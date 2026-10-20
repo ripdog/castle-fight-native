@@ -8617,6 +8617,24 @@
       "splash_targets": "debris,enemies,ground,item,structure,ward"
     }
   ],
+  "secondary_missile_weapons": [
+    {
+      "rawcode": "e00G",
+      "projectile_speed_world_per_second": 1000
+    },
+    {
+      "rawcode": "n02J",
+      "projectile_speed_world_per_second": 900
+    },
+    {
+      "rawcode": "o00D",
+      "projectile_speed_world_per_second": 1000
+    },
+    {
+      "rawcode": "o00E",
+      "projectile_speed_world_per_second": 1000
+    }
+  ],
   "map_version": "9.27",
   "release_revision": "r1",
   "extraction_git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
