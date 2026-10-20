@@ -39,10 +39,14 @@ const HEADING_COLOR: Color = Color::srgb(0.92, 0.94, 0.98);
 const FRAME_COLOR: Color = Color::srgb(0.76, 0.80, 0.86);
 const SMOOTHING_WINDOW: Duration = Duration::from_secs(1);
 const MAX_SYSTEM_TIMINGS: usize = 10;
-const MAX_CAPTURE_SYSTEM_TIMINGS: usize = 40;
+const MAX_CAPTURE_SYSTEM_TIMINGS: usize = 80;
 const MAX_WORST_SYSTEM_TIMINGS: usize = 15;
+/// Frames at least this slow keep a per-system breakdown in the capture report.
+const SLOW_FRAME_BREAKDOWN_THRESHOLD: Duration = Duration::from_millis(30);
+const SLOW_FRAME_BREAKDOWN_SYSTEMS: usize = 6;
+const SLOW_FRAME_BREAKDOWN_FRAMES: usize = 6;
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct SystemTraceAccumulator {
     name: String,
     // Drained by the rolling 1 s display window.
@@ -55,7 +59,7 @@ struct SystemTraceAccumulator {
     capture_max_ns: AtomicU64,
 }
 
-#[derive(Resource, Clone, Default)]
+#[derive(Resource, Clone, Default, Debug)]
 pub(crate) struct SystemTraceSink(Arc<Mutex<Vec<Arc<SystemTraceAccumulator>>>>);
 
 impl SystemTraceSink {
@@ -64,6 +68,29 @@ impl SystemTraceSink {
             .lock()
             .expect("system trace sink mutex poisoned")
             .clone()
+    }
+
+    /// Advances `previous` (the last seen capture totals by accumulator index)
+    /// and, when `collect` is set, returns every system's busy time since the
+    /// previous call, busiest first.
+    fn frame_delta(&self, previous: &mut Vec<u64>, collect: bool) -> Vec<(String, u64)> {
+        let accumulators = self.0.lock().expect("system trace sink mutex poisoned");
+        previous.resize(accumulators.len(), 0);
+        let mut by_name = BTreeMap::<&str, u64>::new();
+        for (accumulator, last) in accumulators.iter().zip(previous.iter_mut()) {
+            let total = accumulator.capture_busy_ns.load(Ordering::Relaxed);
+            let delta = total.saturating_sub(*last);
+            *last = total;
+            if collect && delta > 0 {
+                *by_name.entry(accumulator.name.as_str()).or_default() += delta;
+            }
+        }
+        let mut rows = by_name
+            .into_iter()
+            .map(|(name, ns)| (name.to_owned(), ns))
+            .collect::<Vec<_>>();
+        rows.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0)));
+        rows
     }
 
     /// Restarts the whole-capture totals when a profile capture begins.
@@ -354,6 +381,42 @@ struct FrameWork {
     sim_ticks: u32,
     fixed_wall: Duration,
     sim_step: Duration,
+    scene: SceneWork,
+}
+
+/// Scene-instantiation and first-use asset work done in one main-world frame.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct SceneWork {
+    /// New `WorldAssetRoot` components requested this frame.
+    pub(crate) roots_requested: u32,
+    /// Scene instances the spawner finished this frame.
+    pub(crate) instances_ready: u32,
+    /// Entities those instances contain (template sizes).
+    pub(crate) instance_entities: u32,
+    /// Assets that finished loading this frame.
+    pub(crate) meshes_added: u32,
+    pub(crate) images_added: u32,
+    pub(crate) materials_added: u32,
+    pub(crate) models_added: u32,
+}
+
+impl SceneWork {
+    fn is_quiet(self) -> bool {
+        self.roots_requested == 0
+            && self.instances_ready == 0
+            && self.meshes_added == 0
+            && self.images_added == 0
+            && self.materials_added == 0
+            && self.models_added == 0
+    }
+}
+
+/// Where the busiest systems of a slow frame spent their time.
+#[derive(Debug, Clone)]
+struct SlowFrameBreakdown {
+    start: Duration,
+    wall: Duration,
+    systems: Vec<(String, u64)>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -395,6 +458,7 @@ struct FrameSample {
     fixed_wall: Duration,
     sim_step: Duration,
     schedules: MainScheduleTimings,
+    scene: SceneWork,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -420,10 +484,18 @@ pub(crate) struct PerformanceCounters {
     current_schedule_timings: MainScheduleTimings,
     frame_samples: VecDeque<(Instant, FrameSample)>,
     capture: Option<PerformanceCapture>,
+    trace_sink: Option<SystemTraceSink>,
+    trace_previous: Vec<u64>,
 }
 
 impl PerformanceCounters {
+    /// Adds scene-instantiation counts to the frame currently being built.
+    pub(crate) fn record_scene_work(&mut self, update: impl FnOnce(&mut SceneWork)) {
+        update(&mut self.current_frame_work.scene);
+    }
+
     pub(crate) fn start_capture(&mut self) {
+        self.trace_previous.clear();
         self.capture = Some(PerformanceCapture {
             started: Some(Instant::now()),
             ..default()
@@ -496,15 +568,31 @@ impl PerformanceCounters {
                 fixed_wall: completed.work.fixed_wall,
                 sim_step: completed.work.sim_step,
                 schedules: completed.schedules,
+                scene: completed.work.scene,
             };
             push_recent_sample(&mut self.frame_samples, now, sample);
+            let mut breakdown = None;
             if let Some(capture) = &mut self.capture
                 && capture
                     .started
                     .is_none_or(|started| previous_start >= started)
             {
                 capture.started.get_or_insert(now);
+                let start = capture.wall_total;
+                capture.wall_total += sample.wall;
                 capture.frames.push(sample);
+                breakdown = Some(start);
+            }
+            if let (Some(start), Some(sink)) = (breakdown, self.trace_sink.clone()) {
+                let slow = sample.wall >= SLOW_FRAME_BREAKDOWN_THRESHOLD;
+                let systems = sink.frame_delta(&mut self.trace_previous, slow);
+                if slow && let Some(capture) = &mut self.capture {
+                    capture.slow_frames.push(SlowFrameBreakdown {
+                        start,
+                        wall: sample.wall,
+                        systems,
+                    });
+                }
             }
         }
         self.current_frame_work = FrameWork::default();
@@ -564,6 +652,8 @@ impl PerformanceCounters {
 struct PerformanceCapture {
     started: Option<Instant>,
     frames: Vec<FrameSample>,
+    slow_frames: Vec<SlowFrameBreakdown>,
+    wall_total: Duration,
     sim_ticks: Vec<(u64, TickTimings)>,
     presentation: Vec<PresentationTimings>,
     collision_fallback_searches: usize,
@@ -578,6 +668,7 @@ impl PerformanceCapture {
                 .started
                 .map_or(Duration::ZERO, |started| started.elapsed()),
             frames: self.frames,
+            slow_frames: self.slow_frames,
             sim_ticks: self.sim_ticks,
             presentation: self.presentation,
             collision_fallback_searches: self.collision_fallback_searches,
@@ -591,6 +682,7 @@ impl PerformanceCapture {
 pub(crate) struct PerformanceReport {
     elapsed: Duration,
     frames: Vec<FrameSample>,
+    slow_frames: Vec<SlowFrameBreakdown>,
     sim_ticks: Vec<(u64, TickTimings)>,
     presentation: Vec<PresentationTimings>,
     collision_fallback_searches: usize,
@@ -637,6 +729,8 @@ impl PerformanceReport {
         push_distribution(&mut output, "wall", &frame_wall);
         push_frame_windows(&mut output, &frame_wall);
         push_slowest_frames(&mut output, &self.frames);
+        push_scene_work_summary(&mut output, &self.frames);
+        push_slow_frame_breakdowns(&mut output, &self.slow_frames);
         push_average_timing(
             &mut output,
             "main CPU",
@@ -1234,12 +1328,12 @@ fn push_slowest_frames(output: &mut String, samples: &[FrameSample]) {
         .collect::<Vec<_>>();
     ordered.sort_by_key(|(_, sample)| std::cmp::Reverse(sample.wall));
     output.push_str(
-        "  slowest frames (start seconds; wall/main/fixed/Update/SpawnScene/PostUpdate ms)\n",
+        "  slowest frames (start seconds; wall/main/fixed/Update/SpawnScene/PostUpdate ms; scene work)\n",
     );
     for (start, sample) in ordered.into_iter().take(5) {
         writeln!(
             output,
-            "    {:>6.3}s {:>8.3} / {:>8.3} / {:>7.3} / {:>7.3} / {:>7.3} / {:>7.3}",
+            "    {:>6.3}s {:>8.3} / {:>8.3} / {:>7.3} / {:>7.3} / {:>7.3} / {:>7.3}  {}",
             start.as_secs_f64(),
             duration_ms(sample.wall),
             duration_ms(sample.main_cpu),
@@ -1247,9 +1341,158 @@ fn push_slowest_frames(output: &mut String, samples: &[FrameSample]) {
             duration_ms(sample.schedules.update),
             duration_ms(sample.schedules.spawn_scene),
             duration_ms(sample.schedules.post_update),
+            format_scene_work(sample.scene),
         )
         .unwrap();
     }
+}
+
+fn format_scene_work(scene: SceneWork) -> String {
+    format!(
+        "roots {} / ready {} ({} entities) / loaded mesh {} img {} mat {} model {}",
+        scene.roots_requested,
+        scene.instances_ready,
+        scene.instance_entities,
+        scene.meshes_added,
+        scene.images_added,
+        scene.materials_added,
+        scene.models_added,
+    )
+}
+
+/// Frames split by whether they instantiated scenes or loaded assets: shows what
+/// share of the slow frames is first-use work rather than steady-state load.
+fn push_scene_work_summary(output: &mut String, samples: &[FrameSample]) {
+    let budget = Duration::from_secs_f64(1.0 / 30.0);
+    let (mut busy, mut quiet) = (Vec::new(), Vec::new());
+    for sample in samples {
+        if sample.scene.is_quiet() {
+            quiet.push(sample.wall);
+        } else {
+            busy.push(sample.wall);
+        }
+    }
+    writeln!(
+        output,
+        "  scene-work frames: {} with scene instantiation or asset loads (avg wall {:.3}ms, {} over 33.3ms), {} quiet (avg wall {:.3}ms, {} over 33.3ms)",
+        busy.len(),
+        duration_ms(mean_duration(busy.iter().copied())),
+        busy.iter().filter(|&&wall| wall > budget).count(),
+        quiet.len(),
+        duration_ms(mean_duration(quiet.iter().copied())),
+        quiet.iter().filter(|&&wall| wall > budget).count(),
+    )
+    .unwrap();
+    let mut total = SceneWork::default();
+    for sample in samples {
+        total.roots_requested += sample.scene.roots_requested;
+        total.instances_ready += sample.scene.instances_ready;
+        total.instance_entities += sample.scene.instance_entities;
+        total.meshes_added += sample.scene.meshes_added;
+        total.images_added += sample.scene.images_added;
+        total.materials_added += sample.scene.materials_added;
+        total.models_added += sample.scene.models_added;
+    }
+    writeln!(output, "  scene-work totals: {}", format_scene_work(total)).unwrap();
+}
+
+/// Coarse attribution of a system span to the first-use cost categories.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum SceneCostKind {
+    /// Cloning the scene template into the main world.
+    Instantiate,
+    /// Per-instance setup after spawning (materials, emitters, animation).
+    Setup,
+    /// Render-world asset preparation and GPU uploads.
+    AssetUpload,
+}
+
+fn scene_cost_kind(system: &str) -> Option<SceneCostKind> {
+    const SETUP: [&str; 9] = [
+        "fix_wc3_scene_materials",
+        "setup_wc3_",
+        "resolve_wc3_",
+        "reset_reused_wc3",
+        "retain_prewarmed",
+        "setup_imported_",
+        "index_wc3_model_attachments",
+        "mark_wc3_effect_warmup",
+        "prepare_unit_model_animations",
+    ];
+    if system.contains("world_instance_spawner_system") {
+        Some(SceneCostKind::Instantiate)
+    } else if system.contains("allocate_and_free_meshes")
+        || system.contains("prepare_assets")
+        || system.contains("GpuImage")
+        || system.contains("RenderMesh")
+    {
+        Some(SceneCostKind::AssetUpload)
+    } else if SETUP.iter().any(|pattern| system.contains(pattern)) {
+        Some(SceneCostKind::Setup)
+    } else {
+        None
+    }
+}
+
+fn push_slow_frame_breakdowns(output: &mut String, slow_frames: &[SlowFrameBreakdown]) {
+    if slow_frames.is_empty() {
+        return;
+    }
+    let mut ordered = slow_frames.iter().collect::<Vec<_>>();
+    ordered.sort_by_key(|frame| std::cmp::Reverse(frame.wall));
+    writeln!(
+        output,
+        "  slowest-frame breakdown (ms busy within the frame; spans overlap across threads)"
+    )
+    .unwrap();
+    let group_ms = |frame: &SlowFrameBreakdown, kind: SceneCostKind| {
+        frame
+            .systems
+            .iter()
+            .filter(|(name, _)| scene_cost_kind(name) == Some(kind))
+            .map(|(_, ns)| duration_ms(Duration::from_nanos(*ns)))
+            .sum::<f64>()
+    };
+    for frame in ordered.iter().take(SLOW_FRAME_BREAKDOWN_FRAMES) {
+        write!(
+            output,
+            "    {:>6.3}s wall {:>7.3}ms: instantiate {:.1}, post-spawn setup {:.1}, render asset upload {:.1} | top:",
+            frame.start.as_secs_f64(),
+            duration_ms(frame.wall),
+            group_ms(frame, SceneCostKind::Instantiate),
+            group_ms(frame, SceneCostKind::Setup),
+            group_ms(frame, SceneCostKind::AssetUpload),
+        )
+        .unwrap();
+        for (name, ns) in frame.systems.iter().take(SLOW_FRAME_BREAKDOWN_SYSTEMS) {
+            write!(
+                output,
+                " {} {:.1};",
+                compact_system_name(name).trim(),
+                duration_ms(Duration::from_nanos(*ns))
+            )
+            .unwrap();
+        }
+        output.push('\n');
+    }
+    // Averages over every frame at least as slow as the threshold.
+    let count = slow_frames.len() as f64;
+    let mean_wall = slow_frames
+        .iter()
+        .map(|frame| duration_ms(frame.wall))
+        .sum::<f64>()
+        / count;
+    writeln!(
+        output,
+        "  all {} frames >= {:.0}ms (mean wall {:.1}ms): instantiate {:.1}ms, post-spawn setup {:.1}ms, render asset upload {:.1}ms per frame",
+        slow_frames.len(),
+        duration_ms(SLOW_FRAME_BREAKDOWN_THRESHOLD),
+        mean_wall,
+        slow_frames.iter().map(|f| group_ms(f, SceneCostKind::Instantiate)).sum::<f64>() / count,
+        slow_frames.iter().map(|f| group_ms(f, SceneCostKind::Setup)).sum::<f64>() / count,
+        slow_frames.iter().map(|f| group_ms(f, SceneCostKind::AssetUpload)).sum::<f64>() / count,
+    )
+    .unwrap();
 }
 
 fn push_distribution(output: &mut String, label: &str, samples: &[Duration]) {
@@ -1543,10 +1786,17 @@ fn average_frame_samples(
             post_update: total.schedules.post_update / divisor,
             last: total.schedules.last / divisor,
         },
+        scene: SceneWork::default(),
     })
 }
 
-fn begin_main_frame_profile(mut counters: ResMut<PerformanceCounters>) {
+fn begin_main_frame_profile(
+    mut counters: ResMut<PerformanceCounters>,
+    trace_sink: Option<Res<SystemTraceSink>>,
+) {
+    if counters.trace_sink.is_none() {
+        counters.trace_sink = trace_sink.map(|sink| sink.clone());
+    }
     counters.begin_main_frame();
 }
 
@@ -1654,6 +1904,7 @@ mod tests {
     fn completed_capture_reports_frame_and_tick_distributions() {
         let report = PerformanceReport {
             elapsed: Duration::from_secs(1),
+            slow_frames: Vec::new(),
             frames: vec![FrameSample {
                 wall: Duration::from_millis(20),
                 main_cpu: Duration::from_millis(8),
@@ -1781,6 +2032,7 @@ mod tests {
                     post_update: Duration::from_millis(2),
                     ..default()
                 },
+                ..default()
             },
         ));
         samples.push_back((
@@ -1797,6 +2049,7 @@ mod tests {
                     post_update: Duration::from_millis(4),
                     ..default()
                 },
+                ..default()
             },
         ));
 

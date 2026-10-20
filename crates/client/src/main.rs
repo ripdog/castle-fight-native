@@ -31,6 +31,7 @@ mod presentation;
 mod render_audit;
 mod render_tuning;
 mod resource_ui;
+mod scene_budget;
 mod scoreboard_ui;
 mod settings_menu;
 mod sim_thread;
@@ -722,11 +723,14 @@ fn main() {
         .add_plugins(skin_influences::SkinInfluencePlugin)
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins((
+            skinned_bounds::SkinnedMeshBoundsPlugin,
+            offscreen_animation::OffscreenAnimationPlugin,
+            scene_budget::SceneBudgetPlugin,
+        ))
+        .add_plugins((
             console::ConsolePlugin,
             CastlePresentationPlugin::new(options.health_bars),
             DoodadPresentationPlugin,
-            skinned_bounds::SkinnedMeshBoundsPlugin,
-            offscreen_animation::OffscreenAnimationPlugin,
             BuildUiPlugin,
             CursorPresentationPlugin,
             ResourceUiPlugin,

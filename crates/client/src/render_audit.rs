@@ -13,7 +13,7 @@ use bevy::{
     camera::{primitives::Aabb, visibility::DynamicSkinnedMeshBounds},
     core_pipeline::core_3d::Transparent3d,
     diagnostic::DiagnosticsStore,
-    ecs::{resource::IS_RESOURCE, system::SystemParam},
+    ecs::system::SystemParam,
     mesh::skinning::SkinnedMesh,
     pbr::SkinUniforms,
     prelude::*,
@@ -25,6 +25,9 @@ use bevy::{
     },
 };
 
+use bevy::world_serialization::WorldInstanceReady;
+
+use crate::scene_budget::template_entity_count;
 use crate::wc3_effects::{
     Wc3AnimatedAlphaMaterial, Wc3AnimatedMaterialTexture, Wc3BillboardParticles, Wc3Particle,
     Wc3SplatMaterial, Wc3TeamColorMaterial,
@@ -67,6 +70,7 @@ pub(crate) enum RenderExperiment {
     ParticleUncachedBindings,
     ColdEffectPools,
     OffscreenEffectAnimation,
+    BudgetedSceneSpawn,
     ParticleOverlapAudit,
     ParticleOverlapBatching,
     ParticleDepthSort,
@@ -110,12 +114,13 @@ impl RenderExperiment {
             "particle-uncached-bindings" => Ok(Self::ParticleUncachedBindings),
             "cold-effect-pools" => Ok(Self::ColdEffectPools),
             "offscreen-effect-animation" => Ok(Self::OffscreenEffectAnimation),
+            "budgeted-scene-spawn" => Ok(Self::BudgetedSceneSpawn),
             "particle-overlap-audit" => Ok(Self::ParticleOverlapAudit),
             "particle-overlap-batching" => Ok(Self::ParticleOverlapBatching),
             "particle-depth-sort" => Ok(Self::ParticleDepthSort),
             "particle-source-batching" => Ok(Self::ParticleSourceBatching),
             _ => Err(format!(
-                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, bindless-auto, bindless-16, bindless-32, bindless-64, bindless-128, bindless-256, no-bindless, compact-material, compiled-event-tracks, skin-influences, particle-shared-view, particle-shared-mesh, particle-shared-mesh-partial-bindings, particle-cull, particle-partial-bindings, particle-uncached-bindings, cold-effect-pools, offscreen-effect-animation, particle-overlap-audit, particle-overlap-batching, particle-depth-sort, or particle-source-batching"
+                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, bindless-auto, bindless-16, bindless-32, bindless-64, bindless-128, bindless-256, no-bindless, compact-material, compiled-event-tracks, skin-influences, particle-shared-view, particle-shared-mesh, particle-shared-mesh-partial-bindings, particle-cull, particle-partial-bindings, particle-uncached-bindings, cold-effect-pools, offscreen-effect-animation, budgeted-scene-spawn, particle-overlap-audit, particle-overlap-batching, particle-depth-sort, or particle-source-batching"
             )),
         }
     }
@@ -197,6 +202,8 @@ struct Measurements {
     compact: Option<crate::compact_material::CompactMaterialStats>,
     skin_influences: Option<crate::skin_influences::SkinInfluenceStats>,
     scene_requests: BTreeMap<String, SceneRequestCounts>,
+    effect_pools: Vec<(String, crate::presentation::Wc3EffectPoolStats)>,
+    scene_budget: Option<crate::scene_budget::SceneBudgetStats>,
 }
 
 #[derive(Default)]
@@ -228,6 +235,32 @@ impl RenderAudit {
         {
             measurements.stages[stage].record(finished.duration_since(started));
         }
+    }
+
+    pub(crate) fn capture_started(&self) -> bool {
+        self.0
+            .lock()
+            .expect("render audit mutex poisoned")
+            .started
+            .is_some()
+    }
+
+    /// Replaces the cumulative per-template effect reuse accounting.
+    pub(crate) fn set_effect_pool_stats(
+        &self,
+        stats: Vec<(String, crate::presentation::Wc3EffectPoolStats)>,
+    ) {
+        self.0
+            .lock()
+            .expect("render audit mutex poisoned")
+            .effect_pools = stats;
+    }
+
+    pub(crate) fn set_scene_budget_stats(&self, stats: crate::scene_budget::SceneBudgetStats) {
+        self.0
+            .lock()
+            .expect("render audit mutex poisoned")
+            .scene_budget = Some(stats);
     }
 
     pub(crate) fn format(&self) -> String {
@@ -295,6 +328,20 @@ impl RenderAudit {
             writeln!(output, "  skin influence materials: {:?} wrapped standard/alpha/team properties; {} shared-property fallbacks (latest sample)", skin.materials, skin.shared_material_fallbacks).unwrap();
         }
         output.push_str("\nCOLD SCENE REQUESTS  new roots, not completed spawns; template entity counts are estimates\n");
+        let mut by_category = BTreeMap::<String, (usize, u64)>::new();
+        for (path, counts) in &measurements.scene_requests {
+            let category = path.split('/').take(2).collect::<Vec<_>>().join("/");
+            let entry = by_category.entry(category).or_default();
+            entry.0 += counts.total;
+            entry.1 += counts.total as u64 * u64::from(counts.template_entities);
+        }
+        for (category, (roots, entities)) in &by_category {
+            writeln!(
+                output,
+                "  category {category:<14} {roots:>6} roots, {entities:>8} template entities instantiated"
+            )
+            .unwrap();
+        }
         let mut scenes = measurements.scene_requests.iter().collect::<Vec<_>>();
         scenes.sort_by(|(left_name, left), (right_name, right)| {
             let work = |counts: &SceneRequestCounts| {
@@ -312,6 +359,38 @@ impl RenderAudit {
                 counts.peak_frame,
                 counts.template_entities,
                 counts.first.as_secs_f64(),
+            )
+            .unwrap();
+        }
+        if let Some(budget) = measurements.scene_budget {
+            writeln!(
+                output,
+                "\nSCENE BUDGET  {} roots delayed past their request frame, {} released, peak {} held, wait max {} / mean {:.2} frames",
+                budget.delayed_roots,
+                budget.released_roots,
+                budget.peak_held,
+                budget.max_wait_frames,
+                budget.total_wait_frames as f64 / budget.released_roots.max(1) as f64,
+            )
+            .unwrap();
+        }
+        output.push_str("\nEFFECT POOL REUSE  per template, cumulative since launch (prewarmed roots count as recycled)\n");
+        let mut pools = measurements.effect_pools.iter().collect::<Vec<_>>();
+        pools.sort_by_key(|(path, stats)| {
+            (
+                std::cmp::Reverse(stats.fresh_poolable + stats.fresh_unpoolable),
+                path.clone(),
+            )
+        });
+        for (path, stats) in pools.into_iter().take(15) {
+            writeln!(
+                output,
+                "  fresh {:>5} (unpoolable {:>5})  reused {:>5}  recycled {:>5}  peak pooled {:>4}  {path}",
+                stats.fresh_poolable + stats.fresh_unpoolable,
+                stats.fresh_unpoolable,
+                stats.reused,
+                stats.recycled,
+                stats.peak_pooled,
             )
             .unwrap();
         }
@@ -338,7 +417,9 @@ impl Plugin for RenderAuditPlugin {
         app.add_systems(
             SpawnScene,
             sample_cold_scene_requests.before(SceneSpawnerSystems::WorldInstanceSpawn),
-        );
+        )
+        .add_observer(count_ready_scene_instance)
+        .add_systems(Last, count_loaded_assets);
     }
 
     fn finish(&self, app: &mut App) {
@@ -411,29 +492,26 @@ fn sample_cold_scene_requests(
     assets: Res<Assets<WorldAsset>>,
     asset_server: Res<AssetServer>,
     audit: Res<RenderAudit>,
+    mut counters: ResMut<crate::performance_ui::PerformanceCounters>,
+    mut template_sizes: Local<HashMap<AssetId<WorldAsset>, u32>>,
 ) {
+    let mut counts = HashMap::<AssetId<WorldAsset>, usize>::new();
+    for root in &roots {
+        *counts.entry(root.0.id()).or_default() += 1;
+    }
+    let requested = counts.values().sum::<usize>();
+    counters.record_scene_work(|scene| scene.roots_requested += requested as u32);
     let mut measurements = audit.0.lock().expect("render audit mutex poisoned");
     let Some(started) = measurements.started else {
         return;
     };
     let first = started.elapsed();
-    let mut counts = HashMap::<AssetId<WorldAsset>, usize>::new();
-    for root in &roots {
-        *counts.entry(root.0.id()).or_default() += 1;
-    }
     for (asset, total) in counts {
         let path = asset_server
             .get_path(asset)
             .map_or_else(|| format!("{asset:?}"), |path| path.to_string());
-        let template_entities = assets.get(asset).map_or(0, |asset| {
-            asset
-                .world
-                .archetypes()
-                .iter()
-                .filter(|archetype| !archetype.contains(IS_RESOURCE))
-                .map(|archetype| archetype.entities().len() as u32)
-                .sum()
-        });
+        let template_entities =
+            template_entity_count(&mut template_sizes, &assets, asset).unwrap_or(0);
         let entry = measurements
             .scene_requests
             .entry(path)
@@ -442,6 +520,49 @@ fn sample_cold_scene_requests(
         entry.peak_frame = entry.peak_frame.max(total);
         entry.template_entities = template_entities;
     }
+}
+
+fn count_ready_scene_instance(
+    event: On<WorldInstanceReady>,
+    roots: Query<&WorldAssetRoot>,
+    assets: Res<Assets<WorldAsset>>,
+    mut counters: ResMut<crate::performance_ui::PerformanceCounters>,
+    mut template_sizes: Local<HashMap<AssetId<WorldAsset>, u32>>,
+) {
+    let entities = roots.get(event.entity).map_or(0, |root| {
+        template_entity_count(&mut template_sizes, &assets, root.0.id()).unwrap_or(0)
+    });
+    counters.record_scene_work(|scene| {
+        scene.instances_ready += 1;
+        scene.instance_entities += entities;
+    });
+}
+
+fn count_loaded_assets(
+    mut meshes: MessageReader<AssetEvent<Mesh>>,
+    mut images: MessageReader<AssetEvent<Image>>,
+    mut materials: MessageReader<AssetEvent<StandardMaterial>>,
+    mut models: MessageReader<AssetEvent<bevy::gltf::Gltf>>,
+    mut counters: ResMut<crate::performance_ui::PerformanceCounters>,
+) {
+    fn added<A: Asset>(reader: &mut MessageReader<AssetEvent<A>>) -> u32 {
+        reader
+            .read()
+            .filter(|event| matches!(event, AssetEvent::Added { .. }))
+            .count() as u32
+    }
+    let (meshes, images, materials, models) = (
+        added(&mut meshes),
+        added(&mut images),
+        added(&mut materials),
+        added(&mut models),
+    );
+    counters.record_scene_work(|scene| {
+        scene.meshes_added += meshes;
+        scene.images_added += images;
+        scene.materials_added += materials;
+        scene.models_added += models;
+    });
 }
 
 // Attribution only: clocks keep advancing, but no joint curves are applied.
@@ -629,6 +750,7 @@ fn apply_render_experiment(
             | RenderExperiment::ParticleUncachedBindings
             | RenderExperiment::ColdEffectPools
             | RenderExperiment::OffscreenEffectAnimation
+            | RenderExperiment::BudgetedSceneSpawn
             | RenderExperiment::ParticleOverlapAudit
             | RenderExperiment::ParticleOverlapBatching
             | RenderExperiment::ParticleDepthSort
@@ -679,6 +801,7 @@ fn apply_render_experiment(
             | RenderExperiment::ParticleUncachedBindings
             | RenderExperiment::ColdEffectPools
             | RenderExperiment::OffscreenEffectAnimation
+            | RenderExperiment::BudgetedSceneSpawn
             | RenderExperiment::ParticleOverlapAudit
             | RenderExperiment::ParticleOverlapBatching
             | RenderExperiment::ParticleDepthSort

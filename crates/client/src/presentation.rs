@@ -57,6 +57,7 @@ use crate::{
         finish_presentation_profile, finish_scene_setup_profile, finish_transform_profile,
     },
     render_audit::RenderExperiment,
+    scene_budget::{BudgetedSceneRoot, SceneRootPriority},
     terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureMesh, TerrainTextureSet},
     unit_models::{UnitAnimationClip, UnitAnimationSet, UnitModelAsset, UnitModelSet},
     wc3_effects::{
@@ -719,6 +720,34 @@ struct PresentedStatusEffect {
 struct TimedWc3EffectPool {
     lightning: Vec<PooledLightningEffect>,
     scenes: HashMap<Wc3EffectPoolKey, Vec<Entity>>,
+    stats: HashMap<AssetId<WorldAsset>, Wc3EffectPoolStats>,
+}
+
+/// Per-template reuse accounting, reported by the render audit so pool misses
+/// can be attributed to a cause.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct Wc3EffectPoolStats {
+    /// Requests served by a recycled instance.
+    pub(crate) reused: usize,
+    /// New instances created for a poolable template (pool was empty).
+    pub(crate) fresh_poolable: usize,
+    /// New instances for templates (or runs) that can never be recycled.
+    pub(crate) fresh_unpoolable: usize,
+    /// Instances returned to the pool.
+    pub(crate) recycled: usize,
+    /// Pool size high-water mark for the template.
+    pub(crate) peak_pooled: usize,
+}
+
+impl TimedWc3EffectPool {
+    fn recycle(&mut self, key: Wc3EffectPoolKey, entity: Entity) {
+        let pooled = self.scenes.entry(key).or_default();
+        pooled.push(entity);
+        let len = pooled.len();
+        let stats = self.stats.entry(key.scene).or_default();
+        stats.recycled += 1;
+        stats.peak_pooled = stats.peak_pooled.max(len);
+    }
 }
 
 struct Wc3EffectPrewarmRequest {
@@ -1099,6 +1128,7 @@ impl Plugin for CastlePresentationPlugin {
             })
             .add_systems(Startup, setup_scene)
             .add_systems(Update, update_snow_terrain)
+            .add_systems(Last, publish_effect_pool_stats)
             .add_systems(
                 Update,
                 (
@@ -3371,6 +3401,49 @@ fn building_script_attachment_transform(
     }
 }
 
+fn publish_effect_pool_stats(
+    pool: Res<TimedWc3EffectPool>,
+    asset_server: Res<AssetServer>,
+    audit: Option<Res<crate::render_audit::RenderAudit>>,
+    mut last_publish: Local<Option<std::time::Instant>>,
+    mut capture_baseline: Local<Option<HashMap<AssetId<WorldAsset>, Wc3EffectPoolStats>>>,
+) {
+    let Some(audit) = audit else {
+        return;
+    };
+    // The report only needs the final totals; refresh about once a second.
+    let now = std::time::Instant::now();
+    if last_publish.is_some_and(|last| now.duration_since(last).as_secs_f32() < 1.0) {
+        return;
+    }
+    *last_publish = Some(now);
+    if !audit.capture_started() {
+        return;
+    }
+    // Report only what happened since the capture began (the pool fills during setup).
+    let baseline = capture_baseline.get_or_insert_with(|| pool.stats.clone());
+    audit.set_effect_pool_stats(
+        pool.stats
+            .iter()
+            .map(|(&scene, &stats)| {
+                let base = baseline.get(&scene).copied().unwrap_or_default();
+                (
+                    asset_server
+                        .get_path(scene)
+                        .map_or_else(|| format!("{scene:?}"), |path| path.to_string()),
+                    Wc3EffectPoolStats {
+                        reused: stats.reused - base.reused,
+                        fresh_poolable: stats.fresh_poolable - base.fresh_poolable,
+                        fresh_unpoolable: stats.fresh_unpoolable - base.fresh_unpoolable,
+                        recycled: stats.recycled - base.recycled,
+                        peak_pooled: stats.peak_pooled,
+                    },
+                )
+            })
+            .collect(),
+    );
+}
+
 fn invalidate_wc3_effect_pool_assets(
     mut commands: Commands,
     mut events: MessageReader<AssetEvent<WorldAsset>>,
@@ -3736,6 +3809,7 @@ fn prewarm_timed_wc3_effects(
                 Transform::IDENTITY,
                 Visibility::Hidden,
                 Wc3EffectWarmup,
+                BudgetedSceneRoot(SceneRootPriority::Warmup),
                 request.playback.emitter_source(&request.model),
                 PrewarmingWc3Effect {
                     key: request.playback.key(&request.model),
@@ -3793,7 +3867,7 @@ fn retain_prewarmed_wc3_effects(
             .entity(entity)
             .remove::<PrewarmingWc3Effect>()
             .insert_recursive::<Children>(Disabled);
-        pool.scenes.entry(warmup.key).or_default().push(entity);
+        pool.recycle(warmup.key, entity);
         plan.prepared_total += 1;
     }
 }
@@ -3825,6 +3899,7 @@ fn spawn_or_reuse_wc3_visual(
 ) -> (Entity, Option<Wc3EffectPoolKey>) {
     let pool_key = playback.key(model);
     if pooling_enabled && let Some(entity) = pool.scenes.get_mut(&pool_key).and_then(Vec::pop) {
+        pool.stats.entry(pool_key.scene).or_default().reused += 1;
         commands
             .entity(entity)
             .remove::<(ChildOf, Wc3AttachToNode)>()
@@ -3848,12 +3923,19 @@ fn spawn_or_reuse_wc3_visual(
             transform,
             playback.emitter_source(model),
             Wc3RibbonSource::new(&model.ribbons),
+            BudgetedSceneRoot(SceneRootPriority::Gameplay),
         ))
         .id();
     if let Some(animation) = playback.animation_source(model) {
         commands.entity(entity).try_insert(animation);
     }
     let pooled_scene = (pooling_enabled && model.poolable_instance()).then_some(pool_key);
+    let stats = pool.stats.entry(pool_key.scene).or_default();
+    if pooled_scene.is_some() {
+        stats.fresh_poolable += 1;
+    } else {
+        stats.fresh_unpoolable += 1;
+    }
     (entity, pooled_scene)
 }
 
@@ -4242,7 +4324,7 @@ fn sync_render_entities(
                     .entity(model_root)
                     .remove::<ChildOf>()
                     .insert_recursive::<Children>(Disabled);
-                effect_pool.scenes.entry(key).or_default().push(model_root);
+                effect_pool.recycle(key, model_root);
             }
             commands.entity(projectile_entry.entity).try_despawn();
             if !samples.current.hidden_entities.contains(&id)
@@ -4891,6 +4973,7 @@ fn sync_render_entities(
             let model_root = commands
                 .spawn((
                     WorldAssetRoot(model.scene.clone()),
+                    BudgetedSceneRoot(SceneRootPriority::Gameplay),
                     ImportedUnitModelRoot {
                         sim_id: unit.id,
                         rawcode,
@@ -6310,7 +6393,7 @@ fn release_attached_timed_wc3_effect(
             .entity(effect.entity)
             .remove::<(ChildOf, Wc3AttachToNode)>()
             .insert_recursive::<Children>(Disabled);
-        pool.scenes.entry(key).or_default().push(effect.entity);
+        pool.recycle(key, effect.entity);
     } else {
         commands.entity(effect.entity).try_despawn();
     }
@@ -6327,7 +6410,7 @@ fn release_status_visual(
             .entity(effect.entity)
             .remove::<(ChildOf, Wc3AttachToNode)>()
             .insert_recursive::<Children>(Disabled);
-        pool.scenes.entry(key).or_default().push(effect.entity);
+        pool.recycle(key, effect.entity);
     } else {
         commands.entity(effect.entity).try_despawn();
     }
@@ -6441,6 +6524,7 @@ fn spawn_stun_effect(
     let entity = commands
         .spawn((
             WorldAssetRoot(model.scene.clone()),
+            BudgetedSceneRoot(SceneRootPriority::Gameplay),
             Transform::from_translation(position),
             model.emitter_source(),
             Wc3RibbonSource::new(&model.ribbons),
@@ -6582,11 +6666,7 @@ fn age_timed_wc3_effects(
                         .remove::<ChildOf>()
                         .remove::<Wc3AttachToNode>()
                         .insert_recursive::<Children>(Disabled);
-                    effect_pool
-                        .scenes
-                        .entry(pool_key)
-                        .or_default()
-                        .push(effect.entity);
+                    effect_pool.recycle(pool_key, effect.entity);
                 } else {
                     commands.entity(effect.entity).try_despawn();
                 }
