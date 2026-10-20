@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    Roterothopter = 0x1000_0090 => b"h06Q",
     JadeElder = 0x1000_008f => b"n03M",
     CloudShip = 0x1000_008e => b"h07S",
     BrewshockCatapult = 0x1000_008d => b"o00H",
@@ -179,6 +180,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    AircraftFactory = 0x2000_008c => b"h05J",
     JadeShrine = 0x2000_008b => b"n03L",
     CloudHangar = 0x2000_008a => b"n03Q",
     PandarenSiegeWorkshop = 0x2000_0089 => b"n03N",
