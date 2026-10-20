@@ -127,6 +127,26 @@ fn handle_selection_commands(
         resources.action_panel.status = "Blink: left-click a destination; Esc cancels.".into();
     }
 
+    // Rescue Strike uses its extracted hotkey and the same point-targeting mode as its command
+    // card button; it is offered only while the match rules and the player's strike allow it.
+    if resources.action_panel.mode == ActionPanelMode::Actions
+        && hotkey_just_pressed(&resources.keys, command_card.rescue_strike_hotkey)
+        && resources
+            .authoritative
+            .simulation
+            .builder(actor)
+            .is_some_and(|builder| {
+                resources
+                    .authoritative
+                    .simulation
+                    .can_cast_rescue_strike(builder.owner, builder.id)
+            })
+    {
+        resources.action_panel.mode = ActionPanelMode::Targeting(TargetingAction::RescueStrike);
+        resources.action_panel.status =
+            "Rescue Strike: position the blast circle and left-click; Esc cancels.".into();
+    }
+
     // Repair autocast remains a toggle, not a targeting command. The targeted Repair command is
     // exposed by the action panel and uses the common modal path below.
     if resources.action_panel.mode == ActionPanelMode::Actions

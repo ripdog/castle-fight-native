@@ -980,7 +980,9 @@ fn action_hotkey(action: PanelAction, content: &CastleFightContentBundle) -> Opt
         }
         PanelAction::Target(TargetingAction::SnowExplosion) => None,
         PanelAction::Target(TargetingAction::Blink) => Some(content.command_card.blink_hotkey),
-        PanelAction::Target(TargetingAction::RescueStrike) => Some('V'),
+        PanelAction::Target(TargetingAction::RescueStrike) => {
+            Some(content.command_card.rescue_strike_hotkey)
+        }
         PanelAction::Target(TargetingAction::Build(kind)) => Some(kind.hotkey(content)),
         PanelAction::Building(BuildingPanelAction::Upgrade(target)) => Some(target.hotkey(content)),
         PanelAction::TrainUnit => None,

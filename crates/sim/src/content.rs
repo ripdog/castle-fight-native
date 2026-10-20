@@ -637,6 +637,7 @@ pub struct CastleFightCommandCardLayout {
     pub blink_ability: CommandCardPosition,
     pub rescue_strike_ability: CommandCardPosition,
     pub blink_hotkey: char,
+    pub rescue_strike_hotkey: char,
     pub map_version: MapVersion,
 }
 
@@ -664,6 +665,7 @@ pub fn castle_fight_command_card_layout_for_version(
         blink_ability: CommandCardPosition::new(1, 2),
         rescue_strike_ability: CommandCardPosition::new(3, 2),
         blink_hotkey: 'D',
+        rescue_strike_hotkey: 'V',
         map_version: version,
     })
 }
@@ -3239,6 +3241,7 @@ fn hash_command_card(hash: &mut ContentHash64, layout: CastleFightCommandCardLay
     }
     hash.write_u32(layout.build_hotkey as u32);
     hash.write_u32(layout.blink_hotkey as u32);
+    hash.write_u32(layout.rescue_strike_hotkey as u32);
 }
 
 fn hash_economy_rules(hash: &mut ContentHash64, rules: EconomyRules) {
@@ -8263,6 +8266,7 @@ mod tests {
         assert_eq!(layout.repair_ability, ability_position("Ahrp"));
         assert_eq!(layout.blink_ability, ability_position("A0-1"));
         assert_eq!(layout.blink_hotkey, ability_hotkey("A0-1"));
+        assert_eq!(layout.rescue_strike_hotkey, ability_hotkey("A005"));
     }
 
     #[test]

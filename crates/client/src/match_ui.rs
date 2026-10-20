@@ -207,7 +207,7 @@ fn sync_rescue_wc3_art(
         if tracker.active.contains(&(builder, center)) {
             continue;
         }
-        if let Some(model) = visuals.system_model("Units\\\\NightElf\\\\Wisp\\\\WispExplode.mdl") {
+        if let Some(model) = visuals.system_model(r"Units\NightElf\Wisp\WispExplode.mdl") {
             for _ in 0..3 {
                 spawn_rescue_model(
                     &mut commands,
@@ -216,9 +216,9 @@ fn sync_rescue_wc3_art(
                 );
             }
         }
-        if let Some(model) = visuals.system_model(
-            "Abilities\\\\Spells\\\\Items\\\\TomeOfRetraining\\\\TomeOfRetrainingCaster.mdl",
-        ) && let Some(caster) = authoritative.simulation.builder(builder)
+        if let Some(model) = visuals
+            .system_model(r"Abilities\Spells\Items\TomeOfRetraining\TomeOfRetrainingCaster.mdl")
+            && let Some(caster) = authoritative.simulation.builder(builder)
         {
             spawn_rescue_model(
                 &mut commands,
