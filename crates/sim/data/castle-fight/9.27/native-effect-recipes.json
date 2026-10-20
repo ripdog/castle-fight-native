@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"ability-effect","source_key":"A09E","unit_rawcode":"z003","kind":"travelling-mana-clap"},
+    {"source_kind":"unit-ability","source_key":"A09D","unit_rawcode":"z003","kind":"travelling-mana-clap"},
     {"source_kind":"unit-ability","source_key":"A0FZ","unit_rawcode":"n02M","kind":"death-explosion"},
     {"source_kind":"unit-ability","source_key":"A0A3","unit_rawcode":"n01V","kind":"death-explosion"},
     {"source_kind":"unit-ability","source_key":"A099","unit_rawcode":"n01V","kind":"self-destruct"},
