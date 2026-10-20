@@ -16,3 +16,9 @@ Retained Castle Fight 9.27/r1 extraction tree: `8ea806dca331ff254995e94e6f0baf22
 - Engine note: secondary weapons previously accepted only instant and missile deliveries. A secondary artillery weapon now becomes a ballistic delivery whose speed and outer radius come from that projection; its bands ride on the existing unit-level splash passive, which only ballistic/homing projectiles read (an instant primary ignores it). The loader refuses a body that would carry splash bands on both weapons, because the passive is not weapon-scoped.
 - Complete inventory/control flow: `A09J` (`ACbh`) is the same air-only Bash passive as the Roterothopter's, with its own retained chance, bonus damage and durations; no script consumer or hidden proxy. A ballistic structure attack never rolls it (its mask names air).
 - Discrepancy: the tooltip's "36 dps" for the structure weapon is the protected damage over the 2.5 s cooldown before splash falloff; runtime data wins.
+
+## Tank Factory / Light Tank
+
+- Identity/source: runtime r189; `h05X` (`hbla`) produces `h06T` (`hmtt`) in the second slot of the top row and is the root of the tank line (Mine Layer, Assault and Heavy factories upgrade from it). Protected life, armor, movement and the Normal missile weapon (ground and structures; the retained splash-free missile with its own projectile speed) come from the catalogs. The second weapon (Pierce, air) is disabled and unavailable, so the Light Tank cannot attack air.
+- Complete inventory/control flow: `A0FK` is the shared hidden Channel marker; `A0A0` (`Assk`, "Light Plating") is the native Hardened Skin with a retained 100% chance, minimum damage and ignored damage (shared with the Mine Layer's body, which carries the same row). Its mask `enemy,ally` names no attacker class, so the shared always-on rule applies. No script grant, proxy or hidden marker exists on this body.
+- State: none beyond ordinary projectile and damage state.

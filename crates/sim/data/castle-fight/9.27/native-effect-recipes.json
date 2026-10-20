@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0A0","unit_rawcode":"h06T","kind":"hardened-skin"},
     {"source_kind":"unit-ability","source_key":"A09J","unit_rawcode":"h06R","kind":"bash"},
     {"source_kind":"unit-ability","source_key":"A09I","unit_rawcode":"h06Q","kind":"bash"},
     {"source_kind":"unit-ability","source_key":"A0GW","unit_rawcode":"h07R","kind":"building-script"},

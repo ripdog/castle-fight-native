@@ -388,7 +388,7 @@
   ],
   "source_revision": "r1",
   "sources": {
-    "native-effect-bindings.json": "e428f10abba976fce937bb922a0a9a6e10f5484b8845d8b17ede0fd6daa4e427",
+    "native-effect-bindings.json": "5aa869d9352fa26bd245cf9f21b457e9b8ae4e3f22781c1ac7effac0087593bc",
     "object-fields.tsv": "01040f03e4a625ac1d960a0a2d43d0732d64b797e9357f4f40e8c2c0d6d9710d",
     "objects.tsv": "974d21575d4106609146f2e228b99ec5494732462a1e40735f48e63e7cdae96d",
     "runtime-system-mechanics.tsv": "436cbff2586e2d540d06c86ca7b403f4d5f0d9b37ee27d68d31f896c3b0f412e",

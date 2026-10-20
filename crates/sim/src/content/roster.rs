@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    LightTank = 0x1000_0092 => b"h06T",
     Gyrocopter = 0x1000_0091 => b"h06R",
     Roterothopter = 0x1000_0090 => b"h06Q",
     JadeElder = 0x1000_008f => b"n03M",
@@ -181,6 +182,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    TankFactory = 0x2000_008e => b"h05X",
     BomberFactory = 0x2000_008d => b"h09L",
     AircraftFactory = 0x2000_008c => b"h05J",
     JadeShrine = 0x2000_008b => b"n03L",
