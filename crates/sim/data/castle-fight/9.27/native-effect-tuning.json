@@ -4,6 +4,26 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A09Z",
+      "unit_rawcode": "h06S",
+      "kind": "hardened-skin",
+      "profile": {
+        "ability": 1093679450,
+        "effect": {
+          "HardenedSkin": {
+            "chance_per_10k": 10000,
+            "minimum_damage": 5,
+            "ignored_damage": 24
+          }
+        }
+      },
+      "provenance": {
+        "ability": "A09Z",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A09Y",
       "unit_rawcode": "h099",
       "kind": "hardened-skin",

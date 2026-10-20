@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A09Z","unit_rawcode":"h06S","kind":"hardened-skin"},
     {"source_kind":"unit-ability","source_key":"A09Y","unit_rawcode":"h099","kind":"hardened-skin"},
     {"source_kind":"unit-ability","source_key":"A095","unit_rawcode":"h06U","kind":"parasite-script"},
     {"source_kind":"unit-ability","source_key":"A0A0","unit_rawcode":"h06T","kind":"hardened-skin"},

@@ -37,3 +37,9 @@ Retained Castle Fight 9.27/r1 extraction tree: `8ea806dca331ff254995e94e6f0baf22
 - Identity/source: runtime r191; `h09I` (`hbla`) upgrades from the Tank Factory and produces `h099` (`hmtt`). Protected life, armor, movement and the Chaos artillery weapon (ground and structures; retained projectile speed, three splash bands, damage factors and splash mask) come from the catalogs. The second weapon (Pierce, air) is disabled and unavailable.
 - Complete inventory/control flow: the sole ability is `A09Y` (`Assk`, "Medium Plating"), the native Hardened Skin row with its own retained minimum and ignored damage (the Light Tank's row at a larger reduction). Its mask names no attacker class, so the shared always-on rule applies. No script grant, proxy or hidden marker exists on this body.
 - State: none beyond ordinary projectile and splash state (shared ballistic primitive).
+
+## Heavy Tank Factory / Heavy Tank
+
+- Identity/source: runtime r192; `h09B` (`hbla`) upgrades from the Tank Factory (and leads to the Rocket Tank Factory) and produces `h06S` (`hmtt`). Protected life, armor, movement and the Normal missile weapon (ground and structures, the retained long range and projectile speed) come from the catalogs. The second weapon (Pierce, air) is disabled and unavailable.
+- Complete inventory/control flow: the sole ability is `A09Z` (`Assk`, "Heavy Plating"), the native Hardened Skin row with its own retained ignored damage; the Rocket Tank carries the same ability object, so one recipe serves both bodies. No script grant, proxy or hidden marker exists on this body.
+- State: none beyond ordinary projectile state.
