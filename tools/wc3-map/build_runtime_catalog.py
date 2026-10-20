@@ -61,6 +61,13 @@ def _line_world_integer(value: str) -> int:
     return int(number)
 
 
+def _damage_factor_per_10k(value: str) -> int:
+    factor = Decimal(value) * 10_000
+    if not factor.is_finite() or factor != factor.to_integral_value() or not 0 <= factor <= 10_000:
+        raise SystemExit("splash damage factor must be exact in native fixed point")
+    return int(factor)
+
+
 def _line_damage_retention(value: str) -> int:
     retention = (1 - Decimal(value)) * 10_000
     if (
@@ -277,6 +284,7 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
                 }
 
     secondary_missile_speeds: dict[str, str] = {}
+    secondary_splash_fields: dict[str, dict[str, str]] = {}
     action_fields: dict[str, dict[str, str]] = {}
     sight_fields: dict[str, dict[str, int]] = {}
     bounce_fields: dict[str, dict[str, str]] = {}
@@ -306,6 +314,10 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
                 corpse_fields.setdefault(row["rawcode"], {})[row["field_id"]] = row["recovered_value_json"].strip('"')
             if row["category"] == "units" and row["field_id"] == "ua2z":
                 secondary_missile_speeds[row["rawcode"]] = row["recovered_value_json"].strip('"')
+            if row["category"] == "units" and row["field_id"] in {"ua2f", "ua2h", "ua2q", "ua2p", "uhd2", "uqd2"}:
+                secondary_splash_fields.setdefault(row["rawcode"], {})[row["field_id"]] = (
+                    row["recovered_value_json"].strip('"')
+                )
             if row["category"] == "abilities" and row["base_rawcode"] == "AOfs" and row["level"] == "1" and row["field_id"] in {"aare", "adur", "Ofs1"}:
                 far_sight.setdefault(row["rawcode"], {})[row["field_id"]] = _integer_recovered_value(
                     row["recovered_value_json"], rawcode=row["rawcode"], field_id=row["field_id"])
@@ -381,6 +393,7 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
     building_secondary_attacks = []
     bounce_weapons = []
     line_weapons = []
+    secondary_artillery_weapons = []
     unit_rows = csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree, "resolved/units.tsv").decode()), delimiter="\t")
     for unit in unit_rows:
         if unit["is_building"] == "1" and unit["attack2_enabled"] == "True":
@@ -390,6 +403,21 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
                 "damage": unit["attack2_avg"], "range": unit["attack2_range"],
                 "cooldown": unit["attack2_cooldown"],
                 "projectile_speed_world_per_second": secondary_missile_speeds.get(unit["rawcode"], "-"),
+            })
+        if unit["is_building"] != "1" and unit["attack2_enabled"] == "True" and unit["attack2_weapon_type"] == "artillery":
+            fields = secondary_splash_fields.get(unit["rawcode"], {})
+            if set(fields) != {"ua2f", "ua2h", "ua2q", "ua2p", "uhd2", "uqd2"}:
+                raise SystemExit("secondary artillery weapon requires retained splash bands, factors and targets")
+            bands = [_line_world_integer(fields[key]) for key in ("ua2f", "ua2h", "ua2q")]
+            factors = [_damage_factor_per_10k(fields[key]) for key in ("uhd2", "uqd2")]
+            if not 0 <= bands[0] <= bands[1] <= bands[2] or not bands[2] > 0:
+                raise SystemExit("secondary artillery splash bands must be ordered")
+            secondary_artillery_weapons.append({
+                "rawcode": unit["rawcode"],
+                "projectile_speed_world_per_second": _line_world_integer(secondary_missile_speeds[unit["rawcode"]]),
+                "full_world": bands[0], "medium_world": bands[1], "outer_world": bands[2],
+                "medium_damage_per_10k": factors[0], "outer_damage_per_10k": factors[1],
+                "splash_targets": fields["ua2p"],
             })
         if unit["attack1_weapon_type"] in {"mline", "aline"}:
             fields = line_fields[unit["rawcode"]]
@@ -461,7 +489,7 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
         if row['building_rawcode'] == 'h04K':
             native_summon_bodies.add(int(json.loads(row['parameters_json'])['on_kill_unit_id']).to_bytes(4, 'big').decode())
     return {
-        "schema_version": 10,
+        "schema_version": 11,
         "air_attack_bonuses": air_bonuses,
         "air_attack_bonuses_source": {"git_tree": git_tree, "path": "resolved/production-unit-special-mechanics.tsv",
             "functions": ["hL", "shouldApplyRiptideAirBonus", "addRiptideAirDamageBonus", "DamageListener_addListener_RiptideAttack_onEvent_addListener_RiptideAttack"]},
@@ -504,6 +532,7 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
         "building_secondary_attacks": sorted(building_secondary_attacks, key=lambda weapon: weapon["rawcode"]),
         "bounce_weapons": sorted(bounce_weapons, key=lambda weapon: weapon["rawcode"]),
         "line_weapons": sorted(line_weapons, key=lambda weapon: weapon["rawcode"]),
+        "secondary_artillery_weapons": sorted(secondary_artillery_weapons, key=lambda weapon: weapon["rawcode"]),
         "map_version": release["map_version"],
         "release_revision": release["revision"],
         "extraction_git_tree": git_tree,

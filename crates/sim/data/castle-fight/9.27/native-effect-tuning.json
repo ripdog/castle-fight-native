@@ -4,6 +4,21 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A09J",
+      "unit_rawcode": "h06R",
+      "kind": "bash",
+      "chance_per_10k": 5000,
+      "bonus_damage": 60,
+      "stun_duration_millis": 1200,
+      "hero_stun_duration_millis": 600,
+      "targets": "air-units",
+      "provenance": {
+        "ability": "A09J",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A09I",
       "unit_rawcode": "h06Q",
       "kind": "bash",

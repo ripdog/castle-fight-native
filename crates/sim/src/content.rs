@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r187";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r188";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -852,11 +852,22 @@ impl CastleFightUnitKind {
         {
             passive_effects.push(PassiveUnitEffect::LavaSpawn(profile));
         }
-        if let Some(profile) = extracted_content_927()
+        let primary_splash = extracted_content_927()
             .units
             .get(&definition.rawcode)
-            .and_then(|unit| unit.splash_falloff)
-        {
+            .and_then(|unit| unit.splash_falloff);
+        // The splash passive rides on whichever weapon launches a splash projectile. A body whose
+        // splash belongs to its secondary artillery must not also carry a primary splash profile.
+        let secondary_splash = extracted_content_927()
+            .secondary_artillery_weapons
+            .get(&definition.rawcode)
+            .map(CatalogSecondaryArtilleryWeapon927::splash_profile);
+        assert!(
+            primary_splash.is_none() || secondary_splash.is_none(),
+            "unit {:#010x} has splash bands on both weapons",
+            definition.rawcode
+        );
+        if let Some(profile) = primary_splash.or(secondary_splash) {
             passive_effects.push(PassiveUnitEffect::SplashFalloff(profile));
         }
         for effect in self.human_passive_effects_9_27() {
@@ -1922,6 +1933,9 @@ fn stable_ability_id(
     let id = match (source.kind, source.key) {
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A09I") => {
             0x4000_023a
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A09J") => {
+            0x4000_023b
         }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0GN") => {
             0x4000_022a
@@ -4634,6 +4648,7 @@ struct CatalogSupplement927 {
     building_secondary_attacks: Vec<CatalogBuildingSecondaryAttack927>,
     bounce_weapons: Vec<CatalogBounceWeapon927>,
     line_weapons: Vec<CatalogLineWeapon927>,
+    secondary_artillery_weapons: Vec<CatalogSecondaryArtilleryWeapon927>,
     sight_profiles: Vec<CatalogSightProfile927>,
     fog_rules: CatalogFogRules927,
     spell_reveals: Vec<CatalogSpellReveal927>,
@@ -4850,6 +4865,33 @@ struct CatalogBounceWeapon927 {
     range_world: i32,
 }
 
+/// Secondary artillery weapon: its own projectile speed and splash bands, retained object fields
+/// rather than the primary weapon's.
+#[derive(Debug, Clone, Deserialize)]
+struct CatalogSecondaryArtilleryWeapon927 {
+    rawcode: String,
+    projectile_speed_world_per_second: i32,
+    full_world: i32,
+    medium_world: i32,
+    outer_world: i32,
+    medium_damage_per_10k: u16,
+    outer_damage_per_10k: u16,
+    splash_targets: String,
+}
+
+impl CatalogSecondaryArtilleryWeapon927 {
+    fn splash_profile(&self) -> SplashFalloffProfile {
+        SplashFalloffProfile {
+            full_radius: world(self.full_world),
+            medium_radius: world(self.medium_world),
+            outer_radius: world(self.outer_world),
+            medium_damage_per_10k: self.medium_damage_per_10k,
+            outer_damage_per_10k: self.outer_damage_per_10k,
+            targets: parse_attack_targets_927(&self.splash_targets),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 struct CatalogLineWeapon927 {
     rawcode: String,
@@ -4889,6 +4931,7 @@ struct ExtractedContent927 {
     authored_builder_catalogs: BTreeMap<u32, Vec<u32>>,
     bounce_weapons: BTreeMap<u32, CatalogBounceWeapon927>,
     line_weapons: BTreeMap<u32, CatalogLineWeapon927>,
+    secondary_artillery_weapons: BTreeMap<u32, CatalogSecondaryArtilleryWeapon927>,
     damage_rules: DamageRules,
 }
 
@@ -4979,6 +5022,11 @@ impl ExtractedContent927 {
             .collect();
         let line_weapons = supplement
             .line_weapons
+            .into_iter()
+            .map(|weapon| (parse_rawcode(&weapon.rawcode), weapon))
+            .collect();
+        let secondary_artillery_weapons = supplement
+            .secondary_artillery_weapons
             .into_iter()
             .map(|weapon| (parse_rawcode(&weapon.rawcode), weapon))
             .collect();
@@ -5693,6 +5741,7 @@ impl ExtractedContent927 {
             authored_builder_catalogs,
             bounce_weapons,
             line_weapons,
+            secondary_artillery_weapons,
             damage_rules,
         })
     }
@@ -5701,7 +5750,7 @@ impl ExtractedContent927 {
 fn catalog_supplement_927() -> Result<CatalogSupplement927, String> {
     let supplement: CatalogSupplement927 = serde_json::from_str(CATALOG_SUPPLEMENT_927_R1_JSON)
         .map_err(|error| format!("invalid 9.27 catalog supplement: {error}"))?;
-    if supplement.schema_version != 10 {
+    if supplement.schema_version != 11 {
         return Err(format!(
             "unsupported 9.27 catalog supplement schema {}",
             supplement.schema_version
@@ -6697,6 +6746,18 @@ fn extracted_unit_definition_927(
                     .projectile_speed_per_tick
                     .expect("secondary missile speed"),
             },
+            ExtractedWeaponKind927::Artillery => {
+                let weapon = content
+                    .secondary_artillery_weapons
+                    .get(&rawcode)
+                    .unwrap_or_else(|| {
+                        panic!("unit {rawcode:#010x} secondary artillery lacks retained splash")
+                    });
+                AttackDelivery::RangedBallistic {
+                    speed_per_tick: projectile_speed(weapon.projectile_speed_world_per_second),
+                    impact_radius: world(weapon.outer_world),
+                }
+            }
             other => panic!("unit {rawcode:#010x} has unsupported secondary weapon {other:?}"),
         };
         SecondaryAttackProfile {

@@ -1,5 +1,5 @@
 {
-  "schema_version": 10,
+  "schema_version": 11,
   "air_attack_bonuses": [
     {
       "rawcode": "n03U",
@@ -8603,6 +8603,18 @@
       "minimum_range_world": 0,
       "damage_retention_per_10k": 10000,
       "splash_targets": "debris,enemies,ground,structure,tree,wall"
+    }
+  ],
+  "secondary_artillery_weapons": [
+    {
+      "rawcode": "h06R",
+      "projectile_speed_world_per_second": 300,
+      "full_world": 50,
+      "medium_world": 120,
+      "outer_world": 200,
+      "medium_damage_per_10k": 6000,
+      "outer_damage_per_10k": 3000,
+      "splash_targets": "debris,enemies,ground,item,structure,ward"
     }
   ],
   "map_version": "9.27",
