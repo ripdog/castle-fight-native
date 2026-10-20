@@ -53,14 +53,42 @@ pub(super) fn observe_damage_state(
     }
 }
 
+/// The explosion a unit is currently committed to autocasting on contact: an armed script charge
+/// (the Greater Elemental of Wind's Kaboom) or an object-native Asds the unit always carries.
+pub(super) fn contact_self_destruct(source: &UnitSnapshot) -> Option<SelfDestructProfile> {
+    if let Some(charge) = source.status.damage_charge.filter(|charge| charge.armed) {
+        return Some(charge.profile.explosion);
+    }
+    source
+        .effective_passive_effects()
+        .find_map(|effect| match effect {
+            PassiveUnitEffect::ContactSelfDestruct(profile) => Some(profile),
+            _ => None,
+        })
+}
+
+fn detonation_tick(source: &UnitSnapshot) -> Option<u64> {
+    match source.status.damage_charge.filter(|charge| charge.armed) {
+        Some(charge) => charge.detonation_tick,
+        None => source.status.contact_detonation_tick,
+    }
+}
+
+fn set_detonation_tick(source: &mut UnitSnapshot, tick: Option<u64>) {
+    match source.status.damage_charge.as_mut().filter(|charge| charge.armed) {
+        Some(charge) => charge.detonation_tick = tick,
+        None => source.status.contact_detonation_tick = tick,
+    }
+}
+
 pub(super) fn autocast_target(
     source: &UnitSnapshot,
+    profile: SelfDestructProfile,
     units: &[UnitSnapshot],
     buildings: &[BuildingSnapshot],
     cell_size: i32,
     tick: u64,
 ) -> Option<(SimId, u64, i32)> {
-    let profile = source.status.damage_charge?.profile.explosion;
     let units = units
         .iter()
         .filter(|target| {
@@ -76,7 +104,7 @@ pub(super) fn autocast_target(
             (
                 target.id,
                 source.position.distance_sq(target.position),
-                source.collision_radius + target.collision_radius,
+                source.collision_radius + target.collision_radius + profile.cast_range,
             )
         });
     let buildings = buildings
@@ -92,7 +120,7 @@ pub(super) fn autocast_target(
             (
                 target.id,
                 point_to_footprint_distance_sq(source.position, target.footprint, cell_size),
-                source.collision_radius,
+                source.collision_radius + profile.cast_range,
             )
         });
     units
@@ -119,7 +147,7 @@ impl Simulation {
     ) {
         for index in 0..units.len() {
             let source = units[index];
-            let Some(mut charge) = source.status.damage_charge.filter(|state| state.armed) else {
+            let Some(profile) = contact_self_destruct(&source) else {
                 continue;
             };
             if source.health <= 0 {
@@ -129,20 +157,17 @@ impl Simulation {
                 || source.orders_suspended
                 || self.next_tick < source.status.stunned_until_tick
             {
-                units[index]
-                    .status
-                    .damage_charge
-                    .as_mut()
-                    .unwrap()
-                    .detonation_tick = None;
+                set_detonation_tick(&mut units[index], None);
                 continue;
             }
-            if charge.detonation_tick.is_none() {
+            let mut detonation = detonation_tick(&source);
+            if detonation.is_none() {
                 if source.status.is_performing_action(self.next_tick) {
                     continue;
                 }
                 let Some((_, distance, contact)) = autocast_target(
                     &source,
+                    profile,
                     units,
                     buildings,
                     self.config.navigation_cell_size,
@@ -154,20 +179,18 @@ impl Simulation {
                 if distance > square_i32(contact) {
                     continue;
                 }
-                charge.detonation_tick =
-                    Some(self.next_tick + u64::from(source.action_timing.cast_point_ticks));
+                detonation = Some(self.next_tick + u64::from(source.action_timing.cast_point_ticks));
                 units[index].status.pending_attack = None;
                 units[index].status.begin_action_animation(
                     ActionAnimationKind::Cast,
                     self.next_tick,
                     source.action_timing.cast_ticks,
                 );
-                units[index].status.damage_charge = Some(charge);
+                set_detonation_tick(&mut units[index], detonation);
             }
-            if self.next_tick < charge.detonation_tick.unwrap() {
+            if self.next_tick < detonation.unwrap() {
                 continue;
             }
-            let profile = charge.profile.explosion;
             self.last_ability_casts.push(AbilityCastEvent {
                 source: source.id,
                 ability: profile.ability,

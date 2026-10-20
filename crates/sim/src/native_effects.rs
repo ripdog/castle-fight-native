@@ -1726,6 +1726,7 @@ fn native_unit_mechanics_from_tuning(
                 }
                 TuningEffect::SourceDamageDispatcher { .. } | TuningEffect::HealthScaledAftershock { .. } | TuningEffect::DamageRetaliation { .. } | TuningEffect::LavaSpawn { .. } | TuningEffect::MirrorImage { .. }
                 | TuningEffect::DamageCharge { .. }
+                | TuningEffect::SelfDestruct { .. }
                 | TuningEffect::Poison { .. }
                 | TuningEffect::KillBerserk { .. }
                 | TuningEffect::Corruption { .. }
@@ -1767,7 +1768,6 @@ fn native_unit_mechanics_from_tuning(
                     }
                 }
                 TuningEffect::NativeImpale { .. } | TuningEffect::NativeTargetDebuff { .. } | TuningEffect::OrbAcidBomb { .. } | TuningEffect::OrbCharm { .. } | TuningEffect::NativeWeatherWave { .. } | TuningEffect::NativeEnchantmentGrant { .. } | TuningEffect::BuildingManaRegeneration { .. } | TuningEffect::RetaliationProjectile { .. } | TuningEffect::ForkedLightning { .. }
-                | TuningEffect::SelfDestruct { .. }
                 | TuningEffect::DamageThreshold { .. }
                 | TuningEffect::ConeWave { .. }
         | TuningEffect::ChainLightning { .. }
@@ -1909,6 +1909,9 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
         TuningEffect::DeathExplosion { profile, .. } => {
             assert!(profile.delay_ticks > 0);
             PassiveUnitEffect::DeathExplosion(*profile)
+        }
+        TuningEffect::SelfDestruct { profile, .. } => {
+            PassiveUnitEffect::ContactSelfDestruct(*profile)
         }
         TuningEffect::ManaAttackOrb { profile, .. } => PassiveUnitEffect::ManaAttackOrb(*profile),
         TuningEffect::Incinerate { profile, .. } => PassiveUnitEffect::Incinerate(*profile),
@@ -2334,7 +2337,6 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
         | TuningEffect::BuildingImprovement { .. }
         | TuningEffect::BuildingManaRegeneration { .. }
         | TuningEffect::ConeWave { .. }
-        | TuningEffect::SelfDestruct { .. }
         | TuningEffect::ScriptedAutomatic { .. }
         | TuningEffect::ElvenAutomatic { .. }
         | TuningEffect::RetaliationProjectile { .. }

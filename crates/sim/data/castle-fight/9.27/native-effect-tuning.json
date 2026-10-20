@@ -3,6 +3,44 @@
   "map_version": "9.27",
   "effects": [
     {
+      "source_kind": "unit-ability",
+      "source_key": "A0A3",
+      "unit_rawcode": "n01V",
+      "kind": "death-explosion",
+      "profile": {
+        "ability": 1093681459,
+        "full_radius": 153600,
+        "full_damage": 150,
+        "partial_radius": 286720,
+        "partial_damage": 75,
+        "delay_ticks": 9,
+        "targets": 5
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "Amnx",
+        "targets": "debris,enemies,ground,structure,ward",
+        "delay_field": "Dur1",
+        "native_damage_policy": "universal-spell-armor-type-v1"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A099",
+      "unit_rawcode": "n01V",
+      "kind": "self-destruct",
+      "profile": {
+        "ability": 1093679417,
+        "full_radius": 153600,
+        "full_damage": 275,
+        "partial_radius": 307200,
+        "partial_damage": 125,
+        "building_damage_per_10k": 7500,
+        "targets": 5,
+        "cast_range": 10240
+      }
+    },
+    {
       "kind": "elven-automatic",
       "source_kind": "unit-ability",
       "source_key": "A09F",
@@ -4855,7 +4893,8 @@
           "partial_radius": 358400,
           "partial_damage": 225,
           "building_damage_per_10k": 7500,
-          "targets": 6
+          "targets": 6,
+          "cast_range": 0
         }
       },
       "effect_ability_rawcode": "A0EN",
@@ -4879,7 +4918,8 @@
         "partial_radius": 358400,
         "partial_damage": 225,
         "building_damage_per_10k": 7500,
-        "targets": 6
+        "targets": 6,
+        "cast_range": 0
       }
     },
     {

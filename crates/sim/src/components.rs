@@ -961,10 +961,12 @@ pub struct SelfDestructProfile {
     pub partial_damage: i32,
     pub building_damage_per_10k: u16,
     pub targets: AttackTargetMask,
+    /// Native cast range added to body contact before the autocast detonates; zero is contact.
+    pub cast_range: i32,
 }
 
 impl SelfDestructProfile {
-    pub(crate) fn canonical_words(self) -> [u64; 7] {
+    pub(crate) fn canonical_words(self) -> [u64; 8] {
         [
             u64::from(self.ability.0),
             self.full_radius as u64,
@@ -973,6 +975,7 @@ impl SelfDestructProfile {
             self.partial_damage as u64,
             u64::from(self.building_damage_per_10k),
             u64::from(self.targets.bits()),
+            self.cast_range as u64,
         ]
     }
 }
@@ -989,8 +992,8 @@ pub struct DamageChargeProfile {
 }
 
 impl DamageChargeProfile {
-    pub(crate) fn canonical_words(self) -> [u64; 13] {
-        let mut words = [0; 13];
+    pub(crate) fn canonical_words(self) -> [u64; 14] {
+        let mut words = [0; 14];
         words[..6].copy_from_slice(&[
             u64::from(self.marker.0),
             self.mana_maximum as u64,
@@ -1225,6 +1228,9 @@ pub enum PassiveUnitEffect {
     LavaSpawn(LavaSpawnProfile),
     MirrorImage(MirrorImageProfile),
     DamageCharge(DamageChargeProfile),
+    /// Object-native Asds autocast: the bearer runs to contact with the nearest valid enemy and
+    /// detonates. Unlike [`Self::DamageCharge`], it is armed from the start.
+    ContactSelfDestruct(SelfDestructProfile),
     Poison(PoisonProfile),
     DamageThreshold(DamageThresholdProfile),
     KillBerserk(KillBerserkProfile),
@@ -2432,6 +2438,8 @@ pub struct StatusState {
     pub retaliation_sequence: u64,
     /// Tick at which the Echo Step marker's script-restarted cooldown ends.
     pub echo_step_ready_tick: u64,
+    /// Tick at which an in-progress contact self-destruct cast releases its explosion.
+    pub contact_detonation_tick: Option<u64>,
     /// Completed tick of the last flying-attacker retarget order, throttling the next one.
     pub flying_retarget_tick: Option<u64>,
     pub orb_cooldowns: [Option<OrbCooldown>; 2],

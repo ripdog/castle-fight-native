@@ -2214,6 +2214,7 @@ fn hash_status_state(hash: &mut Fnv64, status: &StatusState) {
     }
     hash.write_u64(status.retaliation_sequence);
     hash.write_u64(status.echo_step_ready_tick);
+    hash_optional_u64(hash, status.contact_detonation_tick);
     hash_optional_u64(hash, status.flying_retarget_tick);
     for entry in status.orb_cooldowns {
         hash.write_u8(u8::from(entry.is_some()));
@@ -2793,6 +2794,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: &PassiveUnitEffects) {
             }
             PassiveUnitEffect::DamageCharge(profile) => {
                 hash.write_u8(18);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
+            PassiveUnitEffect::ContactSelfDestruct(profile) => {
+                hash.write_u8(44);
                 for word in profile.canonical_words() {
                     hash.write_u64(word);
                 }

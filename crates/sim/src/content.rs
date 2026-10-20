@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r193";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r194";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -1952,6 +1952,12 @@ fn stable_ability_id(
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A09F") => {
             0x4000_0240
         }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A099") => {
+            0x4000_0241
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0A3") => {
+            0x4000_0242
+        }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0GN") => {
             0x4000_022a
         }
@@ -3787,6 +3793,12 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
                     hash.write_u64(word);
                 }
             }
+            PassiveUnitEffect::ContactSelfDestruct(profile) => {
+                hash.write_u8(44);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
             PassiveUnitEffect::Sphere(profile) => {
                 hash.write_u8(17);
                 hash.write_u32(profile.ability.0);
@@ -5377,7 +5389,7 @@ impl ExtractedContent927 {
                 damage_type: parse_damage_type_927(columns[11])?,
                 weapon_kind,
                 targets: parse_attack_targets_927(columns[13]),
-                damage: parse_optional_decimal_rounded_i32_927(columns[26])?,
+                damage: parse_report_average_damage_927(&columns)?,
                 cooldown_ticks: parse_seconds_to_ticks_u16_927(columns[20])?,
                 range: world(range_world),
             };
@@ -6259,6 +6271,22 @@ fn extracted_building_income_semantics_927(rawcode: u32) -> (u16, bool, Option<u
             panic!("building {rawcode:#010x} missing from retained 9.27 income semantics")
         });
     (row.factor_per_1000, row.is_siege, row.precursor)
+}
+
+/// The report's average damage. A literal SLK dash for the base damage is the native integer
+/// zero, which leaves the report's average blank; the weapon then deals its dice alone.
+fn parse_report_average_damage_927(columns: &[&str]) -> Result<Option<i32>, String> {
+    if let Some(damage) = parse_optional_decimal_rounded_i32_927(columns[26])? {
+        return Ok(Some(damage));
+    }
+    if columns[14].trim() != "-" {
+        return Ok(None);
+    }
+    let dice = columns[16].trim().parse::<f64>().ok();
+    let sides = columns[18].trim().parse::<f64>().ok();
+    Ok(dice
+        .zip(sides)
+        .map(|(dice, sides)| (dice * (sides + 1.0) / 2.0).round() as i32))
 }
 
 fn parse_optional_u16_927(value: &str) -> Result<Option<u16>, String> {

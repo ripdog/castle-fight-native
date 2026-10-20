@@ -80,14 +80,22 @@ def hostile_spell_bonus(recipe: dict[str, Any], fields: dict[str, str], mechanic
 
 
 def self_destruct_profile(source: str, fields: dict[str, str], base: str) -> dict[str, Any]:
-    if base != "Asds" or set(fields["targs1"].split(",")) != {"air", "enemies", "ward", "structure", "debris"}:
-        raise ValueError("self-destruct requires audited native air/structure/debris targeting")
-    if any(scaled(fields[key]) != 0 for key in ("rng1", "cool1", "cost1")) or scaled(fields["dataf1"]) != 1:
-        raise ValueError("self-destruct requires free contact autocast and corpse explosion flag")
+    tokens = set(fields["targs1"].split(","))
+    # Native Asds hostile masks audited so far: the script-granted air/structure variant and the
+    # object-granted ground/structure variant. Every other qualifier would be silently dropped.
+    classes = tokens & {"air", "ground", "structure"}
+    if (base != "Asds" or "enemies" not in tokens or not classes
+            or tokens - {"air", "ground", "structure", "enemies", "ward", "debris", "tree"}):
+        raise ValueError("self-destruct requires audited native hostile air/ground/structure targeting")
+    # A positive cast range is added to body contact; the autocast is otherwise free.
+    if any(scaled(fields[key]) != 0 for key in ("cool1", "cost1")) or scaled(fields["dataf1"]) not in (0, 1):
+        raise ValueError("self-destruct requires a free autocast and a boolean corpse-explosion flag")
     return {"ability": int.from_bytes(source.encode(), "big"),
         "full_radius": scaled(fields["dataa1"], 1024), "full_damage": scaled(fields["datab1"]),
         "partial_radius": scaled(fields["datac1"], 1024), "partial_damage": scaled(fields["datad1"]),
-        "building_damage_per_10k": scaled(fields["datae1"], 10_000), "targets": 6}
+        "building_damage_per_10k": scaled(fields["datae1"], 10_000),
+        "targets": sum(bit for token, bit in (("ground", 1), ("air", 2), ("structure", 4)) if token in classes),
+        "cast_range": scaled(fields["rng1"], 1024)}
 
 
 def damage_charge_profile(recipe: dict, unit: dict, mechanics: dict) -> dict:

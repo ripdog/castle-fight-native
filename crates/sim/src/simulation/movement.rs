@@ -196,29 +196,29 @@ impl Simulation {
         if unit.orders_suspended || self.next_tick < unit.status.stunned_until_tick {
             return MovementDecision::stationary(current);
         }
-        if unit.status.damage_charge.is_some_and(|charge| charge.armed) && !unit.abilities_disabled
-        {
-            let mut ordered = *unit;
-            ordered.secondary_attack = None;
-            ordered.attack_targets = unit.status.damage_charge.unwrap().profile.explosion.targets;
-            let target = damage_charge::autocast_target(
-                unit,
-                units,
-                buildings,
-                self.config.navigation_cell_size,
-                self.next_tick,
-            );
-            ordered.target = target.map(|target| target.0);
-            ordered.attack.range = target.map_or(unit.collision_radius, |target| target.2);
-            return self.desired_air_position(
-                &ordered,
-                units,
-                buildings,
-                unit_health,
-                building_health,
-                movement_speed,
-            );
-        }
+        // A unit committed to a contact self-destruct walks to its nearest valid detonation
+        // target instead of its weapon target, on its own (ground or air) topology.
+        let contact_orders;
+        let unit = match damage_charge::contact_self_destruct(unit) {
+            Some(explosion) if !unit.abilities_disabled => {
+                let mut ordered = *unit;
+                ordered.secondary_attack = None;
+                ordered.attack_targets = explosion.targets;
+                let target = damage_charge::autocast_target(
+                    unit,
+                    explosion,
+                    units,
+                    buildings,
+                    self.config.navigation_cell_size,
+                    self.next_tick,
+                );
+                ordered.target = target.map(|target| target.0);
+                ordered.attack.range = target.map_or(unit.collision_radius, |target| target.2);
+                contact_orders = ordered;
+                &contact_orders
+            }
+            _ => unit,
+        };
         if unit.movement_class == MovementClass::Air {
             return self.desired_air_position(
                 unit,

@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A0A3","implementation":"warcraft-death-explosion-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A099","implementation":"warcraft-self-destruct-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A09F","implementation":"warcraft-elven-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A09Z","implementation":"warcraft-hardened-skin-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A09Y","implementation":"warcraft-hardened-skin-v1","valid_from":"9.27","valid_through":"9.27"},
