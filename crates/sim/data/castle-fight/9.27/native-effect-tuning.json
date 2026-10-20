@@ -4,6 +4,28 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0FZ",
+      "unit_rawcode": "n02M",
+      "kind": "death-explosion",
+      "profile": {
+        "ability": 1093682778,
+        "full_radius": 163840,
+        "full_damage": 325,
+        "partial_radius": 327680,
+        "partial_damage": 175,
+        "delay_ticks": 9,
+        "targets": 5
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "Amnx",
+        "targets": "debris,enemies,ground,structure,ward",
+        "delay_field": "Dur1",
+        "native_damage_policy": "universal-spell-armor-type-v1"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A0A3",
       "unit_rawcode": "n01V",
       "kind": "death-explosion",

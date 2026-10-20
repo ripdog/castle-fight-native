@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    GoblinRocketeer = 0x1000_0098 => b"n02M",
     LunaticGoblin = 0x1000_0097 => b"n01V",
     RocketTank = 0x1000_0096 => b"h098",
     HeavyTank = 0x1000_0095 => b"h06S",
@@ -187,6 +188,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    RocketLab = 0x2000_0094 => b"h077",
     DemolitionLab = 0x2000_0093 => b"h05M",
     RocketTankFactory = 0x2000_0092 => b"h09H",
     HeavyTankFactory = 0x2000_0091 => b"h09B",

@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0FZ","unit_rawcode":"n02M","kind":"death-explosion"},
     {"source_kind":"unit-ability","source_key":"A0A3","unit_rawcode":"n01V","kind":"death-explosion"},
     {"source_kind":"unit-ability","source_key":"A099","unit_rawcode":"n01V","kind":"self-destruct"},
     {"source_kind":"unit-ability","source_key":"A09F","unit_rawcode":"h098","kind":"phoenix-fire"},
