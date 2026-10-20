@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    RocketTank = 0x1000_0096 => b"h098",
     HeavyTank = 0x1000_0095 => b"h06S",
     AssaultTank = 0x1000_0094 => b"h099",
     MineLayer = 0x1000_0093 => b"h06U",
@@ -185,6 +186,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    RocketTankFactory = 0x2000_0092 => b"h09H",
     HeavyTankFactory = 0x2000_0091 => b"h09B",
     AssaultTankFactory = 0x2000_0090 => b"h09I",
     MineLayerFactory = 0x2000_008f => b"h09J",

@@ -43,3 +43,10 @@ Retained Castle Fight 9.27/r1 extraction tree: `8ea806dca331ff254995e94e6f0baf22
 - Identity/source: runtime r192; `h09B` (`hbla`) upgrades from the Tank Factory (and leads to the Rocket Tank Factory) and produces `h06S` (`hmtt`). Protected life, armor, movement and the Normal missile weapon (ground and structures, the retained long range and projectile speed) come from the catalogs. The second weapon (Pierce, air) is disabled and unavailable.
 - Complete inventory/control flow: the sole ability is `A09Z` (`Assk`, "Heavy Plating"), the native Hardened Skin row with its own retained ignored damage; the Rocket Tank carries the same ability object, so one recipe serves both bodies. No script grant, proxy or hidden marker exists on this body.
 - State: none beyond ordinary projectile state.
+
+## Rocket Tank Factory / Rocket Tank
+
+- Identity/source: runtime r193; `h09H` (`hbla`) upgrades from the Heavy Tank Factory (the end of the tank line) and produces `h098` (`hmtt`). Protected life, armor, movement and the Normal missile weapon (ground and structures) come from the catalogs; the second weapon (Pierce, air) is disabled and unavailable, so the main gun cannot hit flyers. The body has no mana pool.
+- Complete inventory/control flow: `A09Z` (`Assk`, "Heavy Plating") is the Heavy Tank's native Hardened Skin row, shared; `A09F` (`Apxf`, "Rockets") is a native Phoenix Fire row with no script consumer, projected through the same automatic-ability recipe the Wizard's Phoenix Fire uses. Its retained mask is air enemies only, its direct damage is the retained `Data` value, its burn rate and duration are effectively zero (a 0.01 s duration, i.e. one tick), its cooldown is the retained one second and it is free; the cast radius is the retained `Area`. It targets a random visible enemy flyer in range; ground units and structures are never selected.
+- Known tooltip/object discrepancy: the importer's tooltip calls the ability "Barrage"; the object is Phoenix Fire. The burning ground effect of stock Phoenix Fire is absent because the map zeroes the damage over time.
+- State: none beyond the in-flight native bolt state.

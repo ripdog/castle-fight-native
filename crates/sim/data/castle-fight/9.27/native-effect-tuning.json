@@ -3,6 +3,47 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "elven-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A09F",
+      "unit_rawcode": "h098",
+      "spellcasting": {
+        "mana": {
+          "maximum": 0,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147483648
+        },
+        "ability": {
+          "id": 1093679430,
+          "mana_cost": 0,
+          "cooldown_ticks": 30,
+          "range": 870400,
+          "target_policy": "RandomEnemyUnitOrBuilding",
+          "effect": {
+            "PhoenixFire": {
+              "ability": 1093679430,
+              "damage": 85,
+              "stun_ticks": 0,
+              "hero_stun_ticks": 0,
+              "damage_per_second": 0,
+              "duration_ticks": 1,
+              "speed_per_tick": 34133,
+              "cleanse": false,
+              "targets": 2
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 0,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "unit": "resolved/units.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv"
+      }
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A09Z",
       "unit_rawcode": "h06S",
