@@ -3,6 +3,26 @@
   "map_version": "9.27",
   "effects": [
     {
+      "source_kind": "unit-ability",
+      "source_key": "A09Y",
+      "unit_rawcode": "h099",
+      "kind": "hardened-skin",
+      "profile": {
+        "ability": 1093679449,
+        "effect": {
+          "HardenedSkin": {
+            "chance_per_10k": 10000,
+            "minimum_damage": 5,
+            "ignored_damage": 18
+          }
+        }
+      },
+      "provenance": {
+        "ability": "A09Y",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
       "source_key": "A095",
