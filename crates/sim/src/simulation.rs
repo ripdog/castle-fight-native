@@ -747,6 +747,9 @@ pub struct Simulation {
     last_building_spell_visuals: Vec<BuildingSpellVisualEvent>,
     last_chain_lightnings: Vec<ChainLightningEvent>,
     last_rescue_strike_visuals: Vec<RescueStrikeVisualEvent>,
+    /// Entities reduced to zero health by world-level effects (Rescue Strike) between combat
+    /// snapshots. The next snapshots include them so the ordinary death phase resolves them.
+    externally_slain: Vec<Entity>,
     pending_rescue_strikes: Vec<PendingRescueStrike>,
     player_strikes: Vec<PlayerStrikeState>,
     team_rescue_ready_ticks: [u64; 2],
@@ -933,6 +936,7 @@ impl Simulation {
             last_building_spell_visuals: Vec::new(),
             last_chain_lightnings: Vec::new(),
             last_rescue_strike_visuals: Vec::new(),
+            externally_slain: Vec::new(),
             pending_rescue_strikes: Vec::new(),
             player_strikes: player_configs
                 .iter()
@@ -2598,6 +2602,7 @@ impl Simulation {
             self.topology_dirty = true;
         }
         spans.add(Span::BuildingDespawn, building_despawn_start.elapsed());
+        self.externally_slain.clear();
 
         timed!(spans, Span::PostCommitCleanup, {
             self.prune_retired_air_bonus_sources();
@@ -4021,8 +4026,11 @@ impl Simulation {
             query
                 .iter(&self.world)
                 .filter(
-                    |((_, _, _, _, _, health, _, _, _, _, status, _, _, _), _, _)| {
-                        (include_dead || health.current > 0) && keep(status)
+                    |((entity, _, _, _, _, health, _, _, _, _, status, _, _, _), _, _)| {
+                        (include_dead
+                            || health.current > 0
+                            || self.externally_slain.contains(entity))
+                            && keep(status)
                     },
                 )
                 .map(|((entity, id, ..), _, _)| (*id, entity)),
@@ -4240,7 +4248,9 @@ impl Simulation {
         keys.extend(
             query
                 .iter(&self.world)
-                .filter(|((_, _, _, _, health, _, _, _, _, _, _, _, _), _)| health.current > 0)
+                .filter(|((entity, _, _, _, health, _, _, _, _, _, _, _, _), _)| {
+                    health.current > 0 || self.externally_slain.contains(entity)
+                })
                 .map(|((entity, id, ..), _)| (*id, entity)),
         );
         keys.sort_unstable_by_key(|&(id, _)| id);

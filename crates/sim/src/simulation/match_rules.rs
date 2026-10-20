@@ -303,6 +303,9 @@ impl Simulation {
                     // for deciding whether to refund an unused strike.
                     kills += 1;
                     targets.push(id);
+                    if self.world.get::<Health>(entity).unwrap().current <= 0 {
+                        self.externally_slain.push(entity);
+                    }
                 }
                 let team_index = usize::from(source_team.0);
                 self.team_rescue_ready_ticks[team_index] =

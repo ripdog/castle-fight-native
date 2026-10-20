@@ -242,6 +242,40 @@ fn rescue_strike_uses_separate_chaos_death_and_normal_magic_damage_packets() {
 }
 
 #[test]
+fn rescue_strike_victims_are_removed_by_the_ordinary_death_phase() {
+    let mut sim = timed_simulation(1);
+    let victim = sim.spawn_unit(UnitSpawn {
+        team: Team(1),
+        position: SimPoint::new(0, 0),
+        health: 1,
+        attack: AttackProfile {
+            delivery: AttackDelivery::Melee,
+            damage: 0,
+            range: 0,
+            acquisition_range: 0,
+            cooldown_ticks: 100,
+        },
+        movement: MovementProfile { speed_per_tick: 0 },
+    });
+    sim.pending_rescue_strikes.push(PendingRescueStrike {
+        player: PlayerId(0),
+        builder: SimId(999),
+        center: SimPoint::new(0, 0),
+        resolves_at: 0,
+        finishes_at: 45,
+        kills: None,
+    });
+    let result = sim.step();
+    assert_eq!(sim.pending_rescue_strikes[0].kills, Some(1));
+    assert!(
+        sim.unit(victim).is_none(),
+        "slain unit must not linger at 0 health"
+    );
+    assert_eq!(result.units_alive, 0);
+    assert!(sim.externally_slain.is_empty());
+}
+
+#[test]
 fn empty_rescue_strike_refunds_only_after_finish_delay() {
     let mut sim = timed_simulation(1);
     sim.player_strikes[0].available = false;
