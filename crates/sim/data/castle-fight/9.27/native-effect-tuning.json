@@ -4,6 +4,19 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A094",
+      "unit_rawcode": "n01T",
+      "kind": "cleave",
+      "radius_world": 160,
+      "damage_per_10k": 10000,
+      "targets": 1,
+      "provenance": {
+        "ability": "A094",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A092",
       "unit_rawcode": "n024",
       "kind": "pulverize",

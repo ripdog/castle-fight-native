@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    GoblinShredder = 0x1000_009d => b"n01T",
     AdamantGolem = 0x1000_009c => b"n024",
     IronGolem = 0x1000_009b => b"n01X",
     FlamegunnerSergeant = 0x1000_009a => b"z003",
@@ -192,6 +193,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    LumberMill = 0x2000_0099 => b"h05U",
     PreciousGolemFactory = 0x2000_0098 => b"h097",
     GolemFactory = 0x2000_0097 => b"h05V",
     Arsenal = 0x2000_0096 => b"h09P",
