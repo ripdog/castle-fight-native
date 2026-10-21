@@ -15422,6 +15422,75 @@
       "ubertip": ""
     }
   ],
+  "power_plant": {
+    "byte_offset": "1415906",
+    "evidence_kind": "exact-native-aura-object-data-and-cross-runtime-script",
+    "mechanic_kind": "area-building-buffs-cleanse-and-spawn-augmentation",
+    "parameters_json": "{\"building_armor_aura_ability_id\":1093679443,\"building_armor_aura_object_data\":{\"Armor Bonus\":2,\"Percent Bonus\":0},\"building_armor_bonus\":2,\"building_armor_buff_id\":1110454603,\"building_aura_radius\":180,\"cleaned_buff_ids\":[1114010234,1110454349],\"disable_cleanse_excludes_power_plant_itself\":true,\"disable_cleanse_radius\":252,\"disable_cleanse_requires_allied_structure\":false,\"disable_cleanse_requires_structure\":true,\"disable_cleanse_sweep_interval_seconds\":4,\"mana_regen_aura_ability_id\":1093679440,\"mana_regen_aura_object_data\":{\"Mana Regeneration Increase\":0.2,\"Percent Bonus\":0},\"mana_regen_bonus_per_second\":0.2,\"power_plant_name\":\"Power Plant\",\"power_plant_tooltip\":\"|cffffac00Utility|r|n|n|cff80ff00Power Surge|r \u2022 All buildings in range gain |cfffffc012|r armor, immunity to disables and a unique effect based on their type.|n|n|cff80ff00Tower|r \u2022 Attack damage is increased by |cfffffc0125|r%.|n|n|cff80ff00Production|r \u2022 Units produced gain |cfffffc01150|r max hp, |cfffffc0120|r% damage, |cfffffc014|r armor and |cfffffc0115|r% spell resistance.|n|n|cff80ff00Utility|r \u2022 Cooldown is reduced by |cfffffc0120|r%, must be using mana to benefit from this.\",\"power_plant_unit_id\":1747990868,\"spawn_armor_bonus\":4,\"spawn_armor_bonus_ability_id\":1093679441,\"spawn_armor_bonus_object_data\":{\"Defense Bonus\":4},\"spawn_attack_damage_bonus_fraction\":0.2,\"spawn_damage_bonus_ability_id\":1093679442,\"spawn_damage_bonus_object_data\":{\"Attack Damage Increase\":0.2,\"Flat Bonus\":0,\"Melee Bonus\":1,\"Ranged Bonus\":1},\"spawn_hp_bonus_technique\":\"add-A09M,set-level-4(-150-max-life),remove-A09M\",\"spawn_hp_stack_ability_id\":1093679437,\"spawn_hp_stack_object_data_at_level4\":{\"Max Life Gained\":-150},\"spawn_hp_stack_temporary_level\":4,\"spawn_permanent_max_hp_bonus\":150,\"spawn_requires_building_power_armor_buff_id\":1110454603,\"spawn_spell_damage_reduction\":0.15,\"spawn_spell_resist_ability_id\":1093683286,\"spawn_spell_resist_object_data\":{\"Damage Bonus\":0,\"Damage Reduction\":0.15},\"spell_resist_exclusion_ability_ids\":[1093679179,1093679183,1093679411,1093681480,1093681481,1093681484,1093681486,1093681497,1093681498,1093681750,1093681990,1093682760,1093682761,1093682762,1093682766,1093683030,1093683248],\"tower_attack_damage_bonus_fraction\":0.25,\"tower_damage_aura_ability_id\":1093679446,\"tower_damage_aura_object_data\":{\"Attack Damage Increase\":0.25,\"Flat Bonus\":0,\"Melee Bonus\":0,\"Play Channel Animation\":1,\"Ranged Bonus\":1}}",
+    "related_objects_json": "[{\"categories\":\"units\",\"names\":\"Power Plant\",\"rawcode\":\"h09T\",\"rawcode_integer\":1747990868},{\"categories\":\"abilities\",\"names\":\"Power Armor\",\"rawcode\":\"A09S\",\"rawcode_integer\":1093679443},{\"categories\":\"buffs\",\"names\":\"Power Armor\",\"rawcode\":\"B01K\",\"rawcode_integer\":1110454603},{\"categories\":\"abilities\",\"names\":\"\",\"rawcode\":\"A09P\",\"rawcode_integer\":1093679440},{\"categories\":\"abilities\",\"names\":\"\",\"rawcode\":\"A09V\",\"rawcode_integer\":1093679446},{\"categories\":\"\",\"names\":\"\",\"rawcode\":\"Bfrz\",\"rawcode_integer\":1114010234},{\"categories\":\"buffs,destructables\",\"names\":\"Frozen | IWALL\",\"rawcode\":\"B00M\",\"rawcode_integer\":1110454349},{\"categories\":\"abilities\",\"names\":\"Stacking Life Bonus\",\"rawcode\":\"A09M\",\"rawcode_integer\":1093679437},{\"categories\":\"abilities\",\"names\":\"\",\"rawcode\":\"A09Q\",\"rawcode_integer\":1093679441},{\"categories\":\"abilities\",\"names\":\"\",\"rawcode\":\"A09R\",\"rawcode_integer\":1093679442},{\"categories\":\"abilities\",\"names\":\"pp spell resist\",\"rawcode\":\"A0HV\",\"rawcode_integer\":1093683286},{\"categories\":\"abilities\",\"names\":\"ZZZauberschaden-Reduzierung\",\"rawcode\":\"A08K\",\"rawcode_integer\":1093679179},{\"categories\":\"abilities\",\"names\":\"\",\"rawcode\":\"A08O\",\"rawcode_integer\":1093679183},{\"categories\":\"abilities\",\"names\":\"\",\"rawcode\":\"A093\",\"rawcode_integer\":1093679411},{\"categories\":\"abilities\",\"names\":\"Spell Resist (legendary)\",\"rawcode\":\"A0AH\",\"rawcode_integer\":1093681480},{\"categories\":\"abilities\",\"names\":\"\",\"rawcode\":\"A0AI\",\"rawcode_integer\":1093681481},{\"categories\":\"abilities\",\"names\":\"HEL: Blademaster (spell resist)\",\"rawcode\":\"A0AL\",\"rawcode_integer\":1093681484},{\"categories\":\"abilities\",\"names\":\"HEL: Elder Blademaster (spell resist)\",\"rawcode\":\"A0AN\",\"rawcode_integer\":1093681486},{\"categories\":\"abilities\",\"names\":\"NAT: Dryad (spell resist)\",\"rawcode\":\"A0AY\",\"rawcode_integer\":1093681497},{\"categories\":\"abilities\",\"names\":\"NAT: Keeper of the Groove (spell resist)\",\"rawcode\":\"A0AZ\",\"rawcode_integer\":1093681498},{\"categories\":\"abilities\",\"names\":\"NAT: Ancient Keeper (spell immune)\",\"rawcode\":\"A0BV\",\"rawcode_integer\":1093681750},{\"categories\":\"abilities\",\"names\":\"NAT: Mountain Giant (spell resist)\",\"rawcode\":\"A0CF\",\"rawcode_integer\":1093681990},{\"categories\":\"abilities\",\"names\":\"water lesser(spell resist)\",\"rawcode\":\"A0FH\",\"rawcode_integer\":1093682760},{\"categories\":\"abilities\",\"names\":\"water (spell resist)\",\"rawcode\":\"A0FI\",\"rawcode_integer\":1093682761},{\"categories\":\"abilities\",\"names\":\"water greater (spell resist)\",\"rawcode\":\"A0FJ\",\"rawcode_integer\":1093682762},{\"categories\":\"abilities\",\"names\":\"spell resist 50%\",\"rawcode\":\"A0FN\",\"rawcode_integer\":1093682766},{\"categories\":\"abilities\",\"names\":\"\",\"rawcode\":\"A0GV\",\"rawcode_integer\":1093683030},{\"categories\":\"abilities\",\"names\":\"spell resist 20%\",\"rawcode\":\"A0H0\",\"rawcode_integer\":1093683248}]",
+    "source_functions": "dK,registerPowerPlant,ForGroupCallback_forEachIn_PowerPlantRuntime_callback_forEachIn_PowerPlantRuntime,ForGroupCallback_forUnitsInRange_PowerPlantRuntime_callback_forUnitsInRange_PowerPlantRuntime,setupUnit,applyPowerArmor,hasNoPowerArmorExclusion",
+    "system_id": "power-plant-power-surge",
+    "trigger": "construction-plus-periodic-sweep-plus-unit-spawn"
+  },
+  "power_plant_profile": {
+    "armor": {
+      "ability": 1093679443,
+      "bonus_per_100": 200,
+      "buff": 1110454603,
+      "radius": 184320
+    },
+    "cleanse": {
+      "buffs": [
+        1114010234,
+        1110454349
+      ],
+      "interval_ticks": 120,
+      "radius": 258048
+    },
+    "drums": {
+      "ability": 1093679446,
+      "buff": 1110454604,
+      "damage_per_10k": 2500,
+      "radius": 184320
+    },
+    "mana": {
+      "ability": 1093679440,
+      "buff": 1110454601,
+      "radius": 184320,
+      "regeneration_per_second_per_10k": 2000
+    },
+    "source_rawcode": 1747990868,
+    "spawn": {
+      "armor_ability": 1093679441,
+      "armor_bonus_per_100": 400,
+      "damage_ability": 1093679442,
+      "damage_per_10k": 2000,
+      "life_ability": 1093679437,
+      "max_life_bonus": 150,
+      "requires_buff": 1110454603,
+      "spell_damage_taken_per_10k": 8500,
+      "spell_resist_ability": 1093683286,
+      "spell_resist_exclusions": [
+        1093679179,
+        1093679183,
+        1093679411,
+        1093681480,
+        1093681481,
+        1093681484,
+        1093681486,
+        1093681497,
+        1093681498,
+        1093681750,
+        1093681990,
+        1093682760,
+        1093682761,
+        1093682762,
+        1093682766,
+        1093683030,
+        1093683248
+      ]
+    }
+  },
   "production_replication": {
     "chance_per_100": 17,
     "extra_copies_per_shrine": 1,
@@ -17140,6 +17209,14 @@
       "byte_offset": 3736258,
       "source": "function FL()local wOr=nil local xOr=nil local yOr=nil local zOr=nil local AOr=nil local BOr=nil local COr=nil local DOr=nil local EOr=nil local FOr=nil local GOr=nil bW=__wurst_ensureInt(1095577723)aW=1747990359 ZV=1093683279 YV=384. XV=350. WV=20. VV=2. RV=_I[(_d[6948]or _y(6948,_T(243073,\"fb517a443e42d1c387bffe15dcc0d6a120b19ff756\")))]()QV=ArrayList_new_ArrayList1()PV=(__wurst_intDiv(real_toInt((z_[1]-A_[1])),128)+1)OV=(__wurst_intDiv(real_toInt((z_[2]-A_[2])),128)+1)AOr=aW BOr=bW COr=Jsb wOr=Gz:create1052()DOr=BOr if(Isb<Vsb)then EOr=Isb Hsb[EOr]=AOr Gsb[EOr]=DOr Fsb[EOr]=COr Isb=(Isb+1)GOr=EVENT_PLAYER_UNIT_SPELL_EFFECT FOr=qe:create140()EventListener_construct_EventListener(FOr)FOr.abilId=DOr FOr.unitTypeId=AOr FOr.slot=EOr FOr.cb=wOr EventListener_add(GOr,FOr)end AOr=aW COr=ZV xOr=Hz:create1053()_I[(_d[6949]or _y(6949,_T(342881,\"f57a29da6a624398feffe6ad258d29a2a7936e18c0\")))](AOr,COr,xOr)yOr=Iz:create1054()yOr.DamageListener_priority=0 yOr.DamageListener_prev=nil yOr.DamageListener_next=nil yOr.DamageListener_unreduced=false yOr.DamageListener_registered=false DamageEvent_addListener(yOr)zOr=Jz:create1055()watch(zOr)end _I[_T(509848,\"fd3e6d162af7b9e29584bc65e05d55c59723aeaa11\")]=FL "
     },
+    "ForGroupCallback_forEachIn_PowerPlantRuntime_callback_forEachIn_PowerPlantRuntime": {
+      "byte_offset": 1416522,
+      "source": "function ForGroupCallback_forEachIn_PowerPlantRuntime_callback_forEachIn_PowerPlantRuntime(Djn,Ejn)local Fjn=nil local Gjn=nil local Hjn={0.;0.}local Ijn=nil local Jjn={0.;0.}local Kjn=nil local Ljn=nil if((not(Ejn==nil))and(widget_getLife(Ejn)>0.405))then Fjn=Ejn Hjn=tupleCopy1(unit_getPos(Fjn))Ijn=N1 Gjn=xt:create789()Jjn=tupleCopy1(Hjn)Kjn=Ijn Ljn=Gjn forUnitsInRange(Jjn,Kjn,false,Ljn)end end VPb={__index=zt}"
+    },
+    "ForGroupCallback_forUnitsInRange_PowerPlantRuntime_callback_forUnitsInRange_PowerPlantRuntime": {
+      "byte_offset": 1415906,
+      "source": "function ForGroupCallback_forUnitsInRange_PowerPlantRuntime_callback_forUnitsInRange_PowerPlantRuntime(zjn,Ajn)local Bjn=nil if((((widget_getLife(Ajn)>0.405)and unit_isType(Ajn,UNIT_TYPE_STRUCTURE))and(not(unit_getTypeId(Ajn)==O1)))and((unit_getAbilityLevel(Ajn,1114010234)>0)or(unit_getAbilityLevel(Ajn,1110454349)>0)))then unit_removeAbility(Ajn,1114010234)unit_removeAbility(Ajn,1110454349)Bjn=addEffect(\"Abilities\\\\Spells\\\\Orc\\\\MirrorImage\\\\MirrorImageDeathCaster.mdl\",unit_getPos(Ajn))__wurst_safe_DestroyEffect(Bjn)end end WPb={__index=yt}"
+    },
     "ForGroupCallback_forUnitsInRange_RaceNorthernAbilities_callback_forUnitsInRange_RaceNorthernAbilities": {
       "byte_offset": 1486433,
       "source": "function ForGroupCallback_forUnitsInRange_RaceNorthernAbilities_callback_forUnitsInRange_RaceNorthernAbilities(Bxn,Cxn)if((((isAliveCombatSapper(Cxn)and unit_isEnemyOf(Cxn,Bxn.p))and(unit_getAbilityLevel(Cxn,1098282348)<=0))and(unit_getAbilityLevel(Cxn,1093679176)<=0))and(not(unit_getTypeId(Cxn)==1747990082)))then group_add(Bxn.g,Cxn)end end JMb={__index=Rw}"
@@ -17260,6 +17337,10 @@
       "byte_offset": 3293398,
       "source": "function applyArtilleryModeEnabled(LQq)AX=(not LQq)if LQq then __wurst_safe_DisplayTimedTextToPlayer(U1,0.,0.,H1,\"|cffC6FF00Artillery|r enabled. You can build Artillery and Frost Launcher.\")else __wurst_safe_DisplayTimedTextToPlayer(U1,0.,0.,H1,\"|cffC6FF00No Artillery|r has been chosen. You cannot build Artillery and Frost Launcher.\")end setArtilleryModeAbilityIds(LQq)syncArtilleryModeAvailability()end "
     },
+    "applyPowerArmor": {
+      "byte_offset": 4393631,
+      "source": "function applyPowerArmor(Hfs)local Ifs=nil local Jfs=nil local Kfs=nil local Lfs=nil local Mfs=nil if((Hfs==nil)or(widget_getLife(Hfs)<=.405))then return end Ifs=Hfs addProtectedAbility(Ifs,1093679437)Jfs=Hfs __wurst_safe_SetUnitAbilityLevel(Jfs,1093679437,4)unit_removeAbility(Hfs,1093679437)Kfs=Hfs addProtectedAbility(Kfs,1093679441)Lfs=Hfs addProtectedAbility(Lfs,1093679442)if hasNoPowerArmorExclusion(Hfs)then Mfs=Hfs addProtectedAbility(Mfs,1093683286)end end "
+    },
     "applyProtectedAbilityFieldsForJassAdd": {
       "byte_offset": 1699171,
       "source": "function applyProtectedAbilityFieldsForJassAdd(qeo,reo)local seo=nil seo=__wurst_safe_BlzGetUnitAbility(qeo,reo)if(seo==nil)then return end if(reo==1093677109)then __wurst_safe_BlzSetAbilityRealLevelField(seo,ABILITY_RLF_COOLDOWN,0,60.)__wurst_safe_BlzSetAbilityIntegerLevelField(seo,ABILITY_ILF_MANA_COST,0,0)elseif(reo==1093677360)then __wurst_safe_BlzSetAbilityRealLevelField(seo,ABILITY_RLF_COOLDOWN,0,3.)elseif(reo==1093679158)then __wurst_safe_BlzSetAbilityRealLevelField(seo,ABILITY_RLF_COOLDOWN,0,0.)__wurst_safe_BlzSetAbilityIntegerLevelField(seo,ABILITY_ILF_MANA_COST,0,0)elseif(reo==1093679444)then __wurst_safe_BlzSetAbilityRealLevelField(seo,ABILITY_RLF_COOLDOWN,0,0.)__wurst_safe_BlzSetAbilityIntegerLevelField(seo,ABILITY_ILF_MANA_COST,0,0)elseif(reo==1093681717)then __wurst_safe_BlzSetAbilityIntegerLevelField(seo,ABILITY_ILF_MANA_COST,0,0)elseif(reo==1093681718)then __wurst_safe_BlzSetAbilityIntegerLevelField(seo,ABILITY_ILF_MANA_COST,0,0)elseif(reo==1093681719)then __wurst_safe_BlzSetAbilityRealLevelField(seo,ABILITY_RLF_COOLDOWN,0,10.)__wurst_safe_BlzSetAbilityIntegerLevelField(seo,ABILITY_ILF_MANA_COST,0,0)elseif(reo==1093681720)then __wurst_safe_BlzSetAbilityRealLevelField(seo,ABILITY_RLF_COOLDOWN,0,10.)__wurst_safe_BlzSetAbilityIntegerLevelField(seo,ABILITY_ILF_MANA_COST,0,0)elseif(reo==1093682241)then __wurst_safe_BlzSetAbilityRealLevelField(seo,ABILITY_RLF_COOLDOWN,0,90.)__wurst_safe_BlzSetAbilityIntegerLevelField(seo,ABILITY_ILF_MANA_COST,0,0)elseif(reo==1093682243)then __wurst_safe_BlzSetAbilityRealLevelField(seo,ABILITY_RLF_COOLDOWN,0,.1)__wurst_safe_BlzSetAbilityIntegerLevelField(seo,ABILITY_ILF_MANA_COST,0,0)end end "
@@ -17315,6 +17396,10 @@
     "createSpellCarrier": {
       "byte_offset": 3758097,
       "source": "function createSpellCarrier(kUr,lUr)local mUr=nil local nUr=nil local oUr=nil local pUr=nil mUr=createUnit1(kUr,dV,lUr)nUr=mUr oUr=nUr pUr=UNIT_STATE_MANA __wurst_safe_SetUnitState(oUr,pUr,1000000.)return mUr end "
+    },
+    "dK": {
+      "byte_offset": 3513145,
+      "source": "function dK()local pir=nil local qir=nil O1=1747990868 N1=252. M1=_Dr()qir=_b[(_d[6227]or _y(6227,_T(53840,\"2d46ad3e9912e815e676c4\")))]()__wurst_safe_TimerStart(qir,4.,true,(function(...)xpcall((function(...)_I[(_d[6228]or _y(6228,_T(995258,\"501914bb0c8bbc3ccb1205089251649adcb4049b69518a5d0b18ce1f318e0965a257b6252f\")))](...)end),(function(rir)if(rir==(_d[6229]or _y(6229,_a(_T(\"\\x005dcd6797fcc2e47c77112a4b615c51ffb1d1091140b1\")))))then return end _dr(((_d[6230]or _y(6230,_a(_T(\"\\x007b79b29bc49aaa6fef2e43209707833dbfb3e53c5c9d\"))))..tostring(rir)))xpcall((function()error1(tostring(rir))end),(function(sir)if(sir==(_d[6231]or _y(6231,_a(_T(\"\\x005dcd6797fcc2e47c77112a4b615c51ffb1d1091140b1\")))))then return end _dr(((_d[6232]or _y(6232,_T(\"\\x01\\x27\\x4a\\x0f\\xc2\\x67\\x2c\\xc7\\x54\\xa5\\x5b\\xae\\xe9\\xd5\\x5d\\xff\\x84\\xc1\\xa0\\xcf\\xce\\x1f\\x44\\xba\\x63\\xf2\")))..tostring(sir)))_dr(((_d[6233]or _y(6233,_T(\"\\x01\\x79\\x68\\xaf\\x6c\\xd2\\xd1\\xb8\\x7b\\x02\\x99\\x60\\x82\\xd8\\x54\\xd4\\x70\\x4b\\xb9\\xe9\")))..tostring(rir)))end))end),...)end))qir=EVENT_PLAYER_UNIT_CONSTRUCT_FINISH pir=zt:create791()EventListener_construct_EventListener(pir)EventListener_add(qir,pir)end _I[_T(665880,\"f5b759aba9459702ccaedb747e275f992795c77db8d9\")]=dK "
     },
     "damageUnitsOnSnowInArea": {
       "byte_offset": 3739444,
@@ -17383,6 +17468,10 @@
     "handleSourceDamageEffects": {
       "byte_offset": 3027033,
       "source": "function handleSourceDamageEffects(Qpq,Rpq)local Spq=nil local Tpq=nil local Upq=nil local Vpq=nil local Wpq=nil local Xpq=nil local Ypq=nil local Zpq=nil local aqq={0.;0.}local bqq={0.;0.}local cqq=nil local dqq=nil local eqq=nil if(unit_getAbilityLevel(Qpq,1093677905)<=0)then return end if(unit_getAbilityLevel(Qpq,1093682737)>0)then Tpq=(.5*GetEventDamage())Upq=unit_getX(Rpq)Vpq=unit_getY(Rpq)Wpq=unit_isType(Qpq,UNIT_TYPE_ATTACKS_GROUND)Xpq=unit_isType(Qpq,UNIT_TYPE_ATTACKS_FLYING)Ypq=__wurst_safe_CreateUnit(unit_getOwner(Qpq),1697656888,Upq,Vpq,0.)aqq={Upq;Vpq}Zpq=lk:create394()Zpq.source=Qpq Zpq.hitsGround=Wpq Zpq.hitsFlying=Xpq Zpq.dummy=Ypq Zpq.damage=Tpq bqq=tupleCopy1(aqq)cqq=Zpq forUnitsInRange(bqq,250.,false,cqq)__wurst_safe_UnitApplyTimedLife(Ypq,1112820806,1.)end Spq=unit_getTypeId(Qpq)if(Spq==1966092356)then devourAttackProc(Qpq,Rpq)elseif(Spq==1747989836)then h05LAttackProc(Qpq,Rpq)elseif(Spq==1747990065)then boulderAttackProc(Qpq,Rpq)elseif(Spq==1848652353)then tornadoStackProc(Rpq)elseif(Spq==1848652354)then unit_removeAbility(Qpq,1093681976)elseif(Spq==1697656886)then dryadDispelProc(Rpq)elseif(Spq==1697656889)then keeperDispelProc(Rpq)elseif(Spq==1697656899)then ancientKeeperDispelProc(Qpq,Rpq)elseif(unit_getAbilityLevel(Qpq,1093682263)>0)then dqq=hhb __wurst_safe_DisableTrigger(dqq)__wurst_safe_UnitDamageTarget(Qpq,Rpq,(((50.*unit_getLevel(Qpq))*widget_getLife(Qpq))/unit_getMaxHP(Qpq)),true,false,ATTACK_TYPE_SIEGE,DAMAGE_TYPE_DEMOLITION,WEAPON_TYPE_WHOKNOWS)eqq=hhb __wurst_safe_EnableTrigger(eqq)elseif(Spq==1747989081)then randomN02YOrder(Qpq)end end "
+    },
+    "hasNoPowerArmorExclusion": {
+      "byte_offset": 4391423,
+      "source": "function hasNoPowerArmorExclusion(hfs)return(((((((((((((((((unit_getAbilityLevel(hfs,1093679179)==0)and(unit_getAbilityLevel(hfs,1093679183)==0))and(unit_getAbilityLevel(hfs,1093679411)==0))and(unit_getAbilityLevel(hfs,1093681480)==0))and(unit_getAbilityLevel(hfs,1093681481)==0))and(unit_getAbilityLevel(hfs,1093681484)==0))and(unit_getAbilityLevel(hfs,1093681486)==0))and(unit_getAbilityLevel(hfs,1093681497)==0))and(unit_getAbilityLevel(hfs,1093681498)==0))and(unit_getAbilityLevel(hfs,1093681750)==0))and(unit_getAbilityLevel(hfs,1093681990)==0))and(unit_getAbilityLevel(hfs,1093682760)==0))and(unit_getAbilityLevel(hfs,1093682761)==0))and(unit_getAbilityLevel(hfs,1093682762)==0))and(unit_getAbilityLevel(hfs,1093682766)==0))and(unit_getAbilityLevel(hfs,1093683030)==0))and(unit_getAbilityLevel(hfs,1093683248)==0))end "
     },
     "hasShield": {
       "byte_offset": 1697343,
@@ -17527,6 +17616,10 @@
     "recycleSpellDummy": {
       "byte_offset": 3753818,
       "source": "function recycleSpellDummy(tSr,uSr)if((tSr==nil)or(unit_getTypeId(tSr)==0))then return end unit_removeAbility(tSr,uSr)DummyRecycler_recycle(tSr)end "
+    },
+    "registerPowerPlant": {
+      "byte_offset": 3514357,
+      "source": "function registerPowerPlant(tir)local uir=nil local vir=nil local wir=nil if((not(tir==nil))and(unit_getTypeId(tir)==O1))then uir=tir addProtectedAbility(uir,1093679443)vir=tir addProtectedAbility(vir,1093679440)wir=tir addProtectedAbility(wir,1093679446)group_add(M1,tir)end end "
     },
     "replaceUnitWithType": {
       "byte_offset": 2303714,

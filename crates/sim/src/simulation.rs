@@ -37,6 +37,7 @@ mod building_damage_procs;
 mod building_script;
 mod echo_step;
 mod land_mine;
+mod power_plant;
 mod enchantments;
 mod forgotten_one;
 mod healing_spray;
@@ -1812,6 +1813,11 @@ impl Simulation {
             spans,
             Span::NativeBuildingAurasTimers,
             self.refresh_native_building_auras_for_timers()
+        );
+        timed!(
+            spans,
+            Span::NativeBuildingAurasTimers,
+            self.refresh_power_plants_for_timers()
         );
         timed!(spans, Span::AdvanceCooldowns, self.advance_cooldowns());
         timed!(
@@ -3846,12 +3852,20 @@ impl Simulation {
                     armor: attempt.armor,
                     passive_effects: attempt.passive_effects,
                 };
-                let definition = ResolvedUnitDefinition {
+                let mut definition = ResolvedUnitDefinition {
                     template: attempt.profile.unit,
                     properties,
                     spellcasting: attempt.spellcasting,
                     additional_abilities: attempt.additional_abilities,
                 };
+                // A building covered by a Power Plant trains augmented units.
+                let power_armor = attempt.content.and_then(|content| {
+                    self.power_armor_for_producer(attempt.entity, content.map_version)
+                        .map(|spawn| (spawn, content.map_version))
+                });
+                if let Some((spawn, version)) = power_armor {
+                    Self::augment_power_armor_definition(spawn, &mut definition, version);
+                }
                 let replication = crate::building_mechanics::production_replication_for_version(
                     attempt
                         .content
@@ -3868,10 +3882,13 @@ impl Simulation {
                 for _ in 0..replication.local_copies(marked) {
                     let original = self.spawn_resolved_unit_with_provenance(
                         Some(attempt.owner),
-                        UnitSpawn::from_template(attempt.team, position, attempt.profile.unit),
+                        UnitSpawn::from_template(attempt.team, position, definition.template),
                         definition,
                         Some(attempt.id),
                     );
+                    if let Some((spawn, _)) = power_armor {
+                        self.apply_power_armor_status(original, spawn);
+                    }
                     if let Some(content) = attempt.content
                         && let Some(cold) = self.apply_training_variant(
                             original,

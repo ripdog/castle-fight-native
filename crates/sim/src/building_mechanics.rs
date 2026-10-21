@@ -41,6 +41,11 @@ pub(crate) use damage_proc::{
     BuildingDamageProcState, damage_proc_bindings, damage_proc_for_version,
     damage_proc_granted_sources, damage_proc_source,
 };
+mod power_plant;
+pub(crate) use power_plant::{
+    PowerPlantProfile, PowerPlantSpawnProfile, power_plant_bindings, power_plant_for_version, power_plant_granted_sources,
+    power_plant_source,
+};
 mod corrupted;
 pub use corrupted::{ForgottenOneProfile, WellOfPainProfile};
 pub(crate) use corrupted::{

@@ -83,6 +83,7 @@ def build(map_version='9.27', revision='r1'):
     launcher_codes += ['h061', 'A03Q', 'A0EV', 'A0DC', 'e008']
     energy = next(r for r in rows('runtime-system-mechanics.tsv') if r['system_id'] == 'energy-tower-energy-burst')
     launcher_codes += ['h05L', 'A09U', 'A09T']
+    power = next(r for r in rows('runtime-system-mechanics.tsv') if r['system_id'] == 'power-plant-power-surge')
     shield = next(r for r in rows('runtime-system-mechanics.tsv') if r['system_id'] == 'targeted-negative-effect-shields')
     replication = next(r for r in rows('runtime-system-mechanics.tsv') if r['system_id'] == 'heroic-shrine-companion-spawning')
     units = {r['rawcode']: r for r in rows('units.tsv') if r['rawcode'] in ('n00F', 'n00G')}
@@ -114,7 +115,7 @@ def build(map_version='9.27', revision='r1'):
                      *(f for row in erasers for f in row['source_functions'].split(',')), 'Id', 'Od', 'nd', *magic_ruin['source_functions'].split(','), *flame_strike['source_functions'].split(','), 'recycleSpellDummy', *attack_proxy['source_functions'].split(','), 'CallbackSingle_doAfter_RaceChaosAbilities_call_doAfter_RaceChaosAbilities', 'yd', 'completeRoundStart',
                      'EventListener_add_BuildingLifecycle_onEvent_add_BuildingLifecycle',
                      'EventListener_add_BuildingLifecycle_onEvent_add_BuildingLifecycle1',
-                     *guard['source_functions'].split(','), *energy['source_functions'].split(','), *snow['source_functions'].split(','), *serpent['source_functions'].split(','), *ceremonial['source_functions'].split(','),
+                     *guard['source_functions'].split(','), *energy['source_functions'].split(','), *power['source_functions'].split(','), *snow['source_functions'].split(','), *serpent['source_functions'].split(','), *ceremonial['source_functions'].split(','),
                      *starfall['source_functions'].split(','), 'QG', 'DummyRecycler_get', 'createDummy', 'dummyCastImmediateFrom1', 'CallbackSingle_doAfter_SpellHelpers_call_doAfter_SpellHelpers2', 'ForGroupCallback_forUnitsInRect_RaceNelfAbilities_callback_forUnitsInRect_RaceNelfAbilities', *wilderness['source_functions'].split(','), *silver['source_functions'].split(','), *pyramid['source_functions'].split(','), *well['source_functions'].split(','), *forgotten['source_functions'].split(','), 'ForGroupCallback_forUnitsInRect_RaceCorruptedAbilities_callback_forUnitsInRect_RaceCorruptedAbilities', *oracle['source_functions'].split(','), *tidal['source_functions'].split(','), 'mJ', 'orderCodeAttackIfAllowed', 'randomAliveEnemyGround', 'ForGroupCallback_forUnitsInRect_SpellHelpers_callback_forUnitsInRect_SpellHelpers1', *stasis['source_functions'].split(','), *enchantment['source_functions'].split(','), 'dummyCastPointFrom',
                      *healing['source_functions'].split(','), *endurance['source_functions'].split(','), 'dummyCarrierWithAbility', 'createSpellCarrier', 'QL', 'iD', 'hD',
                      'CallbackSingle_doAfter_RaceOrcAbilities_call_doAfter_RaceOrcAbilities1',
@@ -214,6 +215,8 @@ def build(map_version='9.27', revision='r1'):
     guard_profile = project_guard(guard, selected, protected, traces)
     from project_energy_burst import project as project_energy
     energy_profile = project_energy(energy, selected, protected, traces)
+    from project_power_plant import project as project_power_plant
+    power_profile = project_power_plant(power, fields, traces)
     from project_silver import project as project_silver
     unit_rows = {r['rawcode']:r for r in rows('units.tsv')}
     from project_starfall import project as project_starfall
@@ -274,6 +277,7 @@ def build(map_version='9.27', revision='r1'):
             'starfall':starfall, 'starfall_spellcasting':starfall_profile, 'starfall_cast_visuals':[{'role':'caster','path':starfall_path}], 'wilderness':wilderness,'wilderness_spellcasting':wilderness_profile,'wilderness_cast_visuals':wilderness_visuals, 'silver_cast_visuals':silver_visuals, 'silver': silver, 'silver_spellcasting': silver_profile, 'linker': linker, 'linker_death_heal': project_death_heal(linker, buckets, traces),
             'guard': guard, 'guard_damage_proc': guard_profile,
             'energy_burst': energy, 'energy_burst_damage_proc': energy_profile,
+            'power_plant': power, 'power_plant_profile': power_profile,
             'city': mechanics, 'launchers': launchers, 'mushroom': mushroom, 'freezer': freezer,
             'freezer_animation_seconds': re.search(r'doAfter\(([\d.]+),', traces['CallbackSingle_doAfter_RaceNorthernAbilities_call_doAfter_RaceNorthernAbilities1']['source']).group(1),
             'freezer_weather_seconds': re.search(r'doAfter\(([\d.]+),', traces['CallbackSingle_doAfter_doAfter_RaceNorthernAbilities_call_doAfter_doAfter_RaceNorthernAbilities']['source']).group(1),

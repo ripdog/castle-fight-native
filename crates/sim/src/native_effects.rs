@@ -70,6 +70,7 @@ pub enum NativeEffectImplementationId {
     WarcraftScriptedAreaProcV1,
     WarcraftEchoStepV1,
     WarcraftGobboRepairV1,
+    WarcraftPowerPlantV1,
     WarcraftNativeAuraV1,
     WarcraftSpeedAuraV1,
     WarcraftSphereV1,
@@ -163,6 +164,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftScriptedAreaProcV1 => 112,
             Self::WarcraftEchoStepV1 => 113,
             Self::WarcraftGobboRepairV1 => 114,
+            Self::WarcraftPowerPlantV1 => 115,
             Self::WarcraftNativeAuraV1 => 22,
             Self::WarcraftSpeedAuraV1 => 69,
             Self::WarcraftSphereV1 => 70,
@@ -1519,6 +1521,10 @@ pub fn resolve_native_effect_requirements(
         .iter()
         .copied()
         .partition(|source| crate::building_mechanics::damage_proc_source(version, *source));
+    let (plant_roots, roots): (Vec<_>, Vec<_>) = roots
+        .iter()
+        .copied()
+        .partition(|source| crate::building_mechanics::power_plant_source(version, *source));
     let (stasis_roots, roots): (Vec<_>, Vec<_>) = roots
         .iter()
         .copied()
@@ -1590,6 +1596,9 @@ pub fn resolve_native_effect_requirements(
     }
     if !proc_roots.is_empty() {
         resolved.extend(crate::building_mechanics::damage_proc_bindings(version));
+    }
+    if !plant_roots.is_empty() {
+        resolved.extend(crate::building_mechanics::power_plant_bindings(version));
     }
     if !aura_roots.is_empty() {
         resolved.extend(
@@ -1673,6 +1682,10 @@ pub(crate) fn script_granted_ability_sources_for(
                 .map(|effect| effect.source().expect("validated script-granted source"))
         })
         .chain(crate::building_mechanics::damage_proc_granted_sources(
+            version,
+            unit_rawcode,
+        ))
+        .chain(crate::building_mechanics::power_plant_granted_sources(
             version,
             unit_rawcode,
         ))
@@ -1872,6 +1885,9 @@ pub fn native_effect_implementation_for(
     }
     if source.is_some_and(|source| crate::building_mechanics::damage_proc_source(version, source)) {
         return Some(NativeEffectImplementationId::WarcraftBuildingDamageProcV1);
+    }
+    if source.is_some_and(|source| crate::building_mechanics::power_plant_source(version, source)) {
+        return Some(NativeEffectImplementationId::WarcraftPowerPlantV1);
     }
     if source
         .is_some_and(|source| crate::building_mechanics::hex_source_for_version(source, version))

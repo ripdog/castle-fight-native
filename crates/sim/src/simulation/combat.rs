@@ -124,6 +124,23 @@ impl Simulation {
                         scale_damage_per_10k(intent.attack.damage, illusion.damage_dealt_per_10k);
                 }
             }
+            if let AttackSourceIndex::Building(index) = intent.source
+                && let Some(status) = buildings[index].status
+            {
+                // Aura damage bonuses reach a building's attack like any other bearer's.
+                let percent = status.armor_modifiers[..usize::from(status.armor_modifier_count)]
+                    .iter()
+                    .filter(|modifier| completed_tick < modifier.expires_tick)
+                    .map(|modifier| i32::from(modifier.damage_bonus_per_10k))
+                    .sum::<i32>();
+                let base = intent.attack.damage;
+                intent.attack.damage = base
+                    .saturating_add(
+                        i32::try_from(i64::from(base) * i64::from(percent) / 10_000)
+                            .expect("buffed building attack damage exceeds i32"),
+                    )
+                    .max(0);
+            }
             let source_alive = match intent.source {
                 AttackSourceIndex::Unit(index) => unit_health[index] > 0,
                 AttackSourceIndex::Building(index) => building_health[index] > 0,
