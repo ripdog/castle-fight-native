@@ -386,7 +386,7 @@ class NativeTuningProjectionTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 native.damage_charge_profile({"source_key":"PARN"}, unit, {**mechanics,"damage_charge_handler":changed})
         with self.assertRaises(ValueError):
-            native.self_destruct_profile("CHLD", {**fields,"targs1":"air,ground,enemies,structure"}, "Asds")
+            native.self_destruct_profile("CHLD", {**fields,"targs1":"air,enemies,structure,organic"}, "Asds")
 
     def test_committed_tuning_is_a_projection_of_retained_evidence(self) -> None:
         root = Path(__file__).resolve().parents[2]

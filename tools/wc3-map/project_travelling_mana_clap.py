@@ -16,7 +16,7 @@ def project(recipe, fields, unit, protected, detail):
     callback = functions[row['delayed_callback_functions'].split(',')[0]]
     # The ForGroup picker is the script's independent recipient filter. Each race owns a copy.
     pickers = [name for name in row.get('dynamic_callback_functions', '').split(',') if name.startswith('ForGroupCallback_')]
-    picker = functions[pickers[-1]] if pickers else functions[
+    picker = functions[pickers[-1]] if pickers else functions[row['callback_functions'].split(',')[-1]] if 'callback_functions' in row else functions[
         'ForGroupCallback_forUnitsInRange_doAfter_RaceChaosAbilities_callback_forUnitsInRange_doAfter_RaceChaosAbilities']
     number = r'(\d+(?:\.\d*)?)'
     release = re.search(

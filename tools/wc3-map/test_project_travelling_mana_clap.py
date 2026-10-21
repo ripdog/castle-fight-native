@@ -12,7 +12,7 @@ class TravellingManaClapProjection(unittest.TestCase):
             'Hln=(vec2_distanceTo(unit_getPos(Bln),Eln)/71.)'
             'Gln.p=Dln Gln.tpos=tupleCopy1(Eln)doAfter(Hln,Gln)')
         callback = (f'dummyCarrierCastImmediate(Akn.p,{raw("CLAP")},852096,Akn.tpos,3.)'
-            'forUnitsInRange(Jkn,17.,false,Dkn)if(Gkn>0.)then Hkn=min1(Gkn,27.)Lkn=(Gkn-Hkn)'
+            'forUnitsInRange(Jkn,17.,false,Dkn)Gkn=unit_getMana(Ykn)if(Gkn>0.)then Hkn=min1(Gkn,27.)Lkn=(Gkn-Hkn)'
             'addEffect1("Abilities\\\\Synthetic.mdl",Ekn,"origin")'
             'Tkn=ATTACK_TYPE_CHAOS Ukn=DAMAGE_TYPE_NORMAL '
             '__wurst_safe_UnitDamageTarget(Qkn,Rkn,Skn,true,false,Tkn,Ukn,Vkn)')
