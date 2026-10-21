@@ -2415,7 +2415,7 @@ pub struct PendingCastState {
     pub release_tick: u64,
 }
 
-pub const MAX_TIMED_ATTACK_SPEED_MODIFIERS: usize = 8;
+pub const MAX_TIMED_ATTACK_SPEED_MODIFIERS: usize = 16;
 pub const MAX_TIMED_ARMOR_MODIFIERS: usize = 16;
 pub const MAX_TIMED_DAMAGE_OVER_TIME: usize = 8;
 
