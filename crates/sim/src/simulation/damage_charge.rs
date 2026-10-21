@@ -75,7 +75,12 @@ fn detonation_tick(source: &UnitSnapshot) -> Option<u64> {
 }
 
 fn set_detonation_tick(source: &mut UnitSnapshot, tick: Option<u64>) {
-    match source.status.damage_charge.as_mut().filter(|charge| charge.armed) {
+    match source
+        .status
+        .damage_charge
+        .as_mut()
+        .filter(|charge| charge.armed)
+    {
         Some(charge) => charge.detonation_tick = tick,
         None => source.status.contact_detonation_tick = tick,
     }
@@ -179,7 +184,8 @@ impl Simulation {
                 if distance > square_i32(contact) {
                     continue;
                 }
-                detonation = Some(self.next_tick + u64::from(source.action_timing.cast_point_ticks));
+                detonation =
+                    Some(self.next_tick + u64::from(source.action_timing.cast_point_ticks));
                 units[index].status.pending_attack = None;
                 units[index].status.begin_action_animation(
                     ActionAnimationKind::Cast,

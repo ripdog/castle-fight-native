@@ -44,10 +44,9 @@ impl Simulation {
         );
         // `doAfter(distance / carrier speed)`: travel time, rounded up to whole ticks.
         let speed = i64::from(profile.carrier_speed_per_second);
-        let travel = u64::try_from(
-            (distance * i64::from(CASTLE_FIGHT_SIMULATION_HZ) + speed - 1) / speed,
-        )
-        .expect("land mine travel ticks");
+        let travel =
+            u64::try_from((distance * i64::from(CASTLE_FIGHT_SIMULATION_HZ) + speed - 1) / speed)
+                .expect("land mine travel ticks");
         let placed_tick = self.next_tick + travel;
         let id = self.allocate_id();
         self.world.spawn((

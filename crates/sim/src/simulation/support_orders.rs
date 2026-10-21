@@ -3,7 +3,6 @@ use crate::components::{
     GobboRepairProfile, NativeAction, SupportOrderQueue, SupportOrderState, SupportTargetCache,
 };
 
-
 fn profile(unit: &UnitSnapshot) -> Option<crate::WindWalkProfile> {
     match unit.spellcasting?.ability.effect {
         AbilityEffect::WindWalk(p) => Some(p),
@@ -326,7 +325,9 @@ impl Simulation {
         let team = units[i].team;
         let kept = state.selected_target.is_some_and(|id| {
             if let Some(j) = find_unit_index(units, id) {
-                units[j].health > 0 && units[j].team == team && units[j].health < units[j].health_max
+                units[j].health > 0
+                    && units[j].team == team
+                    && units[j].health < units[j].health_max
             } else {
                 buildings.iter().any(|building| {
                     building.id == id
@@ -378,7 +379,11 @@ impl Simulation {
                 *id,
             )
         };
-        let group = if wounded.is_empty() { &allies } else { &wounded };
+        let group = if wounded.is_empty() {
+            &allies
+        } else {
+            &wounded
+        };
         let selected = group.iter().min_by_key(|id| rank(id)).copied();
         state.sequence += 1;
         state.iterations = 0;
@@ -391,7 +396,11 @@ impl Simulation {
     /// The running `repair`/`smart` order: follow the selected body and, within the native repair
     /// range, restore its life at the retained fraction of its repair time. Completing a repair
     /// ends the order.
-    fn advance_gobbo_repairs(&mut self, units: &mut [UnitSnapshot], buildings: &mut [BuildingSnapshot]) {
+    fn advance_gobbo_repairs(
+        &mut self,
+        units: &mut [UnitSnapshot],
+        buildings: &mut [BuildingSnapshot],
+    ) {
         for i in 0..units.len() {
             let Some(profile) = gobbo_profile(&units[i]).filter(|_| units[i].health > 0) else {
                 continue;
@@ -435,13 +444,20 @@ impl Simulation {
                 Body::Unit(j) => (
                     units[j].position,
                     position.distance_sq(units[j].position),
-                    Self::gobbo_repairable(units[j].mechanical, units[j].health, units[j].health_max),
+                    Self::gobbo_repairable(
+                        units[j].mechanical,
+                        units[j].health,
+                        units[j].health_max,
+                    ),
                     units[j].health,
                     units[j].health_max,
                     units[j].entity,
                 ),
                 Body::Building(b) => (
-                    footprint_center_point(buildings[b].footprint, self.config.navigation_cell_size),
+                    footprint_center_point(
+                        buildings[b].footprint,
+                        self.config.navigation_cell_size,
+                    ),
                     point_to_footprint_distance_sq(
                         position,
                         buildings[b].footprint,

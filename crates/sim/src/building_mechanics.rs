@@ -43,8 +43,8 @@ pub(crate) use damage_proc::{
 };
 mod power_plant;
 pub(crate) use power_plant::{
-    PowerPlantProfile, PowerPlantSpawnProfile, power_plant_bindings, power_plant_for_version, power_plant_granted_sources,
-    power_plant_source,
+    PowerPlantProfile, PowerPlantSpawnProfile, power_plant_bindings, power_plant_for_version,
+    power_plant_granted_sources, power_plant_source,
 };
 mod corrupted;
 pub use corrupted::{ForgottenOneProfile, WellOfPainProfile};

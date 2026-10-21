@@ -106,7 +106,9 @@ impl Simulation {
                 self.launch_dummy_bolt(source, state.team, state.origin, victim.id, position, bolt);
             }
             (None, Some(chain)) => {
-                self.launch_dummy_chain_lightning(source, state.team, victim.id, position, chain, tick);
+                self.launch_dummy_chain_lightning(
+                    source, state.team, victim.id, position, chain, tick,
+                );
             }
             _ => unreachable!("exactly one native child"),
         }

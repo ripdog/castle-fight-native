@@ -6583,81 +6583,88 @@ fn extracted_tower_definition_927(
         .unwrap_or_else(|| panic!("tower {rawcode:#010x} missing retained 9.27 unit metadata"));
     let protected = content.protected_stats.get(&rawcode);
     let attack = unit.attack1_weapon_kind.map(|weapon_kind| {
-    let delivery = match weapon_kind {
-        ExtractedWeaponKind927::Melee => AttackDelivery::Melee,
-        ExtractedWeaponKind927::Instant => AttackDelivery::RangedInstant,
-        ExtractedWeaponKind927::Missile => AttackDelivery::RangedGuaranteedHit {
-            speed_per_tick: unit
-                .projectile_speed_per_tick
-                .unwrap_or_else(|| panic!("tower {rawcode:#010x} is missing projectile speed")),
-        },
-        ExtractedWeaponKind927::Splash if content.homing_splash_rawcodes.contains(&rawcode) => {
-            AttackDelivery::RangedGuaranteedHit {
-                speed_per_tick: unit.projectile_speed_per_tick.expect("native homing splash speed"),
-            }
-        }
-        ExtractedWeaponKind927::Artillery | ExtractedWeaponKind927::Splash => {
-            AttackDelivery::RangedBallistic {
+        let delivery = match weapon_kind {
+            ExtractedWeaponKind927::Melee => AttackDelivery::Melee,
+            ExtractedWeaponKind927::Instant => AttackDelivery::RangedInstant,
+            ExtractedWeaponKind927::Missile => AttackDelivery::RangedGuaranteedHit {
                 speed_per_tick: unit
                     .projectile_speed_per_tick
                     .unwrap_or_else(|| panic!("tower {rawcode:#010x} is missing projectile speed")),
-                impact_radius: unit
-                    .outer_splash_radius
-                    .unwrap_or_else(|| panic!("tower {rawcode:#010x} is missing splash radius")),
+            },
+            ExtractedWeaponKind927::Splash if content.homing_splash_rawcodes.contains(&rawcode) => {
+                AttackDelivery::RangedGuaranteedHit {
+                    speed_per_tick: unit
+                        .projectile_speed_per_tick
+                        .expect("native homing splash speed"),
+                }
             }
-        }
-        ExtractedWeaponKind927::Line => {
-            let line = content
-                .line_weapons
-                .get(&rawcode)
-                .unwrap_or_else(|| panic!("tower {rawcode:#010x} needs retained line weapon evidence"));
-            AttackDelivery::Line {
-                speed_per_tick: unit
-                    .projectile_speed_per_tick
-                    .unwrap_or_else(|| panic!("tower {rawcode:#010x} is missing line missile speed")),
-                minimum_range: world(line.minimum_range_world),
-                spill_distance: world(line.spill_distance_world),
-                spill_radius: world(line.spill_radius_world),
-                damage_retention_per_10k: line.damage_retention_per_10k,
-                spill_targets: parse_attack_targets_927(&line.splash_targets),
+            ExtractedWeaponKind927::Artillery | ExtractedWeaponKind927::Splash => {
+                AttackDelivery::RangedBallistic {
+                    speed_per_tick: unit.projectile_speed_per_tick.unwrap_or_else(|| {
+                        panic!("tower {rawcode:#010x} is missing projectile speed")
+                    }),
+                    impact_radius: unit.outer_splash_radius.unwrap_or_else(|| {
+                        panic!("tower {rawcode:#010x} is missing splash radius")
+                    }),
+                }
             }
-        }
-        ExtractedWeaponKind927::Bounce => {
-            let bounce = content
-                .bounce_weapons
-                .get(&rawcode)
-                .unwrap_or_else(|| panic!("tower {rawcode:#010x} needs retained bounce weapon fields"));
-            AttackDelivery::Bounce {
-                speed_per_tick: unit
-                    .projectile_speed_per_tick
-                    .unwrap_or_else(|| panic!("tower {rawcode:#010x} is missing bounce missile speed")),
-                bounce_range: world(bounce.range_world),
-                max_bounces: bounce
-                    .maximum_targets
-                    .checked_sub(1)
-                    .expect("bounce target count"),
-                damage_percent_per_bounce: bounce.damage_percent_per_bounce,
-                allow_repeat_targets: false,
+            ExtractedWeaponKind927::Line => {
+                let line = content.line_weapons.get(&rawcode).unwrap_or_else(|| {
+                    panic!("tower {rawcode:#010x} needs retained line weapon evidence")
+                });
+                AttackDelivery::Line {
+                    speed_per_tick: unit.projectile_speed_per_tick.unwrap_or_else(|| {
+                        panic!("tower {rawcode:#010x} is missing line missile speed")
+                    }),
+                    minimum_range: world(line.minimum_range_world),
+                    spill_distance: world(line.spill_distance_world),
+                    spill_radius: world(line.spill_radius_world),
+                    damage_retention_per_10k: line.damage_retention_per_10k,
+                    spill_targets: parse_attack_targets_927(&line.splash_targets),
+                }
             }
+            ExtractedWeaponKind927::Bounce => {
+                let bounce = content.bounce_weapons.get(&rawcode).unwrap_or_else(|| {
+                    panic!("tower {rawcode:#010x} needs retained bounce weapon fields")
+                });
+                AttackDelivery::Bounce {
+                    speed_per_tick: unit.projectile_speed_per_tick.unwrap_or_else(|| {
+                        panic!("tower {rawcode:#010x} is missing bounce missile speed")
+                    }),
+                    bounce_range: world(bounce.range_world),
+                    max_bounces: bounce
+                        .maximum_targets
+                        .checked_sub(1)
+                        .expect("bounce target count"),
+                    damage_percent_per_bounce: bounce.damage_percent_per_bounce,
+                    allow_repeat_targets: false,
+                }
+            }
+        };
+        AttackProfile {
+            delivery,
+            damage: protected
+                .and_then(|stats| stats.attack1_damage)
+                .or(unit.attack1_damage)
+                .unwrap_or_else(|| {
+                    panic!("tower {rawcode:#010x} is missing effective attack damage")
+                }),
+            range: protected
+                .and_then(|stats| stats.attack1_range)
+                .or(unit.attack1_range)
+                .unwrap_or_else(|| {
+                    panic!("tower {rawcode:#010x} is missing effective attack range")
+                }),
+            acquisition_range: unit
+                .acquisition_range
+                .unwrap_or_else(|| panic!("tower {rawcode:#010x} is missing acquisition range")),
+            cooldown_ticks: protected
+                .and_then(|stats| stats.attack1_cooldown_ticks)
+                .or(unit.attack1_cooldown_ticks)
+                .unwrap_or_else(|| {
+                    panic!("tower {rawcode:#010x} is missing effective attack cooldown")
+                }),
         }
-    };
-    AttackProfile {
-        delivery,
-        damage: protected
-            .and_then(|stats| stats.attack1_damage)
-            .or(unit.attack1_damage)
-            .unwrap_or_else(|| panic!("tower {rawcode:#010x} is missing effective attack damage")),
-        range: protected
-            .and_then(|stats| stats.attack1_range)
-            .or(unit.attack1_range)
-            .unwrap_or_else(|| panic!("tower {rawcode:#010x} is missing effective attack range")),
-        acquisition_range: unit
-            .acquisition_range
-            .unwrap_or_else(|| panic!("tower {rawcode:#010x} is missing acquisition range")),
-        cooldown_ticks: protected.and_then(|stats| stats.attack1_cooldown_ticks).or(unit.attack1_cooldown_ticks).unwrap_or_else(|| {
-            panic!("tower {rawcode:#010x} is missing effective attack cooldown")
-        }),
-    }
     });
     let command_card_position = content
         .building_command_card_position(rawcode)

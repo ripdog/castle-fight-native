@@ -113,7 +113,8 @@ pub(crate) fn damage_proc_granted_sources(
     damage_proc_for_version(version, rawcode)
         .into_iter()
         .flat_map(|p| {
-            let child = NativeEffectSource::new(NativeEffectSourceKind::AbilityEffect, p.child_ability().0);
+            let child =
+                NativeEffectSource::new(NativeEffectSourceKind::AbilityEffect, p.child_ability().0);
             p.granted_at_construction
                 .then_some([
                     NativeEffectSource::new(NativeEffectSourceKind::UnitAbility, p.dispatcher.0),

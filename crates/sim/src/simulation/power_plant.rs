@@ -4,11 +4,7 @@ use super::*;
 use crate::building_mechanics::{PowerPlantProfile, power_plant_for_version};
 use crate::components::SpellResistanceEffectProfile;
 
-fn aura_modifier(
-    ability: AbilityId,
-    buff: u32,
-    expires_tick: u64,
-) -> TimedArmorModifier {
+fn aura_modifier(ability: AbilityId, buff: u32, expires_tick: u64) -> TimedArmorModifier {
     TimedArmorModifier {
         id: ModifierId(ability.0),
         native_buff: Some(crate::NativeBuffIdentity {
@@ -30,17 +26,14 @@ impl Simulation {
         let cell = self.config.navigation_cell_size;
         let mut query = self
             .world
-            .try_query_filtered::<
-                (
-                    Entity,
-                    &ContentIdentity,
-                    &Team,
-                    &BuildingFootprint,
-                    &Health,
-                    Option<&AttackProfile>,
-                ),
-                bevy_ecs::query::Without<BuildingConstruction>,
-            >()
+            .try_query_filtered::<(
+                Entity,
+                &ContentIdentity,
+                &Team,
+                &BuildingFootprint,
+                &Health,
+                Option<&AttackProfile>,
+            ), bevy_ecs::query::Without<BuildingConstruction>>()
             .expect("simulation component types are registered at world construction");
         let buildings: Vec<_> = query
             .iter(&self.world)
@@ -155,7 +148,10 @@ impl Simulation {
         definition: &mut ResolvedUnitDefinition,
         version: crate::MapVersion,
     ) {
-        definition.template.health = definition.template.health.saturating_add(spawn.max_life_bonus);
+        definition.template.health = definition
+            .template
+            .health
+            .saturating_add(spawn.max_life_bonus);
         let excluded = definition.properties.content.is_some_and(|content| {
             spawn.spell_resist_exclusions.iter().any(|ability| {
                 crate::content::unit_has_ability_for_version(content.rawcode, *ability, version)
@@ -163,10 +159,12 @@ impl Simulation {
         });
         if !excluded {
             let mut effects: Vec<_> = definition.properties.passive_effects.iter().collect();
-            effects.push(PassiveUnitEffect::SpellResistance(SpellResistanceEffectProfile {
-                ability: spawn.spell_resist_ability,
-                damage_taken_per_10k: spawn.spell_damage_taken_per_10k,
-            }));
+            effects.push(PassiveUnitEffect::SpellResistance(
+                SpellResistanceEffectProfile {
+                    ability: spawn.spell_resist_ability,
+                    damage_taken_per_10k: spawn.spell_damage_taken_per_10k,
+                },
+            ));
             definition.properties.passive_effects = PassiveUnitEffects::from_slice(&effects);
         }
     }
@@ -179,7 +177,9 @@ impl Simulation {
         let Some(entity) = self
             .world
             .iter_entities()
-            .find(|entity| entity.get::<SimId>() == Some(&unit) && entity.contains::<MovementProfile>())
+            .find(|entity| {
+                entity.get::<SimId>() == Some(&unit) && entity.contains::<MovementProfile>()
+            })
             .map(|entity| entity.id())
         else {
             return;

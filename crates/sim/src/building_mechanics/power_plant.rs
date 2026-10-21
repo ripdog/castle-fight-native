@@ -65,21 +65,23 @@ pub(crate) fn power_plant_for_version(version: MapVersion) -> Option<&'static Po
 }
 
 fn abilities(profile: &PowerPlantProfile) -> impl Iterator<Item = NativeEffectSource> + '_ {
-    [profile.armor.ability, profile.mana.ability, profile.drums.ability]
+    [
+        profile.armor.ability,
+        profile.mana.ability,
+        profile.drums.ability,
+    ]
+    .into_iter()
+    .map(|ability| NativeEffectSource::new(NativeEffectSourceKind::UnitAbility, ability.0))
+    .chain(
+        [
+            profile.spawn.life_ability,
+            profile.spawn.armor_ability,
+            profile.spawn.damage_ability,
+            profile.spawn.spell_resist_ability,
+        ]
         .into_iter()
-        .map(|ability| NativeEffectSource::new(NativeEffectSourceKind::UnitAbility, ability.0))
-        .chain(
-            [
-                profile.spawn.life_ability,
-                profile.spawn.armor_ability,
-                profile.spawn.damage_ability,
-                profile.spawn.spell_resist_ability,
-            ]
-            .into_iter()
-            .map(|ability| {
-                NativeEffectSource::new(NativeEffectSourceKind::AbilityEffect, ability.0)
-            }),
-        )
+        .map(|ability| NativeEffectSource::new(NativeEffectSourceKind::AbilityEffect, ability.0)),
+    )
 }
 
 /// Script-granted abilities: the plant's three auras, and the four augmentation abilities.
