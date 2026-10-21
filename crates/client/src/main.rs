@@ -74,7 +74,7 @@ use doodads::DoodadPresentationPlugin;
 use inspection::InspectionPlugin;
 use lobby::{LobbyPlugin, LobbyState};
 use main_menu::{MainMenuPlugin, MainMenuState};
-use network::{NetworkClient, NetworkEvent};
+use network::{NetworkClient, NetworkClientError, NetworkEvent};
 use performance_ui::{
     PerformanceCounters, PerformanceUiPlugin, SystemTraceDisplay, performance_trace_layer,
 };
@@ -1789,8 +1789,22 @@ fn process_network_events(
                         AuthorityMode::Network { client, .. } => client.send(report),
                         AuthorityMode::Local => unreachable!("network event in local mode"),
                     };
-                    if let Err(error) = send_result {
-                        return Err(format!("could not report checkpoint: {error}"));
+                    match send_result {
+                        Ok(()) => {}
+                        // A checkpoint can be queued ahead of the disconnect that closed the
+                        // transport in the same event batch. The disconnect event itself resets
+                        // the session and reconnect resynchronizes, so this is not an invariant
+                        // failure.
+                        Err(NetworkClientError::Disconnected) => {
+                            authoritative.pending_status.push(format!(
+                                "Checkpoint for tick {} not reported: network connection is closed.",
+                                checkpoint.completed_tick
+                            ));
+                            continue;
+                        }
+                        Err(error) => {
+                            return Err(format!("could not report checkpoint: {error}"));
+                        }
                     }
                     if local_checksum != checkpoint.checksum {
                         if let AuthorityMode::Network { connected, .. } =
@@ -2333,6 +2347,44 @@ mod tests {
             .project(&authoritative.simulation, demo.content);
         assert!(rejected.orders.is_empty());
         assert_eq!(rejected.resources[&builder.owner], before);
+    }
+
+    #[test]
+    fn checkpoint_batched_before_disconnect_does_not_fail_the_session() {
+        let demo = crate::demo::create_demo_world(1, None);
+        let snapshot = PresentationSnapshot::capture(&demo.simulation);
+        let client = NetworkClient::connected_test_fixture(compatibility_identity_for_demo(&demo));
+        let mut authoritative = AuthoritativeSimulation::new_networked(
+            demo.simulation,
+            demo.content,
+            demo.match_config,
+            client,
+            PlayerId(0),
+            0,
+        );
+        let mut presentation = PresentationSamples::new(snapshot);
+        advance_authoritative_simulation_once(&mut authoritative, &mut presentation)
+            .expect("canonical tick must execute");
+        let checkpoint = castle_fight_protocol::Checkpoint {
+            completed_tick: 0,
+            checksum: authoritative.simulation.checksum(),
+        };
+        let AuthorityMode::Network { client, .. } = &authoritative.authority else {
+            unreachable!();
+        };
+        client.inject_server_message_for_test(ServerMessage::Checkpoint { checkpoint });
+        client.inject_disconnect_for_test("connection reset");
+        let mut selected = SelectedMatch {
+            content: demo.content,
+            direct_buildings: demo.direct_buildings,
+            local_player: PlayerId(0),
+        };
+        process_network_events(&mut authoritative, &mut presentation, &mut selected, None)
+            .expect("a closed transport is a recoverable disconnect, not an invariant failure");
+        let AuthorityMode::Network { connected, .. } = &authoritative.authority else {
+            unreachable!();
+        };
+        assert!(!connected);
     }
 
     #[test]

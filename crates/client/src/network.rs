@@ -267,6 +267,16 @@ impl NetworkClient {
     }
 
     #[cfg(test)]
+    pub(crate) fn inject_disconnect_for_test(&self, reason: &str) {
+        self.events_tx
+            .send(InternalNetworkEvent::Disconnected {
+                generation: self.active_generation,
+                reason: reason.to_owned(),
+            })
+            .unwrap();
+    }
+
+    #[cfg(test)]
     pub(crate) fn inject_server_message_for_test(&self, message: ServerMessage) {
         self.events_tx
             .send(InternalNetworkEvent::Message {
