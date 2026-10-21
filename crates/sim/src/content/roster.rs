@@ -366,6 +366,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    DeathPit = 0x2100_003e => b"h00A",
     PowerPlant = 0x2100_003d => b"h09T",
     EnergyTower = 0x2100_003c => b"h05L",
     RedShieldGenerator = 0x2100_003b => b"h05R",

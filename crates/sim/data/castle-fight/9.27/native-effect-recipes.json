@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A033","unit_rawcode":"h00A","kind":"building-script"},
     {"source_kind":"unit-ability","source_key":"A064","unit_rawcode":"u000","kind":"frost-attack"},
     {"source_kind":"unit-ability","source_key":"A01S","unit_rawcode":"n00E","kind":"pulverize"},
     {"source_kind":"unit-ability","source_key":"A01R","unit_rawcode":"n00E","kind":"demolish"},

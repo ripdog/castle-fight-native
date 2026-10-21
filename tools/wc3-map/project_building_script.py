@@ -68,6 +68,23 @@ def _mana_burn(params, detail, number, raw):
         'damage_per_mana': number(factor[1]), 'excluded_ability': int(excluded[1])}}
 
 
+def _death_pit(params, detail, number, raw):
+    functions = detail['functions']
+    body = functions['deathPitSpell']
+    picker = functions['ForGroupCallback_forUnitsInRect_SpellHelpers_callback_forUnitsInRect_SpellHelpers']
+    shape = (r'(\w+)=randomAliveEnemy\(\w+\)if\(\1==nil\)then return end if\(not checkForShield\(\1\)\)then '
+        r'\w+=\w+ \w+=\1 (\w+)=ATTACK_TYPE_NORMAL (\w+)=DAMAGE_TYPE_DEATH (\w+)=WEAPON_TYPE_WHOKNOWS '
+        r'__wurst_safe_UnitDamageTarget\(\w+,\w+,(\d+)\.,true,false,\2,\3,\4\)')
+    matched = re.search(shape, body)
+    filtered = re.search(r'isAliveCombatSapper\((\w+)\)and unit_isEnemyOf\(\1,\w+\.p\)\)and\(unit_getAbilityLevel\(\1,%d\)<=0\)\)and'
+        r'\(unit_getAbilityLevel\(\1,(\d+)\)<=0\)\)and\(not\(unit_getTypeId\(\1\)==(\d+)\)\)' % raw('Avul'), picker)
+    if (matched is None or filtered is None or int(matched[5]) != int(params['damage'])
+            or params['attack_type'] != 'normal' or params['damage_type'] != 'death' or not params['attack_flag'] or params['ranged_flag']
+            or 'group_getRandom(' not in functions['randomAliveEnemy'] or 'bj_mapInitialPlayableArea' in body):
+        raise ValueError('Death Pit control flow changed: shield-checked random alive enemy dies to Death damage')
+    return {'DeathPit': {'damage': int(params['damage']), 'excluded_ability': int(filtered[2]), 'excluded_type': int(filtered[3])}}
+
+
 def _thunder(params, detail, number, raw):
     functions = detail['functions']
     cast = functions['BuildingSpellClosure_registerBuildingSpell_ThunderpawSpire_cast_registerBuildingSpell_ThunderpawSpire']
@@ -172,6 +189,8 @@ def project(recipe, fields, unit, protected, detail):
         child = _replenish(params, detail, number, raw)
     elif kind == 'dummy-target-illusion':
         child = _hallucination(params, detail, number, raw)
+    elif kind == 'direct-random-target-damage':
+        child = _death_pit(params, detail, number, raw)
     elif kind == 'armed-next-melee-attack-splash':
         child = _thunder(params, detail, number, raw)
     elif kind == 'mana-burn-random-target':

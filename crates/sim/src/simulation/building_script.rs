@@ -72,6 +72,17 @@ impl Simulation {
                 (cap, priority_above, damage_per_mana, excluded_ability),
                 units,
             ),
+            BuildingChild::DeathPit {
+                damage,
+                excluded_ability,
+                excluded_type,
+            } => self.cast_death_pit(
+                source,
+                profile.ability,
+                sequence,
+                (damage, excluded_ability, excluded_type),
+                units,
+            ),
             BuildingChild::Sandstorm {
                 debuff,
                 pulse_ability,
@@ -225,6 +236,63 @@ impl Simulation {
         );
         let before = unit.health;
         damage_thresholds::observe_damage_event(unit, before, damage);
+        death_healing::commit_health_from(
+            units,
+            index,
+            before.saturating_sub(damage),
+            Some(source.id),
+        );
+        1
+    }
+
+    /// `deathPitSpell`: a random living hostile combat body (not invulnerable-marked, not the
+    /// tentacle marker or the excluded type) dies to a Death-damage attack unless a shield
+    /// absorbs the cast, in which case the script does nothing else.
+    fn cast_death_pit(
+        &mut self,
+        source: AbilitySourceSnapshot,
+        ability: AbilityId,
+        sequence: u64,
+        (damage, excluded_ability, excluded_type): (i32, AbilityId, u32),
+        units: &mut [UnitSnapshot],
+    ) -> usize {
+        let version = source.map_version.unwrap_or(MapVersion::CASTLE_FIGHT_9_27);
+        let Some(index) = units
+            .iter()
+            .enumerate()
+            .filter(|(_, unit)| {
+                unit.team != source.team
+                    && unit.health > 0
+                    && unit.classifications.combat_sapper
+                    && !unit.classifications.invulnerable
+                    && unit.rawcode != excluded_type
+                    && !crate::content::unit_has_ability_for_version(
+                        unit.rawcode,
+                        excluded_ability,
+                        version,
+                    )
+            })
+            .min_by_key(|(_, unit)| {
+                (
+                    deterministic_ability_target_rank(
+                        self.config.match_seed,
+                        source.id,
+                        ability,
+                        sequence,
+                        unit.id,
+                    ),
+                    unit.id,
+                )
+            })
+            .map(|(index, _)| index)
+        else {
+            return 0;
+        };
+        if self.check_negative_building_shield(&mut units[index], version, source.id, sequence) {
+            return 0;
+        }
+        let before = units[index].health;
+        damage_thresholds::observe_damage_event(&mut units[index], before, damage);
         death_healing::commit_health_from(
             units,
             index,

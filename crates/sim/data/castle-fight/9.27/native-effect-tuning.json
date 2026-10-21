@@ -3,6 +3,51 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A033",
+      "unit_rawcode": "h00A",
+      "spellcasting": {
+        "mana": {
+          "maximum": 16,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093677875,
+          "mana_cost": 15,
+          "cooldown_ticks": 0,
+          "range": 102398976,
+          "target_policy": "NativeBuildingSpellTrigger",
+          "effect": {
+            "BuildingScript": {
+              "ability": 1093677875,
+              "trigger_targets": 5,
+              "trigger_invulnerable": true,
+              "trigger_spell_immune": false,
+              "trigger_mechanical_only": false,
+              "child": {
+                "DeathPit": {
+                  "damage": 50000,
+                  "excluded_ability": 1093679176,
+                  "excluded_type": 1747990082
+                }
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/building-spell-mechanics.tsv",
+        "fields": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "functions": "BuildingSpellClosure_registerBuildingSpell_RaceUndeadAbilities_cast_registerBuildingSpell_RaceUndeadAbilities2,deathPitSpell"
+      }
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A064",
       "unit_rawcode": "u000",

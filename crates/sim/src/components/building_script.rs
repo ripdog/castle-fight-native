@@ -34,6 +34,14 @@ pub enum BuildingChild {
         /// Bodies carrying this ability (the tentacle marker) are never chosen.
         excluded_ability: AbilityId,
     },
+    /// Kills a random hostile combat body outright with Death damage (which ignores armor).
+    DeathPit {
+        damage: i32,
+        /// Bodies carrying this ability (the tentacle marker) are never chosen.
+        excluded_ability: AbilityId,
+        /// This unit type is never chosen.
+        excluded_type: u32,
+    },
     /// Stores one team charge that the shared damage listener spends on the next qualifying melee
     /// attack of an allied unit.
     ThunderCharge(ThunderCallProfile),
@@ -95,6 +103,16 @@ impl BuildingChild {
                 u64::from(shield_ability.0),
                 u64::from(level),
                 u64::from(upgrade_existing),
+            ],
+            Self::DeathPit {
+                damage,
+                excluded_ability,
+                excluded_type,
+            } => vec![
+                7,
+                damage as u64,
+                u64::from(excluded_ability.0),
+                u64::from(excluded_type),
             ],
             Self::ThunderCharge(profile) => {
                 let mut words = vec![5];

@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 111;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 112;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -5405,6 +5405,7 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                         && profile.weapon_range_upper_exclusive
                             > profile.weapon_range_lower_exclusive
                 ),
+                crate::BuildingChild::DeathPit { damage, .. } => assert!(damage > 0),
                 crate::BuildingChild::ManaBurn {
                     cap,
                     damage_per_mana,
