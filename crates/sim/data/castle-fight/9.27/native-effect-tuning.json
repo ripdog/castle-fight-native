@@ -5,6 +5,102 @@
     {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
+      "source_key": "A05L",
+      "unit_rawcode": "u009",
+      "spellcasting": {
+        "mana": {
+          "maximum": 250,
+          "starting": 175,
+          "regen_per_tick_per_10k": 2147501148
+        },
+        "ability": {
+          "id": 1093678412,
+          "mana_cost": 75,
+          "cooldown_ticks": 900,
+          "range": 921600,
+          "target_policy": "RaisableCorpse",
+          "effect": {
+            "RaiseDead": {
+              "map_version": {
+                "major": 9,
+                "minor": 27
+              },
+              "ability": 1093678412,
+              "body_rawcode": 1966092344,
+              "count": 1,
+              "radius": 921600,
+              "duration_ticks": 0
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 17500,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "native_base": "Arai"
+      }
+    },
+    {
+      "source_kind": "ability-effect",
+      "source_key": "A05M",
+      "unit_rawcode": "u009",
+      "kind": "cone-wave",
+      "profile": {
+        "ability": 1093678413,
+        "damage": 70,
+        "maximum_damage": 9999,
+        "distance": 665600,
+        "initial_radius": 153600,
+        "final_radius": 307200,
+        "speed_per_tick": 37546,
+        "targets": 3
+      },
+      "provenance": {
+        "native_base": "AUcs",
+        "protected_resources": {
+          "cooldown": "0.0",
+          "mana_cost": "0"
+        },
+        "source": "resolved/object-fields.tsv",
+        "native_child_cooldown_ticks": 0
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A05N",
+      "unit_rawcode": "u009",
+      "kind": "orb-spell-proc",
+      "chance_per_10k": 2500,
+      "effect_ability_rawcode": "A05M",
+      "cooldown_ticks": 0,
+      "targets": "air-ground-units-and-buildings",
+      "provenance": {
+        "ability": "A05N",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A05O",
+      "unit_rawcode": "u009",
+      "kind": "sphere",
+      "profile": {
+        "ability": 1093678415,
+        "attachment_count": 1,
+        "cooldown_ticks": 30,
+        "speed_per_tick": 47786
+      },
+      "provenance": {
+        "ability": "A05O",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
       "source_key": "A01Y",
       "unit_rawcode": "u005",
       "spellcasting": {

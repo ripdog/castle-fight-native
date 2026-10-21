@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A05L","unit_rawcode":"u009","kind":"raise-dead"},
+    {"source_kind":"ability-effect","source_key":"A05M","unit_rawcode":"u009","kind":"cone-wave"},
+    {"source_kind":"unit-ability","source_key":"A05N","unit_rawcode":"u009","kind":"orb-spell-proc"},
+    {"source_kind":"unit-ability","source_key":"A05O","unit_rawcode":"u009","kind":"sphere"},
     {"source_kind":"unit-ability","source_key":"A01Y","unit_rawcode":"u005","kind":"raise-dead"},
     {"source_kind":"unit-ability","source_key":"A05R","unit_rawcode":"u007","kind":"disease-cloud"},
     {"source_kind":"unit-ability","source_key":"A05S","unit_rawcode":"u007","kind":"poison"},
