@@ -3533,6 +3533,7 @@ fn prewarm_timed_wc3_effects(
                             Some((p.child.ability.0, p.child.duration_ticks))
                         }
                         AbilityEffect::NativeSummon(_)
+                        | AbilityEffect::RaiseDead(_)
                         | AbilityEffect::Ensnare { .. }
                         | AbilityEffect::SpellSteal { .. }
                         | AbilityEffect::HealingWave(_)

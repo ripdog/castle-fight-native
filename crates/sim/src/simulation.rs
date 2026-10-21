@@ -5243,6 +5243,7 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         | AbilityTargetPolicy::RecentlyAttackedFriendlyUnit
         | AbilityTargetPolicy::WoundedFriendlyUnit
         | AbilityTargetPolicy::AllFriendlyUnits
+        | AbilityTargetPolicy::RaisableCorpse
         | AbilityTargetPolicy::RandomCorpse => {}
         AbilityTargetPolicy::AttackDamageTrigger => {
             assert_eq!(spellcasting.ability.range, 0);
@@ -5556,6 +5557,13 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
         }
         AbilityEffect::NativeSummon(p) => {
             assert!(p.count > 0 && p.duration_ticks > 0);
+        }
+        AbilityEffect::RaiseDead(p) => {
+            assert!(p.count > 0 && p.radius > 0);
+            assert_eq!(
+                spellcasting.ability.target_policy,
+                AbilityTargetPolicy::RaisableCorpse
+            );
         }
         AbilityEffect::BuildingAcidBomb(p) => {
             assert!(p.child.speed_per_tick > 0 && p.child.range > 0 && p.child.radius >= 0);

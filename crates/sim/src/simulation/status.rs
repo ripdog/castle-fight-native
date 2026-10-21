@@ -560,6 +560,7 @@ pub(super) fn apply_ability_effect_to_unit(
             );
         }
         AbilityEffect::NativeSummon(_)
+        | AbilityEffect::RaiseDead(_)
         | AbilityEffect::SirenPurge(_)
         | AbilityEffect::TravellingManaClap(_)
         | AbilityEffect::ParasiteAreaBuff(_)

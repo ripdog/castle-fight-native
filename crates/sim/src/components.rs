@@ -20,7 +20,8 @@ mod native_summons;
 mod travelling_mana_clap;
 pub(crate) use native_summons::NativeParasiteState;
 pub use native_summons::{
-    NativeParasiteProfile, NativeSummonProfile, PurgeProfile, PurgeState, SirenPurgeProfile,
+    NativeParasiteProfile, NativeSummonProfile, PurgeProfile, PurgeState, RaiseDeadProfile,
+    SirenPurgeProfile,
 };
 mod curse;
 pub use curse::CurseProfile;
@@ -1976,6 +1977,8 @@ pub enum AbilityTargetPolicy {
     RandomGroundEnemyUnit,
     AllFriendlyUnits,
     RandomCorpse,
+    /// Native Raise Dead: the nearest corpse within range that the map allows to be raised.
+    RaisableCorpse,
     RandomEnemyBasePoint,
     NearestEnemyInCombat,
     FlyingEnemyUnit,
@@ -2005,6 +2008,7 @@ impl AbilityTargetPolicy {
             Self::RandomGroundEnemyUnit => 5,
             Self::AllFriendlyUnits => 6,
             Self::RandomCorpse => 7,
+            Self::RaisableCorpse => 25,
             Self::RandomEnemyBasePoint => 8,
             Self::NearestEnemyInCombat => 9,
             Self::FlyingEnemyUnit => 10,
@@ -2208,6 +2212,7 @@ pub enum AbilityEffect {
     Curse(CurseProfile),
     ManaBurnVisual,
     NativeSummon(NativeSummonProfile),
+    RaiseDead(RaiseDeadProfile),
     NagaEarthquake(crate::building_mechanics::NagaEarthquakeProfile),
     WellOfPain(crate::building_mechanics::WellOfPainProfile),
     ForgottenOne(crate::building_mechanics::ForgottenOneProfile),
@@ -2233,6 +2238,7 @@ impl AbilityEffect {
             Self::ManaBurnVisual => 51,
             Self::SirenPurge(_) => 45,
             Self::NativeSummon(_) => 46,
+            Self::RaiseDead(_) => 65,
             Self::NagaEarthquake(_) => 47,
             Self::WellOfPain(_) => 60,
             Self::ForgottenOne(_) => 61,

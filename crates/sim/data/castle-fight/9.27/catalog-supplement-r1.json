@@ -31,120 +31,161 @@
     {
       "rawcode": "e00D",
       "does_decay": true,
+      "can_raise": true,
       "decay_start_ticks": 95,
       "lifetime_ticks": 905
     },
     {
       "rawcode": "n00M",
       "does_decay": true,
+      "can_raise": true,
       "decay_start_ticks": 48,
       "lifetime_ticks": 858
     },
     {
       "rawcode": "n00N",
       "does_decay": true,
+      "can_raise": true,
       "decay_start_ticks": 48,
       "lifetime_ticks": 858
     },
     {
       "rawcode": "n00O",
       "does_decay": true,
+      "can_raise": true,
       "decay_start_ticks": 48,
       "lifetime_ticks": 858
     },
     {
       "rawcode": "n00P",
       "does_decay": true,
+      "can_raise": true,
       "decay_start_ticks": 48,
       "lifetime_ticks": 858
     },
     {
       "rawcode": "n00Q",
       "does_decay": true,
+      "can_raise": true,
       "decay_start_ticks": 48,
       "lifetime_ticks": 858
     },
     {
       "rawcode": "n00R",
       "does_decay": true,
+      "can_raise": true,
       "decay_start_ticks": 48,
       "lifetime_ticks": 858
     },
     {
       "rawcode": "n00T",
       "does_decay": true,
+      "can_raise": true,
       "decay_start_ticks": 90,
       "lifetime_ticks": 900
     },
     {
       "rawcode": "n00W",
       "does_decay": true,
+      "can_raise": true,
       "decay_start_ticks": 90,
       "lifetime_ticks": 900
     },
     {
       "rawcode": "n01C",
       "does_decay": false,
+      "can_raise": false,
       "decay_start_ticks": 33,
       "lifetime_ticks": null
     },
     {
       "rawcode": "n01N",
       "does_decay": true,
+      "can_raise": true,
       "decay_start_ticks": 90,
       "lifetime_ticks": 900
     },
     {
       "rawcode": "n01Q",
       "does_decay": true,
+      "can_raise": true,
       "decay_start_ticks": 70,
       "lifetime_ticks": 880
     },
     {
       "rawcode": "n01R",
       "does_decay": true,
+      "can_raise": true,
       "decay_start_ticks": 70,
       "lifetime_ticks": 880
     },
     {
       "rawcode": "n01S",
       "does_decay": false,
+      "can_raise": false,
       "decay_start_ticks": 90,
       "lifetime_ticks": null
     },
     {
       "rawcode": "n021",
       "does_decay": false,
+      "can_raise": false,
       "decay_start_ticks": 33,
       "lifetime_ticks": null
     },
     {
       "rawcode": "n02K",
       "does_decay": true,
+      "can_raise": false,
       "decay_start_ticks": 60,
       "lifetime_ticks": 870
     },
     {
       "rawcode": "n02L",
       "does_decay": true,
+      "can_raise": false,
       "decay_start_ticks": 60,
       "lifetime_ticks": 870
     },
     {
       "rawcode": "n03C",
       "does_decay": true,
+      "can_raise": false,
       "decay_start_ticks": 90,
       "lifetime_ticks": 900
     },
     {
       "rawcode": "nfbr",
       "does_decay": true,
+      "can_raise": true,
       "decay_start_ticks": 30,
       "lifetime_ticks": 840
     },
     {
+      "rawcode": "u004",
+      "does_decay": true,
+      "can_raise": true,
+      "decay_start_ticks": 51,
+      "lifetime_ticks": 861
+    },
+    {
+      "rawcode": "u008",
+      "does_decay": true,
+      "can_raise": true,
+      "decay_start_ticks": 51,
+      "lifetime_ticks": 861
+    },
+    {
+      "rawcode": "u00E",
+      "does_decay": true,
+      "can_raise": true,
+      "decay_start_ticks": 51,
+      "lifetime_ticks": 861
+    },
+    {
       "rawcode": "u00G",
       "does_decay": false,
+      "can_raise": false,
       "decay_start_ticks": 30,
       "lifetime_ticks": null
     }

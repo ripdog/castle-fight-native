@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r209";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r210";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -2051,6 +2051,9 @@ fn stable_ability_id(
         }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A05R") => {
             0x4000_025e
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A01Y") => {
+            0x4000_025f
         }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0GN") => {
             0x4000_022a
@@ -4210,6 +4213,11 @@ fn hash_automatic_ability_profile(hash: &mut ContentHash64, ability: AutomaticAb
                 hash.write_u64(word);
             }
         }
+        AbilityEffect::RaiseDead(p) => {
+            for word in p.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         AbilityEffect::WindWalk(p) => p.visit_canonical_words(|word| hash.write_u64(word)),
         AbilityEffect::ScriptedRoots(p) => {
             for word in p.canonical_words() {
@@ -4749,6 +4757,8 @@ struct ExtractedProduction927 {
 #[derive(Debug, Clone, Copy)]
 struct ExtractedCorpse927 {
     does_decay: bool,
+    /// The map's death type allows a Raise Dead to consume this body's corpse.
+    can_raise: bool,
     decay_start_ticks: u32,
     lifetime_ticks: Option<u32>,
 }
@@ -4828,6 +4838,7 @@ pub(crate) fn native_air_attack_bonus_for_version(version: MapVersion, rawcode: 
 struct CatalogSummonBodyCorpse927 {
     rawcode: String,
     does_decay: bool,
+    can_raise: bool,
     decay_start_ticks: u32,
     lifetime_ticks: Option<u32>,
 }
@@ -5612,6 +5623,7 @@ impl ExtractedContent927 {
             }
             let rawcode = parse_rawcode(columns[2]);
             let does_decay = columns[9] == "1";
+            let can_raise = columns[8] == "1";
             let decay_start_ticks = parse_seconds_to_ticks_u32_927(columns[10])?;
             let lifetime_ticks = if does_decay && !columns[13].is_empty() {
                 Some(parse_seconds_to_ticks_u32_927(columns[13])?)
@@ -5622,6 +5634,7 @@ impl ExtractedContent927 {
                 rawcode,
                 ExtractedCorpse927 {
                     does_decay,
+                    can_raise,
                     decay_start_ticks,
                     lifetime_ticks,
                 },
@@ -5655,6 +5668,7 @@ impl ExtractedContent927 {
                 rawcode,
                 ExtractedCorpse927 {
                     does_decay: false,
+                    can_raise: false,
                     decay_start_ticks: handoff.body_death_ticks,
                     lifetime_ticks: None,
                 },
@@ -5694,6 +5708,7 @@ impl ExtractedContent927 {
             }
             corpses.entry(rawcode).or_insert(ExtractedCorpse927 {
                 does_decay: body.does_decay,
+                can_raise: body.can_raise,
                 decay_start_ticks: body.decay_start_ticks,
                 lifetime_ticks: body.lifetime_ticks,
             });
@@ -6302,6 +6317,14 @@ pub fn castle_fight_economy_rules_for_version(
             * CASTLE_FIGHT_SIMULATION_HZ as u32,
         income_tax_bracket_per_10k: CASTLE_FIGHT_INCOME_TAX_BRACKET_GOLD * RESOURCE_FIXED_SCALE,
     })
+}
+
+/// Whether the map's death type for this body lets Raise Dead consume its corpse.
+pub(crate) fn raisable_corpse_927(definition: CorpseDefinitionId) -> bool {
+    extracted_content_927()
+        .corpses
+        .get(&definition.0)
+        .is_some_and(|corpse| corpse.can_raise)
 }
 
 pub(crate) fn vessel_corpse_qualifies_927(definition: CorpseDefinitionId) -> bool {

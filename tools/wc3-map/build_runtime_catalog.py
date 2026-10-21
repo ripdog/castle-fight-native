@@ -196,7 +196,7 @@ def _summon_body_corpse(rawcode: str, fields: dict[str, str], misc: dict[str, st
         raise SystemExit("native summon body has unsupported death type")
     death = Decimal(fields["udtm"])
     decay = death + Decimal(misc["DecayTime"]) + Decimal(misc["BoneDecayTime"])
-    return {"rawcode": rawcode, "does_decay": bool(death_type & 2),
+    return {"rawcode": rawcode, "does_decay": bool(death_type & 2), "can_raise": bool(death_type & 1),
         "decay_start_ticks": _action_duration_ticks(str(death), "0", hz),
         "lifetime_ticks": _action_duration_ticks(str(decay), "0", hz) if death_type & 2 else None}
 
@@ -302,6 +302,11 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
                 body = json.loads(row["recovered_value_json"])
                 if not isinstance(body, str) or len(body) != 4:
                     raise SystemExit("native death spawn requires one resolved child identity")
+                native_summon_bodies.add(body)
+            if row["category"] == "abilities" and row["base_rawcode"] == "Arai" and row["level"] == "1" and row["source_field"].lower() == "datac1":
+                body = json.loads(row["recovered_value_json"])
+                if not isinstance(body, str) or len(body) != 4:
+                    raise SystemExit("native Raise Dead requires one resolved raised body")
                 native_summon_bodies.add(body)
             if row["category"] == "abilities" and row["base_rawcode"] in {"AOsf", "ACpa", "AUls"} and row["level"] == "1" and row["source_field"].lower() == "unitid1":
                 body = json.loads(row["recovered_value_json"])

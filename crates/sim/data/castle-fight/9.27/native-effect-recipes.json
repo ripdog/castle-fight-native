@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A01Y","unit_rawcode":"u005","kind":"raise-dead"},
     {"source_kind":"unit-ability","source_key":"A05R","unit_rawcode":"u007","kind":"disease-cloud"},
     {"source_kind":"unit-ability","source_key":"A05S","unit_rawcode":"u007","kind":"poison"},
     {"source_kind":"unit-ability","source_key":"A05T","unit_rawcode":"u007","kind":"permanent-immolation"},

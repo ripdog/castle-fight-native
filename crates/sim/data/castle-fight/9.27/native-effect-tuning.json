@@ -3,6 +3,47 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A01Y",
+      "unit_rawcode": "u005",
+      "spellcasting": {
+        "mana": {
+          "maximum": 200,
+          "starting": 150,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093677401,
+          "mana_cost": 75,
+          "cooldown_ticks": 1350,
+          "range": 921600,
+          "target_policy": "RaisableCorpse",
+          "effect": {
+            "RaiseDead": {
+              "map_version": {
+                "major": 9,
+                "minor": 27
+              },
+              "ability": 1093677401,
+              "body_rawcode": 1966092340,
+              "count": 1,
+              "radius": 921600,
+              "duration_ticks": 0
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "native_base": "Arai"
+      }
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A05R",
       "unit_rawcode": "u007",

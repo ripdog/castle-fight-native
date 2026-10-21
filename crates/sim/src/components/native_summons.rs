@@ -83,6 +83,32 @@ impl NativeSummonProfile {
     }
 }
 
+/// Native Raise Dead (`Arai`): consumes raisable corpses around the caster and raises the retained
+/// body from each, for the caster's owner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct RaiseDeadProfile {
+    pub map_version: crate::MapVersion,
+    pub ability: AbilityId,
+    pub body_rawcode: u32,
+    pub count: u8,
+    pub radius: i32,
+    /// Zero leaves the raised bodies permanent.
+    pub duration_ticks: u16,
+}
+impl RaiseDeadProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 7] {
+        [
+            u64::from(self.map_version.major),
+            u64::from(self.map_version.minor),
+            u64::from(self.ability.0),
+            u64::from(self.body_rawcode),
+            u64::from(self.count),
+            self.radius as u64,
+            u64::from(self.duration_ticks),
+        ]
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct PurgeState {
     pub profile: PurgeProfile,

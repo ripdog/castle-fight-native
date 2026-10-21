@@ -1299,6 +1299,17 @@ impl Simulation {
                         }
                     }
                 }
+                AbilityIntentTarget::Corpse { .. }
+                    if matches!(intent.ability.effect, AbilityEffect::RaiseDead(_)) =>
+                {
+                    let AbilityEffect::RaiseDead(p) = intent.ability.effect else {
+                        unreachable!()
+                    };
+                    let AbilitySourceIndex::Unit(index) = source.source else {
+                        unreachable!("Raise Dead is a unit ability")
+                    };
+                    metrics.effects += self.cast_raise_dead(source, units[index].owner, p);
+                }
                 AbilityIntentTarget::Corpse { position, .. } => {
                     let AbilityEffect::Purification {
                         damage,
@@ -1637,6 +1648,61 @@ impl Simulation {
         revived
     }
 
+    /// Native Raise Dead: the nearest raisable corpses around the caster are consumed and each
+    /// raises the retained body at the corpse's position for the caster's owner.
+    fn cast_raise_dead(
+        &mut self,
+        source: AbilitySourceSnapshot,
+        owner: PlayerId,
+        p: crate::components::RaiseDeadProfile,
+    ) -> usize {
+        let radius_sq = square_i32(p.radius);
+        let mut query = self.world.query::<(Entity, &SimId, &Corpse, &Position)>();
+        let mut candidates = query
+            .iter(&self.world)
+            .filter_map(|(entity, id, corpse, position)| {
+                let distance = self.ability_source_distance_sq(source.origin, position.0);
+                (corpse.is_usable_at(self.next_tick)
+                    && crate::content::raisable_corpse_927(corpse.definition)
+                    && distance <= radius_sq)
+                    .then_some((distance, *id, entity, corpse.source_unit, position.0))
+            })
+            .collect::<Vec<_>>();
+        candidates.sort_unstable_by_key(|(distance, id, ..)| (*distance, *id));
+        let kind =
+            crate::CastleFightUnitKind::from_rawcode_for_version(p.body_rawcode, p.map_version)
+                .unwrap()
+                .expect("promoted raised body");
+        let mut definition = kind
+            .definition_for_version(p.map_version)
+            .unwrap()
+            .resolved();
+        definition.properties.classifications.summoned = true;
+        let mut raised = 0;
+        for (_, _, entity, original, position) in candidates.into_iter().take(usize::from(p.count))
+        {
+            self.retired_damage_sources.remove(&original);
+            self.world.despawn(entity);
+            let child = self.spawn_resolved_unit_unchecked(
+                Some(owner),
+                UnitSpawn::from_template(source.team, position, definition.template),
+                definition,
+            );
+            if p.duration_ticks > 0 {
+                let id = self.allocate_id();
+                self.world.spawn((
+                    id,
+                    crate::components::NativeAction::TimedLife {
+                        child,
+                        expires_tick: self.next_tick + u64::from(p.duration_ticks),
+                    },
+                ));
+            }
+            raised += 1;
+        }
+        raised
+    }
+
     pub(super) fn resurrect_friendly_corpses(
         &mut self,
         team: Team,
@@ -1914,6 +1980,32 @@ impl Simulation {
                         id,
                     );
                     let key = (rank, id, position);
+                    if best.is_none_or(|current| key < current) {
+                        best = Some(key);
+                    }
+                }
+                best.map(|(_, id, position)| AbilityIntentTarget::Corpse { id, position })
+            }
+            AbilityTargetPolicy::RaisableCorpse => {
+                let mut best = None;
+                let mut corpses = self
+                    .world
+                    .try_query::<(Option<&SimId>, &Corpse, &Position)>()
+                    .expect("simulation component types are registered at world construction");
+                for (sim_id, corpse, position) in corpses.iter(&self.world) {
+                    let position = position.0;
+                    if !corpse.is_usable_at(self.next_tick)
+                        || !crate::content::raisable_corpse_927(corpse.definition)
+                    {
+                        continue;
+                    }
+                    let distance = self.ability_source_distance_sq(source.origin, position);
+                    if distance > square_i32(spellcasting.ability.range) {
+                        continue;
+                    }
+                    candidate_checks += 1;
+                    // The key ends in the unique SimId, so visit order does not matter.
+                    let key = (distance, *sim_id.expect("corpse missing id"), position);
                     if best.is_none_or(|current| key < current) {
                         best = Some(key);
                     }
@@ -2618,6 +2710,7 @@ impl Simulation {
                         | AbilityTargetPolicy::AllEnemyUnits => false,
                         AbilityTargetPolicy::AllFriendlyUnits
                         | AbilityTargetPolicy::RandomCorpse
+                        | AbilityTargetPolicy::RaisableCorpse
                         | AbilityTargetPolicy::RandomEnemyBasePoint => false,
                         AbilityTargetPolicy::RecentlyAttackedFriendlyUnit => {
                             target.team == source.team
@@ -2736,20 +2829,27 @@ impl Simulation {
                 ability.target_policy == AbilityTargetPolicy::AllFriendlyUnits
             }
             AbilityIntentTarget::Corpse { id, position } => {
-                ability.target_policy == AbilityTargetPolicy::RandomCorpse && {
-                    let mut corpses = self
-                        .world
-                        .try_query::<(&SimId, &Corpse, &Position)>()
-                        .expect("simulation component types are registered at world construction");
-                    corpses
-                        .iter(&self.world)
-                        .any(|(entity_id, corpse, actual)| {
-                            *entity_id == id
-                                && corpse.is_usable_at(self.next_tick)
-                                && crate::content::vessel_corpse_qualifies_927(corpse.definition)
-                                && actual.0 == position
-                        })
-                }
+                let qualifies = |corpse: &Corpse| match ability.target_policy {
+                    AbilityTargetPolicy::RandomCorpse => {
+                        crate::content::vessel_corpse_qualifies_927(corpse.definition)
+                    }
+                    AbilityTargetPolicy::RaisableCorpse => {
+                        crate::content::raisable_corpse_927(corpse.definition)
+                    }
+                    _ => false,
+                };
+                let mut corpses = self
+                    .world
+                    .try_query::<(&SimId, &Corpse, &Position)>()
+                    .expect("simulation component types are registered at world construction");
+                corpses
+                    .iter(&self.world)
+                    .any(|(entity_id, corpse, actual)| {
+                        *entity_id == id
+                            && corpse.is_usable_at(self.next_tick)
+                            && qualifies(corpse)
+                            && actual.0 == position
+                    })
             }
             AbilityIntentTarget::Point { .. } => {
                 ability.target_policy == AbilityTargetPolicy::RandomEnemyBasePoint
