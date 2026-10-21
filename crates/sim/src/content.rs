@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r206";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r207";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -368,6 +368,7 @@ impl CastleFightContentBundle {
                         CastleFightBuilderRace::Desert,
                         CastleFightBuilderRace::Pandaren,
                         CastleFightBuilderRace::Mechanical,
+                        CastleFightBuilderRace::Undead,
                     ]
                 } else {
                     &[CastleFightBuilderRace::Human]
@@ -2032,6 +2033,9 @@ fn stable_ability_id(
         }
         (NativeEffectSourceKind::AbilityEffect, v) if v == u32::from_be_bytes(*b"A0HV") => {
             0x4000_0258
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A01L") => {
+            0x4000_0259
         }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0GN") => {
             0x4000_022a

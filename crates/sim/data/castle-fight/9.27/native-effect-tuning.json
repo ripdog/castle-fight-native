@@ -3,6 +3,25 @@
   "map_version": "9.27",
   "effects": [
     {
+      "source_kind": "unit-ability",
+      "source_key": "A01L",
+      "unit_rawcode": "n00B",
+      "kind": "permanent-immolation",
+      "profile": {
+        "ability": 1093677388,
+        "buff_rawcode": 1110454321,
+        "radius": 256000,
+        "damage": 8,
+        "interval_ticks": 30,
+        "targets": 3,
+        "organic_only": true
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "ANpi"
+      }
+    },
+    {
       "kind": "gobbo-repair",
       "source_kind": "unit-ability",
       "source_key": "A09K",
