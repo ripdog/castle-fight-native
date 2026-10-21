@@ -4,6 +4,21 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A064",
+      "unit_rawcode": "u000",
+      "kind": "frost-attack",
+      "duration_millis": 5000,
+      "hero_duration_millis": 5000,
+      "movement_percent_delta": -30,
+      "attack_speed_percent_delta": -30,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A064",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A01S",
       "unit_rawcode": "n00E",
       "kind": "pulverize",
