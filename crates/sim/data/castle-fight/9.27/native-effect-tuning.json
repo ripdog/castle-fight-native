@@ -3,6 +3,69 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A01M",
+      "unit_rawcode": "u001",
+      "spellcasting": {
+        "mana": {
+          "maximum": 240,
+          "starting": 150,
+          "regen_per_tick_per_10k": 2147508648
+        },
+        "ability": {
+          "id": 1093677389,
+          "mana_cost": 25,
+          "cooldown_ticks": 300,
+          "range": 819200,
+          "target_policy": "NearestEnemyInCombat",
+          "effect": {
+            "NativeDebuff": {
+              "ability": 1093677389,
+              "buff": 1110454608,
+              "targets": 3,
+              "organic_only": false,
+              "duration_ticks": 1050,
+              "hero_duration_ticks": 263,
+              "movement_percent_delta": -30,
+              "attack_speed_percent_delta": -30,
+              "damage_bonus_per_10k": 0,
+              "ethereal": null
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 25000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "source": "resolved/base-data-manifest.json",
+        "reference_source_sha256": {
+          "custom_v1/units/abilitydata.slk": "052195ebf094e49ded0a0ebc281cada420e30a46a0a40ca83f52748daac8c9d3",
+          "custom_v1/units/miscgame.txt": "4f948777038b7dd3e5b251e758c45622cb9d5b3244ed0f867ed0bc53e2cbb44e"
+        },
+        "native_base": "Aslo",
+        "unit": "resolved/units.tsv",
+        "default_active_alias": "A01M"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A01N",
+      "unit_rawcode": "u001",
+      "kind": "hostile-armor-aura",
+      "profile": {
+        "ability": 1093677390,
+        "buff_rawcode": 1110454322,
+        "radius": 460800,
+        "armor_bonus_per_100": 0,
+        "damage_bonus_per_10k": -1500,
+        "organic_only": true,
+        "targets": 3,
+        "linger_ticks": 0,
+        "spell_damage_taken_bonus_per_10k": 0
+      }
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A06O",
       "unit_rawcode": "h05H",

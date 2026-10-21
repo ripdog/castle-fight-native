@@ -14,6 +14,8 @@ fn source(sim: &mut Simulation, x: i32, ability: u32, family: u32, armor: i16) -
                     targets: AttackTargetMask::AIR_AND_GROUND,
                     linger_ticks: 0,
                     spell_damage_taken_bonus_per_10k: 0,
+                    damage_bonus_per_10k: 0,
+                    organic_only: false,
                 },
             )),
             ..Default::default()
@@ -174,6 +176,8 @@ fn building_source(sim: &mut Simulation, team: u8, x: i32, ability: u32, spell_b
                     targets: AttackTargetMask::AIR_AND_GROUND,
                     linger_ticks: 0,
                     spell_damage_taken_bonus_per_10k: spell_bonus,
+                    damage_bonus_per_10k: 0,
+                    organic_only: false,
                 },
             )),
             ..Default::default()

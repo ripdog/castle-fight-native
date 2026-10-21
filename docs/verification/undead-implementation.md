@@ -57,3 +57,11 @@ Retained Castle Fight 9.27/r1 extraction tree: `8ea806dca331ff254995e94e6f0baf22
 
 - Identity/source: runtime r213; `h054` (`hbla`) upgrades from the Crypt (the end of the line) and produces `h05H` (`hfoo`). Protected life, armor, movement and the Chaos melee weapon come from the catalogs.
 - Complete inventory/control flow: `A07K` marker; `A06O` (`Asph`, "Sphere"), the shared native Sphere with its own retained row; `A01O` the Vampire's friendly Vampiric Aura (same ability object); `A06N` (`ACvp`, self) a stronger self-only Vampiric Aura (70%). The Lord's own two auras never stack: only the larger value applies to it, and it benefits from nearby Vampires' `A01O` only when that is larger than its own. No hidden proxy exists on this body.
+
+## Haunted Mine / Banshee
+
+- Identity/source: runtime r214; `h01L` (`hbla`) produces `u001` (`uswb`) in the fourth slot of the top row; it has no upgrade. Protected life, armor, movement, the mana pool (240, starting 150) and the weapon come from the catalogs.
+- Complete inventory/control flow: `A01N` (`ACac`, "Command Aura") with a negative value and an enemy mask is a hostile damage aura; `A01M` (`Aslo`, "Slow") is the default-active (`udaa`) native Slow autocast. Both are registered object data with no script consumer and no hidden proxy.
+- `A01N`: effect eligibility — enemy air or ground organic bodies (mechanical bodies are not recipients; the stock `ward` token only widens the mask) within the retained area (450) of the carrier; each recipient's attack damage changes by the retained −15% for melee and ranged weapons alike, via the shared native aura buff family (`B002`): where several carriers cover one recipient the strongest source applies, never their sum. It is a passive: no mana, cooldown or order.
+- `A01M`: the shared native Slow primitive (default-active autocast on the nearest enemy in combat within the retained range 800): the protected mana cost (25) and cooldown (10 s), the retained movement and attack-speed slow (30% each) for the retained duration (35 s; hero duration 8.75 s), air and ground units.
+- Engine change: the hostile aura profile gained a signed attack-damage change and an organic-only restriction (both neutral for Devotion); the tuning projection routes the negative Command Aura through it. Snapshot schema 113, checksum schema 110.

@@ -147,6 +147,19 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     if kind == "incinerate":
         from project_incinerate import project
         return project(recipe, fields, mechanics["native_base"])
+    if kind == "hostile-damage-aura":
+        # Native Command Aura (ACac) on enemies: DataA is a negative percent change of attack damage
+        # for both weapon classes; the shared buff family selects the strongest source per recipient.
+        if (mechanics["native_base"] != "ACac"
+                or set(fields["targs1"].split(",")) - {"ward"} != {"air", "enemies", "ground", "organic", "vulnerable"}
+                or number("DataA1", 10_000) >= 0 or number("DataB1") != 1 or number("DataC1") != 1
+                or number("DataD1") != 0 or number("Dur1", 30) != number("HeroDur1", 30)
+                or len(fields["buffid1"]) != 4):
+            raise ValueError("hostile Command Aura requires its negative percent damage, both weapon classes and organic mask")
+        return {**recipe, "kind": "hostile-armor-aura", "profile": {"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
+            "buff_rawcode": int.from_bytes(fields["buffid1"].encode(), "big"), "radius": number("Area1", 1024),
+            "armor_bonus_per_100": 0, "damage_bonus_per_10k": number("DataA1", 10_000), "organic_only": True,
+            "targets": 3, "linger_ticks": number("Dur1", 30), "spell_damage_taken_bonus_per_10k": 0}}
     if kind == "hostile-armor-aura":
         if (mechanics["native_base"] != "AHad" or set(fields["targs1"].split(",")) - {"ward"} != {"air", "enemies", "ground", "vulnerable"}
                 or number("DataB1") != 0 or number("DataA1", 100) >= 0

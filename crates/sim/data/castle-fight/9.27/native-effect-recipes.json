@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A01M","unit_rawcode":"u001","kind":"native-debuff"},
+    {"source_kind":"unit-ability","source_key":"A01N","unit_rawcode":"u001","kind":"hostile-damage-aura"},
     {"source_kind":"unit-ability","source_key":"A06O","unit_rawcode":"h05H","kind":"sphere"},
     {"source_kind":"unit-ability","source_key":"A06N","unit_rawcode":"h05H","kind":"native-aura"},
     {"source_kind":"unit-ability","source_key":"A01O","unit_rawcode":"h01U","kind":"native-aura"},

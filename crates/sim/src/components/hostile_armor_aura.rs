@@ -12,9 +12,15 @@ pub struct HostileArmorAuraProfile {
     /// Script-owned extra non-attack damage for recipients carrying this aura's buff.
     #[serde(default)]
     pub spell_damage_taken_bonus_per_10k: u16,
+    /// Command Aura: a signed change to the recipients' attack damage (negative on enemies).
+    #[serde(default)]
+    pub damage_bonus_per_10k: i16,
+    /// Mechanical enemies are not recipients (the native mask lists `organic`).
+    #[serde(default)]
+    pub organic_only: bool,
 }
 impl HostileArmorAuraProfile {
-    pub(crate) fn canonical_words(self) -> [u64; 7] {
+    pub(crate) fn canonical_words(self) -> [u64; 9] {
         [
             u64::from(self.ability.0),
             u64::from(self.buff_rawcode),
@@ -23,6 +29,8 @@ impl HostileArmorAuraProfile {
             u64::from(self.targets.bits()),
             u64::from(self.linger_ticks),
             u64::from(self.spell_damage_taken_bonus_per_10k),
+            self.damage_bonus_per_10k as u64,
+            u64::from(self.organic_only),
         ]
     }
 }

@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    Banshee = 0x1000_00ab => b"u001",
     Vampire = 0x1000_00a9 => b"h01U",
     VampireLord = 0x1000_00aa => b"h05H",
     LichKing = 0x1000_00a7 => b"u00D",
@@ -206,6 +207,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    HauntedMine = 0x2000_00a4 => b"h01L",
     Crypt = 0x2000_00a2 => b"h01N",
     Graveyard = 0x2000_00a3 => b"h054",
     HighCitadelOfNecromancy = 0x2000_00a1 => b"h055",

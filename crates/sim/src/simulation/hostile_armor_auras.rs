@@ -42,10 +42,18 @@ impl Simulation {
                     .iter()
                     .filter(|(p, _, team, position)| {
                         target.team != *team
+                            && !(p.organic_only && target.mechanical)
                             && p.targets.can_target_unit(target.target_movement_class())
                             && position.distance_sq(target.position) <= square_i32(p.radius)
                     })
-                    .min_by_key(|(p, id, _, _)| (p.armor_bonus_per_100, p.ability, *id))
+                    .min_by_key(|(p, id, _, _)| {
+                        (
+                            p.armor_bonus_per_100,
+                            p.damage_bonus_per_10k,
+                            p.ability,
+                            *id,
+                        )
+                    })
                 else {
                     continue;
                 };
@@ -54,6 +62,7 @@ impl Simulation {
                     TimedArmorModifier {
                         id: ModifierId(p.ability.0),
                         armor_bonus_per_100: p.armor_bonus_per_100,
+                        damage_bonus_per_10k: p.damage_bonus_per_10k,
                         native_buff: Some(crate::NativeBuffIdentity {
                             rawcode: p.buff_rawcode,
                             positive: false,
