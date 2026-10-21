@@ -33,6 +33,10 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    SkeletalHero = 0x1000_00ae => b"n00C",
+    SkeletonWarrior = 0x1000_00af => b"u002",
+    SkeletonArcher = 0x1000_00b0 => b"n00D",
+    SkeletalMage = 0x1000_00b1 => b"u00A",
     FrostWyrm = 0x1000_00ad => b"u000",
     FleshGolem = 0x1000_00ac => b"n00E",
     Banshee = 0x1000_00ab => b"u001",
@@ -366,6 +370,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    SkullPile = 0x2100_003f => b"h01P",
     DeathPit = 0x2100_003e => b"h00A",
     PowerPlant = 0x2100_003d => b"h09T",
     EnergyTower = 0x2100_003c => b"h05L",

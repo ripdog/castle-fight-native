@@ -5,6 +5,60 @@
     {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
+      "source_key": "A01Q",
+      "unit_rawcode": "h01P",
+      "spellcasting": {
+        "mana": {
+          "maximum": 15,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093677393,
+          "mana_cost": 12,
+          "cooldown_ticks": 30,
+          "range": 102398976,
+          "target_policy": "NativeBuildingSpellTrigger",
+          "effect": {
+            "BuildingScript": {
+              "ability": 1093677393,
+              "trigger_targets": 5,
+              "trigger_invulnerable": true,
+              "trigger_spell_immune": false,
+              "trigger_mechanical_only": false,
+              "child": {
+                "RaiseFromCorpse": {
+                  "map_version": {
+                    "major": 9,
+                    "minor": 27
+                  },
+                  "rare_body": 1848651843,
+                  "rare_chance_per_10k": 1000,
+                  "common_bodies": [
+                    1966092338,
+                    1848651844,
+                    1966092353
+                  ],
+                  "excluded_ability": 1098282348
+                }
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/building-spell-mechanics.tsv",
+        "fields": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "functions": "BuildingSpellClosure_registerBuildingSpell_RaceUndeadAbilities_cast_registerBuildingSpell_RaceUndeadAbilities,ForGroupCallback_forUnitsInRect_RaceUndeadAbilities_callback_forUnitsInRect_RaceUndeadAbilities,raiseFromCorpse"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
       "source_key": "A033",
       "unit_rawcode": "h00A",
       "spellcasting": {

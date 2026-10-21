@@ -42,6 +42,17 @@ pub enum BuildingChild {
         /// This unit type is never chosen.
         excluded_type: u32,
     },
+    /// Consumes the corpse of a random dying combat body (of either team, never undead or
+    /// invulnerable-marked) and creates a skeleton there for the building's player: the rare body
+    /// with the retained chance, otherwise one of the common bodies uniformly.
+    RaiseFromCorpse {
+        map_version: crate::MapVersion,
+        rare_body: u32,
+        rare_chance_per_10k: u16,
+        common_bodies: [u32; 3],
+        /// Bodies carrying this marker (the invulnerable ability) are never chosen.
+        excluded_ability: AbilityId,
+    },
     /// Stores one team charge that the shared damage listener spends on the next qualifying melee
     /// attack of an allied unit.
     ThunderCharge(ThunderCallProfile),
@@ -103,6 +114,23 @@ impl BuildingChild {
                 u64::from(shield_ability.0),
                 u64::from(level),
                 u64::from(upgrade_existing),
+            ],
+            Self::RaiseFromCorpse {
+                map_version,
+                rare_body,
+                rare_chance_per_10k,
+                common_bodies,
+                excluded_ability,
+            } => vec![
+                8,
+                u64::from(map_version.major),
+                u64::from(map_version.minor),
+                u64::from(rare_body),
+                u64::from(rare_chance_per_10k),
+                u64::from(common_bodies[0]),
+                u64::from(common_bodies[1]),
+                u64::from(common_bodies[2]),
+                u64::from(excluded_ability.0),
             ],
             Self::DeathPit {
                 damage,

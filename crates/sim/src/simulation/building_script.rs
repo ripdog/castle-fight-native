@@ -72,6 +72,25 @@ impl Simulation {
                 (cap, priority_above, damage_per_mana, excluded_ability),
                 units,
             ),
+            BuildingChild::RaiseFromCorpse {
+                map_version,
+                rare_body,
+                rare_chance_per_10k,
+                common_bodies,
+                excluded_ability,
+            } => self.cast_raise_from_corpse(
+                source,
+                profile.ability,
+                sequence,
+                (
+                    map_version,
+                    rare_body,
+                    rare_chance_per_10k,
+                    common_bodies,
+                    excluded_ability,
+                ),
+                units,
+            ),
             BuildingChild::DeathPit {
                 damage,
                 excluded_ability,
@@ -241,6 +260,93 @@ impl Simulation {
             index,
             before.saturating_sub(damage),
             Some(source.id),
+        );
+        1
+    }
+
+    /// `raiseFromCorpse`: the corpse of a random dying combat body, whichever team it belonged to,
+    /// is removed and a skeleton appears in its place for the building's player.
+    fn cast_raise_from_corpse(
+        &mut self,
+        source: AbilitySourceSnapshot,
+        ability: AbilityId,
+        sequence: u64,
+        (map_version, rare_body, rare_chance_per_10k, common_bodies, excluded_ability): (
+            MapVersion,
+            u32,
+            u16,
+            [u32; 3],
+            AbilityId,
+        ),
+        units: &[UnitSnapshot],
+    ) -> usize {
+        let mut query = self.world.query::<(Entity, &SimId, &Corpse, &Position)>();
+        let Some((_, id, entity, original, position)) = query
+            .iter(&self.world)
+            .filter(|(_, _, corpse, _)| {
+                crate::content::dying_sapper_corpse_qualifies_927(
+                    corpse.definition,
+                    excluded_ability,
+                )
+            })
+            .map(|(entity, id, corpse, position)| {
+                (
+                    deterministic_ability_target_rank(
+                        self.config.match_seed,
+                        source.id,
+                        ability,
+                        sequence,
+                        *id,
+                    ),
+                    *id,
+                    entity,
+                    corpse.source_unit,
+                    position.0,
+                )
+            })
+            .min_by_key(|(rank, id, ..)| (*rank, *id))
+        else {
+            return 0;
+        };
+        let Some(owner) = self
+            .world
+            .get::<Owner>(self.source_entity(source, units))
+            .map(|owner| owner.0)
+        else {
+            return 0;
+        };
+        // One roll picks the rare tier; the common tier is a second independent draw.
+        let roll = deterministic_random(
+            self.config.match_seed,
+            self.next_tick,
+            source.id,
+            u64::from(ability.0),
+            sequence ^ id.0,
+        ) % u64::from(ATTACK_PROC_CHANCE_SCALE);
+        let body = if roll < u64::from(rare_chance_per_10k) {
+            rare_body
+        } else {
+            let pick = deterministic_random(
+                self.config.match_seed,
+                self.next_tick,
+                source.id,
+                u64::from(ability.0) ^ 0x5241_4953_4500_0001,
+                sequence ^ id.0,
+            ) % common_bodies.len() as u64;
+            common_bodies[usize::try_from(pick).expect("common body index")]
+        };
+        let definition = crate::CastleFightUnitKind::from_rawcode_for_version(body, map_version)
+            .unwrap()
+            .expect("promoted raised skeleton")
+            .definition_for_version(map_version)
+            .unwrap()
+            .resolved();
+        self.retired_damage_sources.remove(&original);
+        self.world.despawn(entity);
+        self.spawn_resolved_unit_unchecked(
+            Some(owner),
+            UnitSpawn::from_template(source.team, position, definition.template),
+            definition,
         );
         1
     }

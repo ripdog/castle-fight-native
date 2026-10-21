@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r217";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r218";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -2105,6 +2105,9 @@ fn stable_ability_id(
         }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A033") => {
             0x4000_0270
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A01Q") => {
+            0x4000_0271
         }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0GN") => {
             0x4000_022a
@@ -6397,6 +6400,19 @@ pub(crate) fn raisable_corpse_927(definition: CorpseDefinitionId) -> bool {
         .corpses
         .get(&definition.0)
         .is_some_and(|corpse| corpse.can_raise)
+}
+
+/// `isDyingCombatSapper` filtered like the Skull Pile: a combat body that is neither undead nor
+/// carries the excluded marker ability. The map's raise flag plays no part.
+pub(crate) fn dying_sapper_corpse_qualifies_927(
+    definition: CorpseDefinitionId,
+    excluded_ability: AbilityId,
+) -> bool {
+    extracted_content_927()
+        .units
+        .get(&definition.0)
+        .is_some_and(|unit| unit.sapper && !unit.undead)
+        && !unit_has_ability_927(definition.0, excluded_ability)
 }
 
 pub(crate) fn vessel_corpse_qualifies_927(definition: CorpseDefinitionId) -> bool {

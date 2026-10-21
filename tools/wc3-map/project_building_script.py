@@ -68,6 +68,32 @@ def _mana_burn(params, detail, number, raw):
         'damage_per_mana': number(factor[1]), 'excluded_ability': int(excluded[1])}}
 
 
+def _raise_from_corpse(params, detail, number, raw):
+    functions = detail['functions']
+    names = detail['building_spell']['source_functions'].split(',')
+    closure = functions[names[0]]
+    body = functions['raiseFromCorpse']
+    picker = functions['ForGroupCallback_forUnitsInRect_RaceUndeadAbilities_callback_forUnitsInRect_RaceUndeadAbilities']
+    outcomes = params['summon_outcomes']
+    called = re.fullmatch(r'function \w+\(\w+,\w+\)local (\w+)=nil \1=\w+ raiseFromCorpse\(\1,(\d+),(\d+),(\d+),(\d+)\)end', closure.strip())
+    shape = (r'(\w+)=randomDyingSapper\(\)if\(\1==nil\)then return end (\w+)=tupleCopy1\(unit_getPos\(\1\)\).*?'
+        r'(\w+)=(\w+) if\(GetRandomInt\(0,99\)>=(\d+)\)then (\w+)=GetRandomInt\(0,2\)(\w+)=\6 if\(\7==0\)then \3=(\w+) elseif\(\7==1\)then \3=(\w+) else \3=(\w+) end end '
+        r'orderCodeAttack\(createUnit\(unit_getOwner\(\w+\),\3,\2,\{0\.\}\)\)(\w+)=\1 __wurst_safe_RemoveUnit\(\11\)')
+    matched = re.search(shape, body)
+    avul = raw('Avul')
+    if (called is None or matched is None or len(outcomes) != 4 or outcomes[0]['probability_percent'] != 10
+            or [o['probability_percent'] for o in outcomes[1:]] != [30, 30, 30]
+            or [int(called[i]) for i in range(2, 6)] != [o['unit_id'] for o in outcomes]
+            or int(matched[5]) != outcomes[0]['probability_percent']
+            or not re.search(r'isDyingCombatSapper\(\w+\)and\(unit_getAbilityLevel\(\w+,%d\)<=0\)\)and\(not unit_isType\(\w+,UNIT_TYPE_UNDEAD\)\)' % avul, picker)
+            or params['consumption_mode'] != 'selected-only' or params['requires_wc3_can_raise']
+            or 'group_getRandom(' not in functions['randomDyingSapper']):
+        raise ValueError('Skull Pile control flow changed: random dying non-undead combat body raised into a tiered skeleton')
+    return {'RaiseFromCorpse': {'map_version': detail['map_version'], 'rare_body': outcomes[0]['unit_id'],
+        'rare_chance_per_10k': number(outcomes[0]['probability_percent'], 100),
+        'common_bodies': [o['unit_id'] for o in outcomes[1:]], 'excluded_ability': avul}}
+
+
 def _death_pit(params, detail, number, raw):
     functions = detail['functions']
     body = functions['deathPitSpell']
@@ -189,6 +215,8 @@ def project(recipe, fields, unit, protected, detail):
         child = _replenish(params, detail, number, raw)
     elif kind == 'dummy-target-illusion':
         child = _hallucination(params, detail, number, raw)
+    elif kind == 'scripted-raise-random':
+        child = _raise_from_corpse(params, detail, number, raw)
     elif kind == 'direct-random-target-damage':
         child = _death_pit(params, detail, number, raw)
     elif kind == 'armed-next-melee-attack-splash':
