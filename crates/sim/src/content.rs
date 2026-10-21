@@ -2124,6 +2124,9 @@ fn stable_ability_id(
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A01T") => {
             0x4000_0276
         }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A08X") => {
+            0x4000_0277
+        }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0GN") => {
             0x4000_022a
         }
@@ -6964,9 +6967,28 @@ fn extracted_unit_definition_927(
         .units
         .get(&rawcode)
         .unwrap_or_else(|| panic!("unit {rawcode:#010x} missing from retained 9.27 unit table"));
-    let protected = content.protected_stats.get(&rawcode).unwrap_or_else(|| {
-        panic!("unit {rawcode:#010x} missing from retained 9.27 protected stats")
-    });
+    // A body the map script never touches (a Raise Dead ghoul) keeps its object's own stats.
+    let native_protected;
+    let protected = if let Some(protected) = content.protected_stats.get(&rawcode) {
+        protected
+    } else {
+        native_protected = ExtractedProtectedStats927 {
+            health: unit.native_health.unwrap_or_else(|| {
+                panic!("unit {rawcode:#010x} missing from retained 9.27 protected stats")
+            }),
+            armor: unit.native_armor.unwrap_or_else(|| {
+                panic!("unit {rawcode:#010x} missing from retained 9.27 protected stats")
+            }),
+            move_speed_per_tick: unit.move_speed_per_tick,
+            attack1_damage: None,
+            attack1_cooldown_ticks: None,
+            attack1_range: None,
+            attack2_damage: None,
+            attack2_cooldown_ticks: None,
+            attack2_range: None,
+        };
+        &native_protected
+    };
     // Unit entities require an AttackProfile even when the native object has no weapon.
     // An empty target mask and zero damage make this engine carrier inert; none of
     // these placeholder fields are imported as a Warcraft weapon or tuning value.
