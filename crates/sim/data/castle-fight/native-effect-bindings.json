@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A09O","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A09N","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A09B","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27","notes":"Goblin Shredder Engine Overheat death explosion; its per-level amounts are consumed by the overheat death resolution and it is never cast directly."},
     {"source_kind":"unit-ability","source_key":"A09C","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27","notes":"Goblin Shredder Engine Overheat attack-speed item ability; its per-level bonus is consumed by the building-spell overheat state and it is never cast directly."},

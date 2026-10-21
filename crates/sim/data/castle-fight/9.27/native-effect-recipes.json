@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A09O","unit_rawcode":"h05R","kind":"building-script"},
     {"source_kind":"unit-ability","source_key":"A09N","unit_rawcode":"h06J","kind":"building-script"},
     {"source_kind":"unit-ability","source_key":"A094","unit_rawcode":"n01T","kind":"cleave"},
     {"source_kind":"unit-ability","source_key":"A092","unit_rawcode":"n024","kind":"pulverize"},

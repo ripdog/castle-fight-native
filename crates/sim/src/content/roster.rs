@@ -339,6 +339,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    RedShieldGenerator = 0x2100_003b => b"h05R",
     BlueShieldGenerator = 0x2100_003a => b"h06J",
     CelestialChiTower = 0x2100_0039 => b"h07V",
     ThunderpawSpire = 0x2100_0038 => b"h07R",
