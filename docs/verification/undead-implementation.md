@@ -8,3 +8,9 @@ Retained Castle Fight 9.27/r1 extraction tree: `8ea806dca331ff254995e94e6f0baf22
 - Complete inventory/control flow: the sole ability is `A01L` (`ANpi`, "Permanent Immolation"), registered object data with no script consumer and no hidden proxy. It is the shared native permanent Immolation primitive (`warcraft-permanent-immolation-v1`, also used by the Infernal): radius, damage per interval, interval and target mask come from the retained row. Unlike the Infernal's variant its mask is organic-only, so mechanical bodies are never burned (the recipe projects the `organic` qualifier).
 - State: none beyond the shared Immolation pulse phase.
 - Undead becomes selectable with this completed root; later roots remain unavailable until their own mechanics are verified.
+
+## Tainted Farm / Suffocated Zombie
+
+- Identity/source: runtime r208; `h04Z` (`hbla`) upgrades from the Rotting Hay Cart (and leads to the Defiled Granary) and produces `n01K` (`nzom`). Protected life, armor, movement and the Chaos melee weapon come from the catalogs; the second weapon is disabled and unavailable.
+- Complete inventory/control flow: `A05Q` (`ACvs`, "Envenomed Weapons") and `A05P` (`ANpi`, "Permanent Immolation"), both registered object data with no script consumer, proxy or hidden marker. `A05Q` is the shared native poison primitive (`warcraft-poison-v1`): per-second damage, movement factor (the retained `DataB` slow), attack-speed factor (zero), duration, the shorter hero duration, per-source stacking and the organic-only non-lethal pulses all come from the retained row. `A05P` is the same organic-only native Immolation as the Zombie's with its own retained radius and damage.
+- State: ordinary poison and Immolation state only.
