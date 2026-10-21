@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 108;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 109;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -3337,6 +3337,8 @@ impl Simulation {
                     || (target.attack.delivery == AttackDelivery::Melee && !profile.affects_melee)
                     || (target.attack.delivery != AttackDelivery::Melee && !profile.affects_ranged)
                     || ((profile.self_only || profile.radius == 0) && target.id != source_id)
+                    || (profile.excludes_source && target.id == source_id)
+                    || (profile.organic_only && target.mechanical)
                     || position.distance_sq(target.position) > square_i32(profile.radius)
                 {
                     continue;

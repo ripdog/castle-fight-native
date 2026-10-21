@@ -2881,6 +2881,8 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: &PassiveUnitEffects) {
                 hash.write_i32(i32::from(profile.armor_bonus_per_100));
                 hash.write_u64(u64::from(profile.mana_regeneration_per_second_per_10k));
                 hash.write_u8(u8::from(profile.suspend_during_spell_cooldown));
+                hash.write_u8(u8::from(profile.organic_only));
+                hash.write_u8(u8::from(profile.excludes_source));
             }
             PassiveUnitEffect::Pulverize(profile) => {
                 hash.write_u8(12);

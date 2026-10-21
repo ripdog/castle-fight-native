@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r212";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r213";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -1050,6 +1050,8 @@ impl CastleFightUnitKind {
                         armor_bonus_per_100: 300,
                         mana_regeneration_per_second_per_10k: 0,
                         suspend_during_spell_cooldown: false,
+                        organic_only: false,
+                        excludes_source: false,
                     }));
                 }
             }
@@ -1073,6 +1075,8 @@ impl CastleFightUnitKind {
                     armor_bonus_per_100: 900,
                     mana_regeneration_per_second_per_10k: 0,
                     suspend_during_spell_cooldown: false,
+                    organic_only: false,
+                    excludes_source: false,
                 }));
             }
             Self::Warlock => effects.push(PassiveUnitEffect::Aura(AuraEffectProfile {
@@ -1088,6 +1092,8 @@ impl CastleFightUnitKind {
                 armor_bonus_per_100: 0,
                 mana_regeneration_per_second_per_10k: 10_000,
                 suspend_during_spell_cooldown: true,
+                organic_only: false,
+                excludes_source: false,
             })),
             _ => {}
         }
@@ -2072,6 +2078,15 @@ fn stable_ability_id(
         }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A085") => {
             0x4000_0267
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A01O") => {
+            0x4000_0268
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A06N") => {
+            0x4000_0269
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A06O") => {
+            0x4000_026a
         }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0GN") => {
             0x4000_022a
@@ -3980,6 +3995,8 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
                 hash.write_i32(i32::from(profile.armor_bonus_per_100));
                 hash.write_u32(profile.mana_regeneration_per_second_per_10k);
                 hash.write_u8(u8::from(profile.suspend_during_spell_cooldown));
+                hash.write_u8(u8::from(profile.organic_only));
+                hash.write_u8(u8::from(profile.excludes_source));
             }
             PassiveUnitEffect::Pulverize(profile) => {
                 hash.write_u8(12);

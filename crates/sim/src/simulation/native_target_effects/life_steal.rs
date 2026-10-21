@@ -14,6 +14,8 @@ fn aura() -> PassiveUnitEffect {
         affects_ranged: false,
         linger_ticks: 1,
         suspend_during_spell_cooldown: false,
+        organic_only: false,
+        excludes_source: false,
     })
 }
 

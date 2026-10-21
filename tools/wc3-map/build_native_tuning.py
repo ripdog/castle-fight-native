@@ -575,7 +575,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     elif kind == "native-aura":
         base = mechanics["native_base"]
         self_only = base == 'ACvp' and fields['targs1'] == 'self'
-        if not self_only and set(fields["targs1"].split(",")) != {"air", "ground", "friend", "self", "vuln", "invu"}:
+        # Vampiric Aura on friendly organic bodies: no `self` token, so the carrier is not a recipient.
+        friends_only = base == 'ACvp' and set(fields['targs1'].split(',')) == {'air', 'friend', 'ground', 'invulnerable', 'organic', 'vulnerable'}
+        if not (self_only or friends_only) and set(fields["targs1"].split(",")) != {"air", "ground", "friend", "self", "vuln", "invu"}:
             raise ValueError("native aura requires explicit target semantics")
         damage, armor, mana, returned, melee, ranged = 0, 0, 0, 0, True, True
         if base in {"AIar", "ACac"}:
@@ -591,8 +593,8 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
                 raise ValueError("native mana aura requires flat regeneration")
             mana = number("DataA1", 10_000)
         elif base == "ACvp":
-            if not self_only or number('DataA1', 10000) < 0:
-                raise ValueError('self Vampiric Aura requires its exact native self mask and positive factor')
+            if not (self_only or friends_only) or number('DataA1', 10000) < 0:
+                raise ValueError('Vampiric Aura requires its exact native self or friendly organic mask and positive factor')
             melee, ranged = True, False
         elif base == "AEah":
             if number("DataB1") != 1 or number("DataA1", 10_000) < 0:
@@ -605,6 +607,8 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
             melee_damage_return_per_10k=returned,
             mana_regeneration_per_second_per_10k=mana, affects_melee=melee, affects_ranged=ranged,
             linger_ticks=int((Decimal(fields["dur1"]) * 30).to_integral_value(rounding="ROUND_CEILING")))
+        if friends_only:
+            effect.update(organic_only=True, excludes_source=True)
     elif kind == "pulverize":
         if set(fields["targs1"].split(",")) - {"ground", "enemy", "enemies", "neutral", "ward"}:
             raise ValueError("unsupported native Pulverize mask")

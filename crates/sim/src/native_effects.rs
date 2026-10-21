@@ -821,6 +821,12 @@ enum TuningEffect {
         self_only: bool,
         #[serde(default)]
         melee_life_steal_per_10k: u32,
+        /// Friendly recipients must be organic (mechanical bodies are excluded).
+        #[serde(default)]
+        organic_only: bool,
+        /// The carrier itself is not a recipient (the native mask lacks `self`).
+        #[serde(default)]
+        excludes_source: bool,
         source_kind: String,
         source_key: String,
         unit_rawcode: String,
@@ -2108,6 +2114,8 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             source_key,
             radius_world,
             mana_regeneration_per_second_per_10k,
+            organic_only,
+            excludes_source,
             ..
         } => PassiveUnitEffect::Aura(crate::components::AuraEffectProfile {
             self_only: *self_only,
@@ -2122,6 +2130,8 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             armor_bonus_per_100: *armor_bonus_per_100,
             mana_regeneration_per_second_per_10k: *mana_regeneration_per_second_per_10k,
             suspend_during_spell_cooldown: false,
+            organic_only: *organic_only,
+            excludes_source: *excludes_source,
         }),
         TuningEffect::GobboRepair { profile, .. } => {
             assert!(

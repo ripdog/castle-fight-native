@@ -1688,6 +1688,8 @@ fn native_mana_aura_retains_fractional_regeneration_and_continues_during_cast_co
                     armor_bonus_per_100: 0,
                     mana_regeneration_per_second_per_10k: 13_000,
                     suspend_during_spell_cooldown: false,
+                    organic_only: false,
+                    excludes_source: false,
                 },
             )),
             ..UnitGameplayProperties::default()
@@ -1753,6 +1755,8 @@ fn native_damage_aura_filters_weapon_class_and_does_not_stack_duplicate_sources(
         affects_ranged: false,
         linger_ticks: 0,
         suspend_during_spell_cooldown: false,
+        organic_only: false,
+        excludes_source: false,
     };
     let properties = UnitGameplayProperties {
         collision_radius: Some(CollisionRadius(0)),
@@ -1832,6 +1836,8 @@ fn native_aura_keeps_its_authored_linger_after_source_removal_across_recovery() 
                     affects_ranged: true,
                     linger_ticks: 7,
                     suspend_during_spell_cooldown: false,
+                    organic_only: false,
+                    excludes_source: false,
                 },
             )),
             ..Default::default()

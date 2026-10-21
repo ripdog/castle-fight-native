@@ -182,6 +182,8 @@ fn locust_handles_do_not_become_weapon_targets_or_ordinary_aura_recipients() {
                     mana_regeneration_per_second_per_10k: 0,
                     linger_ticks: 0,
                     suspend_during_spell_cooldown: false,
+                    organic_only: false,
+                    excludes_source: false,
                 },
             )),
             ..Default::default()

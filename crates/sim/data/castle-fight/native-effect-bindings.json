@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A06O","implementation":"warcraft-sphere-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A06N","implementation":"warcraft-native-aura-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A01O","implementation":"warcraft-native-aura-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A085","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A08X","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A086","implementation":"warcraft-death-mastery-v1","valid_from":"9.27","valid_through":"9.27"},

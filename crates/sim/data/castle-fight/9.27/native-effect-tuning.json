@@ -3,6 +3,64 @@
   "map_version": "9.27",
   "effects": [
     {
+      "source_kind": "unit-ability",
+      "source_key": "A06O",
+      "unit_rawcode": "h05H",
+      "kind": "sphere",
+      "profile": {
+        "ability": 1093678671,
+        "attachment_count": 2,
+        "cooldown_ticks": 30,
+        "speed_per_tick": 0
+      },
+      "provenance": {
+        "ability": "A06O",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A06N",
+      "unit_rawcode": "h05H",
+      "kind": "native-aura",
+      "radius_world": 900,
+      "damage_bonus_per_10k": 0,
+      "armor_bonus_per_100": 0,
+      "self_only": true,
+      "melee_life_steal_per_10k": 7000,
+      "melee_damage_return_per_10k": 0,
+      "mana_regeneration_per_second_per_10k": 0,
+      "affects_melee": true,
+      "affects_ranged": false,
+      "linger_ticks": 0,
+      "provenance": {
+        "ability": "A06N",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A01O",
+      "unit_rawcode": "h01U",
+      "kind": "native-aura",
+      "radius_world": 900,
+      "damage_bonus_per_10k": 0,
+      "armor_bonus_per_100": 0,
+      "self_only": false,
+      "melee_life_steal_per_10k": 3500,
+      "melee_damage_return_per_10k": 0,
+      "mana_regeneration_per_second_per_10k": 0,
+      "affects_melee": true,
+      "affects_ranged": false,
+      "linger_ticks": 0,
+      "organic_only": true,
+      "excludes_source": true,
+      "provenance": {
+        "ability": "A01O",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
       "source_key": "A085",

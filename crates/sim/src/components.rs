@@ -895,6 +895,12 @@ pub struct AuraEffectProfile {
     pub armor_bonus_per_100: i16,
     pub mana_regeneration_per_second_per_10k: u32,
     pub suspend_during_spell_cooldown: bool,
+    /// Only organic friendly recipients are affected.
+    #[serde(default)]
+    pub organic_only: bool,
+    /// The carrier is not one of its own recipients.
+    #[serde(default)]
+    pub excludes_source: bool,
 }
 
 /// Script-ordered native Mirror Image. Values are version-scoped source projections.

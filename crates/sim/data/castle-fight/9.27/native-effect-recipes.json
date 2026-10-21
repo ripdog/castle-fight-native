@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A06O","unit_rawcode":"h05H","kind":"sphere"},
+    {"source_kind":"unit-ability","source_key":"A06N","unit_rawcode":"h05H","kind":"native-aura"},
+    {"source_kind":"unit-ability","source_key":"A01O","unit_rawcode":"h01U","kind":"native-aura"},
     {"source_kind":"unit-ability","source_key":"A085","unit_rawcode":"u00D","kind":"raise-dead"},
     {"source_kind":"unit-ability","source_key":"A086","unit_rawcode":"u00D","kind":"death-mastery"},
     {"source_kind":"unit-ability","source_key":"A05L","unit_rawcode":"u009","kind":"raise-dead"},
