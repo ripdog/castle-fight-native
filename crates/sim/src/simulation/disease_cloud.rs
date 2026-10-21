@@ -58,8 +58,7 @@ impl Simulation {
     ) {
         let limit = square_i32(radius);
         let refresh_window = CASTLE_FIGHT_SIMULATION_HZ as u64;
-        for i in 0..units.len() {
-            let unit = &units[i];
+        for unit in units.iter_mut() {
             if !hostile(unit, team, targets, organic_only)
                 || center.distance_sq(unit.position) > limit
             {
@@ -77,7 +76,7 @@ impl Simulation {
                 })
             });
             if !fresh {
-                self.apply_poison(source, &mut units[i], infection, self.next_tick);
+                self.apply_poison(source, unit, infection, self.next_tick);
             }
         }
     }
