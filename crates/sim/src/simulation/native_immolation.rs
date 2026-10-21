@@ -1,7 +1,26 @@
 use super::*;
 
 impl Simulation {
-    pub(super) fn resolve_permanent_immolation(&self, units: &mut [UnitSnapshot]) {
+    pub(super) fn resolve_permanent_immolation(
+        &self,
+        units: &mut [UnitSnapshot],
+        buildings: &[BuildingSnapshot],
+    ) {
+        // A completed building carries its own Immolation from the tick it finished.
+        let building_sources = buildings
+            .iter()
+            .filter(|b| b.health > 0 && self.world.get::<BuildingConstruction>(b.entity).is_none())
+            .flat_map(|b| {
+                let position =
+                    footprint_center_point(b.footprint, self.config.navigation_cell_size);
+                b.passive_effects.iter().filter_map(move |effect| {
+                    let PassiveUnitEffect::PermanentImmolation(profile) = effect else {
+                        return None;
+                    };
+                    Some((b.id, b.team, position, b.spawn_tick.unwrap_or(0), profile))
+                })
+            })
+            .collect::<Vec<_>>();
         let sources = units
             .iter()
             .filter(|u| u.health > 0 && !u.abilities_disabled)
@@ -13,6 +32,7 @@ impl Simulation {
                     Some((u.id, u.team, u.position, u.spawn_tick, profile))
                 })
             })
+            .chain(building_sources)
             .collect::<Vec<_>>();
         for (source, team, position, created, profile) in sources {
             let age = self.next_tick.saturating_sub(created);

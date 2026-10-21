@@ -1963,7 +1963,7 @@ impl Simulation {
         timed!(
             spans,
             Span::PermanentImmolation,
-            self.resolve_permanent_immolation(&mut units)
+            self.resolve_permanent_immolation(&mut units, &buildings)
         );
         timed!(
             spans,

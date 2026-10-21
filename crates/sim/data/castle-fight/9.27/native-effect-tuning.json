@@ -4,6 +4,25 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A01T",
+      "unit_rawcode": "h01Q",
+      "kind": "permanent-immolation",
+      "profile": {
+        "ability": 1093677396,
+        "buff_rawcode": 1110454323,
+        "radius": 20480000,
+        "damage": 10,
+        "interval_ticks": 30,
+        "targets": 3,
+        "organic_only": true
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "ANpi"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A065",
       "unit_rawcode": "u00B",
       "kind": "cleave",
