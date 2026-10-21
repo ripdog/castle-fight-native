@@ -86,28 +86,62 @@ impl Simulation {
             .entity_mut(entity)
             .insert(NativeAction::BuildingDamageProc(state));
         // Each rolled proc creates a fresh native dummy; child cooldown is independent.
+        let child_targets = p.bolt.map_or_else(
+            || p.chain.expect("exactly one native child").targets,
+            |bolt| bolt.targets,
+        );
         if !success
             || victim.health <= 0
             || victim.team == state.team
             || victim.classifications.spell_immune
             || victim.classifications.invulnerable
             || !victim.visible_to(state.team, tick)
-            || !p
-                .bolt
-                .targets
-                .can_target_unit(victim.target_movement_class())
+            || !child_targets.can_target_unit(victim.target_movement_class())
             || state.origin.distance_sq(position) > square_i32(p.range)
         {
             return;
         }
-        self.launch_dummy_bolt(
-            source,
-            state.team,
-            state.origin,
-            victim.id,
-            position,
-            p.bolt,
-        );
+        match (p.bolt, p.chain) {
+            (Some(bolt), None) => {
+                self.launch_dummy_bolt(source, state.team, state.origin, victim.id, position, bolt);
+            }
+            (None, Some(chain)) => {
+                self.launch_dummy_chain_lightning(source, state.team, victim.id, position, chain, tick);
+            }
+            _ => unreachable!("exactly one native child"),
+        }
+    }
+
+    /// The dummy's Chain Lightning order on the damaged unit: the first bolt strikes that unit
+    /// itself on the next chain phase, then jumps follow the ordinary hop cadence.
+    fn launch_dummy_chain_lightning(
+        &mut self,
+        source: SimId,
+        team: Team,
+        target: SimId,
+        position: SimPoint,
+        profile: crate::ChainLightningEffectProfile,
+        tick: u64,
+    ) {
+        // `chain_lightning_jump_due_tick` fires jump one a quarter second after `started_tick`;
+        // an order issued now strikes at once, so the chain starts one jump interval in the past.
+        let one_jump = chain_lightning_jump_due_tick(0, 1);
+        let id = self.allocate_id();
+        self.world.spawn((
+            id,
+            crate::components::ChainLightningState {
+                source,
+                source_team: team,
+                profile,
+                started_tick: tick.saturating_sub(one_jump),
+                next_jump_index: 1,
+                current_target: target,
+                last_position: position,
+                next_damage: profile.initial_damage,
+                hit_targets: [SimId(0); MAX_BOUNCE_HITS],
+                hit_count: 0,
+            },
+        ));
     }
 }
 

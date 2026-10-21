@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r204";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r205";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -2005,6 +2005,12 @@ fn stable_ability_id(
         }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A09K") => {
             0x4000_024f
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A09U") => {
+            0x4000_0250
+        }
+        (NativeEffectSourceKind::AbilityEffect, v) if v == u32::from_be_bytes(*b"A09T") => {
+            0x4000_0251
         }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0GN") => {
             0x4000_022a
@@ -6595,9 +6601,24 @@ fn extracted_tower_definition_927(
                 spill_targets: parse_attack_targets_927(&line.splash_targets),
             }
         }
-        ExtractedWeaponKind927::Bounce => panic!(
-            "tower {rawcode:#010x} uses an extracted weapon primitive that is not implemented in the current native slice"
-        ),
+        ExtractedWeaponKind927::Bounce => {
+            let bounce = content
+                .bounce_weapons
+                .get(&rawcode)
+                .unwrap_or_else(|| panic!("tower {rawcode:#010x} needs retained bounce weapon fields"));
+            AttackDelivery::Bounce {
+                speed_per_tick: unit
+                    .projectile_speed_per_tick
+                    .unwrap_or_else(|| panic!("tower {rawcode:#010x} is missing bounce missile speed")),
+                bounce_range: world(bounce.range_world),
+                max_bounces: bounce
+                    .maximum_targets
+                    .checked_sub(1)
+                    .expect("bounce target count"),
+                damage_percent_per_bounce: bounce.damage_percent_per_bounce,
+                allow_repeat_targets: false,
+            }
+        }
     };
     AttackProfile {
         delivery,
