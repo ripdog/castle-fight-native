@@ -2189,6 +2189,7 @@ fn hash_status_state(hash: &mut Fnv64, status: &StatusState) {
         hash.write_u8(order.iterations);
         hash.write_u64(order.sequence);
         hash.write_i32(order.backstab_pending);
+        hash.write_u32(order.repair_remainder);
     }
     hash.write_u8(u8::from(status.wind_walk.is_some()));
     if let Some(w) = status.wind_walk {
@@ -2797,6 +2798,10 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: &PassiveUnitEffects) {
                 for word in profile.canonical_words() {
                     hash.write_u64(word);
                 }
+            }
+            PassiveUnitEffect::GobboRepair(profile) => {
+                hash.write_u8(45);
+                profile.visit_canonical_words(|word| hash.write_u64(word));
             }
             PassiveUnitEffect::ContactSelfDestruct(profile) => {
                 hash.write_u8(44);

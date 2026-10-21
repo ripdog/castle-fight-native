@@ -3,6 +3,87 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "gobbo-repair",
+      "source_kind": "unit-ability",
+      "source_key": "A09K",
+      "unit_rawcode": "n01U",
+      "profile": {
+        "ability": 1093679435,
+        "rules": {
+          "map_version": {
+            "major": 9,
+            "minor": 27
+          },
+          "interval_ticks": 6,
+          "budget": 12,
+          "cache_ticks": 3,
+          "retention_limit": 15,
+          "preferred_mana_above": 10,
+          "fallback_health_below": [
+            150,
+            300
+          ],
+          "local_rectangles": [
+            [
+              {
+                "x": -6160384,
+                "y": -4194304
+              },
+              {
+                "x": 1966080,
+                "y": 4194304
+              }
+            ],
+            [
+              {
+                "x": -1933312,
+                "y": -4194304
+              },
+              {
+                "x": 6193152,
+                "y": 4194304
+              }
+            ]
+          ],
+          "battlefield": [
+            {
+              "x": -6324224,
+              "y": -3670016
+            },
+            {
+              "x": 6324224,
+              "y": 3670016
+            }
+          ],
+          "excluded_ability": 1093679176,
+          "excluded_buffs": [
+            1110454578,
+            1112040046
+          ]
+        },
+        "repair_range": 204800,
+        "repair_time_ratio_numerator": 9,
+        "repair_time_ratio_denominator": 20,
+        "timed_life_ticks": 1350,
+        "construction_spawn_building": 1747990073
+      },
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/object-fields.tsv",
+        "script": "resolved/runtime-system-mechanics.tsv",
+        "functions": [
+          "orderGoboW",
+          "prepareGobboTargets",
+          "isGobboRepairableTarget",
+          "isGobboRallyTarget",
+          "applyGobboTimedLife",
+          "sH",
+          "nH",
+          "EventListener_add_doAfter_ObeliskOfLight_onEvent_add_doAfter_ObeliskOfLight"
+        ]
+      }
+    },
+    {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
       "source_key": "A09O",

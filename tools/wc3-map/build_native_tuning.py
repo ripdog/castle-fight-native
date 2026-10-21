@@ -258,6 +258,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     if kind == "fan-of-knives":
         from project_fan_of_knives import project
         return project(recipe, fields, unit, protected, mechanics)
+    if kind == "gobbo-repair":
+        from project_gobbo_repair import project
+        return project(recipe, fields, unit, protected, mechanics)
     if kind == "building-script":
         from project_building_script import project
         return project(recipe, fields, unit, protected, mechanics)
@@ -1034,6 +1037,10 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             detail.update(fan_of_knives=fan_of_knives[recipe["unit_rawcode"]], functions=functions, git_tree=tree)
         if recipe["kind"] == "orb-spell-proc":
             detail.update(all_fields=abilities, all_protected=protected)
+        if recipe["kind"] == "gobbo-repair":
+            detail.update(all_bases=ability_bases, functions=functions, git_tree=tree,
+                support_system=system_mechanics["support-order-controller"],
+                map_version=dict(zip(["major", "minor"], map(int, release["map_version"].split(".")))))
         if recipe["kind"] in {"scripted-roots", "wind-walk", "native-heal", "orb-charm"}:
             detail.update(all_bases=ability_bases, functions=functions, git_tree=tree,
                 map_version=dict(zip(["major", "minor"], map(int, release["map_version"].split(".")))))

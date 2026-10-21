@@ -3,7 +3,9 @@ use std::collections::VecDeque;
 
 mod support_orders;
 pub(crate) use support_orders::{SupportOrderQueue, SupportTargetCache};
-pub use support_orders::{SupportOrderRules, SupportOrderState, WindWalkProfile, WindWalkState};
+pub use support_orders::{
+    GobboRepairProfile, SupportOrderRules, SupportOrderState, WindWalkProfile, WindWalkState,
+};
 mod native_grants;
 pub use native_grants::{
     MAX_PERMANENT_NATIVE_ABILITIES, NativeAbilityGrant, NativeAbilityGrantEffect,
@@ -1253,6 +1255,7 @@ pub enum PassiveUnitEffect {
     LifeSteal(LifeStealProfile),
     HardenedSkin(NativeAbilityGrant),
     EchoStep(EchoStepProfile),
+    GobboRepair(GobboRepairProfile),
 }
 
 /// Damage-listener Echo Step: when a nearby combat sapper damages the bearer it blinks toward its

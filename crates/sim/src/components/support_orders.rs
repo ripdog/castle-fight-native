@@ -84,6 +84,39 @@ pub struct SupportOrderState {
     pub iterations: u8,
     pub sequence: u64,
     pub backstab_pending: i32,
+    /// Fractional repair progress of a repairing support body, in target health units.
+    pub repair_remainder: u32,
+}
+/// Native Repair carried by a script-driven support body (the Gobbo Machinist). It joins the same
+/// shared task queue as the Assassins, so the queue rules are part of the profile and must match.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct GobboRepairProfile {
+    pub ability: AbilityId,
+    pub rules: SupportOrderRules,
+    /// Cast range of the native Repair order, measured to a unit's centre or a building's edge.
+    pub repair_range: i32,
+    /// Repair time as a fraction of the target's retained repair time.
+    pub repair_time_ratio_numerator: u16,
+    pub repair_time_ratio_denominator: u16,
+    /// Every body lives this long from the moment it exists.
+    pub timed_life_ticks: u32,
+    /// Completing a building of this type creates one body for its owner immediately.
+    pub construction_spawn_building: u32,
+}
+impl GobboRepairProfile {
+    pub(crate) fn visit_canonical_words(self, mut write: impl FnMut(u64)) {
+        self.rules.visit_canonical_words(&mut write);
+        for word in [
+            u64::from(self.ability.0),
+            self.repair_range as u64,
+            u64::from(self.repair_time_ratio_numerator),
+            u64::from(self.repair_time_ratio_denominator),
+            u64::from(self.timed_life_ticks),
+            u64::from(self.construction_spawn_building),
+        ] {
+            write(word);
+        }
+    }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct SupportTargetCache {

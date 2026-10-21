@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r203";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r204";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -1319,7 +1319,16 @@ impl CastleFightProductionDefinition {
             footprint,
             health: self.building_health,
             production: Some(ProductionProfile {
-                initial_delay_ticks: self.spawn_interval_ticks,
+                // Completing this building immediately creates its first body (the Gobbo controller's
+                // construction listener); every later body follows the retained spawn interval.
+                initial_delay_ticks: if self.produced_unit.passive_effects.iter().any(|effect| {
+                    matches!(effect, PassiveUnitEffect::GobboRepair(profile)
+                        if profile.construction_spawn_building == self.rawcode)
+                }) {
+                    0
+                } else {
+                    self.spawn_interval_ticks
+                },
                 interval_ticks: self.spawn_interval_ticks,
                 search_radius_cells: PRODUCTION_SPAWN_SEARCH_RADIUS_CELLS,
                 unit: unit.template,
@@ -1993,6 +2002,9 @@ fn stable_ability_id(
         }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A09O") => {
             0x4000_024e
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A09K") => {
+            0x4000_024f
         }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0GN") => {
             0x4000_022a
@@ -3828,6 +3840,10 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
                 for word in profile.canonical_words() {
                     hash.write_u64(word);
                 }
+            }
+            PassiveUnitEffect::GobboRepair(profile) => {
+                hash.write_u8(45);
+                profile.visit_canonical_words(|word| hash.write_u64(word));
             }
             PassiveUnitEffect::ContactSelfDestruct(profile) => {
                 hash.write_u8(44);

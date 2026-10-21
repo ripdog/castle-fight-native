@@ -1185,6 +1185,7 @@ impl Simulation {
                 | PassiveUnitEffect::DamageThreshold(_)
                 | PassiveUnitEffect::DamageCharge(_)
                 | PassiveUnitEffect::ContactSelfDestruct(_)
+                | PassiveUnitEffect::GobboRepair(_)
                 | PassiveUnitEffect::KillBerserk(_)
                 | PassiveUnitEffect::Pulverize(_)
                 | PassiveUnitEffect::Evasion(_)

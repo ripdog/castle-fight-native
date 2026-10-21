@@ -69,6 +69,7 @@ pub enum NativeEffectImplementationId {
     WarcraftPulverizeV1,
     WarcraftScriptedAreaProcV1,
     WarcraftEchoStepV1,
+    WarcraftGobboRepairV1,
     WarcraftNativeAuraV1,
     WarcraftSpeedAuraV1,
     WarcraftSphereV1,
@@ -161,6 +162,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftPulverizeV1 => 21,
             Self::WarcraftScriptedAreaProcV1 => 112,
             Self::WarcraftEchoStepV1 => 113,
+            Self::WarcraftGobboRepairV1 => 114,
             Self::WarcraftNativeAuraV1 => 22,
             Self::WarcraftSpeedAuraV1 => 69,
             Self::WarcraftSphereV1 => 70,
@@ -829,6 +831,15 @@ enum TuningEffect {
         half_radius_world: i32,
         targets: String,
     },
+    /// Native Repair on a body driven by the shared support-order task queue.
+    GobboRepair {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        profile: crate::GobboRepairProfile,
+        #[allow(dead_code)]
+        provenance: serde_json::Value,
+    },
     /// A script damage listener that blinks the bearer away and leaves a remnant mine.
     DamageEchoStep {
         source_kind: String,
@@ -1172,6 +1183,7 @@ impl TuningEffect {
             | Self::Pulverize { source_kind, .. }
             | Self::AttackWhirlwind { source_kind, .. }
             | Self::DamageEchoStep { source_kind, .. }
+            | Self::GobboRepair { source_kind, .. }
             | Self::FrostAttack { source_kind, .. }
             | Self::ScriptedAutomatic { source_kind, .. }
             | Self::ElvenAutomatic { source_kind, .. }
@@ -1230,6 +1242,7 @@ impl TuningEffect {
             | Self::Pulverize { source_key, .. }
             | Self::AttackWhirlwind { source_key, .. }
             | Self::DamageEchoStep { source_key, .. }
+            | Self::GobboRepair { source_key, .. }
             | Self::FrostAttack { source_key, .. }
             | Self::ScriptedAutomatic { source_key, .. }
             | Self::ElvenAutomatic { source_key, .. }
@@ -1277,6 +1290,7 @@ impl TuningEffect {
             | Self::Pulverize { unit_rawcode, .. }
             | Self::AttackWhirlwind { unit_rawcode, .. }
             | Self::DamageEchoStep { unit_rawcode, .. }
+            | Self::GobboRepair { unit_rawcode, .. }
             | Self::FrostAttack { unit_rawcode, .. }
             | Self::ScriptedAutomatic { unit_rawcode, .. }
             | Self::ElvenAutomatic { unit_rawcode, .. }
@@ -1344,6 +1358,7 @@ impl TuningEffect {
                 NativeEffectImplementationId::WarcraftScriptedAreaProcV1
             }
             Self::DamageEchoStep { .. } => NativeEffectImplementationId::WarcraftEchoStepV1,
+            Self::GobboRepair { .. } => NativeEffectImplementationId::WarcraftGobboRepairV1,
             Self::DeathSpawn { .. } => NativeEffectImplementationId::WarcraftDeathSpawnV1,
             Self::Poison { .. } => NativeEffectImplementationId::WarcraftPoisonV1,
             Self::DamageThreshold { .. } => NativeEffectImplementationId::WarcraftDamageThresholdV1,
@@ -1410,6 +1425,7 @@ impl TuningEffect {
             Self::Pulverize { .. } => "pulverize",
             Self::AttackWhirlwind { .. } => "attack-whirlwind",
             Self::DamageEchoStep { .. } => "damage-echo-step",
+            Self::GobboRepair { .. } => "gobbo-repair",
             Self::DeathSpawn { .. } => "death-spawn",
             Self::Poison { .. } => "poison",
             Self::DamageThreshold { .. } => "damage-threshold",
@@ -1744,6 +1760,7 @@ fn native_unit_mechanics_from_tuning(
                 | TuningEffect::Pulverize { .. }
                 | TuningEffect::AttackWhirlwind { .. }
                 | TuningEffect::DamageEchoStep { .. }
+                | TuningEffect::GobboRepair { .. }
                 | TuningEffect::FrostAttack { .. }
                 | TuningEffect::Feedback { .. }
                 | TuningEffect::SpellResistance { .. }
@@ -2056,6 +2073,15 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             mana_regeneration_per_second_per_10k: *mana_regeneration_per_second_per_10k,
             suspend_during_spell_cooldown: false,
         }),
+        TuningEffect::GobboRepair { profile, .. } => {
+            assert!(
+                profile.repair_range >= 0
+                    && profile.repair_time_ratio_numerator > 0
+                    && profile.repair_time_ratio_denominator > 0
+                    && profile.timed_life_ticks > 0
+            );
+            PassiveUnitEffect::GobboRepair(*profile)
+        }
         TuningEffect::DamageEchoStep { profile, .. } => {
             assert!(profile.trigger_range > 0 && profile.blink_distance > 0);
             PassiveUnitEffect::EchoStep(*profile)

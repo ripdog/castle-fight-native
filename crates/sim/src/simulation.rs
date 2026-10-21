@@ -1940,7 +1940,7 @@ impl Simulation {
         timed!(
             spans,
             Span::SupportOrders,
-            self.resolve_support_orders(&mut units)
+            self.resolve_support_orders(&mut units, &mut buildings)
         );
         timed!(
             spans,
@@ -3121,6 +3121,13 @@ impl Simulation {
                 AdditionalAutomaticAbilities::from_definitions(definitions, self.next_tick)
             });
         let id = self.allocate_id();
+        let timed_life = properties
+            .passive_effects
+            .iter()
+            .find_map(|effect| match effect {
+                PassiveUnitEffect::GobboRepair(profile) => Some(profile.timed_life_ticks),
+                _ => None,
+            });
         let trained_mana = spellcasting
             .as_ref()
             .and_then(|profile| self.trained_land_mine_mana(profile, id));
@@ -3219,6 +3226,17 @@ impl Simulation {
                 current: mana.starting,
                 regen_remainder_per_10k: 0,
             });
+        }
+        // A support body of the script's Gobbo controller lives a fixed time from existing.
+        if let Some(ticks) = timed_life {
+            let action = self.allocate_id();
+            self.world.spawn((
+                action,
+                crate::components::NativeAction::TimedLife {
+                    child: id,
+                    expires_tick: self.next_tick + u64::from(ticks),
+                },
+            ));
         }
         id
     }

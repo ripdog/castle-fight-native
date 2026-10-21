@@ -49,7 +49,7 @@ pub use components::{
     FrostAttackEffectProfile, GameplayBundleIdentity, HealingSprayProfile, HealingSprayState,
     HealingWaveProfile, HealthScaledAftershockProfile, HostileArmorAuraProfile, ImpaleFanProfile,
     ImpaleProfile, ImpaleStatus, IncinerateProfile, IncinerateStatus, KillBerserkProfile,
-    LandMineProfile, LandMineState, LavaSpawnProfile, LavaSpawnState, LifeStealProfile,
+    GobboRepairProfile, LandMineProfile, LandMineState, LavaSpawnProfile, LavaSpawnState, LifeStealProfile,
     LocustState, LocustSwarmProfile,
     LocustSwarmState, MAX_AUTOMATIC_ABILITIES, MAX_LOCUSTS, MAX_PERMANENT_NATIVE_ABILITIES,
     ManaAttackOrbProfile, ManaProfile, ManaRegeneration, MasterMoverProfile,
