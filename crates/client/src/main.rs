@@ -89,7 +89,12 @@ use view_state::{
     ViewState, ViewStatePersistence, persist_view_state, sync_cursor_grab, toggle_fullscreen,
 };
 
-const ASSET_IO_STACK_BYTES: usize = 8 * 1024 * 1024;
+// Bevy's glTF loader loads textures through `TaskPool::scope`, which runs other queued IO tasks on
+// the waiting thread. Each queued glTF load can therefore nest inside the previous one, so stack
+// depth scales with the number of glTFs queued per IO thread (about 22 KiB per level, and a
+// single IO thread on 4-core machines). The generated set has ~1150 glTFs; 64 MiB covers that
+// with margin, and untouched stack pages are never committed.
+const ASSET_IO_STACK_BYTES: usize = 64 * 1024 * 1024;
 
 enum AuthorityMode {
     Local,
@@ -377,6 +382,7 @@ struct SimulationPausePanel;
 struct SimulationPauseText;
 
 fn main() {
+    raise_open_file_limit();
     configure_asset_io_task_pool();
     let options = ClientOptions::parse();
     if options.list_map_versions {
@@ -2148,11 +2154,38 @@ fn local_command_feedback_text(execution: CommandExecution) -> String {
     }
 }
 
+/// Distributions commonly default the soft `RLIMIT_NOFILE` to 1024. Bevy's glTF loader keeps every
+/// in-progress glTF (and its buffers/textures) open while nested loads run, so the startup asset
+/// burst can exceed that and fail with `EMFILE` ("Too many open files"). Raise the soft limit to
+/// the hard limit, capped to something every kernel accepts.
+#[cfg(unix)]
+fn raise_open_file_limit() {
+    use rustix::process::{Resource, getrlimit, setrlimit};
+
+    const WANTED_OPEN_FILES: u64 = 65_536;
+
+    let mut limit = getrlimit(Resource::Nofile);
+    let wanted = limit
+        .maximum
+        .map_or(WANTED_OPEN_FILES, |hard| hard.min(WANTED_OPEN_FILES));
+    if limit.current.is_some_and(|soft| soft >= wanted) {
+        return;
+    }
+    limit.current = Some(wanted);
+    if let Err(error) = setrlimit(Resource::Nofile, limit) {
+        eprintln!("warning: could not raise the open file limit to {wanted}: {error}");
+    }
+}
+
+#[cfg(not(unix))]
+fn raise_open_file_limit() {}
+
 fn configure_asset_io_task_pool() {
     // Warcraft's generated glTF set exercises Bevy's recursive glTF loader deeply enough that the
-    // platform-default worker stack can occasionally overflow during the startup asset burst. Keep
-    // Bevy's normal IO-thread count, but give only that pool a larger stack instead of inflating the
-    // simulation/compute pools (or requiring RUST_MIN_STACK globally).
+    // platform-default worker stack overflows during the startup asset burst (see
+    // `ASSET_IO_STACK_BYTES`). Keep Bevy's normal IO-thread count, but give only that pool a larger
+    // stack instead of inflating the simulation/compute pools (or requiring RUST_MIN_STACK
+    // globally).
     let thread_count = default_io_thread_count(available_parallelism());
     IoTaskPool::get_or_init(|| {
         TaskPoolBuilder::new()

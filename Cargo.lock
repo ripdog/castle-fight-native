@@ -1965,6 +1965,7 @@ dependencies = [
  "castle-fight-protocol",
  "castle-fight-server",
  "castle-fight-sim",
+ "rustix 1.1.4",
  "serde",
  "serde_json",
 ]
