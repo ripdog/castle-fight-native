@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A05R","implementation":"warcraft-disease-cloud-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A05S","implementation":"warcraft-poison-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A05T","implementation":"warcraft-permanent-immolation-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A05P","implementation":"warcraft-permanent-immolation-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A05Q","implementation":"warcraft-poison-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A01L","implementation":"warcraft-permanent-immolation-v1","valid_from":"9.27","valid_through":"9.27"},

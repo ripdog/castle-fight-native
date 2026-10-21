@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A05R","unit_rawcode":"u007","kind":"disease-cloud"},
+    {"source_kind":"unit-ability","source_key":"A05S","unit_rawcode":"u007","kind":"poison"},
+    {"source_kind":"unit-ability","source_key":"A05T","unit_rawcode":"u007","kind":"permanent-immolation"},
     {"source_kind":"unit-ability","source_key":"A05P","unit_rawcode":"n01K","kind":"permanent-immolation"},
     {"source_kind":"unit-ability","source_key":"A05Q","unit_rawcode":"n01K","kind":"poison"},
     {"source_kind":"unit-ability","source_key":"A01L","unit_rawcode":"n00B","kind":"permanent-immolation"},

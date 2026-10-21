@@ -169,6 +169,27 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
             'radius': number('Area1', 1024), 'damage': number('DataA1'),
             'interval_ticks': number('Dur1', 30), 'targets': 3, 'organic_only': 'organic' in fields['targs1'].split(',')},
             'provenance': {'source': 'resolved/object-fields.tsv', 'native_base': mechanics['native_base']}}
+    if kind == "disease-cloud":
+        # Native Aapl: the carrier infects hostile organic bodies (DataA lasting seconds, DataB
+        # damage per second) and an infected body that dies leaves a plague ward for DataC seconds.
+        mask = set(fields["targs1"].split(","))
+        if (mechanics["native_base"] != "Aap1" or mask != {"air", "enemies", "ground", "neutral", "organic"}
+                or any(number(key) != 0 for key in ("Cost1", "Cool1", "Dur1", "HeroDur1"))
+                or number("DataA1") <= 0 or number("DataB1") < 0 or number("DataC1") <= 0
+                or len(fields["buffid1"]) != 4):
+            raise ValueError("disease cloud requires the free passive native Plague aura inventory")
+        return {**recipe, "profile": {
+            "ability": int.from_bytes(recipe["source_key"].encode(), "big"),
+            "radius": number("Area1", 1024), "targets": 3, "organic_only": True,
+            "infection": {"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
+                "buff_rawcode": int.from_bytes(fields["buffid1"].encode(), "big"),
+                "damage_per_second": number("DataB1"), "movement_percent_delta": 0,
+                "attack_speed_percent_delta": 0, "duration_ticks": number("DataA1", 30),
+                "hero_duration_ticks": number("DataA1", 30), "targets": 3,
+                "stack_damage": False, "can_kill": True, "organic_only": True,
+                "ward": {"radius": number("Area1", 1024), "duration_ticks": number("DataC1", 30),
+                    "targets": 3, "organic_only": True}}},
+            "provenance": {"source": "resolved/object-fields.tsv", "native_base": mechanics["native_base"]}}
     if kind == "death-spawn":
         if mechanics["native_base"] != "Aspy" or any(number(key) != 0 for key in ("Cost1", "Cool1", "Dur1", "HeroDur1")):
             raise ValueError("death spawn requires the passive permanent native Aspy inventory")

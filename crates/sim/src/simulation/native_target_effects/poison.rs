@@ -14,6 +14,7 @@ fn profile() -> PoisonProfile {
         stack_damage: true,
         can_kill: false,
         organic_only: true,
+        ward: None,
     }
 }
 

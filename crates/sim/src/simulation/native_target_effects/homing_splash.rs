@@ -33,6 +33,7 @@ fn source(sim: &mut Simulation) -> SimId {
                     stack_damage: true,
                     can_kill: false,
                     organic_only: true,
+                    ward: None,
                 }),
             ]),
             ..Default::default()

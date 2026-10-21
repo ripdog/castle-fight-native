@@ -57,7 +57,7 @@ mod native_actions;
 pub(crate) use native_actions::{
     AcidBombMissileState, AuraCarrierState, BuildingAttackProxyState, ConeWaveState,
     EnsnareMissileState, HailstoneState, HealingWaveState, NativeAction, NativeBoltState,
-    PoisonState, SphereFlightState, StasisTrapState,
+    PlagueWardState, PoisonState, SphereFlightState, StasisTrapState,
 };
 pub use native_actions::{
     AcidBombProfile, AcidBombStatus, EnsnareProfile, EnsnareState, HealingWaveProfile,
@@ -1255,6 +1255,7 @@ pub enum PassiveUnitEffect {
     HardenedSkin(NativeAbilityGrant),
     EchoStep(EchoStepProfile),
     GobboRepair(GobboRepairProfile),
+    DiseaseCloud(DiseaseCloudProfile),
 }
 
 /// Damage-listener Echo Step: when a nearby combat sapper damages the bearer it blinks toward its
@@ -1442,6 +1443,30 @@ pub struct PoisonProfile {
     /// Native `organic` target token: mechanical bodies are immune only when it is listed.
     #[serde(default = "poison_organic_only_default")]
     pub organic_only: bool,
+    /// An infection that leaves a lingering cloud where its bearer dies (Disease Cloud).
+    #[serde(default)]
+    pub ward: Option<PlagueWardProfile>,
+}
+
+/// The cloud an infected body leaves behind when it dies: the unit created by the native Plague
+/// aura infects every valid body inside its radius with the same infection until it expires.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct PlagueWardProfile {
+    pub radius: i32,
+    pub duration_ticks: u16,
+    pub targets: AttackTargetMask,
+    pub organic_only: bool,
+}
+
+/// Native Plague aura (`Aap1`): infects hostile bodies in range with a long damage-over-time
+/// buff that follows them away from the carrier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiseaseCloudProfile {
+    pub ability: AbilityId,
+    pub radius: i32,
+    pub targets: AttackTargetMask,
+    pub organic_only: bool,
+    pub infection: PoisonProfile,
 }
 
 const fn poison_organic_only_default() -> bool {

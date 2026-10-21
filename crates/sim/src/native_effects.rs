@@ -70,6 +70,7 @@ pub enum NativeEffectImplementationId {
     WarcraftScriptedAreaProcV1,
     WarcraftEchoStepV1,
     WarcraftGobboRepairV1,
+    WarcraftDiseaseCloudV1,
     WarcraftPowerPlantV1,
     WarcraftNativeAuraV1,
     WarcraftSpeedAuraV1,
@@ -164,6 +165,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftScriptedAreaProcV1 => 112,
             Self::WarcraftEchoStepV1 => 113,
             Self::WarcraftGobboRepairV1 => 114,
+            Self::WarcraftDiseaseCloudV1 => 116,
             Self::WarcraftPowerPlantV1 => 115,
             Self::WarcraftNativeAuraV1 => 22,
             Self::WarcraftSpeedAuraV1 => 69,
@@ -842,6 +844,15 @@ enum TuningEffect {
         #[allow(dead_code)]
         provenance: serde_json::Value,
     },
+    /// Native Plague aura: a long infection with a lingering cloud where its victims die.
+    DiseaseCloud {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        profile: crate::DiseaseCloudProfile,
+        #[allow(dead_code)]
+        provenance: serde_json::Value,
+    },
     /// A script damage listener that blinks the bearer away and leaves a remnant mine.
     DamageEchoStep {
         source_kind: String,
@@ -1186,6 +1197,7 @@ impl TuningEffect {
             | Self::AttackWhirlwind { source_kind, .. }
             | Self::DamageEchoStep { source_kind, .. }
             | Self::GobboRepair { source_kind, .. }
+            | Self::DiseaseCloud { source_kind, .. }
             | Self::FrostAttack { source_kind, .. }
             | Self::ScriptedAutomatic { source_kind, .. }
             | Self::ElvenAutomatic { source_kind, .. }
@@ -1245,6 +1257,7 @@ impl TuningEffect {
             | Self::AttackWhirlwind { source_key, .. }
             | Self::DamageEchoStep { source_key, .. }
             | Self::GobboRepair { source_key, .. }
+            | Self::DiseaseCloud { source_key, .. }
             | Self::FrostAttack { source_key, .. }
             | Self::ScriptedAutomatic { source_key, .. }
             | Self::ElvenAutomatic { source_key, .. }
@@ -1293,6 +1306,7 @@ impl TuningEffect {
             | Self::AttackWhirlwind { unit_rawcode, .. }
             | Self::DamageEchoStep { unit_rawcode, .. }
             | Self::GobboRepair { unit_rawcode, .. }
+            | Self::DiseaseCloud { unit_rawcode, .. }
             | Self::FrostAttack { unit_rawcode, .. }
             | Self::ScriptedAutomatic { unit_rawcode, .. }
             | Self::ElvenAutomatic { unit_rawcode, .. }
@@ -1361,6 +1375,7 @@ impl TuningEffect {
             }
             Self::DamageEchoStep { .. } => NativeEffectImplementationId::WarcraftEchoStepV1,
             Self::GobboRepair { .. } => NativeEffectImplementationId::WarcraftGobboRepairV1,
+            Self::DiseaseCloud { .. } => NativeEffectImplementationId::WarcraftDiseaseCloudV1,
             Self::DeathSpawn { .. } => NativeEffectImplementationId::WarcraftDeathSpawnV1,
             Self::Poison { .. } => NativeEffectImplementationId::WarcraftPoisonV1,
             Self::DamageThreshold { .. } => NativeEffectImplementationId::WarcraftDamageThresholdV1,
@@ -1428,6 +1443,7 @@ impl TuningEffect {
             Self::AttackWhirlwind { .. } => "attack-whirlwind",
             Self::DamageEchoStep { .. } => "damage-echo-step",
             Self::GobboRepair { .. } => "gobbo-repair",
+            Self::DiseaseCloud { .. } => "disease-cloud",
             Self::DeathSpawn { .. } => "death-spawn",
             Self::Poison { .. } => "poison",
             Self::DamageThreshold { .. } => "damage-threshold",
@@ -1774,6 +1790,7 @@ fn native_unit_mechanics_from_tuning(
                 | TuningEffect::AttackWhirlwind { .. }
                 | TuningEffect::DamageEchoStep { .. }
                 | TuningEffect::GobboRepair { .. }
+                | TuningEffect::DiseaseCloud { .. }
                 | TuningEffect::FrostAttack { .. }
                 | TuningEffect::Feedback { .. }
                 | TuningEffect::SpellResistance { .. }
@@ -2097,6 +2114,14 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
                     && profile.timed_life_ticks > 0
             );
             PassiveUnitEffect::GobboRepair(*profile)
+        }
+        TuningEffect::DiseaseCloud { profile, .. } => {
+            assert!(
+                profile.radius > 0
+                    && profile.infection.duration_ticks > 0
+                    && profile.infection.ward.is_some_and(|ward| ward.radius > 0)
+            );
+            PassiveUnitEffect::DiseaseCloud(*profile)
         }
         TuningEffect::DamageEchoStep { profile, .. } => {
             assert!(profile.trigger_range > 0 && profile.blink_distance > 0);

@@ -740,6 +740,19 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u64(state.armed_tick);
                         hash.write_u64(state.expires_tick);
                     }
+                    NativeAction::PlagueWard(state) => {
+                        hash.write_u8(44);
+                        hash.write_u64(state.source.0);
+                        hash.write_u8(state.team.0);
+                        hash.write_i32(state.position.x);
+                        hash.write_i32(state.position.y);
+                        hash_poison_profile(&mut hash, &state.infection);
+                        hash.write_i32(state.ward.radius);
+                        hash.write_u16(state.ward.duration_ticks);
+                        hash.write_u8(state.ward.targets.bits());
+                        hash.write_u8(u8::from(state.ward.organic_only));
+                        hash.write_u64(state.expires_tick);
+                    }
                     NativeAction::LandMine(state) => {
                         hash.write_u8(43);
                         for word in state.profile.canonical_words() {
@@ -2803,6 +2816,14 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: &PassiveUnitEffects) {
                 hash.write_u8(45);
                 profile.visit_canonical_words(|word| hash.write_u64(word));
             }
+            PassiveUnitEffect::DiseaseCloud(profile) => {
+                hash.write_u8(46);
+                hash.write_u32(profile.ability.0);
+                hash.write_i32(profile.radius);
+                hash.write_u8(profile.targets.bits());
+                hash.write_u8(u8::from(profile.organic_only));
+                hash_poison_profile(hash, &profile.infection);
+            }
             PassiveUnitEffect::ContactSelfDestruct(profile) => {
                 hash.write_u8(44);
                 for word in profile.canonical_words() {
@@ -3744,6 +3765,16 @@ fn hash_poison_profile(hash: &mut Fnv64, profile: &crate::PoisonProfile) {
     hash.write_u8(u8::from(profile.stack_damage));
     hash.write_u8(u8::from(profile.can_kill));
     hash.write_u8(u8::from(profile.organic_only));
+    match profile.ward {
+        None => hash.write_u8(0),
+        Some(ward) => {
+            hash.write_u8(1);
+            hash.write_i32(ward.radius);
+            hash.write_u16(ward.duration_ticks);
+            hash.write_u8(ward.targets.bits());
+            hash.write_u8(u8::from(ward.organic_only));
+        }
+    }
 }
 
 #[cfg(test)]

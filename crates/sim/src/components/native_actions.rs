@@ -217,6 +217,7 @@ pub(crate) enum NativeAction {
     ThunderCall(super::ThunderCallState),
     EchoRemnant(super::EchoRemnantState),
     LandMine(super::LandMineState),
+    PlagueWard(PlagueWardState),
     Bolt(NativeBoltState),
     Hailstone(HailstoneState),
     ImmediateSummonOrder {
@@ -236,6 +237,17 @@ pub(crate) enum NativeAction {
         children: Vec<SimId>,
         expires_tick: u64,
     },
+}
+
+/// The lingering cloud a Plague-infected body leaves where it dies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct PlagueWardState {
+    pub source: SimId,
+    pub team: Team,
+    pub position: SimPoint,
+    pub infection: PoisonProfile,
+    pub ward: super::PlagueWardProfile,
+    pub expires_tick: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

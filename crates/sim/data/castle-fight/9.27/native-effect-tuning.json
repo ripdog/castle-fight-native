@@ -4,6 +4,85 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A05R",
+      "unit_rawcode": "u007",
+      "kind": "disease-cloud",
+      "profile": {
+        "ability": 1093678418,
+        "radius": 358400,
+        "targets": 3,
+        "organic_only": true,
+        "infection": {
+          "ability": 1093678418,
+          "buff_rawcode": 1113682028,
+          "damage_per_second": 18,
+          "movement_percent_delta": 0,
+          "attack_speed_percent_delta": 0,
+          "duration_ticks": 3600,
+          "hero_duration_ticks": 3600,
+          "targets": 3,
+          "stack_damage": false,
+          "can_kill": true,
+          "organic_only": true,
+          "ward": {
+            "radius": 358400,
+            "duration_ticks": 150,
+            "targets": 3,
+            "organic_only": true
+          }
+        }
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "Aap1"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A05S",
+      "unit_rawcode": "u007",
+      "kind": "poison",
+      "profile": {
+        "ability": 1093678419,
+        "buff_rawcode": 1110454357,
+        "damage_per_second": 15,
+        "movement_percent_delta": -30,
+        "attack_speed_percent_delta": 0,
+        "duration_ticks": 450,
+        "hero_duration_ticks": 113,
+        "targets": 3,
+        "stack_damage": true,
+        "can_kill": false,
+        "organic_only": true
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "ACvs",
+        "stacking_flags": 1,
+        "unrepresented_damage_per_second": "0"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A05T",
+      "unit_rawcode": "u007",
+      "kind": "permanent-immolation",
+      "profile": {
+        "ability": 1093678420,
+        "buff_rawcode": 1110454321,
+        "radius": 358400,
+        "damage": 2,
+        "interval_ticks": 30,
+        "targets": 3,
+        "organic_only": true
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "ANpi"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A05P",
       "unit_rawcode": "n01K",
       "kind": "permanent-immolation",

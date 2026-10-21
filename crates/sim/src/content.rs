@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r208";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r209";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -2043,6 +2043,15 @@ fn stable_ability_id(
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A05P") => {
             0x4000_025b
         }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A05T") => {
+            0x4000_025c
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A05S") => {
+            0x4000_025d
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A05R") => {
+            0x4000_025e
+        }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0GN") => {
             0x4000_022a
         }
@@ -3695,6 +3704,29 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
                 hash.write_u8(u8::from(profile.stack_damage));
                 hash.write_u8(u8::from(profile.can_kill));
                 hash.write_u8(u8::from(profile.organic_only));
+                if let Some(ward) = profile.ward {
+                    hash.write_u8(1);
+                    hash.write_i32(ward.radius);
+                    hash.write_u16(ward.duration_ticks);
+                    hash.write_u8(ward.targets.bits());
+                    hash.write_u8(u8::from(ward.organic_only));
+                }
+            }
+            PassiveUnitEffect::DiseaseCloud(profile) => {
+                hash.write_u8(46);
+                hash.write_u32(profile.ability.0);
+                hash.write_i32(profile.radius);
+                hash.write_u8(profile.targets.bits());
+                hash.write_u8(u8::from(profile.organic_only));
+                hash.write_u32(profile.infection.buff_rawcode);
+                hash.write_i32(profile.infection.damage_per_second);
+                hash.write_u16(profile.infection.duration_ticks);
+                hash.write_u16(profile.infection.hero_duration_ticks);
+                hash.write_u8(u8::from(profile.infection.can_kill));
+                if let Some(ward) = profile.infection.ward {
+                    hash.write_i32(ward.radius);
+                    hash.write_u16(ward.duration_ticks);
+                }
             }
             PassiveUnitEffect::DamageThreshold(profile) => {
                 hash.write_u8(14);

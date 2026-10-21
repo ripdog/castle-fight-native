@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 106;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 107;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -30,6 +30,7 @@ mod builder;
 mod building_bolts;
 mod death_explosion;
 mod death_healing;
+mod disease_cloud;
 mod scripted_roots;
 mod support_orders;
 pub use death_healing::DeathHealVisualEvent;
@@ -1965,6 +1966,11 @@ impl Simulation {
         );
         timed!(
             spans,
+            Span::PermanentImmolation,
+            self.resolve_disease_clouds(&mut units)
+        );
+        timed!(
+            spans,
             Span::PassiveAuras,
             self.apply_passive_auras(&mut units, &buildings)
         );
@@ -2351,6 +2357,7 @@ impl Simulation {
         );
         let death_observers_start = Instant::now();
         self.observe_native_death_explosions(&units, &unit_health, &positions);
+        self.observe_plague_deaths(&units, &unit_health, &positions);
         self.observe_incinerate_deaths(&units, &unit_health, &positions);
         self.observe_master_parasite_deaths(&units, &unit_health, &positions);
         self.observe_native_parasite_deaths(
