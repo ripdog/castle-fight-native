@@ -507,6 +507,7 @@ fn cleanse_native_effects(
             PassiveUnitEffect::GobboRepair(profile) => Some(profile.ability),
             PassiveUnitEffect::DiseaseCloud(profile) => Some(profile.ability),
             PassiveUnitEffect::DeathMastery(profile) => Some(profile.ability),
+            PassiveUnitEffect::Demolish(profile) => Some(profile.ability),
             PassiveUnitEffect::DeathExplosion(p) => Some(p.ability),
             PassiveUnitEffect::ManaAttackOrb(p) => Some(p.ability),
             PassiveUnitEffect::Incinerate(p) => Some(p.ability),

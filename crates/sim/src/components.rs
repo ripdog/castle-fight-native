@@ -1272,6 +1272,28 @@ pub enum PassiveUnitEffect {
     GobboRepair(GobboRepairProfile),
     DiseaseCloud(DiseaseCloudProfile),
     DeathMastery(DeathMasteryProfile),
+    /// Object-native Demolish (`ANde`) on the bearer's own weapon.
+    Demolish(DemolishProfile),
+}
+
+/// Native Demolish: a rolled weapon-damage multiplier against its target mask. It is not Critical
+/// Strike and never feeds the critical-only Barrage bonus.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct DemolishProfile {
+    pub ability: AbilityId,
+    pub chance_per_10k: u16,
+    pub multiplier_per_10k: u16,
+    pub targets: AttackTargetMask,
+}
+impl DemolishProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 4] {
+        [
+            u64::from(self.ability.0),
+            u64::from(self.chance_per_10k),
+            u64::from(self.multiplier_per_10k),
+            u64::from(self.targets.bits()),
+        ]
+    }
 }
 
 /// Damage-listener Echo Step: when a nearby combat sapper damages the bearer it blinks toward its

@@ -3,6 +3,37 @@
   "map_version": "9.27",
   "effects": [
     {
+      "source_kind": "unit-ability",
+      "source_key": "A01S",
+      "unit_rawcode": "n00E",
+      "kind": "pulverize",
+      "chance_per_10k": 3500,
+      "damage": 125,
+      "full_radius_world": 150,
+      "half_radius_world": 250,
+      "targets": "ground-units",
+      "provenance": {
+        "ability": "A01S",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A01R",
+      "unit_rawcode": "n00E",
+      "kind": "demolish",
+      "profile": {
+        "ability": 1093677394,
+        "chance_per_10k": 10000,
+        "multiplier_per_10k": 15000,
+        "targets": 4
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "ANde"
+      }
+    },
+    {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
       "source_key": "A01M",

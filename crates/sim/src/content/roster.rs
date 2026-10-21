@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    FleshGolem = 0x1000_00ac => b"n00E",
     Banshee = 0x1000_00ab => b"u001",
     Vampire = 0x1000_00a9 => b"h01U",
     VampireLord = 0x1000_00aa => b"h05H",
@@ -207,6 +208,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    SlaughterHouse = 0x2000_00a5 => b"h01T",
     HauntedMine = 0x2000_00a4 => b"h01L",
     Crypt = 0x2000_00a2 => b"h01N",
     Graveyard = 0x2000_00a3 => b"h054",

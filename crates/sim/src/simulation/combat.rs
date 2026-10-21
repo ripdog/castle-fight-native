@@ -1034,6 +1034,7 @@ impl Simulation {
         completed_tick: u64,
     ) -> (i32, PendingAttackEffects, bool) {
         let mut bonus_damage = 0i32;
+        let mut passive_demolish = 0i32;
         let mut on_hit = PendingAttackEffects::default();
         let mut critical = false;
         let mut critical_bonus: Option<i32> = None;
@@ -1220,6 +1221,28 @@ impl Simulation {
                         );
                     }
                 }
+                PassiveUnitEffect::Demolish(profile) => {
+                    let matches = match intent.target {
+                        TargetIndex::Unit(index) => profile
+                            .targets
+                            .can_target_unit(units[index].target_movement_class()),
+                        TargetIndex::Building(_) => profile.targets.can_target_buildings(),
+                    };
+                    let roll = deterministic_random(
+                        self.config.match_seed,
+                        completed_tick,
+                        intent.source_id,
+                        RANDOM_PURPOSE_ATTACK_PROC ^ u64::from(profile.ability.0),
+                        intent.attack_sequence,
+                    ) % u64::from(ATTACK_PROC_CHANCE_SCALE);
+                    if matches && roll < u64::from(profile.chance_per_10k) {
+                        let bonus = i64::from(intent.attack.damage)
+                            * i64::from(profile.multiplier_per_10k - 10_000)
+                            / 10_000;
+                        passive_demolish =
+                            passive_demolish.max(i32::try_from(bonus).expect("Demolish damage"));
+                    }
+                }
                 PassiveUnitEffect::BurningOil(profile) => {
                     assert!(
                         on_hit.burning_oil.is_none(),
@@ -1299,7 +1322,8 @@ impl Simulation {
                 })
             })
             .max()
-            .unwrap_or_default();
+            .unwrap_or_default()
+            .max(passive_demolish);
         bonus_damage = bonus_damage
             .checked_add(demolish_bonus)
             .expect("Demolish bonus overflowed");

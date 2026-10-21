@@ -283,6 +283,15 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     if kind in {"siren-purge", "feral-spirit"}:
         from project_naga_unit import project
         return project(recipe, fields, unit, protected, mechanics)
+    if kind == "demolish":
+        # Object-native passive Demolish on the bearer's own weapon (targets: enemy structures).
+        if (mechanics["native_base"] != "ANde" or fields["targs1"] != "enemy,structure"
+                or any(number(key) != 0 for key in ["DataC1", "DataD1", "Cost1", "Cool1"])
+                or not 0 <= number("DataA1", 100) <= 10_000 or number("DataB1", 10_000) < 10_000):
+            raise ValueError("Demolish requires its passive structure-only native weapon multiplier")
+        return {**recipe, "profile": {"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
+            "chance_per_10k": number("DataA1", 100), "multiplier_per_10k": number("DataB1", 10_000), "targets": 4},
+            "provenance": {"source": "resolved/object-fields.tsv", "native_base": mechanics["native_base"]}}
     if kind == "native-training-grant":
         if (mechanics['native_base'] != 'ANde' or fields['targs1'] != 'enemy,structure'
             or any(number(key) != 0 for key in ['DataC1', 'DataD1', 'Cost1', 'Cool1'])):

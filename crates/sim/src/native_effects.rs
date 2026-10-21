@@ -72,6 +72,7 @@ pub enum NativeEffectImplementationId {
     WarcraftGobboRepairV1,
     WarcraftDiseaseCloudV1,
     WarcraftDeathMasteryV1,
+    WarcraftDemolishV1,
     WarcraftPowerPlantV1,
     WarcraftNativeAuraV1,
     WarcraftSpeedAuraV1,
@@ -168,6 +169,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftGobboRepairV1 => 114,
             Self::WarcraftDiseaseCloudV1 => 116,
             Self::WarcraftDeathMasteryV1 => 117,
+            Self::WarcraftDemolishV1 => 118,
             Self::WarcraftPowerPlantV1 => 115,
             Self::WarcraftNativeAuraV1 => 22,
             Self::WarcraftSpeedAuraV1 => 69,
@@ -852,6 +854,15 @@ enum TuningEffect {
         #[allow(dead_code)]
         provenance: serde_json::Value,
     },
+    /// Object-native Demolish on the bearer's own weapon.
+    Demolish {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        profile: crate::DemolishProfile,
+        #[allow(dead_code)]
+        provenance: serde_json::Value,
+    },
     /// The Lich King's source-damage listener: devour or Death and Decay on a landed attack.
     DeathMastery {
         source_kind: String,
@@ -1216,6 +1227,7 @@ impl TuningEffect {
             | Self::GobboRepair { source_kind, .. }
             | Self::DiseaseCloud { source_kind, .. }
             | Self::DeathMastery { source_kind, .. }
+            | Self::Demolish { source_kind, .. }
             | Self::FrostAttack { source_kind, .. }
             | Self::ScriptedAutomatic { source_kind, .. }
             | Self::ElvenAutomatic { source_kind, .. }
@@ -1277,6 +1289,7 @@ impl TuningEffect {
             | Self::GobboRepair { source_key, .. }
             | Self::DiseaseCloud { source_key, .. }
             | Self::DeathMastery { source_key, .. }
+            | Self::Demolish { source_key, .. }
             | Self::FrostAttack { source_key, .. }
             | Self::ScriptedAutomatic { source_key, .. }
             | Self::ElvenAutomatic { source_key, .. }
@@ -1327,6 +1340,7 @@ impl TuningEffect {
             | Self::GobboRepair { unit_rawcode, .. }
             | Self::DiseaseCloud { unit_rawcode, .. }
             | Self::DeathMastery { unit_rawcode, .. }
+            | Self::Demolish { unit_rawcode, .. }
             | Self::FrostAttack { unit_rawcode, .. }
             | Self::ScriptedAutomatic { unit_rawcode, .. }
             | Self::ElvenAutomatic { unit_rawcode, .. }
@@ -1397,6 +1411,7 @@ impl TuningEffect {
             Self::GobboRepair { .. } => NativeEffectImplementationId::WarcraftGobboRepairV1,
             Self::DiseaseCloud { .. } => NativeEffectImplementationId::WarcraftDiseaseCloudV1,
             Self::DeathMastery { .. } => NativeEffectImplementationId::WarcraftDeathMasteryV1,
+            Self::Demolish { .. } => NativeEffectImplementationId::WarcraftDemolishV1,
             Self::DeathSpawn { .. } => NativeEffectImplementationId::WarcraftDeathSpawnV1,
             Self::Poison { .. } => NativeEffectImplementationId::WarcraftPoisonV1,
             Self::DamageThreshold { .. } => NativeEffectImplementationId::WarcraftDamageThresholdV1,
@@ -1466,6 +1481,7 @@ impl TuningEffect {
             Self::GobboRepair { .. } => "gobbo-repair",
             Self::DiseaseCloud { .. } => "disease-cloud",
             Self::DeathMastery { .. } => "death-mastery",
+            Self::Demolish { .. } => "demolish",
             Self::DeathSpawn { .. } => "death-spawn",
             Self::Poison { .. } => "poison",
             Self::DamageThreshold { .. } => "damage-threshold",
@@ -1814,6 +1830,7 @@ fn native_unit_mechanics_from_tuning(
                 | TuningEffect::GobboRepair { .. }
                 | TuningEffect::DiseaseCloud { .. }
                 | TuningEffect::DeathMastery { .. }
+                | TuningEffect::Demolish { .. }
                 | TuningEffect::FrostAttack { .. }
                 | TuningEffect::Feedback { .. }
                 | TuningEffect::SpellResistance { .. }
@@ -2141,6 +2158,10 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
                     && profile.timed_life_ticks > 0
             );
             PassiveUnitEffect::GobboRepair(*profile)
+        }
+        TuningEffect::Demolish { profile, .. } => {
+            assert!(profile.chance_per_10k <= 10_000 && profile.multiplier_per_10k >= 10_000);
+            PassiveUnitEffect::Demolish(*profile)
         }
         TuningEffect::DeathMastery { profile, .. } => {
             assert!(

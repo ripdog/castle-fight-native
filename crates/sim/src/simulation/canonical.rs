@@ -2828,6 +2828,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: &PassiveUnitEffects) {
                 hash.write_u8(45);
                 profile.visit_canonical_words(|word| hash.write_u64(word));
             }
+            PassiveUnitEffect::Demolish(profile) => {
+                hash.write_u8(48);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
             PassiveUnitEffect::DeathMastery(profile) => {
                 hash.write_u8(47);
                 for word in profile.canonical_words() {
