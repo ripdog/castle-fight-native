@@ -105,7 +105,7 @@ impl Simulation {
         // The cleanse is one global script timer, not a per-plant clock.
         for (profile, _, plant_center) in &plants {
             let cleanse = profile.cleanse;
-            if tick == 0 || tick % u64::from(cleanse.interval_ticks) != 0 {
+            if tick == 0 || !tick.is_multiple_of(u64::from(cleanse.interval_ticks)) {
                 continue;
             }
             for (entity, content, _, center, _) in &buildings {

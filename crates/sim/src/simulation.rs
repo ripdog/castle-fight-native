@@ -3208,12 +3208,10 @@ impl Simulation {
         }
         if let Some(spellcasting) = spellcasting {
             // A trained body may roll its initial mana (the Mine Layer's train-event script).
-            let initial_mana = spawn_building
-                .and_then(|_| trained_mana)
-                .unwrap_or(ManaState {
-                    current: spellcasting.mana.starting,
-                    regen_remainder_per_10k: 0,
-                });
+            let initial_mana = spawn_building.and(trained_mana).unwrap_or(ManaState {
+                current: spellcasting.mana.starting,
+                regen_remainder_per_10k: 0,
+            });
             entity.insert((
                 spellcasting,
                 initial_mana,
