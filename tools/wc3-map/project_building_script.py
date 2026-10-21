@@ -131,6 +131,35 @@ def _sandstorm(params, detail, number, raw):
         'duration_ticks': number(carrier[1], 30), 'targets': mask}}
 
 
+def _energy_shield(params, detail, number, raw):
+    functions = detail['functions']
+    handlers = {name: functions[name] for name in detail['building_spell']['source_functions'].split(',')
+        if name in ('blueShieldSpell', 'redShieldSpell')}
+    shield, level = params['shield_ability_id'], params['shield_level']
+    picker = functions['ForGroupCallback_forUnitsInRect_RaceMechAbilities_callback_forUnitsInRect_RaceMechAbilities']
+    chooser = functions['randomAllySapper']
+    avul = raw('Avul')
+    if (detail['building_spell']['mechanic_kind'] == 'apply-shield-level-1') != (list(handlers) == ['blueShieldSpell']):
+        raise ValueError('shield generator handler does not match its retained mechanic kind')
+    if 'blueShieldSpell' in handlers:
+        body = handlers['blueShieldSpell']
+        upgrade = False
+        if (level != 1 or not re.search(r'=randomAllySapper\(\w+,true\)if\(\w+==nil\)then return end if\(widget_getLife\(\w+\)>0\.405\)then \w+=\w+ addProtectedAbility\(\w+,%d\)' % shield, body)
+                or 'SetUnitAbilityLevel' in body):
+            raise ValueError('Blue shield control flow changed: random unshielded ally receives a level-one shield')
+    else:
+        body = handlers['redShieldSpell']
+        upgrade = True
+        if (level != 2 or not params.get('fallback_can_upgrade_existing_shield')
+                or not re.search(r'(\w+)=randomAllySapper\(\w+,true\)if\(\1==nil\)then \1=randomAllySapper\(\w+,false\)if\(\1==nil\)then return end '
+                    r'elseif\(widget_getLife\(\1\)>0\.405\)then \w+=\1 addProtectedAbility\(\w+,%d\)end \w+=\1 __wurst_safe_SetUnitAbilityLevel\(\w+,%d,2\)' % (shield, shield), body)):
+            raise ValueError('Red shield control flow changed: unshielded-first selection, any-ally fallback and level-two shield')
+    if (not re.search(r'isAliveCombatSapper\(\w+\)and unit_isAllyOf\(\w+,\w+\.p\)\)and\(unit_getAbilityLevel\(\w+,%d\)<=0\)\)and\(\(not \w+\.requireUnshielded\)or\(unit_getAbilityLevel\(\w+,%d\)<=0\)\)' % (avul, shield), picker)
+            or 'GroupEnumUnitsInRect(' not in chooser or 'group_getRandom(' not in chooser):
+        raise ValueError('shield recipient picker changed: ally combat bodies, no invulnerable marker, optional unshielded filter')
+    return {'EnergyShield': {'shield_ability': shield, 'level': level, 'upgrade_existing': upgrade}}
+
+
 def project(recipe, fields, unit, protected, detail):
     number, raw = _helpers()
     row = detail['building_spell']
@@ -149,6 +178,8 @@ def project(recipe, fields, unit, protected, detail):
         child = _mana_burn(params, detail, number, raw)
     elif kind == 'global-weather-ability-carrier':
         child = _sandstorm(params, detail, number, raw)
+    elif kind in ('apply-shield-level-1', 'apply-or-upgrade-shield-level-2'):
+        child = _energy_shield(params, detail, number, raw)
     else:
         raise ValueError(f'unsupported building script {kind!r}')
     rate = number(unit['mana_regen'], 10000)

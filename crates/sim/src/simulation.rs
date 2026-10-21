@@ -5371,6 +5371,9 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                     duration_ticks,
                     ..
                 } => assert!(pulse_interval_ticks > 0 && duration_ticks > 0),
+                crate::BuildingChild::EnergyShield { level, .. } => {
+                    assert!((1..=2).contains(&level))
+                }
             }
         }
         AbilityEffect::BuildingAura(p) => {

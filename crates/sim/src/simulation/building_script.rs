@@ -45,6 +45,17 @@ impl Simulation {
                 ),
                 units,
             ),
+            BuildingChild::EnergyShield {
+                shield_ability: _,
+                level,
+                upgrade_existing,
+            } => self.cast_energy_shield(
+                source,
+                profile.ability,
+                sequence,
+                (level, upgrade_existing),
+                units,
+            ),
             BuildingChild::ThunderCharge(thunder) => {
                 self.add_thunder_charge(source.team, thunder);
                 1
@@ -102,6 +113,57 @@ impl Simulation {
                 applied + 1
             }
         }
+    }
+
+    /// `randomAllySapper`: a random living allied combat body without the invulnerable marker,
+    /// optionally restricted to bodies without a shield. Fog and range play no part.
+    fn cast_energy_shield(
+        &mut self,
+        source: AbilitySourceSnapshot,
+        ability: AbilityId,
+        sequence: u64,
+        (level, upgrade_existing): (u8, bool),
+        units: &[UnitSnapshot],
+    ) -> usize {
+        let pick = |this: &Self, require_unshielded: bool, salt: u64| {
+            units
+                .iter()
+                .filter(|unit| {
+                    unit.team == source.team
+                        && unit.health > 0
+                        && unit.classifications.combat_sapper
+                        && !unit.classifications.invulnerable
+                        && (!require_unshielded
+                            || this
+                                .world
+                                .get::<BuildingSpellControl>(unit.entity)
+                                .is_none_or(|control| control.shield_level == 0))
+                })
+                .min_by_key(|unit| {
+                    (
+                        deterministic_ability_target_rank(
+                            this.config.match_seed,
+                            source.id,
+                            ability,
+                            sequence ^ salt,
+                            unit.id,
+                        ),
+                        unit.id,
+                    )
+                })
+                .map(|unit| unit.id)
+        };
+        // The second `randomAllySapper` call is a separate random draw.
+        let target = pick(self, true, 0).or_else(|| {
+            upgrade_existing
+                .then(|| pick(self, false, 1 << 40))
+                .flatten()
+        });
+        let Some(target) = target else {
+            return 0;
+        };
+        self.set_negative_building_shield(target, level, None);
+        1
     }
 
     /// Withering Touch: a random hostile combat body, preferring high mana, loses mana and is

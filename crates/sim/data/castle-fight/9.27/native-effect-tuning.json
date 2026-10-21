@@ -3,6 +3,51 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A09N",
+      "unit_rawcode": "h06J",
+      "spellcasting": {
+        "mana": {
+          "maximum": 10,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093679438,
+          "mana_cost": 7,
+          "cooldown_ticks": 30,
+          "range": 102398976,
+          "target_policy": "NativeBuildingSpellTrigger",
+          "effect": {
+            "BuildingScript": {
+              "ability": 1093679438,
+              "trigger_targets": 5,
+              "trigger_invulnerable": true,
+              "trigger_spell_immune": false,
+              "trigger_mechanical_only": false,
+              "child": {
+                "EnergyShield": {
+                  "shield_ability": 1093679436,
+                  "level": 1,
+                  "upgrade_existing": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/building-spell-mechanics.tsv",
+        "fields": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "functions": "BuildingSpellClosure_registerBuildingSpell_RaceMechAbilities_cast_registerBuildingSpell_RaceMechAbilities,blueShieldSpell,randomAllySapper,ForGroupCallback_forUnitsInRect_RaceMechAbilities_callback_forUnitsInRect_RaceMechAbilities"
+      }
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A094",
       "unit_rawcode": "n01T",

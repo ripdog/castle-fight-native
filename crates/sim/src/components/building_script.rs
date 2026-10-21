@@ -37,6 +37,15 @@ pub enum BuildingChild {
     /// Stores one team charge that the shared damage listener spends on the next qualifying melee
     /// attack of an allied unit.
     ThunderCharge(ThunderCallProfile),
+    /// Grants the native A09L energy shield to a random allied combat body anywhere on the map.
+    EnergyShield {
+        /// The shield ability, whose level is the number of negative building effects it blocks.
+        shield_ability: AbilityId,
+        /// The level every cast leaves on the chosen body.
+        level: u8,
+        /// When no unshielded ally exists, any ally is chosen and raised to `level`.
+        upgrade_existing: bool,
+    },
     /// A map-wide debuff plus a pulsing immolation on every hostile unit for a fixed time.
     Sandstorm {
         debuff: NativeDebuffProfile,
@@ -76,6 +85,16 @@ impl BuildingChild {
                 u64::from(damage_dealt_per_10k),
                 u64::from(damage_taken_per_10k),
                 u64::from(excluded_ability.0),
+            ],
+            Self::EnergyShield {
+                shield_ability,
+                level,
+                upgrade_existing,
+            } => vec![
+                6,
+                u64::from(shield_ability.0),
+                u64::from(level),
+                u64::from(upgrade_existing),
             ],
             Self::ThunderCharge(profile) => {
                 let mut words = vec![5];
