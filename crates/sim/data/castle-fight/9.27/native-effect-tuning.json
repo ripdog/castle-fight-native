@@ -3,6 +3,106 @@
   "map_version": "9.27",
   "effects": [
     {
+      "source_kind": "unit-ability",
+      "source_key": "A065",
+      "unit_rawcode": "u00B",
+      "kind": "cleave",
+      "radius_world": 175,
+      "damage_per_10k": 2500,
+      "targets": 1,
+      "provenance": {
+        "ability": "A065",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A066",
+      "unit_rawcode": "n01M",
+      "kind": "critical-strike",
+      "chance_per_10k": 2000,
+      "damage_multiplier_per_10k": 20000,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A066",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A019",
+      "unit_rawcode": "n01M",
+      "kind": "native-aura",
+      "radius_world": 900,
+      "damage_bonus_per_10k": 2000,
+      "armor_bonus_per_100": 0,
+      "self_only": false,
+      "melee_life_steal_per_10k": 0,
+      "melee_damage_return_per_10k": 0,
+      "mana_regeneration_per_second_per_10k": 0,
+      "affects_melee": true,
+      "affects_ranged": true,
+      "linger_ticks": 0,
+      "provenance": {
+        "ability": "A019",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A05U",
+      "unit_rawcode": "h056",
+      "spellcasting": {
+        "mana": {
+          "maximum": 15,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093678421,
+          "mana_cost": 12,
+          "cooldown_ticks": 30,
+          "range": 102398976,
+          "target_policy": "NativeBuildingSpellTrigger",
+          "effect": {
+            "BuildingScript": {
+              "ability": 1093678421,
+              "trigger_targets": 5,
+              "trigger_invulnerable": true,
+              "trigger_spell_immune": false,
+              "trigger_mechanical_only": false,
+              "child": {
+                "RaiseFromCorpse": {
+                  "map_version": {
+                    "major": 9,
+                    "minor": 27
+                  },
+                  "rare_body": 1848652109,
+                  "rare_chance_per_10k": 1000,
+                  "common_bodies": [
+                    1966092354,
+                    1848652108,
+                    1966092339
+                  ],
+                  "excluded_ability": 1098282348
+                }
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/building-spell-mechanics.tsv",
+        "fields": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "functions": "BuildingSpellClosure_registerBuildingSpell_RaceUndeadAbilities_cast_registerBuildingSpell_RaceUndeadAbilities1,ForGroupCallback_forUnitsInRect_RaceUndeadAbilities_callback_forUnitsInRect_RaceUndeadAbilities,raiseFromCorpse"
+      }
+    },
+    {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
       "source_key": "A01Q",

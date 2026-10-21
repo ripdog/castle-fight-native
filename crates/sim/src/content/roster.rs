@@ -33,6 +33,10 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    SkeletalGeneral = 0x1000_00b2 => b"n01M",
+    GreaterSkeletonWarrior = 0x1000_00b3 => b"u00B",
+    GreaterSkeletonArcher = 0x1000_00b4 => b"n01L",
+    GreaterSkeletalMage = 0x1000_00b5 => b"u003",
     SkeletalHero = 0x1000_00ae => b"n00C",
     SkeletonWarrior = 0x1000_00af => b"u002",
     SkeletonArcher = 0x1000_00b0 => b"n00D",
@@ -370,6 +374,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    SkullShrine = 0x2100_0040 => b"h056",
     SkullPile = 0x2100_003f => b"h01P",
     DeathPit = 0x2100_003e => b"h00A",
     PowerPlant = 0x2100_003d => b"h09T",

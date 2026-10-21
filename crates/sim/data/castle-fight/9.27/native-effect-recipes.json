@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A065","unit_rawcode":"u00B","kind":"cleave"},
+    {"source_kind":"unit-ability","source_key":"A066","unit_rawcode":"n01M","kind":"critical-strike"},
+    {"source_kind":"unit-ability","source_key":"A019","unit_rawcode":"n01M","kind":"native-aura"},
+    {"source_kind":"unit-ability","source_key":"A05U","unit_rawcode":"h056","kind":"building-script"},
     {"source_kind":"unit-ability","source_key":"A01Q","unit_rawcode":"h01P","kind":"building-script"},
     {"source_kind":"unit-ability","source_key":"A033","unit_rawcode":"h00A","kind":"building-script"},
     {"source_kind":"unit-ability","source_key":"A064","unit_rawcode":"u000","kind":"frost-attack"},
