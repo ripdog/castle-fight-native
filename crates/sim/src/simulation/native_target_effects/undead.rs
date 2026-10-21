@@ -62,7 +62,7 @@ fn raise_dead_consumes_only_raisable_corpses_of_either_team_and_pays_once() {
         panic!("the Necromancer raises the dead");
     };
     let mut sim = simulation(1);
-    let caster = sim.spawn_resolved_unit(Team(0), at(40), necromancer);
+    sim.spawn_resolved_unit(Team(0), at(40), necromancer);
     // A footman's corpse of the enemy and an ally's both qualify; a Zombie-free control: the
     // Necromancer's own kind cannot be raised (cannot-raise death type).
     corpse(&mut sim, b"hfoo", Team(1), 60);

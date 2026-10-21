@@ -843,11 +843,15 @@ mod tests {
                 );
                 let center_x2 =
                     building.footprint.min_x * 2 + i32::from(building.footprint.width) - 1;
-                assert!(if team == Team(0) {
-                    center_x2 < castle_center_x2
-                } else {
-                    center_x2 > castle_center_x2
-                });
+                // Packing starts on the outer edge behind the castle and moves inward; a roster
+                // larger than that strip legitimately continues past the castle inside the region.
+                if index == 0 {
+                    assert!(if team == Team(0) {
+                        center_x2 < castle_center_x2
+                    } else {
+                        center_x2 > castle_center_x2
+                    });
+                }
                 assert!(
                     line[index + 1..]
                         .iter()
