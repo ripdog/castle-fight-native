@@ -40,8 +40,11 @@ pub use parasite_script::{
 pub use travelling_mana_clap::TravellingManaClapProfile;
 pub(crate) use travelling_mana_clap::TravellingManaClapState;
 mod death_explosion;
+mod death_mastery;
 pub use death_explosion::DeathExplosionProfile;
 pub(crate) use death_explosion::DeathExplosionState;
+pub(crate) use death_mastery::DeathAndDecayState;
+pub use death_mastery::{DeathAndDecayProfile, DeathMasteryProfile};
 mod hostile_armor_aura;
 pub use hostile_armor_aura::HostileArmorAuraProfile;
 mod impale;
@@ -582,6 +585,11 @@ pub enum TriggeredAttackEffect {
     AcidBomb(AcidBombProfile),
     /// Script-authored area damage released at the damaged target when an attack lands.
     Whirlwind(WhirlwindProfile),
+    /// The Lich King's single-roll listener, already resolved to one branch by the attack roll.
+    DeathMastery {
+        profile: DeathMasteryProfile,
+        devour: bool,
+    },
 }
 
 /// A damage-listener spin: universal damage to every eligible unit around the damaged target.
@@ -1257,6 +1265,7 @@ pub enum PassiveUnitEffect {
     EchoStep(EchoStepProfile),
     GobboRepair(GobboRepairProfile),
     DiseaseCloud(DiseaseCloudProfile),
+    DeathMastery(DeathMasteryProfile),
 }
 
 /// Damage-listener Echo Step: when a nearby combat sapper damages the bearer it blinks toward its

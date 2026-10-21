@@ -169,6 +169,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
             'radius': number('Area1', 1024), 'damage': number('DataA1'),
             'interval_ticks': number('Dur1', 30), 'targets': 3, 'organic_only': 'organic' in fields['targs1'].split(',')},
             'provenance': {'source': 'resolved/object-fields.tsv', 'native_base': mechanics['native_base']}}
+    if kind == "death-mastery":
+        from project_death_mastery import project
+        return project(recipe, fields, protected, mechanics)
     if kind == "disease-cloud":
         # Native Aapl: the carrier infects hostile organic bodies (DataA lasting seconds, DataB
         # damage per second) and an infected body that dies leaves a plague ward for DataC seconds.
@@ -931,6 +934,9 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
     damage_thresholds = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "damage-triggered-persistent-low-hp-attack-bonus"}
+    death_masteries = {row["unit_rawcode"]: json.loads(row["parameters_json"])
+        for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
+        if row["mechanic_kind"] == "source-damage-mastery-over-death"}
     mirror_images = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "attack-proc-native-mirror-image"}
@@ -1095,6 +1101,8 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         if recipe["kind"] in {"scripted-roots", "wind-walk", "native-heal", "orb-charm"}:
             detail.update(all_bases=ability_bases, functions=functions, git_tree=tree,
                 map_version=dict(zip(["major", "minor"], map(int, release["map_version"].split(".")))))
+        if recipe["kind"] == "death-mastery":
+            detail.update(functions=functions, git_tree=tree, death_mastery=death_masteries[recipe["unit_rawcode"]])
         if recipe["kind"] == "raise-dead":
             detail.update(map_version=dict(zip(["major", "minor"], map(int, release["map_version"].split(".")))),
                 git_tree=tree, default_active=default_autocast.get(recipe["unit_rawcode"]))

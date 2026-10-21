@@ -33,6 +33,8 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    LichKing = 0x1000_00a7 => b"u00D",
+    RaisedLichGhoul = 0x1000_00a8 => b"u00E",
     MightyNecromancer = 0x1000_00a5 => b"u009",
     RaisedGreaterGhoul = 0x1000_00a6 => b"u008",
     Necromancer = 0x1000_00a3 => b"u005",
@@ -202,6 +204,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    HighCitadelOfNecromancy = 0x2000_00a1 => b"h055",
     TempleOfNecromancy = 0x2000_00a0 => b"h04B",
     TempleOfBone = 0x2000_009f => b"h01K",
     DefiledGranary = 0x2000_009e => b"h03M",

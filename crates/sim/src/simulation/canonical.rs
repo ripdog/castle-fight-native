@@ -740,6 +740,18 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u64(state.armed_tick);
                         hash.write_u64(state.expires_tick);
                     }
+                    NativeAction::DeathAndDecay(state) => {
+                        hash.write_u8(45);
+                        hash.write_u64(state.source.0);
+                        hash.write_u8(state.team.0);
+                        hash.write_i32(state.position.x);
+                        hash.write_i32(state.position.y);
+                        for word in state.profile.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                        hash.write_u64(state.next_pulse_tick);
+                        hash.write_u64(state.expires_tick);
+                    }
                     NativeAction::PlagueWard(state) => {
                         hash.write_u8(44);
                         hash.write_u64(state.source.0);
@@ -2816,6 +2828,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: &PassiveUnitEffects) {
                 hash.write_u8(45);
                 profile.visit_canonical_words(|word| hash.write_u64(word));
             }
+            PassiveUnitEffect::DeathMastery(profile) => {
+                hash.write_u8(47);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
             PassiveUnitEffect::DiseaseCloud(profile) => {
                 hash.write_u8(46);
                 hash.write_u32(profile.ability.0);
@@ -2939,6 +2957,13 @@ fn hash_triggered_attack_effect(hash: &mut Fnv64, effect: &TriggeredAttackEffect
         }
         TriggeredAttackEffect::Whirlwind(profile) => {
             hash.write_u8(7);
+            for word in profile.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
+        TriggeredAttackEffect::DeathMastery { profile, devour } => {
+            hash.write_u8(8);
+            hash.write_u8(u8::from(*devour));
             for word in profile.canonical_words() {
                 hash.write_u64(word);
             }

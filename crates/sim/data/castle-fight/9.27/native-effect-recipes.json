@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A085","unit_rawcode":"u00D","kind":"raise-dead"},
+    {"source_kind":"unit-ability","source_key":"A086","unit_rawcode":"u00D","kind":"death-mastery"},
     {"source_kind":"unit-ability","source_key":"A05L","unit_rawcode":"u009","kind":"raise-dead"},
     {"source_kind":"ability-effect","source_key":"A05M","unit_rawcode":"u009","kind":"cone-wave"},
     {"source_kind":"unit-ability","source_key":"A05N","unit_rawcode":"u009","kind":"orb-spell-proc"},

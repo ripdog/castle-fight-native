@@ -17,7 +17,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 107;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 108;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -30,6 +30,7 @@ mod builder;
 mod building_bolts;
 mod death_explosion;
 mod death_healing;
+mod death_mastery;
 mod disease_cloud;
 mod scripted_roots;
 mod support_orders;
@@ -7053,6 +7054,7 @@ struct PendingAttackEffectState<'a> {
 #[derive(Debug, Clone, Default)]
 struct PendingAttackEffectResult {
     cone_wave: Option<crate::components::ConeWaveState>,
+    death_and_decay: Option<crate::components::DeathAndDecayState>,
     poison: Option<crate::PoisonProfile>,
     fork_events: Vec<ChainLightningEvent>,
     native_debuff_casts: [Option<AbilityCastEvent>; 2],
@@ -7193,6 +7195,15 @@ fn apply_pending_attack_effects(
             ));
             return result;
         }
+        if let Some(TriggeredAttackEffect::DeathMastery { profile, .. }) = effects.triggered_spell {
+            result.death_and_decay = Some(death_mastery::new_decay(
+                source,
+                footprint_center_point(buildings[index].footprint, navigation_cell_size),
+                profile,
+                completed_tick,
+            ));
+            return result;
+        }
         if let Some(TriggeredAttackEffect::EntanglingRoots(profile)) = effects.triggered_spell
             && profile.targets.can_target_buildings()
             && building_health[index] > 0
@@ -7229,6 +7240,32 @@ fn apply_pending_attack_effects(
                 retired_sources,
             },
         ));
+    }
+    if let Some(TriggeredAttackEffect::DeathMastery { profile, devour }) = effects.triggered_spell {
+        if devour {
+            death_mastery::devour(
+                profile,
+                source,
+                index,
+                &mut PendingAttackEffectState {
+                    navigation_cell_size,
+                    completed_tick,
+                    units,
+                    unit_health,
+                    buildings,
+                    building_health,
+                    damage_rules,
+                    retired_sources,
+                },
+            );
+        } else {
+            result.death_and_decay = Some(death_mastery::new_decay(
+                source,
+                units[index].position,
+                profile,
+                completed_tick,
+            ));
+        }
     }
     if let Some(p) = effects.incinerate {
         incinerate::landed_hit(
@@ -7370,6 +7407,7 @@ fn apply_pending_attack_effects(
             }
             TriggeredAttackEffect::ConeWave(_) => {}
             TriggeredAttackEffect::Whirlwind(_) => {}
+            TriggeredAttackEffect::DeathMastery { .. } => {}
             TriggeredAttackEffect::ChainLightning(profile) => {
                 let max_targets = usize::from(profile.maximum_targets).min(MAX_BOUNCE_HITS);
                 if max_targets > 0 {

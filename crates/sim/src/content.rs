@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r211";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r212";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -2067,6 +2067,12 @@ fn stable_ability_id(
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A05L") => {
             0x4000_0263
         }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A086") => {
+            0x4000_0264
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A085") => {
+            0x4000_0267
+        }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0GN") => {
             0x4000_022a
         }
@@ -3727,6 +3733,12 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
                     hash.write_u8(u8::from(ward.organic_only));
                 }
             }
+            PassiveUnitEffect::DeathMastery(profile) => {
+                hash.write_u8(47);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
             PassiveUnitEffect::DiseaseCloud(profile) => {
                 hash.write_u8(46);
                 hash.write_u32(profile.ability.0);
@@ -4048,6 +4060,13 @@ fn hash_triggered_effect(hash: &mut ContentHash64, effect: TriggeredAttackEffect
         }
         TriggeredAttackEffect::Whirlwind(profile) => {
             hash.write_u8(7);
+            for word in profile.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
+        TriggeredAttackEffect::DeathMastery { profile, devour } => {
+            hash.write_u8(8);
+            hash.write_u8(u8::from(devour));
             for word in profile.canonical_words() {
                 hash.write_u64(word);
             }

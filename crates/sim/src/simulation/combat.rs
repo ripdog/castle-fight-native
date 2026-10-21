@@ -626,6 +626,9 @@ impl Simulation {
                                 request.profile,
                             );
                         }
+                        if let Some(state) = pending.death_and_decay {
+                            self.launch_death_and_decay(state);
+                        }
                         if let Some(state) = pending.cone_wave {
                             self.launch_attack_cone_wave(state);
                         }
@@ -1155,6 +1158,46 @@ impl Simulation {
                             "multiple triggered spell procs on one attack are not yet supported"
                         );
                         on_hit.triggered_spell = Some(profile.effect);
+                    }
+                }
+                PassiveUnitEffect::DeathMastery(profile) => {
+                    // One roll per landed attack is partitioned between the two script branches.
+                    let roll = deterministic_random(
+                        self.config.match_seed,
+                        completed_tick,
+                        intent.source_id,
+                        RANDOM_PURPOSE_ATTACK_PROC ^ u64::from(profile.ability.0),
+                        intent.attack_sequence,
+                    ) % u64::from(ATTACK_PROC_CHANCE_SCALE);
+                    let devour_eligible = match intent.target {
+                        TargetIndex::Unit(i) => {
+                            let target = &units[i];
+                            !target.mechanical
+                                && !target.map_version.is_some_and(|version| {
+                                    crate::content::unit_has_ability_for_version(
+                                        target.rawcode,
+                                        profile.devour_excluded_ability,
+                                        version,
+                                    )
+                                })
+                        }
+                        TargetIndex::Building(_) => false,
+                    };
+                    let devour =
+                        if roll < u64::from(profile.devour_chance_per_10k) && devour_eligible {
+                            Some(true)
+                        } else if roll < u64::from(profile.decay_chance_per_10k) {
+                            Some(false)
+                        } else {
+                            None
+                        };
+                    if let Some(devour) = devour {
+                        assert!(
+                            on_hit.triggered_spell.is_none(),
+                            "multiple triggered spell procs on one attack are not yet supported"
+                        );
+                        on_hit.triggered_spell =
+                            Some(TriggeredAttackEffect::DeathMastery { profile, devour });
                     }
                 }
                 PassiveUnitEffect::FrostAttack(profile) => {

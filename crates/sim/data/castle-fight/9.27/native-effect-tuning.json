@@ -5,6 +5,76 @@
     {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
+      "source_key": "A085",
+      "unit_rawcode": "u00D",
+      "spellcasting": {
+        "mana": {
+          "maximum": 400,
+          "starting": 250,
+          "regen_per_tick_per_10k": 2147508648
+        },
+        "ability": {
+          "id": 1093679157,
+          "mana_cost": 100,
+          "cooldown_ticks": 750,
+          "range": 921600,
+          "target_policy": "RaisableCorpse",
+          "effect": {
+            "RaiseDead": {
+              "map_version": {
+                "major": 9,
+                "minor": 27
+              },
+              "ability": 1093679157,
+              "body_rawcode": 1966092357,
+              "count": 2,
+              "radius": 921600,
+              "duration_ticks": 0
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 25000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "native_base": "Arai"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A086",
+      "unit_rawcode": "u00D",
+      "kind": "death-mastery",
+      "profile": {
+        "ability": 1093679158,
+        "devour_chance_per_10k": 1500,
+        "decay_chance_per_10k": 2500,
+        "devour_damage": 10000,
+        "devour_heal_per_10k": 5000,
+        "devour_excluded_ability": 1093678896,
+        "decay": {
+          "ability": 1093679158,
+          "radius": 358400,
+          "life_per_10k": 800,
+          "duration_ticks": 150,
+          "targets": 3
+        }
+      },
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/production-unit-special-mechanics.tsv",
+        "handler": "devourAttackProc",
+        "dispatcher": "handleSourceDamageEffects",
+        "marker": "A03Q:1093677905",
+        "native_base": "AUdd"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
       "source_key": "A05L",
       "unit_rawcode": "u009",
       "spellcasting": {

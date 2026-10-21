@@ -415,6 +415,9 @@ impl Simulation {
                                     request.profile,
                                 );
                             }
+                            if let Some(state) = pending.death_and_decay {
+                                self.launch_death_and_decay(state);
+                            }
                             if let Some(state) = pending.cone_wave {
                                 self.launch_attack_cone_wave(state);
                             }
