@@ -65,7 +65,12 @@ impl Simulation {
 
     /// A direction uniform in angle without trigonometry: sample the square until a point falls
     /// inside the inscribed circle, then scale it to the requested length.
-    fn land_mine_direction(&self, source: SimId, sequence: u64, distance: i64) -> (i64, i64) {
+    pub(super) fn land_mine_direction(
+        &self,
+        source: SimId,
+        sequence: u64,
+        distance: i64,
+    ) -> (i64, i64) {
         for attempt in 0..DIRECTION_ATTEMPTS {
             let axis = |salt: u64| {
                 let roll = deterministic_random(

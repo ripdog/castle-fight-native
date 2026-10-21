@@ -33,6 +33,7 @@ mod life_steal;
 mod lightning;
 mod mana_attack_orb;
 mod master_projectiles;
+mod mechanical;
 mod mirror_image;
 mod native_debuff;
 mod orb_charm;

@@ -133,7 +133,9 @@ impl Simulation {
         status.armor_modifiers[..usize::from(status.armor_modifier_count)]
             .iter()
             .any(|modifier| {
-                self.next_tick < modifier.expires_tick
+                // Production runs before the timers phase refreshes the aura, so it reads the
+                // modifier granted by the previous tick, which expires exactly now.
+                self.next_tick <= modifier.expires_tick
                     && modifier
                         .native_buff
                         .is_some_and(|buff| buff.rawcode == spawn.requires_buff)

@@ -35,10 +35,10 @@ fn setup(weapon: bool) -> (Simulation, SimId, BuildingDamageProcState) {
     let (e, mut p) = controller(&sim, source);
     p.profile.chance_per_10k = 10_000;
     p.profile.range = 40 * SUBUNITS_PER_WORLD_UNIT;
-    p.profile.bolt.speed_per_tick = 5 * SUBUNITS_PER_WORLD_UNIT;
-    p.profile.bolt.damage = 13;
-    p.profile.bolt.stun_ticks = 11;
-    p.profile.bolt.hero_stun_ticks = 3;
+    p.profile.bolt.as_mut().unwrap().speed_per_tick = 5 * SUBUNITS_PER_WORLD_UNIT;
+    p.profile.bolt.as_mut().unwrap().damage = 13;
+    p.profile.bolt.as_mut().unwrap().stun_ticks = 11;
+    p.profile.bolt.as_mut().unwrap().hero_stun_ticks = 3;
     sim.world
         .entity_mut(e)
         .insert(NativeAction::BuildingDamageProc(p));
@@ -127,7 +127,7 @@ fn fresh_dummy_orders_have_independent_cooldowns_and_survive_source_removal_and_
     }
     assert_eq!(
         sim.unit(victim).unwrap().health,
-        1000 - 2 * p.profile.bolt.damage
+        1000 - 2 * p.profile.bolt.unwrap().damage
     );
     assert!(
         sim.world
@@ -222,7 +222,7 @@ fn released_weapon_retains_callback_until_impact_even_after_tower_death() {
     assert!(saw_boulder);
     assert_eq!(
         sim.unit(victim).unwrap().health,
-        1000 - 1 - p.profile.bolt.damage
+        1000 - 1 - p.profile.bolt.unwrap().damage
     );
     assert!(!sim.world.iter_entities().any(|e| matches!(
         e.get::<NativeAction>(),

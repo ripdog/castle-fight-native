@@ -88,7 +88,7 @@ fn support_selection_prefers_local_fallback_before_global_mana_and_retains_nativ
     let fallback = spawn(&mut s, 1, 1, 20, false, false);
     spawn(&mut s, 1, 80, 100, false, true);
     let mut units = s.snapshot_units();
-    s.resolve_support_orders(&mut units);
+    s.resolve_support_orders(&mut units, &mut []);
     let i = find_unit_index(&units, actor).unwrap();
     assert_eq!(
         units[i].status.support_order.unwrap().selected_target,
@@ -117,7 +117,7 @@ fn support_queue_caps_service_rotates_fifo_and_halves_interval_under_load() {
         .map(|_| spawn(&mut s, 0, 0, 100, true, false))
         .collect();
     let mut units = s.snapshot_units();
-    s.resolve_support_orders(&mut units);
+    s.resolve_support_orders(&mut units, &mut []);
     assert_eq!(
         units
             .iter()
@@ -150,7 +150,7 @@ fn support_queue_caps_service_rotates_fifo_and_halves_interval_under_load() {
         q.actors.push_front(SimId(99999));
     }
     s.next_tick = 3;
-    s.resolve_support_orders(&mut units);
+    s.resolve_support_orders(&mut units, &mut []);
     assert_eq!(
         units
             .iter()
@@ -263,7 +263,7 @@ fn one_owner_cache_keeps_distinct_ordinary_and_royal_fallback_groups() {
         fallback_health_below: p().rules.fallback_health_below[1],
         ..p()
     });
-    s.resolve_support_orders(&mut units);
+    s.resolve_support_orders(&mut units, &mut []);
     assert_eq!(
         units[find_unit_index(&units, ordinary).unwrap()]
             .status

@@ -17,6 +17,7 @@ pub(super) fn profile() -> DamageChargeProfile {
             partial_damage: 40,
             building_damage_per_10k: 5000,
             targets: AttackTargetMask::AIR_UNITS.union(AttackTargetMask::BUILDINGS),
+            cast_range: 0,
         },
     }
 }
