@@ -99,10 +99,9 @@ avoid repeating this map's numerical values in tests.
 
 ## Fidelity gates still open
 
-- Warcraft-executable probes are still needed for Feedback's exact damage-class/
-  resistance interactions and native Faerie Fire AI cadence/order interruptions.
-  The current Feedback payload uses the shared spell-damage path; synthetic tests
-  are not an independent oracle for that native classification.
+- Feedback's damage class is traced (Magic kind, Spells attack type; see
+  `engine-evidence-gaps.md`), which the shared spell-damage path already models. Native
+  Faerie Fire AI cadence/order interruptions still need a Warcraft-executable probe.
 - Bounce target selection follows the traced native rule (nearest eligible unit to
   the impact position; see `engine-evidence-gaps.md`). Only the engine's tie-break
   among exactly equidistant units (group enumeration order) is replaced by `SimId`.

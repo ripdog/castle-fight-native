@@ -10,7 +10,6 @@ Evidence tiers: **Ghidra** = traced in `Game.dll`; **In-game** = observed by the
 
 ### Elven
 
-- [ ] **Feedback damage class / resistance.** Currently routed through the shared spell-damage path. Need the native damage kind and which immunity/resistance masks apply. Audit: [elven-melee-autocast.md](elven-melee-autocast.md).
 - [ ] **Faerie Fire AI cadence and order interruptions.** Native autocast evaluation cadence and what interrupts it. Audit: [elven-melee-autocast.md](elven-melee-autocast.md).
 - [ ] **Parasite carrier sub-tick corner.** Retained Parasite buff lifetime and the `nfbr` death summon when an unrelated same-frame death occurs. Deliberately unimplemented until observed. Audit: [elven-caster-audit.md](elven-caster-audit.md).
 - [ ] **Healer AI frame fidelity.** Native order cadence, visibility and simultaneous event ordering for healing target selection. Audit: [elven-caster-audit.md](elven-caster-audit.md).
@@ -35,13 +34,16 @@ Tier is Community only; each needs a Ghidra trace or an explicit acceptance.
 
 - [ ] Thunder Clap hostile eligibility and undispellable slow (Naga).
 - [ ] Charm summoned-unit expiry, upgrades and creep-level rule (Naga).
-- [ ] Carapace melee/ranged factor scope (Naga).
 - [ ] Aspo shared stacking and second-buff selection (Naga).
 - [ ] Life Regeneration Aura buff and literal regeneration (Naga).
 - [ ] Chaos aura recipients / hostile Thorns immunity (Chaos).
 - [ ] Orc spell-resistance and poison/slow family semantics.
 
 ## Resolved
+
+- [x] **Feedback damage class (`Afbt`).** **Ghidra** (`CAbilityFeedback`, vtable `0x6fb333d0`; pre-hit hook `0x6f5c3cb0`, post-hit hook `0x6f5c3b50`): the post-hit hook reads the ability's burn amount and mana multiplier, clamps the burn to the target's current mana and calls the shared magic-damage helper `0x6f5809b0`, which builds a damage record of kind Magic (`0x4000`) with the default attack type 0 (Spells). Magic-kind damage is blocked by spell immunity (mask `0x033ee700`) and passes ethereal bodies; Defend, Magic Defense and spell-damage-reduction listeners and the Spells defense-type row all apply. This is the shared spell-damage path the clone already uses. Audit: [elven-melee-autocast.md](elven-melee-autocast.md).
+
+- [x] **Spiked/Thorny Shell (`ANth`) received and returned damage scope (Naga Dragon Turtle).** **Ghidra** (`CAbilityThornyShield`/`CAbilityThorns`, listener `0x6f5b2820`, phase 1): the listener acts only when the incoming record's flag bit 0 (the JASS `ranged` argument) is clear and its kind is Normal (`0x10`), the attacker is present and not spell-immune. The returned damage is the ability's fraction of the original record amount, dealt with kind Defensive (`0x200000`) and the default attack type, and is computed before the received-damage factor rescales the record, so the two are independent. The received factor therefore applies to melee Normal-kind hits only, not to all damage as the tooltip says. The clone matches. Audit: [naga-implementation.md](naga-implementation.md).
 
 - [x] **Defend / Magic Defense / spell damage reduction versus Universal damage.** **Ghidra**: the damage routine (`0x6f6cf530`) runs every registered listener regardless of damage kind. Defend and Magic Defense share listener `0x6f5f9f90` (phase 6) and `CAbilityPassiveDefense` (`0x6f5fa140`) is identical: they scale damage by the record's *attack type* (0 Spells and 4 Magic use the spell factor, 2 Pierce the pierce factor). `CAbilityItemSpellReduction` (`0x6f5750a0`, the base of the map's `AIsr` spell-resistance abilities `A0AH`, `A0AN`, `A0FN`, `A0H0`) scales attack type 0 only. `CAbilityMagicImmunity` and `CAbilityWhirlwind`/`CAbilityStoneSkin` zero attack type 4. Every native Universal damage site (`CAbilityDeathAndDecay` pulse `0x6f6239c0`, and the sites at `0x6f55a3e0`, `0x6f57ede0`, `0x6f5d91b0`, `0x6f60cb20`) builds its record with the default attack type 0, so Defend and spell reduction apply to it. The clone had assumed otherwise for Starfall; `starfall.rs` now routes unit damage through `spell_damage_after_defend` and its test proves a partial `AIsr` factor reduces it. Open: Snowveil's explosion and other script-passed `UnitDamageTarget` calls use whatever attack type the map script passes, which has not been traced, so `snowveil.rs` is unchanged. Audit: [night-elf-implementation.md](night-elf-implementation.md).
 
