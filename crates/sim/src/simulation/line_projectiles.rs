@@ -121,8 +121,13 @@ impl Simulation {
             // Damage loss is per collision, so spatial ordering matters; stable IDs break ties.
             hits.sort_unstable_by_key(|(dot, id, _)| (*dot, *id));
             for (_, id, target) in hits {
-                let damage =
-                    ranged_projectile_damage_after_defend(target, p.damage, completed_tick, units);
+                let damage = ranged_projectile_damage_after_defend(
+                    target,
+                    p.damage,
+                    p.damage_type,
+                    completed_tick,
+                    units,
+                );
                 if self
                     .apply_damage_to_target(
                         target,

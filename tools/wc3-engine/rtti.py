@@ -134,6 +134,8 @@ def main():
                 if code[0] == 0xB8 and code[5] == 0xC3:
                     value = struct.unpack_from("<I", code, 1)[0]
                     print(n, value, hex(s[index]))
+                elif code[0] in (0x31, 0x33) and code[1] == 0xC0 and code[2] == 0xC3:
+                    print(n, 0, hex(s[index]))
     elif cmd == "slot":
         index = int(sys.argv[3], 0) // 4
         prefix = sys.argv[4] if len(sys.argv) > 4 else ""

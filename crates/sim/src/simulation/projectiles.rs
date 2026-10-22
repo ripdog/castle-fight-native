@@ -775,6 +775,7 @@ impl Simulation {
                     let damage = ranged_projectile_damage_after_defend(
                         target,
                         scaled_damage,
+                        snapshot.projectile.damage_type,
                         completed_tick,
                         units,
                     );

@@ -6569,9 +6569,21 @@ fn scale_damage_per_10k(damage: i32, factor_per_10k: u16) -> i32 {
     i32::try_from(scaled.max(1)).expect("scaled damage exceeds i32")
 }
 
+/// The native Defend listener (`Game.dll` `0x6f5f9f90`) selects its factor from the record's attack
+/// type: Pierce takes the pierce factor, Spells and Magic take the spell factor, and every other
+/// type (Normal, Siege, Chaos, Hero) is untouched.
+fn defend_factor_for_attack_type(profile: &DefendEffectProfile, damage_type: DamageType) -> u16 {
+    match damage_type {
+        DamageType::Pierce => profile.ranged_damage_taken_per_10k,
+        DamageType::Magic | DamageType::Spells => profile.spell_damage_taken_per_10k,
+        DamageType::Normal | DamageType::Siege | DamageType::Chaos | DamageType::Hero => 10_000,
+    }
+}
+
 fn ranged_projectile_damage_after_defend(
     target: TargetIndex,
     damage: i32,
+    damage_type: DamageType,
     completed_tick: u64,
     units: &[UnitSnapshot],
 ) -> i32 {
@@ -6579,10 +6591,12 @@ fn ranged_projectile_damage_after_defend(
         return damage;
     };
     let unit = units[index];
-    active_defend_profile(unit.passive_effects, unit.spawn_tick, completed_tick)
-        .map_or(damage, |profile| {
-            scale_damage_per_10k(damage, profile.ranged_damage_taken_per_10k)
-        })
+    active_defend_profile(unit.passive_effects, unit.spawn_tick, completed_tick).map_or(
+        damage,
+        |profile| {
+            scale_damage_per_10k(damage, defend_factor_for_attack_type(&profile, damage_type))
+        },
+    )
 }
 
 fn resolve_directed_projectile_defense(
@@ -6625,7 +6639,7 @@ fn resolve_directed_projectile_defense(
     let factor = if reflected {
         profile.deflected_pierce_damage_taken_per_10k
     } else {
-        profile.ranged_damage_taken_per_10k
+        defend_factor_for_attack_type(&profile, damage_type)
     };
     ProjectileDefenseResolution {
         damage: scale_damage_per_10k(damage, factor),

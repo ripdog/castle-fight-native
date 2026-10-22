@@ -78,7 +78,13 @@ impl Simulation {
             };
             let scaled = i32::try_from(i64::from(projectile.damage) * i64::from(factor) / 10_000)
                 .expect("native splash damage overflow");
-            let damage = ranged_projectile_damage_after_defend(target, scaled, tick, state.units);
+            let damage = ranged_projectile_damage_after_defend(
+                target,
+                scaled,
+                projectile.damage_type,
+                tick,
+                state.units,
+            );
             effects += usize::from(
                 self.apply_damage_to_target(
                     target,

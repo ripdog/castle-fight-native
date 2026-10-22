@@ -853,8 +853,8 @@ cooldown_ticks: 0,
         }))
     }
 
-    #[test]
-    fn defend_reduces_directed_ranged_damage_at_projectile_impact() {
+    /// Health lost by a defender after one guaranteed-hit projectile of `damage_type`.
+    fn guaranteed_hit_loss(damage_type: DamageType, defend: Option<PassiveUnitEffects>) -> i32 {
         let world = SUBUNITS_PER_WORLD_UNIT;
         let mut sim = Simulation::new(SimulationConfig::default(), 2);
         let attacker = sim.spawn_unit_with_properties(
@@ -874,7 +874,7 @@ cooldown_ticks: 0,
                 movement: MovementProfile { speed_per_tick: 0 },
             },
             UnitGameplayProperties {
-                damage_type: DamageType::Normal,
+                damage_type,
                 ..UnitGameplayProperties::default()
             },
         );
@@ -882,7 +882,7 @@ cooldown_ticks: 0,
             UnitSpawn {
                 team: Team(1),
                 position: SimPoint::new(42 * world, 0),
-                health: 100,
+                health: 1000,
                 attack: AttackProfile {
                     delivery: AttackDelivery::Melee,
                     damage: 0,
@@ -893,7 +893,7 @@ cooldown_ticks: 0,
                 movement: MovementProfile { speed_per_tick: 0 },
             },
             UnitGameplayProperties {
-                passive_effects: always_on_defend(),
+                passive_effects: defend.unwrap_or_default(),
                 ..UnitGameplayProperties::default()
             },
         );
@@ -905,8 +905,35 @@ cooldown_ticks: 0,
         while sim.tick() <= impact_tick {
             sim.step();
         }
-        assert_eq!(sim.unit(defender).unwrap().health, 60);
         assert_eq!(sim.unit(attacker).unwrap().health, 100);
+        1000 - sim.unit(defender).unwrap().health
+    }
+
+    #[test]
+    fn defend_scales_projectiles_by_attack_type_like_the_native_listener() {
+        let defend = PassiveUnitEffects::single(PassiveUnitEffect::Defend(DefendEffectProfile {
+            deflect_chance_per_10k: 0,
+            ..match always_on_defend().iter().next().unwrap() {
+                PassiveUnitEffect::Defend(profile) => profile,
+                _ => unreachable!(),
+            }
+        }));
+        // Pierce takes the pierce factor, Magic the spell factor; other types are untouched.
+        for (damage_type, factor_per_10k) in [
+            (DamageType::Pierce, 4_000),
+            (DamageType::Magic, 5_000),
+            (DamageType::Siege, 10_000),
+            (DamageType::Normal, 10_000),
+            (DamageType::Chaos, 10_000),
+        ] {
+            let bare = guaranteed_hit_loss(damage_type, None);
+            let defended = guaranteed_hit_loss(damage_type, Some(defend));
+            assert_eq!(
+                defended,
+                bare * factor_per_10k / 10_000,
+                "{damage_type:?} loss {bare} defended {defended}"
+            );
+        }
     }
 
     #[test]

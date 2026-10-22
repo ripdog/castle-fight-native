@@ -33,9 +33,11 @@ Tier is Community only; each needs a Ghidra trace or an explicit acceptance.
 - [ ] Charm summoned-unit expiry, upgrades and creep-level rule (Naga).
 - [ ] Aspo shared stacking and second-buff selection (Naga).
 - [ ] Life Regeneration Aura buff and literal regeneration (Naga).
-- [ ] Orc spell-resistance and poison/slow family semantics.
+- [ ] Orc poison/slow family stacking semantics (flags `+0x190`, `+0x1dc`, `+0x1e0` are constants shared by every poison variant; their meaning is untraced).
 
 ## Resolved
+
+- [x] **Defend attack-type selection and spell resistance on weapon damage (Orc, Elven, Human).** **Ghidra** (`0x6f5f9f90`, `0x6f5750a0`): Defend reduces Pierce attack-type damage by its pierce factor and Spells and Magic attack-type damage by its spell factor, and leaves Normal, Siege, Chaos and Hero untouched; `AIsr` spell resistance scales attack type Spells only, so an ordinary Magic or Chaos weapon is not reduced by it (the clone already documented this). The clone applied Defend's ranged factor to every ranged projectile; `defend_factor_for_attack_type` now selects the factor by damage type and a test covers Pierce, Magic, Siege, Normal and Chaos. Melee Pierce attack types are not yet routed through Defend. Audit: [elven-passive-fidelity.md](elven-passive-fidelity.md).
 
 - [x] **Thorns / Spiked Shell return basis and armor (Chaos, Naga).** **Ghidra**: `CBuffAuraThorns` (`0x6f4ec790`) and `CAbilityThornyShield` (`0x6f5b2820`) are phase-1 damage listeners, and the damage routine runs phase 1 before the armor-point reduction, Defend and every later phase. In percentage mode they return the ability fraction of the record amount, clamped to at least 1, as Plant (`0x100000`) and Defensive (`0x200000`) kind respectively with the default attack type 0. The returned fraction is therefore based on the unreduced hit, and the returned packet takes no numeric armor points (only the Spells row of the defense-type table). The clone previously used the post-armor hit and applied armor points to the Shell return; `spiked_shell.rs` and the damage path now use the unreduced basis, no armor points, and the one-point minimum. Audit: [chaos-implementation.md](chaos-implementation.md), [naga-implementation.md](naga-implementation.md).
 
