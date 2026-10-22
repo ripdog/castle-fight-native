@@ -10,7 +10,7 @@ from project_native_reference import project
 class NativeReferenceTests(unittest.TestCase):
     def fixture(self, root):
         entries = {
-            'custom_v1/units/abilitydata.slk': b'ID;PWXL;N;E\nB;X2;Y2;D0\nC;X1;Y1;K"alias"\nC;X2;K"code"\nC;X1;Y2;K"ACsw"\nC;X2;K"Aslo"\nE;\n',
+            'custom_v1/units/abilitydata.slk': b'ID;PWXL;N;E\nB;X2;Y2;D0\nC;X1;Y1;K"alias"\nC;X2;K"code"\nC;X1;Y2;K"ACsw"\nC;X2;K"Aslo"\nC;X1;Y3;K"Aap2"\nC;X2;K"Aapl"\nE;\n',
             'custom_v1/units/miscgame.txt': b'EtherealDamageBonus=0,0,0,2,0,2,0\nEtherealDamageBonusAlly=1\nEtherealHealBonus=3\n',
         }
         manifest = []
