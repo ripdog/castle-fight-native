@@ -259,7 +259,7 @@ and travel time uses the same upward-rounded integer distance/speed rule as the 
 
 Guaranteed-hit and bounce projectiles that become due in the same pre-movement subphase resolve together in ascending projectile `SimId`; ballistic impacts remain a later post-movement subphase by definition.
 
-The exact Castle Fight-compatible bounce range, repeat policy, scaling, building eligibility, maximum chain length, and random-selection distribution remain compatibility-tunable. Any replacement MUST remain explicitly bounded, keyed-deterministic, and independent of candidate enumeration/worker order.
+The next bounce target is the eligible hostile unit nearest the impact position inside the bounce radius (the native `CMissileBounce` rule); exact distance ties resolve to the lowest `SimId`. The bounce range, repeat policy, scaling, building eligibility and maximum chain length come from the authored attack data. Any replacement MUST remain explicitly bounded and independent of candidate enumeration/worker order.
 
 ### 9.4a Targeted missile line
 

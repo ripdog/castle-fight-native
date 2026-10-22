@@ -7,7 +7,6 @@ use bevy_ecs::{entity::Entity, prelude::World};
 use rayon::{ThreadPool, ThreadPoolBuilder, prelude::*};
 use serde::{Deserialize, Serialize};
 
-const RANDOM_PURPOSE_BOUNCE_TARGET: u64 = 0x424f_554e_4345_0001;
 const RANDOM_PURPOSE_ABILITY_TARGET: u64 = 0x4142_494c_4954_0001;
 const RANDOM_PURPOSE_UPHILL_MISS: u64 = 0x5550_4849_4c4c_0001;
 const RANDOM_PURPOSE_ATTACK_PROC: u64 = 0x4154_4b50_524f_4301;
@@ -4937,7 +4936,6 @@ struct BounceProjectileUpdate {
 }
 
 struct BounceSearchContext<'a> {
-    completed_tick: u64,
     units: &'a [UnitSnapshot],
     unit_health: &'a [i32],
     grid: &'a SpatialGrid,

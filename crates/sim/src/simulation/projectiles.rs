@@ -594,13 +594,11 @@ impl Simulation {
                     }
 
                     let bounce_search = BounceSearchContext {
-                        completed_tick,
                         units,
                         unit_health,
                         grid,
                     };
                     let Some(next_index) = self.select_bounce_target(
-                        snapshot.id,
                         &snapshot.projectile,
                         impact_position,
                         &bounce_search,
@@ -1249,9 +1247,12 @@ impl Simulation {
         projectiles
     }
 
+    /// Native `CMissileBounce` next-target rule: among eligible hostile units inside the bounce
+    /// radius of the impact position, the unit nearest that position wins (`Game.dll` `0x6f705050`
+    /// keeps the strictly smaller distance). The engine breaks exact ties by group enumeration
+    /// order, which the simulation replaces with the stable `SimId` order.
     pub(super) fn select_bounce_target(
         &self,
-        projectile_id: SimId,
         projectile: &BounceProjectile,
         impact_position: SimPoint,
         context: &BounceSearchContext<'_>,
@@ -1263,7 +1264,6 @@ impl Simulation {
         let range_sq = square_i32(projectile.bounce_range);
         let hit_count = usize::from(projectile.hit_count);
         let hit_targets = &projectile.hit_targets[..hit_count];
-        let next_bounce_index = u32::from(projectile.bounce_index) + 1;
         let mut best: Option<(u64, SimId, usize)> = None;
         context.grid.for_each_candidate(
             SpatialPartition::global(enemy_team),
@@ -1275,25 +1275,19 @@ impl Simulation {
                     return;
                 }
                 let candidate = &context.units[unit_index];
+                let distance_sq = impact_position.distance_sq(candidate.position);
                 if !projectile
                     .target_mask
                     .can_target_unit(candidate.target_movement_class())
                     || candidate.id == projectile.target
-                    || impact_position.distance_sq(candidate.position) > range_sq
+                    || distance_sq > range_sq
                 {
                     return;
                 }
                 if !projectile.allow_repeat_targets && hit_targets.contains(&candidate.id) {
                     return;
                 }
-                let rank = deterministic_random(
-                    self.config.match_seed,
-                    context.completed_tick,
-                    projectile_id,
-                    RANDOM_PURPOSE_BOUNCE_TARGET ^ candidate.id.0,
-                    u64::from(next_bounce_index),
-                );
-                let key = (rank, candidate.id, unit_index);
+                let key = (distance_sq, candidate.id, unit_index);
                 if best.is_none_or(|current| key < current) {
                     best = Some(key);
                 }

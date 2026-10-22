@@ -5058,7 +5058,7 @@ cooldown_ticks: 0,
             } => target,
             _ => panic!("expected first bounce hop"),
         };
-        assert!(second_target == second_candidate || second_target == third_candidate);
+        assert_eq!(second_target, second_candidate);
 
         let second_impact = sim.step();
         assert_eq!(second_impact.projectile_impacts, 1);
@@ -5078,7 +5078,7 @@ cooldown_ticks: 0,
         };
         assert_ne!(third_target, first);
         assert_ne!(third_target, second_target);
-        assert!(third_target == second_candidate || third_target == third_candidate);
+        assert_eq!(third_target, third_candidate);
 
         let third_impact = sim.step();
         assert_eq!(third_impact.projectile_impacts, 1);
@@ -5086,6 +5086,54 @@ cooldown_ticks: 0,
         assert_eq!(third_impact.bounce_jumps, 0);
         assert_eq!(sim.unit(third_target).unwrap().health, 98);
         assert_eq!(sim.projectile_count(), 0);
+    }
+
+    #[test]
+    fn bounce_picks_the_nearest_eligible_unit_regardless_of_identity_order() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let mut sim = Simulation::new(SimulationConfig::default(), 2);
+        let source = sim.spawn_unit(UnitSpawn {
+            team: Team(0),
+            position: SimPoint::new(0, 0),
+            health: 100,
+            attack: AttackProfile {
+                delivery: AttackDelivery::Bounce {
+                    speed_per_tick: 10 * cell,
+                    bounce_range: 6 * cell,
+                    max_bounces: 1,
+                    damage_percent_per_bounce: 50,
+                    allow_repeat_targets: false,
+                },
+                damage: 8,
+                range: 10 * cell,
+                acquisition_range: 10 * cell,
+                cooldown_ticks: 30,
+            },
+            movement: MovementProfile { speed_per_tick: 0 },
+        });
+        let first = sim.spawn_unit(UnitSpawn {
+            health: 100,
+            ..passive_unit(1, 4 * cell)
+        });
+        // The farther candidate has the lower identity; the nearer one must still win.
+        let farther = sim.spawn_unit(UnitSpawn {
+            health: 100,
+            ..passive_unit(1, 9 * cell)
+        });
+        let nearer = sim.spawn_unit(UnitSpawn {
+            health: 100,
+            ..passive_unit(1, 6 * cell)
+        });
+        assert!(farther < nearer);
+
+        sim.step();
+        assert_eq!(sim.unit(source).unwrap().target, Some(first));
+        sim.step();
+        sim.step();
+        match sim.projectiles()[0].kind {
+            ProjectileViewKind::Bounce { target, .. } => assert_eq!(target, nearer),
+            _ => panic!("expected a bounce hop"),
+        }
     }
 
     #[test]

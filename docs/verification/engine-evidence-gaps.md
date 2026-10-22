@@ -12,7 +12,6 @@ Evidence tiers: **Ghidra** = traced in `Game.dll`; **In-game** = observed by the
 
 - [ ] **Feedback damage class / resistance.** Currently routed through the shared spell-damage path. Need the native damage kind and which immunity/resistance masks apply. Audit: [elven-melee-autocast.md](elven-melee-autocast.md).
 - [ ] **Faerie Fire AI cadence and order interruptions.** Native autocast evaluation cadence and what interrupts it. Audit: [elven-melee-autocast.md](elven-melee-autocast.md).
-- [ ] **Bounce (Moon Glaive-style) target selection.** Engine rule is provisional deterministic; need the native group iteration / next-target selection order. Audit: [elven-melee-autocast.md](elven-melee-autocast.md), [README.md](README.md).
 - [ ] **Parasite carrier sub-tick corner.** Retained Parasite buff lifetime and the `nfbr` death summon when an unrelated same-frame death occurs. Deliberately unimplemented until observed. Audit: [elven-caster-audit.md](elven-caster-audit.md).
 - [ ] **Healer AI frame fidelity.** Native order cadence, visibility and simultaneous event ordering for healing target selection. Audit: [elven-caster-audit.md](elven-caster-audit.md).
 - [ ] **Elven shrine / item native-executable observations.** Audit: [golden-shrine-of-justice-9.27-r1.md](golden-shrine-of-justice-9.27-r1.md).
@@ -45,6 +44,8 @@ Tier is Community only; each needs a Ghidra trace or an explicit acceptance.
 - [ ] Orc spell-resistance and poison/slow family semantics.
 
 ## Resolved
+
+- [x] **Bounce next-target selection.** **Ghidra**: `CMissileBounce` (vtable `0x6fb0a068`) impact handler `0x6f703d70` calls `0x6f704fa0`, which enumerates units within the bounce radius of the missile position and keeps, via `0x6f705050`, the candidate with the strictly smallest distance (initial best distance is a large constant). The current target and already-hit units are excluded by the validator `0x6f702550`; the bounce counter is decremented before the search. The clone previously used a keyed-random rank; it now selects the nearest unit and breaks exact ties by `SimId` (the engine uses group enumeration order, which is not reproducible). Remaining uncertainty: whether the engine metric is centre distance (the unit-position accessor suggests so) rather than edge distance. Audit: [elven-melee-autocast.md](elven-melee-autocast.md).
 
 - [x] **Universal damage armor handling (Death and Decay, Starfall, Whirlwind).** **Ghidra** (`0x6f6cf530`): armor-point reduction only for kind Normal `0x10`; the attack-type by armor-type multiplier applies to all kinds. Matches the clone. Audit: [undead-implementation.md](undead-implementation.md).
 

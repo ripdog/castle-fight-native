@@ -103,9 +103,9 @@ avoid repeating this map's numerical values in tests.
   resistance interactions and native Faerie Fire AI cadence/order interruptions.
   The current Feedback payload uses the shared spell-damage path; synthetic tests
   are not an independent oracle for that native classification.
-- Bounce target selection remains the engine's documented provisional deterministic
-  rule, not a measured reproduction of Warcraft group iteration. Do not claim
-  exact native bounce ordering from these imported parameters alone.
+- Bounce target selection follows the traced native rule (nearest eligible unit to
+  the impact position; see `engine-evidence-gaps.md`). Only the engine's tie-break
+  among exactly equidistant units (group enumeration order) is replaced by `SimId`.
 - Reveal state is authoritative, but there is no fog-of-war/invisibility system
   yet; its visibility consequences remain dormant until that system consumes it.
 - General dispel/cleanse and hostile immunity interaction coverage are not complete.

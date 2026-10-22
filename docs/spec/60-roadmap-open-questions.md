@@ -337,7 +337,7 @@ Compatibility work still needs to establish:
 - exact canonical ordering for otherwise simultaneous strikes beyond the stable-ID fallback;
 - whether observed Castle Fight behavior requires revising the provisional guaranteed-hit travel/death rules;
 - whether observed Castle Fight behavior requires revising the provisional ballistic circular-zone, hostile-only splash, building-intersection, or travel rules;
-- whether observed Castle Fight behavior requires revising the provisional bounce range, repeat/building eligibility, chain cap, damage falloff, travel, or keyed-random selection rules;
+- whether observed Castle Fight behavior requires revising the provisional bounce range, repeat/building eligibility, chain cap, damage falloff or travel rules;
 - exact Castle Fight/Warcraft uphill-miss probability; the native rule deliberately keeps this as a `0..=10_000` per-10k rule parameter rather than embedding a guessed constant;
 - whether Warcraft has any edge-case cliff-transition sampling behavior that differs from the current nearest-terrain-vertex `layerHeight` lookup; normal base/lane plateaus are already represented unambiguously by the extracted data;
 - target-retention/range hysteresis details;
