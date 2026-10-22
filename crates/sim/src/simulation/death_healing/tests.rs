@@ -439,6 +439,7 @@ fn credited_kill_healing_uses_victim_class_and_source_handle_for_inline_and_spli
             rawcode: 0,
             heal_percent: 17,
             retaliation_damage: 0,
+            ..Default::default()
         });
         units[2].classifications.combat_sapper = false;
         let source = units[0].id;
@@ -472,11 +473,13 @@ fn death_retaliation_precedes_healing_and_cannot_revive_a_recursively_dead_kille
             rawcode: 0,
             heal_percent: 90,
             retaliation_damage: 40,
+            ..Default::default()
         });
         u[1].death_rule = Some(crate::native_effects::NativeUnitDeathRule {
             rawcode: 0,
             heal_percent: 0,
             retaliation_damage: 30,
+            ..Default::default()
         });
         u[0].classifications.spell_immune = true;
         let killer = u[0].id;
@@ -503,6 +506,7 @@ fn kill_heal_is_immediate_before_linker_and_missing_source_does_not_claim_credit
         rawcode: 0,
         heal_percent: 30,
         retaliation_damage: 0,
+        ..Default::default()
     });
     u[1].death_heal = Some(support());
     u[0].rawcode = 1;
@@ -526,6 +530,7 @@ fn spell_resolution_carries_actual_source_credit_into_shared_death_callbacks() {
         rawcode: 0,
         heal_percent: 19,
         retaliation_damage: 0,
+        ..Default::default()
     });
     let source = u[0].id;
     s.apply_source_ability_to_unit(

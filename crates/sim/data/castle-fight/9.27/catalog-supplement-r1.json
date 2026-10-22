@@ -36,6 +36,20 @@
       "lifetime_ticks": 905
     },
     {
+      "rawcode": "h01U",
+      "does_decay": true,
+      "can_raise": true,
+      "decay_start_ticks": 92,
+      "lifetime_ticks": 902
+    },
+    {
+      "rawcode": "h01V",
+      "does_decay": true,
+      "can_raise": true,
+      "decay_start_ticks": 92,
+      "lifetime_ticks": 902
+    },
+    {
       "rawcode": "n00C",
       "does_decay": false,
       "can_raise": false,

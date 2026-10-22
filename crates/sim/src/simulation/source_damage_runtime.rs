@@ -256,7 +256,45 @@ fn dispatch_inner(
     }
     let dummy_killed = state.health(victim) <= 0;
     aftershock_inner(source, victim, state);
+    deepen_armor_stack(source, victim, state);
     dummy_killed
+}
+
+/// Blood Corrosion (`applyVampireArmorReduction`): every damage event from a bearer of the rule
+/// raises the victim's permanent armor-reduction level by one, up to the retained maximum.
+fn deepen_armor_stack(source: SimId, victim: usize, state: &mut DamageStorage<'_>) {
+    let Some(rule) = find_unit_index(state.units, source)
+        .and_then(|index| state.units[index].death_rule)
+        .and_then(|rule| rule.armor_stack)
+    else {
+        return;
+    };
+    let status = &mut state.units[victim].status;
+    let id = ModifierId(rule.ability);
+    let per_level = i32::from(rule.armor_per_level_per_100);
+    let current = status.armor_modifiers[..usize::from(status.armor_modifier_count)]
+        .iter()
+        .find(|modifier| modifier.id == id)
+        .map_or(0, |modifier| i32::from(modifier.armor_bonus_per_100));
+    let level = if per_level == 0 {
+        0
+    } else {
+        current / per_level
+    };
+    if level >= i32::from(rule.maximum_level) {
+        return;
+    }
+    apply_timed_armor_modifier(
+        status,
+        TimedArmorModifier {
+            id,
+            armor_bonus_per_100: i16::try_from(per_level * (level + 1))
+                .expect("stacked armor reduction fits"),
+            undispellable: true,
+            expires_tick: u64::MAX,
+            ..Default::default()
+        },
+    );
 }
 
 #[cfg(test)]

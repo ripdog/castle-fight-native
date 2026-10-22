@@ -220,6 +220,22 @@ fn on_death(
                 }
             }
         }
+        // Eternal Servitude: an organic victim of the bearer is removed and returns converted.
+        if let Some(rule) = units[killer].death_rule.and_then(|p| p.servitude)
+            && let Some(version) = units[killer].map_version
+            && !dead.mechanical
+            && !crate::content::unit_is_undead_927(dead.rawcode)
+            && !crate::content::unit_has_ability_927(dead.rawcode, AbilityId(rule.excluded_ability))
+        {
+            let (owner, team) = (units[killer].owner, units[killer].team);
+            units[index].removed_without_death = true;
+            units[index].servitude_spawn = Some(ServitudeSpawn {
+                rawcode: rule.spawn_rawcode,
+                map_version: version,
+                owner,
+                team,
+            });
+        }
         let current = health.as_ref().map_or(units[killer].health, |v| v[killer]);
         if current > 0
             && let Some(p) = units[killer].death_rule

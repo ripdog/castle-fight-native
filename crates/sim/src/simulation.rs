@@ -2373,6 +2373,7 @@ impl Simulation {
         let unit_death_start = Instant::now();
         let mut deaths = 0;
         let mut corpse_spawns = Vec::new();
+        let mut servitude_spawns = Vec::new();
         let mut death_spawns = 0;
         // Team contributions are phase-local derived state, never a stale persistent counter.
         // Scan buildings twice per resolution phase rather than once per individual fatality.
@@ -2396,6 +2397,9 @@ impl Simulation {
             if unit.removed_without_death {
                 if let Some(source) = source_damage_runtime::RetiredDamageSource::capture(unit) {
                     self.retired_damage_sources.insert(unit.id, source);
+                }
+                if let Some(spawn) = unit.servitude_spawn {
+                    servitude_spawns.push((spawn, positions[index]));
                 }
                 self.world.despawn(unit.entity);
                 continue;
@@ -2507,6 +2511,22 @@ impl Simulation {
         }
 
         spans.add(Span::UnitDeathLoop, unit_death_start.elapsed());
+        for (spawn, position) in servitude_spawns {
+            let definition = crate::CastleFightUnitKind::from_rawcode_for_version(
+                spawn.rawcode,
+                spawn.map_version,
+            )
+            .unwrap()
+            .expect("promoted Eternal Servitude body")
+            .definition_for_version(spawn.map_version)
+            .unwrap()
+            .resolved();
+            self.spawn_resolved_unit_unchecked(
+                Some(spawn.owner),
+                UnitSpawn::from_template(spawn.team, position, definition.template),
+                definition,
+            );
+        }
         let corpses_spawned = corpse_spawns.len();
         let corpse_spawn_start = Instant::now();
         for (
@@ -4182,6 +4202,7 @@ impl Simulation {
                         });
                         UnitSnapshot {
                             removed_without_death: false,
+                            servitude_spawn: None,
                             pending_blink: None,
                             air_attack_bonus_per_10k: content.map_or(0, |c| {
                                 crate::content::native_air_attack_bonus_for_version(
@@ -4404,6 +4425,15 @@ impl Simulation {
     }
 }
 
+/// The unit that replaces a body converted by a killer's Eternal Servitude.
+#[derive(Debug, Clone, Copy)]
+struct ServitudeSpawn {
+    rawcode: u32,
+    map_version: crate::MapVersion,
+    owner: PlayerId,
+    team: Team,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct UnitSnapshot {
     air_attack_bonus_per_10k: u16,
@@ -4427,6 +4457,8 @@ struct UnitSnapshot {
     position: SimPoint,
     /// Phase-local RemoveUnit directive. Never survives a completed step.
     removed_without_death: bool,
+    /// Phase-local Eternal Servitude replacement created when this body is removed.
+    servitude_spawn: Option<ServitudeSpawn>,
     /// Phase-local blink destination, applied to the working positions after attack resolution.
     pending_blink: Option<SimPoint>,
     health: i32,

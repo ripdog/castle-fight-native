@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    LesserVampire = 0x1000_00b6 => b"h01V",
     SkeletalGeneral = 0x1000_00b2 => b"n01M",
     GreaterSkeletonWarrior = 0x1000_00b3 => b"u00B",
     GreaterSkeletonArcher = 0x1000_00b4 => b"n01L",

@@ -3228,6 +3228,28 @@ pub(crate) struct NativeUnitDeathRule {
     pub rawcode: u32,
     pub heal_percent: u16,
     pub retaliation_damage: i32,
+    /// The killer's victims return as this unit for the killer's owner (Eternal Servitude).
+    #[serde(default)]
+    pub servitude: Option<NativeServitudeRule>,
+    /// Each damage event of this bearer deepens a permanent armor reduction on its victim.
+    #[serde(default)]
+    pub armor_stack: Option<NativeArmorStackRule>,
+}
+
+/// Blood Corrosion: stacking permanent armor reduction, one level per damage event.
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+pub(crate) struct NativeArmorStackRule {
+    pub ability: u32,
+    pub armor_per_level_per_100: i16,
+    pub maximum_level: u8,
+}
+
+/// An organic combat victim of the bearer is removed and replaced by `spawn_rawcode`.
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+pub(crate) struct NativeServitudeRule {
+    pub spawn_rawcode: u32,
+    /// Victims carrying this marker (the tentacle) are never converted.
+    pub excluded_ability: u32,
 }
 pub(crate) fn unit_death_rule_for_version(
     version: MapVersion,

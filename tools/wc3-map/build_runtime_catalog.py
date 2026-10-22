@@ -497,6 +497,10 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
                 native_summon_bodies.add(int(outcome['unit_id']).to_bytes(4, 'big').decode())
         if row['building_rawcode'] == 'h04K':
             native_summon_bodies.add(int(json.loads(row['parameters_json'])['on_kill_unit_id']).to_bytes(4, 'big').decode())
+    for row in csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree,
+        'resolved/production-unit-special-mechanics.tsv').decode()), delimiter='\t'):
+        if row['mechanic_kind'] == 'organic-kill-eternal-servitude':
+            native_summon_bodies.add(int(json.loads(row['parameters_json'])['spawned_unit_id']).to_bytes(4, 'big').decode())
     return {
         "schema_version": 11,
         "air_attack_bonuses": air_bonuses,

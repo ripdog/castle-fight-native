@@ -7895,6 +7895,29 @@
       "rawcode": 1697656898,
       "heal_percent": 14,
       "retaliation_damage": 0
+    },
+    {
+      "rawcode": 1747988821,
+      "heal_percent": 0,
+      "retaliation_damage": 0,
+      "servitude": {
+        "spawn_rawcode": 1747988822,
+        "excluded_ability": 1093679176
+      }
+    },
+    {
+      "rawcode": 1747989832,
+      "heal_percent": 0,
+      "retaliation_damage": 0,
+      "armor_stack": {
+        "ability": 1093683033,
+        "armor_per_level_per_100": -200,
+        "maximum_level": 5
+      },
+      "servitude": {
+        "spawn_rawcode": 1747988821,
+        "excluded_ability": 1093679176
+      }
     }
   ],
   "unit_death_rules_source": {

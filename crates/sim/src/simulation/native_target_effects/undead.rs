@@ -463,3 +463,83 @@ fn a_lich_king_raises_two_empowered_skeletons_from_the_upper_tiers_or_the_genera
         }
     }
 }
+
+fn sapper() -> UnitGameplayProperties {
+    UnitGameplayProperties {
+        classifications: UnitClassifications {
+            combat_sapper: true,
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
+#[test]
+fn eternal_servitude_converts_only_organic_non_undead_victims_of_a_vampire() {
+    let vampire = definition(b"h01U");
+    let mut sim = simulation(1);
+    sim.spawn_resolved_unit(Team(0), at(40), vampire);
+    let victim = sim.spawn_unit_with_properties(unit(1, 42, 0, AttackDelivery::Melee), sapper());
+    let machine = sim.spawn_unit_with_properties(
+        unit(1, 44, 0, AttackDelivery::Melee),
+        UnitGameplayProperties {
+            mechanical: true,
+            build_time_ticks: Some(30),
+            ..sapper()
+        },
+    );
+    for id in [victim, machine] {
+        sim.world
+            .get_mut::<Health>(entity(&sim, id))
+            .unwrap()
+            .current = 1;
+    }
+    for _ in 0..200 {
+        sim.step();
+    }
+    // The organic victim vanished without a corpse and a Lesser Vampire stands in its place.
+    assert!(sim.unit(victim).is_none());
+    assert_eq!(alive_count(&sim, b"h01V"), 1);
+    let converted = sim
+        .units()
+        .into_iter()
+        .find(|unit| {
+            unit.content
+                .is_some_and(|c| c.rawcode == u32::from_be_bytes(*b"h01V"))
+        })
+        .unwrap();
+    assert_eq!(converted.team, Team(0));
+    // A mechanical victim dies normally: it neither converts nor leaves its handle in place.
+    assert_eq!(alive_count(&sim, b"h01V"), 1);
+}
+
+#[test]
+fn blood_corrosion_stacks_five_levels_of_permanent_armor_reduction() {
+    let lord = definition(b"h05H");
+    let rule = crate::native_effects::unit_death_rule_for_version(
+        crate::MapVersion::CASTLE_FIGHT_9_27,
+        u32::from_be_bytes(*b"h05H"),
+    )
+    .and_then(|rule| rule.armor_stack)
+    .expect("the Vampire Lord carries Blood Corrosion");
+    let mut sim = simulation(1);
+    sim.spawn_resolved_unit(Team(0), at(40), lord);
+    let mut victim_spawn = unit(1, 42, 0, AttackDelivery::Melee);
+    victim_spawn.health = 1_000_000;
+    let victim = sim.spawn_unit_with_properties(victim_spawn, sapper());
+    let before = {
+        let u = sim.unit(victim).unwrap();
+        u.status.effective_armor_points_per_100(u.armor)
+    };
+    for _ in 0..1200 {
+        sim.step();
+    }
+    let after = {
+        let u = sim.unit(victim).unwrap();
+        u.status.effective_armor_points_per_100(u.armor)
+    };
+    assert_eq!(
+        after - before,
+        i32::from(rule.armor_per_level_per_100) * i32::from(rule.maximum_level)
+    );
+}

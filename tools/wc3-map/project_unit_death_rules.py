@@ -11,12 +11,33 @@ def project(rows, functions):
     result = {}
     for row in rows:
         kind = row['mechanic_kind']
-        if kind not in {'kill-heal-percent-max-hp', 'death-retaliation-damage-to-killer'}:
+        if kind not in {'kill-heal-percent-max-hp', 'death-retaliation-damage-to-killer', 'organic-kill-eternal-servitude', 'source-damage-stacking-blood-corrosion'}:
             continue
         p = json.loads(row['parameters_json'])
         raw = int.from_bytes(row['unit_rawcode'].encode(), 'big')
         value = result.setdefault(raw, {'rawcode': raw, 'heal_percent': 0, 'retaliation_damage': 0})
-        if kind == 'kill-heal-percent-max-hp':
+        if kind == 'source-damage-stacking-blood-corrosion':
+            levels = p['stack_levels']
+            step = levels[0]['defense_bonus']
+            reducer = functions['applyVampireArmorReduction']
+            if (p['initial_stack_level'] != 1 or p['stack_increment_per_damage_event'] != 1 or not p['target_must_not_be_structure']
+                    or [lv['level'] for lv in levels] != list(range(1, p['maximum_stack_level'] + 1))
+                    or any(lv['defense_bonus'] != step * lv['level'] for lv in levels)
+                    or f"unit_getTypeId(kqq)=={raw}" not in reducer
+                    or f"addProtectedAbility(lqq,{p['target_stack_ability_id']})" not in reducer
+                    or f"elseif(mqq<{p['maximum_stack_level']})then" not in reducer):
+                raise ValueError('Blood Corrosion control flow changed')
+            value['armor_stack'] = {'ability': p['target_stack_ability_id'],
+                'armor_per_level_per_100': int(step * 100), 'maximum_level': p['maximum_stack_level']}
+        elif kind == 'organic-kill-eternal-servitude':
+            tentacle = re.search(r'GetUnitAbilityLevel\(\w+,(\d+)\)<=0', functions['isNotTentacle'])
+            branch = re.search(r'\(\(\(\(R2q==%d\)and isNotTentacle\(M2q\)\)and\(not unit_isType\(M2q,UNIT_TYPE_MECHANICAL\)\)\)and\(not unit_isType\(M2q,UNIT_TYPE_UNDEAD\)\)\)then (\w+)=M2q (\w+)=tupleCopy1\(unit_getPos\(\1\)\)pFb=\1 createUnit\(unit_getOwner\(N2q\),%d,\2,\{0\.\}\)(\w+)=\1 __wurst_safe_RemoveUnit\(\3\)' % (raw, p['spawned_unit_id']), source)
+            if (tentacle is None or branch is None or not p['victim_requires_combat_sapper'] or not p['killer_must_not_be_structure']
+                    or not p['victim_requires_not_mechanical'] or not p['victim_requires_not_undead'] or not p['victim_requires_not_tentacle']
+                    or not p['remove_original_dead_unit'] or p['spawn_owner'] != 'killer-owner' or p['spawn_position'] != 'victim-position'):
+                raise ValueError('Eternal Servitude control flow changed')
+            value['servitude'] = {'spawn_rawcode': p['spawned_unit_id'], 'excluded_ability': int(tentacle[1])}
+        elif kind == 'kill-heal-percent-max-hp':
             if (p['implementation'] != 'set-life-percent-current-plus-delta'
                 or not p['victim_requires_combat_sapper'] or not p['killer_must_not_be_structure']
                 or not re.search(r'R2q=='+str(raw)+r'\)then.*?GetUnitLifePercent\(N2q\)\+'+str(p['heal_percent_of_max_hp'])+r'\.', source)):

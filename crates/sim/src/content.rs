@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r222";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r223";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -3363,6 +3363,15 @@ fn canonical_content_bundle_hash(bundle: &CastleFightContentBundle) -> u64 {
         hash.write_u32(rule.rawcode);
         hash.write_u16(rule.heal_percent);
         hash.write_i32(rule.retaliation_damage);
+        if let Some(stack) = rule.armor_stack {
+            hash.write_u32(stack.ability);
+            hash.write_i32(i32::from(stack.armor_per_level_per_100));
+            hash.write_u8(stack.maximum_level);
+        }
+        if let Some(servitude) = rule.servitude {
+            hash.write_u32(servitude.spawn_rawcode);
+            hash.write_u32(servitude.excluded_ability);
+        }
     }
     for rule in crate::native_effects::unit_structure_damage_rules_for_version(bundle.map_version) {
         hash.write_u32(rule.rawcode);
@@ -6447,6 +6456,13 @@ pub(crate) fn unit_has_ability_for_version(
 ) -> bool {
     assert_eq!(version, MapVersion::CASTLE_FIGHT_9_27);
     unit_has_ability_927(rawcode, ability)
+}
+
+pub(crate) fn unit_is_undead_927(rawcode: u32) -> bool {
+    extracted_content_927()
+        .units
+        .get(&rawcode)
+        .is_some_and(|unit| unit.undead)
 }
 
 pub(crate) fn unit_has_ability_927(rawcode: u32, ability: AbilityId) -> bool {
