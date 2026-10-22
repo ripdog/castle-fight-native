@@ -35,7 +35,7 @@ fn donor(sim: &mut Simulation, x: i32) -> SimId {
 }
 
 #[test]
-fn thorns_uses_recipient_membership_and_post_armor_damage_without_reducing_the_hit() {
+fn thorns_uses_recipient_membership_and_unreduced_damage_without_reducing_the_hit() {
     let mut sim = simulation(1);
     let attacker = sim.spawn_unit_with_properties(
         unit(0, 20, 100, AttackDelivery::Melee),
@@ -86,7 +86,8 @@ fn thorns_uses_recipient_membership_and_post_armor_damage_without_reducing_the_h
         DamageType::Normal,
         ArmorProfile::new(ArmorType::Large, 10),
     );
-    let returned = (incoming * 2700 + 5000) / 10_000;
+    // Phase-1 listener: a fraction of the unreduced hit, not of the post-armor damage.
+    let returned = (100 * 2700 + 5000) / 10_000;
     let returned = rules.apply_spell(returned, ArmorType::Large);
     assert_eq!(sim.unit(recipient).unwrap().health, 1000 - incoming);
     assert_eq!(

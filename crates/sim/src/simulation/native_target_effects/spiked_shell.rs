@@ -72,12 +72,10 @@ fn shell_melee_reduction_and_return_have_independent_armor_and_no_recursion() {
         ArmorProfile::new(ArmorType::Large, 10),
     );
     let incoming = (base * 8000 + 5000) / 10_000;
-    let returned = (base * 6000 + 5000) / 10_000;
-    let returned = rules.apply_attack(
-        returned,
-        DamageType::Spells,
-        ArmorProfile::new(ArmorType::Large, 7),
-    );
+    // The native listener returns a fraction of the unreduced hit and the Defensive packet
+    // takes no armor points, only the Spells defense-type row.
+    let returned = (100 * 6000 + 5000) / 10_000;
+    let returned = rules.apply_spell(returned, ArmorType::Large);
     assert_eq!(sim.unit(target).unwrap().health, 1000 - incoming);
     assert_eq!(
         sim.unit(source).unwrap().health,
@@ -135,7 +133,7 @@ fn shell_does_not_reduce_ranged_spell_cleave_or_defensive_packets() {
 }
 
 #[test]
-fn shells_stack_returns_from_one_armor_basis_and_reduce_independently() {
+fn shells_stack_returns_from_one_unreduced_basis_and_reduce_independently() {
     let mut sim = simulation(1);
     let source = sim.spawn_unit(unit(0, 20, 100, AttackDelivery::Melee));
     let target = sim.spawn_unit_with_properties(
@@ -156,7 +154,7 @@ fn shells_stack_returns_from_one_armor_basis_and_reduce_independently() {
         ArmorProfile::new(ArmorType::Unarmored, 2),
     );
     let incoming = (((base * 5000 + 5000) / 10_000) * 8000 + 5000) / 10_000;
-    let returned = (base * 6000 + 5000) / 10_000 + (base * 2000 + 5000) / 10_000;
+    let returned = (100 * 6000 + 5000) / 10_000 + (100 * 2000 + 5000) / 10_000;
     assert_eq!(sim.unit(target).unwrap().health, 1000 - incoming);
     assert_eq!(sim.unit(source).unwrap().health, 1000 - returned);
 }
@@ -174,7 +172,7 @@ fn shell_zero_negative_and_fatal_packets_do_not_add_healing_or_cancel_a_return()
     );
     let snapshot = sim.snapshot_units();
     for amount in [-10, 0] {
-        let result = super::super::spiked_shell::damage(&snapshot[1], amount, true);
+        let result = super::super::spiked_shell::damage(&snapshot[1], amount, amount, true);
         assert_eq!(result.incoming, amount);
         assert_eq!(result.count, 0);
     }

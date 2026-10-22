@@ -6755,6 +6755,7 @@ impl Simulation {
                 );
                 let shell = spiked_shell::damage(
                     &state.units[index],
+                    damage,
                     adjusted_damage,
                     kind == WeaponDamageKind::Melee,
                 );
@@ -6939,11 +6940,7 @@ impl Simulation {
                                 next_defense_alerts: state.next_defense_alerts,
                                 navigation_cell_size: state.navigation_cell_size,
                             },
-                            if returned.thorns {
-                                DamageArmorRule::IgnorePoints
-                            } else {
-                                DamageArmorRule::Standard
-                            },
+                            DamageArmorRule::IgnorePoints,
                         );
                     }
                 }

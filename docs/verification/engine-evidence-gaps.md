@@ -33,10 +33,11 @@ Tier is Community only; each needs a Ghidra trace or an explicit acceptance.
 - [ ] Charm summoned-unit expiry, upgrades and creep-level rule (Naga).
 - [ ] Aspo shared stacking and second-buff selection (Naga).
 - [ ] Life Regeneration Aura buff and literal regeneration (Naga).
-- [ ] Chaos aura recipients / hostile Thorns immunity (Chaos).
 - [ ] Orc spell-resistance and poison/slow family semantics.
 
 ## Resolved
+
+- [x] **Thorns / Spiked Shell return basis and armor (Chaos, Naga).** **Ghidra**: `CBuffAuraThorns` (`0x6f4ec790`) and `CAbilityThornyShield` (`0x6f5b2820`) are phase-1 damage listeners, and the damage routine runs phase 1 before the armor-point reduction, Defend and every later phase. In percentage mode they return the ability fraction of the record amount, clamped to at least 1, as Plant (`0x100000`) and Defensive (`0x200000`) kind respectively with the default attack type 0. The returned fraction is therefore based on the unreduced hit, and the returned packet takes no numeric armor points (only the Spells row of the defense-type table). The clone previously used the post-armor hit and applied armor points to the Shell return; `spiked_shell.rs` and the damage path now use the unreduced basis, no armor points, and the one-point minimum. Audit: [chaos-implementation.md](chaos-implementation.md), [naga-implementation.md](naga-implementation.md).
 
 - [x] **Feedback damage class (`Afbt`).** **Ghidra** (`CAbilityFeedback`, vtable `0x6fb333d0`; pre-hit hook `0x6f5c3cb0`, post-hit hook `0x6f5c3b50`): the post-hit hook reads the ability's burn amount and mana multiplier, clamps the burn to the target's current mana and calls the shared magic-damage helper `0x6f5809b0`, which builds a damage record of kind Magic (`0x4000`) with the default attack type 0 (Spells). Magic-kind damage is blocked by spell immunity (mask `0x033ee700`) and passes ethereal bodies; Defend, Magic Defense and spell-damage-reduction listeners and the Spells defense-type row all apply. This is the shared spell-damage path the clone already uses. Audit: [elven-melee-autocast.md](elven-melee-autocast.md).
 
