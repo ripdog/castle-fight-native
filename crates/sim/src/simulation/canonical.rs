@@ -749,7 +749,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         for word in state.profile.canonical_words() {
                             hash.write_u64(word);
                         }
-                        hash.write_u64(state.next_pulse_tick);
+                        hash.write_u64(state.cast_tick);
                         hash.write_u64(state.expires_tick);
                     }
                     NativeAction::PlagueWard(state) => {

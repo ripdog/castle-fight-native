@@ -63,6 +63,7 @@ pub(crate) struct DeathAndDecayState {
     pub team: Team,
     pub position: SimPoint,
     pub profile: DeathAndDecayProfile,
-    pub next_pulse_tick: u64,
+    /// Tick the area was released: every body's pulse phase is counted from it.
+    pub cast_tick: u64,
     pub expires_tick: u64,
 }

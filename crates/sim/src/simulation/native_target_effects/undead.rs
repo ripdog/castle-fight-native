@@ -234,36 +234,42 @@ fn devour_chain_heals_per_nested_cast_and_kills_through_armor() {
 }
 
 #[test]
-fn death_and_decay_costs_a_share_of_maximum_life_once_per_second_for_its_duration() {
+fn death_and_decay_pulses_each_body_once_a_second_on_its_own_phase_for_its_duration() {
     let profile: DeathAndDecayProfile = mastery().decay;
     let mut sim = simulation(1);
-    let victim = sim.spawn_unit(unit(1, 60, 0, AttackDelivery::Melee));
+    let victims =
+        [60, 62, 64, 66, 68, 70].map(|x| sim.spawn_unit(unit(1, x, 0, AttackDelivery::Melee)));
     let ally = sim.spawn_unit(unit(0, 60, 0, AttackDelivery::Melee));
+    let cast_tick = sim.next_tick;
     sim.launch_death_and_decay(crate::components::DeathAndDecayState {
         source: ally,
         team: Team(0),
         position: at(60),
         profile,
-        next_pulse_tick: sim.next_tick + 30,
-        expires_tick: sim.next_tick + u64::from(profile.duration_ticks),
+        cast_tick,
+        expires_tick: cast_tick + u64::from(profile.duration_ticks),
     });
-    let mut first_pulse_tick = None;
-    for _ in 0..40 {
-        sim.step();
-        if first_pulse_tick.is_none() && sim.unit(victim).unwrap().health < 1000 {
-            first_pulse_tick = Some(sim.next_tick);
-        }
-    }
-    // The first pulse lands one second after the release, never earlier.
-    assert!(first_pulse_tick.is_some_and(|tick| tick >= 30));
-    let first = 1000 - sim.unit(victim).unwrap().health;
-    assert!(first > 0);
+    let mut last = [1000; 6];
+    let mut pulses: [Vec<u64>; 6] = Default::default();
     for _ in 0..u64::from(profile.duration_ticks) + 40 {
         sim.step();
+        for (i, victim) in victims.iter().enumerate() {
+            let health = sim.unit(*victim).unwrap().health;
+            if health < last[i] {
+                pulses[i].push(sim.next_tick - cast_tick);
+                last[i] = health;
+            }
+        }
     }
-    // One equal pulse per second for the whole duration, then nothing more.
-    let pulses = i32::try_from(u64::from(profile.duration_ticks) / 30).unwrap();
-    assert_eq!(1000 - sim.unit(victim).unwrap().health, first * pulses);
+    let count = usize::try_from(u64::from(profile.duration_ticks) / 30).unwrap();
+    for ticks in &pulses {
+        // One pulse per second for the whole duration, the first within a second of the release.
+        assert_eq!(ticks.len(), count);
+        assert!(ticks[0] > 0 && ticks[0] <= 30);
+        assert!(ticks.windows(2).all(|w| w[1] - w[0] == 30));
+    }
+    // Every body draws its own phase, so the pulses are not all on the same tick.
+    assert!(pulses.iter().any(|ticks| ticks[0] != pulses[0][0]));
     assert_eq!(sim.unit(ally).unwrap().health, 1000);
 }
 

@@ -4,6 +4,8 @@ use super::*;
 use crate::DeathMasteryProfile;
 use crate::components::{DeathAndDecayState, NativeAction};
 
+const RANDOM_PURPOSE_DECAY_PHASE: u64 = 0x4445_4341_5950_0001;
+
 pub(super) fn new_decay(
     source: PendingAttackEffectSource,
     position: SimPoint,
@@ -15,7 +17,7 @@ pub(super) fn new_decay(
         team: source.team,
         position,
         profile: profile.decay,
-        next_pulse_tick: completed_tick + CASTLE_FIGHT_SIMULATION_HZ as u64,
+        cast_tick: completed_tick,
         expires_tick: completed_tick + u64::from(profile.decay.duration_ticks),
     }
 }
@@ -70,16 +72,35 @@ impl Simulation {
         self.world.spawn((id, NativeAction::DeathAndDecay(state)));
     }
 
-    /// Once a second every hostile body inside the area loses its share of maximum life.
+    /// The tick offset, within the first second after the release, of a body's first pulse.
+    ///
+    /// The engine attaches the area buff to each body inside the area and arms its pulse timer
+    /// with a random delay of up to one second, then re-arms it every second; the phase is a
+    /// deterministic draw per body, so bodies inside the area from the start pulse at their own
+    /// offset once per second and a body that stays loses its share five times in five seconds.
+    fn decay_phase(&self, state: &DeathAndDecayState, target: SimId) -> u64 {
+        let second = CASTLE_FIGHT_SIMULATION_HZ as u64;
+        1 + deterministic_random(
+            self.config.match_seed,
+            state.cast_tick,
+            state.source,
+            RANDOM_PURPOSE_DECAY_PHASE ^ u64::from(state.profile.ability.0),
+            target.0,
+        ) % (second - 1)
+    }
+
+    /// Every hostile body inside the area loses its share of maximum life once per second, each
+    /// on its own phase; spell-immune and invulnerable bodies are never buffed.
     pub(super) fn advance_death_and_decay(
         &mut self,
         entity: Entity,
-        mut state: DeathAndDecayState,
+        state: DeathAndDecayState,
         units: &mut [UnitSnapshot],
     ) {
         let limit = square_i32(state.profile.radius);
-        while self.next_tick >= state.next_pulse_tick && state.next_pulse_tick <= state.expires_tick
-        {
+        let second = CASTLE_FIGHT_SIMULATION_HZ as u64;
+        let elapsed = self.next_tick.saturating_sub(state.cast_tick);
+        if elapsed > 0 && self.next_tick < state.expires_tick {
             for i in 0..units.len() {
                 let target = units[i];
                 if target.health <= 0
@@ -93,6 +114,10 @@ impl Simulation {
                         .can_target_unit(target.target_movement_class())
                     || state.position.distance_sq(target.position) > limit
                 {
+                    continue;
+                }
+                let phase = self.decay_phase(&state, target.id);
+                if elapsed < phase || !(elapsed - phase).is_multiple_of(second) {
                     continue;
                 }
                 let amount = i64::from(target.health_max) * i64::from(state.profile.life_per_10k)
@@ -113,16 +138,9 @@ impl Simulation {
                     Some(state.source),
                 );
             }
-            state.next_pulse_tick += CASTLE_FIGHT_SIMULATION_HZ as u64;
         }
         if self.next_tick >= state.expires_tick {
             self.world.despawn(entity);
-        } else {
-            *self
-                .world
-                .entity_mut(entity)
-                .get_mut::<NativeAction>()
-                .unwrap() = NativeAction::DeathAndDecay(state);
         }
     }
 }
