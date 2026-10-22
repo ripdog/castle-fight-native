@@ -83,29 +83,59 @@ impl NativeSummonProfile {
     }
 }
 
-/// Native Raise Dead (`Arai`): consumes raisable corpses around the caster and raises the retained
-/// body from each, for the caster's owner.
+/// The map script replaces the summoned carrier with a random skeleton the moment it appears
+/// (`onChaosPortalUnitSummoned`): a one-in-`rolls` draw that selects a fixed table entry, otherwise
+/// a uniform draw over an inclusive range of table entries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct RaiseDeadSpecial {
+    pub rolls: u8,
+    pub index: u8,
+}
+
+/// Native Raise Dead (`Arai`): consumes raisable corpses around the caster; each one raises the
+/// carrier body for the caster's owner, which the script immediately replaces with a fresh
+/// skeleton drawn from the retained table (with optional permanent bonus grants).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct RaiseDeadProfile {
     pub map_version: crate::MapVersion,
     pub ability: AbilityId,
+    /// The carrier body named by the ability; it is never left standing.
     pub body_rawcode: u32,
     pub count: u8,
     pub radius: i32,
-    /// Zero leaves the raised bodies permanent.
-    pub duration_ticks: u16,
+    pub table: [u32; 8],
+    pub first_index: u8,
+    pub last_index: u8,
+    pub special: Option<RaiseDeadSpecial>,
+    pub bonus_grants: [Option<NativeAbilityGrant>; 2],
 }
 impl RaiseDeadProfile {
-    pub(crate) fn canonical_words(self) -> [u64; 7] {
-        [
+    pub(crate) fn canonical_words(self) -> Vec<u64> {
+        let mut words = vec![
             u64::from(self.map_version.major),
             u64::from(self.map_version.minor),
             u64::from(self.ability.0),
             u64::from(self.body_rawcode),
             u64::from(self.count),
             self.radius as u64,
-            u64::from(self.duration_ticks),
-        ]
+            u64::from(self.first_index),
+            u64::from(self.last_index),
+        ];
+        words.extend(self.table.iter().map(|body| u64::from(*body)));
+        match self.special {
+            Some(special) => words.extend([1, u64::from(special.rolls), u64::from(special.index)]),
+            None => words.extend([0, 0, 0]),
+        }
+        for grant in self.bonus_grants {
+            match grant {
+                Some(grant) => {
+                    words.push(1);
+                    words.extend(grant.canonical_words());
+                }
+                None => words.push(0),
+            }
+        }
+        words
     }
 }
 

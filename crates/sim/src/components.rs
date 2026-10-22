@@ -21,7 +21,7 @@ mod travelling_mana_clap;
 pub(crate) use native_summons::NativeParasiteState;
 pub use native_summons::{
     NativeParasiteProfile, NativeSummonProfile, PurgeProfile, PurgeState, RaiseDeadProfile,
-    SirenPurgeProfile,
+    RaiseDeadSpecial, SirenPurgeProfile,
 };
 mod curse;
 pub use curse::CurseProfile;

@@ -207,29 +207,8 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
                     "targets": 3, "organic_only": True}}},
             "provenance": {"source": "resolved/object-fields.tsv", "native_base": mechanics["native_base"]}}
     if kind == "raise-dead":
-        # Native Arai: an instant caster-centered order over corpses ("dead"); the unit carries it as
-        # its default-active autocast. DataA is the count of the one raised body type (DataC).
-        raw = int.from_bytes(recipe["source_key"].encode(), "big")
-        body = fields["datac1"]
-        if (mechanics["native_base"] != "Arai" or unit is None or mechanics["default_active"] != recipe["source_key"]
-                or set(fields["targs1"].split(",")) != {"dead"} or len(body) != 4
-                or fields["datad1"] not in ("-", "") or number("DataB1") != 0 or not 0 < number("DataA1") <= 255
-                or number("Area1") <= 0 or number("Dur1") != 0 or number("HeroDur1") != 0):
-            raise ValueError("Raise Dead requires the default-active native corpse order with one raised body type")
-        mana = lambda key, scale=1: 0 if unit[key] in {"", "-", "_"} else scaled(unit[key], scale)
-        rate = mana("mana_regen", 10_000)
-        return {"kind": "scripted-automatic", "source_kind": recipe["source_kind"], "source_key": recipe["source_key"],
-            "unit_rawcode": recipe["unit_rawcode"], "spellcasting": {
-                "mana": {"maximum": mana("mana_max"), "starting": mana("mana_start"), "regen_per_tick_per_10k": (1 << 31) | rate},
-                "ability": {"id": raw, "mana_cost": scaled(protected.get("mana_cost", fields["cost1"])),
-                    "cooldown_ticks": scaled(protected.get("cooldown", fields["cool1"]), 30),
-                    "range": number("Area1", 1024), "target_policy": "RaisableCorpse",
-                    "effect": {"RaiseDead": {"map_version": mechanics["map_version"], "ability": raw,
-                        "body_rawcode": int.from_bytes(body.encode(), "big"), "count": number("DataA1"),
-                        "radius": number("Area1", 1024), "duration_ticks": number("Dur1", 30)}}}},
-            "mana_regen_per_second_per_10k": rate, "effect_ability_rawcode": None,
-            "provenance": {"git_tree": mechanics["git_tree"], "source": "resolved/object-fields.tsv",
-                "protected": "resolved/protected-ability-fields.tsv", "native_base": "Arai"}}
+        from project_raise_dead import project
+        return project(recipe, fields, unit, protected, mechanics)
     if kind == "death-spawn":
         if mechanics["native_base"] != "Aspy" or any(number(key) != 0 for key in ("Cost1", "Cool1", "Dur1", "HeroDur1")):
             raise ValueError("death spawn requires the passive permanent native Aspy inventory")
@@ -1131,7 +1110,8 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             detail.update(functions=functions, git_tree=tree, death_mastery=death_masteries[recipe["unit_rawcode"]])
         if recipe["kind"] == "raise-dead":
             detail.update(map_version=dict(zip(["major", "minor"], map(int, release["map_version"].split(".")))),
-                git_tree=tree, default_active=default_autocast.get(recipe["unit_rawcode"]))
+                git_tree=tree, default_active=default_autocast.get(recipe["unit_rawcode"]),
+                raise_dead_system=system_mechanics["raise-dead-skeleton-randomization"], functions=functions)
         detail["misc"] = misc
         if recipe['kind'] == 'native-debuff':
             default = default_autocast.get(recipe['unit_rawcode'])

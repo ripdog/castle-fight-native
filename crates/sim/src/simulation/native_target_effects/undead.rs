@@ -72,14 +72,26 @@ fn raise_dead_consumes_only_raisable_corpses_of_either_team_and_pays_once() {
     }
     // Exactly the retained count of corpses is consumed by the one cast, nearest first.
     assert_eq!(sim.corpse_count(), 2 - usize::from(profile.count));
-    assert_eq!(alive_count(&sim, b"u004"), usize::from(profile.count));
-    // The raised body belongs to the caster's team and is flagged as summoned.
-    let raised = sim
+    // The carrier is replaced at once by one of the retained skeletons (never a standing Ghoul).
+    let allowed =
+        &profile.table[usize::from(profile.first_index)..=usize::from(profile.last_index)];
+    let skeletons: Vec<_> = sim
         .units()
         .into_iter()
-        .find(|unit| unit.content.map(|content| content.rawcode) == Some(profile.body_rawcode))
-        .unwrap();
-    assert_eq!(raised.team, Team(0));
+        .filter(|unit| {
+            unit.content
+                .is_some_and(|c| profile.table.contains(&c.rawcode))
+        })
+        .collect();
+    assert_eq!(skeletons.len(), usize::from(profile.count));
+    assert!(
+        skeletons
+            .iter()
+            .all(|unit| unit.content.is_some_and(|c| allowed.contains(&c.rawcode)))
+    );
+    assert!(skeletons.iter().all(|unit| !unit.classifications.summoned));
+    assert_eq!(alive_count(&sim, b"u004"), 0);
+    assert!(skeletons.iter().all(|unit| unit.team == Team(0)));
     // The cooldown keeps the second corpse until it has elapsed.
     for _ in 0..u64::from(spell.ability.cooldown_ticks) / 2 {
         sim.step();
@@ -408,4 +420,46 @@ fn city_of_decay_does_not_stack_across_buildings_of_one_team() {
     );
     // The enemy team's own building is an independent source against the other side.
     assert_eq!(lost(&[(0, 20), (1, 30)]), single);
+}
+
+#[test]
+fn a_lich_king_raises_two_empowered_skeletons_from_the_upper_tiers_or_the_general() {
+    let lich = definition(b"u00D");
+    let spell = lich.spellcasting.expect("Lich King Raise Dead");
+    let Effect::RaiseDead(profile) = spell.ability.effect else {
+        panic!("the Lich King raises the dead");
+    };
+    let mut sim = simulation(1);
+    sim.spawn_resolved_unit(Team(0), at(40), lich);
+    corpse(&mut sim, b"hfoo", Team(1), 60);
+    corpse(&mut sim, b"hfoo", Team(1), 70);
+    for _ in 0..90 {
+        sim.step();
+    }
+    let raised: Vec<_> = sim
+        .units()
+        .into_iter()
+        .filter(|unit| {
+            unit.content
+                .is_some_and(|c| profile.table.contains(&c.rawcode))
+        })
+        .collect();
+    assert_eq!(raised.len(), 2);
+    let special = profile.special.expect("the General branch");
+    for unit in &raised {
+        let rawcode = unit.content.unwrap().rawcode;
+        let slot = profile
+            .table
+            .iter()
+            .position(|body| *body == rawcode)
+            .unwrap();
+        assert!(
+            slot == usize::from(special.index)
+                || (usize::from(profile.first_index)..=usize::from(profile.last_index))
+                    .contains(&slot)
+        );
+        for grant in profile.bonus_grants.into_iter().flatten() {
+            assert!(unit.status.native_grants.contains(grant.ability));
+        }
+    }
 }

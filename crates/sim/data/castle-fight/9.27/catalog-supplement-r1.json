@@ -204,20 +204,6 @@
       "lifetime_ticks": null
     },
     {
-      "rawcode": "u004",
-      "does_decay": true,
-      "can_raise": true,
-      "decay_start_ticks": 51,
-      "lifetime_ticks": 861
-    },
-    {
-      "rawcode": "u008",
-      "does_decay": true,
-      "can_raise": true,
-      "decay_start_ticks": 51,
-      "lifetime_ticks": 861
-    },
-    {
       "rawcode": "u00A",
       "does_decay": false,
       "can_raise": false,
@@ -230,13 +216,6 @@
       "can_raise": false,
       "decay_start_ticks": 152,
       "lifetime_ticks": null
-    },
-    {
-      "rawcode": "u00E",
-      "does_decay": true,
-      "can_raise": true,
-      "decay_start_ticks": 51,
-      "lifetime_ticks": 861
     },
     {
       "rawcode": "u00G",

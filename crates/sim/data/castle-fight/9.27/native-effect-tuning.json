@@ -414,7 +414,36 @@
               "body_rawcode": 1966092357,
               "count": 2,
               "radius": 921600,
-              "duration_ticks": 0
+              "table": [
+                1966092338,
+                1848651844,
+                1966092353,
+                1848651843,
+                1966092354,
+                1848652108,
+                1966092339,
+                1848652109
+              ],
+              "first_index": 3,
+              "last_index": 6,
+              "special": {
+                "rolls": 8,
+                "index": 7
+              },
+              "bonus_grants": [
+                {
+                  "ability": 1093679160,
+                  "effect": {
+                    "AttackDamage": 12
+                  }
+                },
+                {
+                  "ability": 1093679161,
+                  "effect": {
+                    "Armor": 300
+                  }
+                }
+              ]
             }
           }
         }
@@ -424,6 +453,8 @@
       "provenance": {
         "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
         "source": "resolved/object-fields.tsv",
+        "system": "resolved/runtime-system-mechanics.tsv",
+        "handler": "onChaosPortalUnitSummoned",
         "protected": "resolved/protected-ability-fields.tsv",
         "native_base": "Arai"
       }
@@ -484,7 +515,23 @@
               "body_rawcode": 1966092344,
               "count": 1,
               "radius": 921600,
-              "duration_ticks": 0
+              "table": [
+                1966092338,
+                1848651844,
+                1966092353,
+                1848651843,
+                1966092354,
+                1848652108,
+                1966092339,
+                1848652109
+              ],
+              "first_index": 0,
+              "last_index": 6,
+              "special": null,
+              "bonus_grants": [
+                null,
+                null
+              ]
             }
           }
         }
@@ -494,6 +541,8 @@
       "provenance": {
         "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
         "source": "resolved/object-fields.tsv",
+        "system": "resolved/runtime-system-mechanics.tsv",
+        "handler": "onChaosPortalUnitSummoned",
         "protected": "resolved/protected-ability-fields.tsv",
         "native_base": "Arai"
       }
@@ -580,7 +629,23 @@
               "body_rawcode": 1966092340,
               "count": 1,
               "radius": 921600,
-              "duration_ticks": 0
+              "table": [
+                1966092338,
+                1848651844,
+                1966092353,
+                1848651843,
+                1966092354,
+                1848652108,
+                1966092339,
+                1848652109
+              ],
+              "first_index": 0,
+              "last_index": 2,
+              "special": null,
+              "bonus_grants": [
+                null,
+                null
+              ]
             }
           }
         }
@@ -590,6 +655,8 @@
       "provenance": {
         "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
         "source": "resolved/object-fields.tsv",
+        "system": "resolved/runtime-system-mechanics.tsv",
+        "handler": "onChaosPortalUnitSummoned",
         "protected": "resolved/protected-ability-fields.tsv",
         "native_base": "Arai"
       }

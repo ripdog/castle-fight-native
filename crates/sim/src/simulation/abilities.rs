@@ -1648,8 +1648,9 @@ impl Simulation {
         revived
     }
 
-    /// Native Raise Dead: the nearest raisable corpses around the caster are consumed and each
-    /// raises the retained body at the corpse's position for the caster's owner.
+    /// Native Raise Dead: the nearest raisable corpses around the caster are consumed. Each raises
+    /// the carrier body, which the map script replaces at once with a fresh skeleton from the
+    /// retained table, so the carrier is never created and the skeleton is not a summon.
     fn cast_raise_dead(
         &mut self,
         source: AbilitySourceSnapshot,
@@ -1669,18 +1670,37 @@ impl Simulation {
             })
             .collect::<Vec<_>>();
         candidates.sort_unstable_by_key(|(distance, id, ..)| (*distance, *id));
-        let kind =
-            crate::CastleFightUnitKind::from_rawcode_for_version(p.body_rawcode, p.map_version)
-                .unwrap()
-                .expect("promoted raised body");
-        let mut definition = kind
-            .definition_for_version(p.map_version)
-            .unwrap()
-            .resolved();
-        definition.properties.classifications.summoned = true;
         let mut raised = 0;
-        for (_, _, entity, original, position) in candidates.into_iter().take(usize::from(p.count))
+        for (_, corpse_id, entity, original, position) in
+            candidates.into_iter().take(usize::from(p.count))
         {
+            let draw = |salt: u64, span: u64| {
+                deterministic_random(
+                    self.config.match_seed,
+                    self.next_tick,
+                    source.id,
+                    u64::from(p.ability.0) ^ salt,
+                    corpse_id.0,
+                ) % span
+            };
+            let index = match p.special {
+                Some(special) if draw(0x5241_4953_4500_0010, u64::from(special.rolls)) == 0 => {
+                    special.index
+                }
+                _ => {
+                    let span = u64::from(p.last_index - p.first_index) + 1;
+                    p.first_index
+                        + u8::try_from(draw(0x5241_4953_4500_0011, span)).expect("table index")
+                }
+            };
+            let body = p.table[usize::from(index)];
+            let definition =
+                crate::CastleFightUnitKind::from_rawcode_for_version(body, p.map_version)
+                    .unwrap()
+                    .expect("promoted raised skeleton")
+                    .definition_for_version(p.map_version)
+                    .unwrap()
+                    .resolved();
             self.retired_damage_sources.remove(&original);
             self.world.despawn(entity);
             let child = self.spawn_resolved_unit_unchecked(
@@ -1688,15 +1708,22 @@ impl Simulation {
                 UnitSpawn::from_template(source.team, position, definition.template),
                 definition,
             );
-            if p.duration_ticks > 0 {
-                let id = self.allocate_id();
-                self.world.spawn((
-                    id,
-                    crate::components::NativeAction::TimedLife {
-                        child,
-                        expires_tick: self.next_tick + u64::from(p.duration_ticks),
-                    },
-                ));
+            if p.bonus_grants.iter().any(Option::is_some) {
+                let entity = self
+                    .world
+                    .iter_entities()
+                    .find(|entity| entity.get::<SimId>() == Some(&child))
+                    .expect("raised skeleton")
+                    .id();
+                let mut status = self
+                    .world
+                    .get::<StatusState>(entity)
+                    .copied()
+                    .unwrap_or_default();
+                for grant in p.bonus_grants.into_iter().flatten() {
+                    status.native_grants.insert(grant);
+                }
+                self.world.entity_mut(entity).insert(status);
             }
             raised += 1;
         }
