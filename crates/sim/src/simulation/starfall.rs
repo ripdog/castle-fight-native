@@ -159,15 +159,17 @@ impl Simulation {
                 }
                 let u = &mut units[i];
                 position = u.position;
-                // Native AEsf is a Spell/Universal ultimate: its mask permits immune bodies.
-                // Native resistance/Defend do not reduce universal damage; scripted incoming factors still do.
-                let damage = self
-                    .combat_rules
-                    .damage_rules
-                    .apply_spell(p.damage, u.armor.armor_type);
-                let damage = scale_damage_per_10k(
-                    native_kill_effects::damage_after_native_incoming(u, damage, self.next_tick),
-                    u.snow_damage_taken_per_10k,
+                // Native AEsf is a Spell/Universal ultimate: its mask permits immune bodies. The
+                // engine's damage listeners (Defend, Magic Defense, spell damage reduction) key on
+                // the record's attack type (Spells for engine-built damage), never on the Universal
+                // kind, so they reduce it exactly like other spell damage (`Game.dll` `0x6f5f9f90`,
+                // `0x6f5750a0`). Only numeric armor points are skipped, as for every non-Normal kind.
+                let damage = spell_damage_after_defend(
+                    *u,
+                    self.combat_rules
+                        .damage_rules
+                        .apply_spell(p.damage, u.armor.armor_type),
+                    self.next_tick,
                 );
                 if damage > 0 {
                     damage_thresholds::observe_damage_event(u, u.health, damage);

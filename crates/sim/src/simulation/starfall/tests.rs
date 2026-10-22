@@ -176,7 +176,8 @@ fn native_channel_uses_fixed_point_and_live_masks_after_source_death_and_wire_re
             .native_grants = NativeAbilityGrants::from_slice(&[
             NativeAbilityGrant {
                 ability: AbilityId(501),
-                effect: NativeAbilityGrantEffect::SpellResistance(0),
+                // Engine damage listeners key on the Spells attack type, not the Universal kind.
+                effect: NativeAbilityGrantEffect::SpellResistance(5000),
             },
             NativeAbilityGrant {
                 ability: AbilityId(502),
@@ -222,15 +223,15 @@ fn native_channel_uses_fixed_point_and_live_masks_after_source_death_and_wire_re
                     other.checksum()
                 }
             );
-            let expected = 20 * (tick / 2).min(3);
-            assert_eq!(sim.unit(immune).unwrap().health, 1000 - expected);
+            let pulses = (tick / 2).min(3);
+            assert_eq!(sim.unit(immune).unwrap().health, 1000 - 10 * pulses);
             assert_eq!(sim.unit(invulnerable).unwrap().health, 1000);
             assert_eq!(sim.unit(friendly).unwrap().health, 1000);
             assert_eq!(sim.unit(distant).unwrap().health, 1000);
             assert_eq!(sim.unit(center).unwrap().health, 1000);
             assert_eq!(
                 sim.building(structure).unwrap().health,
-                1000 - if artillery { expected / 2 } else { 0 }
+                1000 - if artillery { 10 * pulses } else { 0 }
             );
         }
         assert!(action(&sim).is_none());

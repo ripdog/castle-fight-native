@@ -206,7 +206,9 @@ impl Simulation {
             if state.tiles.contains_key(&id)
                 && center(p, id).distance_sq(point) <= square_i32(p.explosion_radius)
             {
-                // DAMAGE_TYPE_UNIVERSAL bypasses armor/Defend/spell resistance, but the global snow listener still applies.
+                // Universal skips numeric armor points. Native Defend/spell-reduction listeners key on the attack type the
+                // script passes to UnitDamageTarget, which is not traced for this explosion, so only scripted
+                // incoming factors and the global snow listener are applied here.
                 let event_damage = scale_damage_per_10k(
                     super::native_kill_effects::damage_after_native_incoming(
                         target,
