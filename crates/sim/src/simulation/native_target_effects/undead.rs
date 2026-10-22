@@ -378,3 +378,34 @@ fn a_hostile_command_aura_takes_the_strongest_source_and_spares_mechanical_enemi
     assert!(one > -3000);
     assert_eq!(bonus(machine), 0);
 }
+
+#[test]
+fn city_of_decay_does_not_stack_across_buildings_of_one_team() {
+    let city = bundle()
+        .tower(crate::CastleFightTowerKind::CityOfDecay)
+        .unwrap();
+    let lost = |buildings: &[(u8, i32)]| {
+        let mut sim = simulation(1);
+        for &(team, x) in buildings {
+            sim.spawn_building_for_player_with_properties(
+                PlayerId(team),
+                city.spawn(Team(team), BuildingFootprint::new(x, 0, 4, 4)),
+                city.gameplay_properties(),
+            );
+        }
+        let victim = sim.spawn_unit(unit(1, 400, 0, AttackDelivery::Melee));
+        for _ in 0..100 {
+            sim.step();
+        }
+        1000 - sim.unit(victim).unwrap().health
+    };
+    let single = lost(&[(0, 20)]);
+    assert!(single > 0);
+    assert_eq!(
+        lost(&[(0, 20), (0, 30)]),
+        single,
+        "a second copy adds nothing"
+    );
+    // The enemy team's own building is an independent source against the other side.
+    assert_eq!(lost(&[(0, 20), (1, 30)]), single);
+}

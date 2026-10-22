@@ -21,6 +21,21 @@ impl Simulation {
                 })
             })
             .collect::<Vec<_>>();
+        // A building's Immolation is a map-wide effect that does not stack: only the oldest
+        // (lowest-id) standing building of a team contributes for each ability.
+        let building_sources = building_sources
+            .iter()
+            .filter(|(id, team, _, _, profile)| {
+                building_sources
+                    .iter()
+                    .all(|(other, other_team, _, _, other_profile)| {
+                        other_team != team
+                            || other_profile.ability != profile.ability
+                            || other >= id
+                    })
+            })
+            .copied()
+            .collect::<Vec<_>>();
         let sources = units
             .iter()
             .filter(|u| u.health > 0 && !u.abilities_disabled)
