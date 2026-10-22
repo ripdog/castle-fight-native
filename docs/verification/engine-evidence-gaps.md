@@ -37,7 +37,6 @@ Tier is Community only; each needs a Ghidra trace or an explicit acceptance.
 - [ ] Thunder Clap hostile eligibility and undispellable slow (Naga).
 - [ ] Charm summoned-unit expiry, upgrades and creep-level rule (Naga).
 - [ ] Carapace melee/ranged factor scope (Naga).
-- [ ] Cleave circle placement and armor exclusion on secondary hits (Naga, Chaos).
 - [ ] Aspo shared stacking and second-buff selection (Naga).
 - [ ] Life Regeneration Aura buff and literal regeneration (Naga).
 - [ ] Chaos aura recipients / hostile Thorns immunity (Chaos).
@@ -45,9 +44,19 @@ Tier is Community only; each needs a Ghidra trace or an explicit acceptance.
 
 ## Resolved
 
+- [x] **Cleaving Attack placement, damage kind and armor (Naga, Chaos).** **Ghidra** (`CAbilityCleavingAttack`, vtable `0x6faea080`, post-hit hook `0x6f5016d0`): the area centre is the attacker's position plus one area radius along the attacker's facing; the secondary damage is the ability's percentage of the hit record's amount (read before any target-specific reduction) applied through the shared area-damage helper `0x6f7032d0` with damage kind `0x20` (Enhanced, JASS damage type 5) and the original attack's attack type, so numeric armor points do not apply (they only apply to kind `0x10`) while the attack-type by armor-type multiplier does. The primary target is skipped by the callback `0x6f4f6e00`. The clone matches (`combat.rs` uses `DamageArmorRule::IgnorePoints`); it offsets toward the target rather than along the facing angle, which coincides for a melee swing at the target. Audit: [naga-implementation.md](naga-implementation.md).
+
 - [x] **Bounce next-target selection.** **Ghidra**: `CMissileBounce` (vtable `0x6fb0a068`) impact handler `0x6f703d70` calls `0x6f704fa0`, which enumerates units within the bounce radius of the missile position and keeps, via `0x6f705050`, the candidate with the strictly smallest distance (initial best distance is a large constant). The current target and already-hit units are excluded by the validator `0x6f702550`; the bounce counter is decremented before the search. The clone previously used a keyed-random rank; it now selects the nearest unit and breaks exact ties by `SimId` (the engine uses group enumeration order, which is not reproducible). Remaining uncertainty: whether the engine metric is centre distance (the unit-position accessor suggests so) rather than edge distance. Audit: [elven-melee-autocast.md](elven-melee-autocast.md).
 
 - [x] **Universal damage armor handling (Death and Decay, Starfall, Whirlwind).** **Ghidra** (`0x6f6cf530`): armor-point reduction only for kind Normal `0x10`; the attack-type by armor-type multiplier applies to all kinds. Matches the clone. Audit: [undead-implementation.md](undead-implementation.md).
 
 - [x] **City of Decay stacking.** Only the oldest standing building per team contributes. Evidence: tooltip plus **In-game** confirmation by the project owner. Audit: [undead-implementation.md](undead-implementation.md).
 - [x] **Death and Decay pulse timing and damage kind.** **Ghidra**: per-body random first delay in the first second, one-second period, Universal damage kind. Audit: [undead-implementation.md](undead-implementation.md).
+
+## Engine reference (shared findings)
+
+- Damage record (`CUnit` vtable `0x6fb68914`, slot `+0x120` = `0x6f6cf530`): `[0]` source, `[1]` weapon type, `[3]` flags (`0x100` attack, `0x40` suppress retaliation bookkeeping, `0x10` zero-amount), `[4]` amount, `[5]` damage kind bit, `[8]` attack type.
+- Damage kind bit is `1 << JASS damage type`: Normal `0x10`, Enhanced `0x20`, Divine `0x2000`, Magic `0x4000`, Spirit Link `0x1000000`, Universal `0x4000000`.
+- Attack type indices equal the JASS values: 0 Spells (named `ATTACK_TYPE_NORMAL` in JASS), 1 Normal, 2 Pierce, 3 Siege, 4 Magic, 5 Chaos, 6 Hero; the multiplier tables are `DamageBonus<Name>` at `0x6fd38708 + (attackType * 8 + armorType) * 4`.
+- Damage listeners are objects with a phase accessor at slot `+0xf8` and an apply at slot `+0xfc`; the damage routine runs phase 1 first, then phases 2 to 8 in order. Defend and Magic Defense share listener `0x6f5f9f90` (phase 6).
+- RTTI recovery: `strings -a Game.dll` lists every `.?AV...@@` type name; a class's vtable is found from its type descriptor (string address minus 8), then the complete-object-locator that references it, then the pointer to that locator (the vtable starts 4 bytes after that pointer).
