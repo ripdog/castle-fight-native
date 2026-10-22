@@ -588,7 +588,10 @@ pub enum TriggeredAttackEffect {
     /// The Lich King's single-roll listener, already resolved to one branch by the attack roll.
     DeathMastery {
         profile: DeathMasteryProfile,
-        devour: bool,
+        /// Nested devour casts in the script's recursive damage chain (each heals the bearer).
+        devours: u8,
+        /// The chain ended in a Death and Decay release.
+        decay: bool,
     },
 }
 
@@ -1494,6 +1497,30 @@ pub struct PlagueWardProfile {
     pub duration_ticks: u16,
     pub targets: AttackTargetMask,
     pub organic_only: bool,
+    /// The ward's own aura (`Aap2`): a separate infection that does not spread a further ward.
+    pub ability: AbilityId,
+    pub buff_rawcode: u32,
+    pub damage_per_second: i32,
+    pub infection_ticks: u16,
+}
+
+impl PlagueWardProfile {
+    pub(crate) fn infection(self) -> PoisonProfile {
+        PoisonProfile {
+            ability: self.ability,
+            buff_rawcode: self.buff_rawcode,
+            damage_per_second: self.damage_per_second,
+            movement_percent_delta: 0,
+            attack_speed_percent_delta: 0,
+            duration_ticks: self.infection_ticks,
+            hero_duration_ticks: self.infection_ticks,
+            targets: self.targets,
+            stack_damage: false,
+            can_kill: true,
+            organic_only: self.organic_only,
+            ward: None,
+        }
+    }
 }
 
 /// Native Plague aura (`Aap1`): infects hostile bodies in range with a long damage-over-time

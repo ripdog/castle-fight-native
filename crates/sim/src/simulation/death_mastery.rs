@@ -24,6 +24,7 @@ pub(super) fn new_decay(
 /// before the target takes the retained killing damage (which ignores armor).
 pub(super) fn devour(
     profile: DeathMasteryProfile,
+    devours: u8,
     source: PendingAttackEffectSource,
     target: usize,
     state: &mut PendingAttackEffectState<'_>,
@@ -32,7 +33,10 @@ pub(super) fn devour(
     if state.unit_health[target] <= 0 {
         return;
     }
-    let restored = i64::from(state.unit_health[target]) * i64::from(profile.devour_heal_per_10k)
+    // Every nested cast heals from the same untouched life: the damage lands only after the chain.
+    let restored = i64::from(state.unit_health[target])
+        * i64::from(profile.devour_heal_per_10k)
+        * i64::from(devours)
         / i64::from(ATTACK_PROC_CHANCE_SCALE);
     if let Some(bearer) = find_unit_index(state.units, source.id)
         && state.unit_health[bearer] > 0

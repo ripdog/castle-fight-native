@@ -124,7 +124,7 @@ impl Simulation {
                     // Infection is hostile, so the cloud belongs to the victim's opponents.
                     team: Team(u8::from(units[i].team.0 == 0)),
                     position: positions[i],
-                    infection: state.profile,
+                    infection: ward.infection(),
                     ward,
                     expires_tick: self.next_tick + u64::from(ward.duration_ticks),
                 }),

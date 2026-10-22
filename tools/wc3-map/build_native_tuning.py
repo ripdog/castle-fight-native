@@ -194,6 +194,18 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
                 or number("DataA1") <= 0 or number("DataB1") < 0 or number("DataC1") <= 0
                 or len(fields["buffid1"]) != 4):
             raise ValueError("disease cloud requires the free passive native Plague aura inventory")
+        # The plague ward is the stock unit `uplg`; its own aura row `Aap2` is registered base data
+        # (the map never overrides it). A negative ward-duration field means the aura leaves no ward.
+        aura = mechanics["all_fields"]["Aap2"]
+        aura_tokens = set(aura["targs1"].split(","))
+        aura_buffs = aura["buffid1"].split(",")
+        if (aura["code"] != "Aapl" or aura_tokens != {"ground", "enemy", "organic", "neutral"}
+                or len(aura_buffs) != 2 or Decimal(aura["datac1"]) >= 0 or Decimal(aura["dataa1"]) <= 0
+                or Decimal(aura["datab1"]) < 0 or Decimal(aura["area1"]) <= 0 or fields["unitid1"] != "uplg"):
+            raise ValueError("Plague Ward aura requires its registered ground organic hostile aura with no ward of its own")
+        ward = {"radius": scaled(aura["area1"], 1024), "duration_ticks": number("DataC1", 30), "targets": 1, "organic_only": True,
+            "ability": int.from_bytes("Aap2".encode(), "big"), "buff_rawcode": int.from_bytes(aura_buffs[1].encode(), "big"),
+            "damage_per_second": scaled(aura["datab1"]), "infection_ticks": scaled(aura["dataa1"], 30)}
         return {**recipe, "profile": {
             "ability": int.from_bytes(recipe["source_key"].encode(), "big"),
             "radius": number("Area1", 1024), "targets": 3, "organic_only": True,
@@ -203,8 +215,7 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
                 "attack_speed_percent_delta": 0, "duration_ticks": number("DataA1", 30),
                 "hero_duration_ticks": number("DataA1", 30), "targets": 3,
                 "stack_damage": False, "can_kill": True, "organic_only": True,
-                "ward": {"radius": number("Area1", 1024), "duration_ticks": number("DataC1", 30),
-                    "targets": 3, "organic_only": True}}},
+                "ward": ward}},
             "provenance": {"source": "resolved/object-fields.tsv", "native_base": mechanics["native_base"]}}
     if kind == "raise-dead":
         from project_raise_dead import project
@@ -1106,6 +1117,8 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         if recipe["kind"] in {"scripted-roots", "wind-walk", "native-heal", "orb-charm"}:
             detail.update(all_bases=ability_bases, functions=functions, git_tree=tree,
                 map_version=dict(zip(["major", "minor"], map(int, release["map_version"].split(".")))))
+        if recipe["kind"] == "disease-cloud":
+            detail.update(all_fields=abilities)
         if recipe["kind"] == "death-mastery":
             detail.update(functions=functions, git_tree=tree, death_mastery=death_masteries[recipe["unit_rawcode"]])
         if recipe["kind"] == "raise-dead":

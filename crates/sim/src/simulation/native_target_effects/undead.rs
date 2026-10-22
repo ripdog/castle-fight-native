@@ -187,7 +187,7 @@ fn mastery() -> DeathMasteryProfile {
 }
 
 #[test]
-fn devour_heals_a_share_of_the_target_life_and_kills_through_armor() {
+fn devour_chain_heals_per_nested_cast_and_kills_through_armor() {
     let profile = mastery();
     let lich = definition(b"u00D");
     let mut sim = simulation(1);
@@ -197,6 +197,10 @@ fn devour_heals_a_share_of_the_target_life_and_kills_through_armor() {
         .get_mut::<Health>(entity(&sim, king))
         .unwrap()
         .current = 100;
+    sim.world
+        .get_mut::<Health>(entity(&sim, victim))
+        .unwrap()
+        .current = 300;
     let victim_life = sim.unit(victim).unwrap().health;
     let mut units = sim.snapshot_units();
     let mut health: Vec<_> = units.iter().map(|u| u.health).collect();
@@ -219,12 +223,12 @@ fn devour_heals_a_share_of_the_target_life_and_kills_through_armor() {
         team: Team(0),
     };
     let target = state.units.iter().position(|u| u.id == victim).unwrap();
-    death_mastery::devour(profile, source, target, &mut state);
+    death_mastery::devour(profile, 2, source, target, &mut state);
     let bearer = state.units.iter().position(|u| u.id == king).unwrap();
     assert_eq!(
         state.unit_health[bearer],
-        100 + victim_life / 2,
-        "the heal is the retained share of the target's life before the blow"
+        100 + victim_life,
+        "each nested devour heals the retained share of the target's untouched life"
     );
     assert!(state.unit_health[target] <= 0, "death damage ignores armor");
 }

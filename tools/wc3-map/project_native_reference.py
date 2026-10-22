@@ -27,6 +27,9 @@ def project(root, retained):
     fields = {key.lower(): value for key, value in data['ACsw'].items()}
     if fields['code'] != 'Aslo':
         raise ValueError('native creep Slow base changed')
+    plague = {key.lower(): value for key, value in data['Aap2'].items()}
+    if plague['code'] != 'Aapl':
+        raise ValueError('native Plague Ward aura base changed')
     misc = {}
     for line in verified('custom_v1/units/miscgame.txt').read_text().splitlines():
         if '=' in line and not line.lstrip().startswith('//'):
@@ -37,6 +40,6 @@ def project(root, retained):
         if '=' in line and not line.lstrip().startswith('//'):
             key, value = line.split('=', 1)
             misc[key] = value
-    return {'abilities': {'ACsw': fields}, 'ethereal': {key: misc[key] for key in
+    return {'abilities': {'ACsw': fields, 'Aap2': plague}, 'ethereal': {key: misc[key] for key in
         ['EtherealDamageBonus', 'EtherealDamageBonusAlly', 'EtherealHealBonus']},
         'source_sha256': sources, 'manifest_source': 'resolved/base-data-manifest.json'}

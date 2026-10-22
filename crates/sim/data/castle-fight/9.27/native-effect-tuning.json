@@ -684,10 +684,14 @@
           "can_kill": true,
           "organic_only": true,
           "ward": {
-            "radius": 358400,
+            "radius": 256000,
             "duration_ticks": 150,
-            "targets": 3,
-            "organic_only": true
+            "targets": 1,
+            "organic_only": true,
+            "ability": 1096904754,
+            "buff_rawcode": 1114664039,
+            "damage_per_second": 1,
+            "infection_ticks": 3600
           }
         }
       },

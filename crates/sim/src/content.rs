@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r223";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r224";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -3794,6 +3794,10 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
                     hash.write_u16(ward.duration_ticks);
                     hash.write_u8(ward.targets.bits());
                     hash.write_u8(u8::from(ward.organic_only));
+                    hash.write_u32(ward.ability.0);
+                    hash.write_u32(ward.buff_rawcode);
+                    hash.write_i32(ward.damage_per_second);
+                    hash.write_u16(ward.infection_ticks);
                 }
             }
             PassiveUnitEffect::Demolish(profile) => {
@@ -4135,9 +4139,14 @@ fn hash_triggered_effect(hash: &mut ContentHash64, effect: TriggeredAttackEffect
                 hash.write_u64(word);
             }
         }
-        TriggeredAttackEffect::DeathMastery { profile, devour } => {
+        TriggeredAttackEffect::DeathMastery {
+            profile,
+            devours,
+            decay,
+        } => {
             hash.write_u8(8);
-            hash.write_u8(u8::from(devour));
+            hash.write_u8(devours);
+            hash.write_u8(u8::from(decay));
             for word in profile.canonical_words() {
                 hash.write_u64(word);
             }

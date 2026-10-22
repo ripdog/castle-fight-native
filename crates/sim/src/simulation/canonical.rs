@@ -763,6 +763,10 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u16(state.ward.duration_ticks);
                         hash.write_u8(state.ward.targets.bits());
                         hash.write_u8(u8::from(state.ward.organic_only));
+                        hash.write_u32(state.ward.ability.0);
+                        hash.write_u32(state.ward.buff_rawcode);
+                        hash.write_i32(state.ward.damage_per_second);
+                        hash.write_u16(state.ward.infection_ticks);
                         hash.write_u64(state.expires_tick);
                     }
                     NativeAction::LandMine(state) => {
@@ -2969,9 +2973,14 @@ fn hash_triggered_attack_effect(hash: &mut Fnv64, effect: &TriggeredAttackEffect
                 hash.write_u64(word);
             }
         }
-        TriggeredAttackEffect::DeathMastery { profile, devour } => {
+        TriggeredAttackEffect::DeathMastery {
+            profile,
+            devours,
+            decay,
+        } => {
             hash.write_u8(8);
-            hash.write_u8(u8::from(*devour));
+            hash.write_u8(*devours);
+            hash.write_u8(u8::from(*decay));
             for word in profile.canonical_words() {
                 hash.write_u64(word);
             }
@@ -3811,6 +3820,10 @@ fn hash_poison_profile(hash: &mut Fnv64, profile: &crate::PoisonProfile) {
             hash.write_u16(ward.duration_ticks);
             hash.write_u8(ward.targets.bits());
             hash.write_u8(u8::from(ward.organic_only));
+            hash.write_u32(ward.ability.0);
+            hash.write_u32(ward.buff_rawcode);
+            hash.write_i32(ward.damage_per_second);
+            hash.write_u16(ward.infection_ticks);
         }
     }
 }

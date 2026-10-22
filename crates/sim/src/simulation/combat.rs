@@ -24,6 +24,9 @@ pub(super) struct AttackResolution {
     pub(super) chain_lightning_launches: Vec<ChainLightningState>,
 }
 
+/// Bound on the recursive devour chain; the chain ends geometrically long before it.
+const MAXIMUM_DEVOUR_CHAIN: u8 = 16;
+
 impl Simulation {
     pub(super) fn resolve_attacks(
         &mut self,
@@ -1162,43 +1165,53 @@ impl Simulation {
                     }
                 }
                 PassiveUnitEffect::DeathMastery(profile) => {
-                    // One roll per landed attack is partitioned between the two script branches.
-                    let roll = deterministic_random(
-                        self.config.match_seed,
-                        completed_tick,
-                        intent.source_id,
-                        RANDOM_PURPOSE_ATTACK_PROC ^ u64::from(profile.ability.0),
-                        intent.attack_sequence,
-                    ) % u64::from(ATTACK_PROC_CHANCE_SCALE);
-                    let devour_eligible = match intent.target {
-                        TargetIndex::Unit(i) => {
-                            let target = &units[i];
-                            !target.mechanical
-                                && !target.map_version.is_some_and(|version| {
-                                    crate::content::unit_has_ability_for_version(
-                                        target.rawcode,
-                                        profile.devour_excluded_ability,
-                                        version,
-                                    )
-                                })
-                        }
-                        TargetIndex::Building(_) => false,
+                    // The script's damage listener is registered on combat bodies only, never on
+                    // structures. Its killing devour blow re-enters the listener (an attack-flagged
+                    // damage event with no guard) while the victim still has its full life, so each
+                    // devour rolls again; the chain ends at the first roll that does not devour.
+                    let TargetIndex::Unit(i) = intent.target else {
+                        continue;
                     };
-                    let devour =
+                    let target = &units[i];
+                    if !target.classifications.combat_sapper {
+                        continue;
+                    }
+                    let devour_eligible = !target.mechanical
+                        && !target.map_version.is_some_and(|version| {
+                            crate::content::unit_has_ability_for_version(
+                                target.rawcode,
+                                profile.devour_excluded_ability,
+                                version,
+                            )
+                        });
+                    let (mut devours, mut decay) = (0u8, false);
+                    for level in 0..MAXIMUM_DEVOUR_CHAIN {
+                        let roll = deterministic_random(
+                            self.config.match_seed,
+                            completed_tick,
+                            intent.source_id,
+                            RANDOM_PURPOSE_ATTACK_PROC
+                                ^ u64::from(profile.ability.0)
+                                ^ (u64::from(level) << 56),
+                            intent.attack_sequence,
+                        ) % u64::from(ATTACK_PROC_CHANCE_SCALE);
                         if roll < u64::from(profile.devour_chance_per_10k) && devour_eligible {
-                            Some(true)
-                        } else if roll < u64::from(profile.decay_chance_per_10k) {
-                            Some(false)
+                            devours += 1;
                         } else {
-                            None
-                        };
-                    if let Some(devour) = devour {
+                            decay = roll < u64::from(profile.decay_chance_per_10k);
+                            break;
+                        }
+                    }
+                    if devours > 0 || decay {
                         assert!(
                             on_hit.triggered_spell.is_none(),
                             "multiple triggered spell procs on one attack are not yet supported"
                         );
-                        on_hit.triggered_spell =
-                            Some(TriggeredAttackEffect::DeathMastery { profile, devour });
+                        on_hit.triggered_spell = Some(TriggeredAttackEffect::DeathMastery {
+                            profile,
+                            devours,
+                            decay,
+                        });
                     }
                 }
                 PassiveUnitEffect::FrostAttack(profile) => {
