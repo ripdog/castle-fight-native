@@ -20,9 +20,12 @@ Evidence tiers: **Ghidra** = traced in `Game.dll`; **In-game** = observed by the
 ### Undead
 
 - [ ] **Raise Dead cast range from corpses.** Whether the original AI cast from a corpse beyond the 600 cast range. Audit: [undead-implementation.md](undead-implementation.md).
-- [ ] **Death and Decay: Universal damage armor handling.** Trace `CUnit::Damage` (`0x6f6cf530`) for damage-kind `0x4000000`. Owner states there is no armor interaction; confirm in Ghidra. Audit: [undead-implementation.md](undead-implementation.md).
 - [ ] **Death damage through damage listeners.** Stock Death damage would reach listeners (for example Hardened Skin); the engine applies it directly. Audit: [undead-implementation.md](undead-implementation.md).
 - [ ] **Conversion vs other death-time listeners.** Conversion removes the victim before listeners the engine runs after the death loop. Audit: [undead-implementation.md](undead-implementation.md).
+
+### Cross-cutting
+
+- [ ] **Defend / Magic Defense versus Universal spell damage (contradiction).** The Ghidra listener shared by `CAbilityDefend` (vtable `0x6fb38628`) and `CAbilityMagicDefense` (vtable `0x6fb38988`) is `0x6f5f9f90`, phase 6. It reduces damage by the damage record's *attack type* (0/4 spells, 2 pierce) and contains no check of the damage *kind*. Universal damage with attack type 0 therefore appears to be reduced. The clone assumes the opposite for Starfall (`starfall.rs`) and Snowveil (`snowveil.rs`) while Whirlwind and Death and Decay do apply Defend/resistance, so the clone is internally inconsistent. Needs confirmation (Defend level-data field mapping, and whether another gate exists) before changing behavior. Audit: [night-elf-implementation.md](night-elf-implementation.md).
 
 ### Mechanical
 
@@ -42,6 +45,8 @@ Tier is Community only; each needs a Ghidra trace or an explicit acceptance.
 - [ ] Orc spell-resistance and poison/slow family semantics.
 
 ## Resolved
+
+- [x] **Universal damage armor handling (Death and Decay, Starfall, Whirlwind).** **Ghidra** (`0x6f6cf530`): armor-point reduction only for kind Normal `0x10`; the attack-type by armor-type multiplier applies to all kinds. Matches the clone. Audit: [undead-implementation.md](undead-implementation.md).
 
 - [x] **City of Decay stacking.** Only the oldest standing building per team contributes. Evidence: tooltip plus **In-game** confirmation by the project owner. Audit: [undead-implementation.md](undead-implementation.md).
 - [x] **Death and Decay pulse timing and damage kind.** **Ghidra**: per-body random first delay in the first second, one-second period, Universal damage kind. Audit: [undead-implementation.md](undead-implementation.md).
