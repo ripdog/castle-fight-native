@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"ability-effect","source_key":"A0C3","implementation":"warcraft-orb-mana-burn-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0C2","implementation":"warcraft-orb-spell-proc-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0C1","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0C0","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0AV","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0AS","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},

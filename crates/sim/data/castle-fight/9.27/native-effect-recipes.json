@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"ability-effect","source_key":"A0C3","unit_rawcode":"n028","kind":"orb-mana-burn"},
+    {"source_kind":"unit-ability","source_key":"A0C2","unit_rawcode":"n028","kind":"orb-spell-proc"},
+    {"source_kind":"unit-ability","source_key":"A0C1","unit_rawcode":"n028","kind":"native-heal"},
     {"source_kind":"unit-ability","source_key":"A0C0","unit_rawcode":"n026","kind":"native-heal"},
     {"source_kind":"unit-ability","source_key":"A0AV","unit_rawcode":"n01W","kind":"parasite-script"},
     {"source_kind":"unit-ability","source_key":"A0AS","unit_rawcode":"n01W","kind":"native-web"},

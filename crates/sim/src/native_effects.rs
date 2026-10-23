@@ -100,6 +100,7 @@ pub enum NativeEffectImplementationId {
     WarcraftNativeTargetDebuffV1,
     WarcraftOrbAcidBombV1,
     WarcraftOrbCharmV1,
+    WarcraftOrbManaBurnV1,
     WarcraftEraserV1,
     WarcraftMagicRuinV1,
     WarcraftFlameStrikeV1,
@@ -197,6 +198,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftNativeTargetDebuffV1 => 101,
             Self::WarcraftOrbAcidBombV1 => 111,
             Self::WarcraftOrbCharmV1 => 107,
+            Self::WarcraftOrbManaBurnV1 => 190,
             Self::WarcraftEraserV1 => 100,
             Self::WarcraftMagicRuinV1 => 99,
             Self::WarcraftFlameStrikeV1 => 98,
@@ -1046,6 +1048,13 @@ enum TuningEffect {
         #[allow(dead_code)]
         provenance: serde_json::Value,
     },
+    OrbManaBurn {
+        source_kind: String,
+        source_key: String,
+        profile: crate::ManaBurnProfile,
+        #[allow(dead_code)]
+        provenance: serde_json::Value,
+    },
     OrbSpellProc {
         source_kind: String,
         source_key: String,
@@ -1195,6 +1204,7 @@ impl TuningEffect {
             | Self::NativeTargetDebuff { source_kind, .. }
             | Self::OrbAcidBomb { source_kind, .. }
             | Self::OrbCharm { source_kind, .. }
+            | Self::OrbManaBurn { source_kind, .. }
             | Self::NativeWeatherWave { source_kind, .. }
             | Self::SourceDamageDispatcher { source_kind, .. }
             | Self::NativeEnchantmentGrant { source_kind, .. }
@@ -1257,6 +1267,7 @@ impl TuningEffect {
             | Self::NativeTargetDebuff { source_key, .. }
             | Self::OrbAcidBomb { source_key, .. }
             | Self::OrbCharm { source_key, .. }
+            | Self::OrbManaBurn { source_key, .. }
             | Self::NativeWeatherWave { source_key, .. }
             | Self::SourceDamageDispatcher { source_key, .. }
             | Self::NativeEnchantmentGrant { source_key, .. }
@@ -1359,6 +1370,7 @@ impl TuningEffect {
             | Self::NativeTargetDebuff { .. }
             | Self::OrbAcidBomb { .. }
             | Self::OrbCharm { .. }
+            | Self::OrbManaBurn { .. }
             | Self::NativeWeatherWave { .. }
             | Self::NativeEnchantmentGrant { .. }
             | Self::BuildingManaRegeneration { .. }
@@ -1385,6 +1397,7 @@ impl TuningEffect {
                 NativeEffectImplementationId::WarcraftNativeTargetDebuffV1
             }
             Self::OrbCharm { .. } => NativeEffectImplementationId::WarcraftOrbCharmV1,
+            Self::OrbManaBurn { .. } => NativeEffectImplementationId::WarcraftOrbManaBurnV1,
             Self::NativeWeatherWave { .. } => NativeEffectImplementationId::WarcraftWeatherWaveV1,
             Self::NativeEnchantmentGrant { .. } => {
                 NativeEffectImplementationId::WarcraftPermanentAbilityGrantsV1
@@ -1463,6 +1476,7 @@ impl TuningEffect {
             Self::NativeTargetDebuff { .. } => "native-target-debuff",
             Self::OrbAcidBomb { .. } => "orb-acid-bomb",
             Self::OrbCharm { .. } => "orb-charm",
+            Self::OrbManaBurn { .. } => "orb-mana-burn",
             Self::NativeWeatherWave { .. } => "native-weather-wave",
             Self::NativeEnchantmentGrant { .. } => "native-enchantment-grant",
             Self::SourceDamageDispatcher { .. } => "source-damage-dispatcher",
@@ -1854,7 +1868,7 @@ fn native_unit_mechanics_from_tuning(
                         passive = Some(candidate);
                     }
                 }
-                TuningEffect::NativeImpale { .. } | TuningEffect::NativeTargetDebuff { .. } | TuningEffect::OrbAcidBomb { .. } | TuningEffect::OrbCharm { .. } | TuningEffect::NativeWeatherWave { .. } | TuningEffect::NativeEnchantmentGrant { .. } | TuningEffect::BuildingManaRegeneration { .. } | TuningEffect::RetaliationProjectile { .. } | TuningEffect::ForkedLightning { .. }
+                TuningEffect::NativeImpale { .. } | TuningEffect::NativeTargetDebuff { .. } | TuningEffect::OrbAcidBomb { .. } | TuningEffect::OrbCharm { .. } | TuningEffect::OrbManaBurn { .. } | TuningEffect::NativeWeatherWave { .. } | TuningEffect::NativeEnchantmentGrant { .. } | TuningEffect::BuildingManaRegeneration { .. } | TuningEffect::RetaliationProjectile { .. } | TuningEffect::ForkedLightning { .. }
                 | TuningEffect::DamageThreshold { .. }
                 | TuningEffect::ConeWave { .. }
         | TuningEffect::ChainLightning { .. }
@@ -2456,6 +2470,7 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
         | TuningEffect::NativeTargetDebuff { .. }
         | TuningEffect::OrbAcidBomb { .. }
         | TuningEffect::OrbCharm { .. }
+        | TuningEffect::OrbManaBurn { .. }
         | TuningEffect::NativeWeatherWave { .. }
         | TuningEffect::NativeEnchantmentGrant { .. }
         | TuningEffect::BuildingImprovement { .. }
@@ -2486,6 +2501,7 @@ fn build_triggered_effect(effect: &TuningEffect, parent: AbilityId) -> Triggered
         }
         TuningEffect::ConeWave { profile, .. } => TriggeredAttackEffect::ConeWave(*profile),
         TuningEffect::OrbCharm { profile, .. } => TriggeredAttackEffect::Charm(*profile),
+        TuningEffect::OrbManaBurn { profile, .. } => TriggeredAttackEffect::ManaBurn(*profile),
         TuningEffect::ChainLightning {
             source_key,
             initial_damage,

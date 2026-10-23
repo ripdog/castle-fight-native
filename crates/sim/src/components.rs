@@ -580,6 +580,8 @@ pub enum TriggeredAttackEffect {
     ConeWave(ConeWaveProfile),
     ChainLightning(ChainLightningEffectProfile),
     EntanglingRoots(EntanglingRootsEffectProfile),
+    /// Free native Mana Burn cast by a landed orb attack: the burned mana is the damage.
+    ManaBurn(ManaBurnProfile),
     Charm(OrbCharmProfile),
     /// Free native Acid Bomb cast by a landed orb attack; the missile is an independent action.
     AcidBomb(AcidBombProfile),
@@ -593,6 +595,24 @@ pub enum TriggeredAttackEffect {
         /// The chain ended in a Death and Decay release.
         decay: bool,
     },
+}
+
+/// Free native Mana Burn invoked by a landed orb attack, independent of its parent mask.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct ManaBurnProfile {
+    pub ability: AbilityId,
+    pub maximum_mana_drained: i32,
+    pub targets: AttackTargetMask,
+}
+
+impl ManaBurnProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 3] {
+        [
+            u64::from(self.ability.0),
+            self.maximum_mana_drained as u64,
+            u64::from(self.targets.bits()),
+        ]
+    }
 }
 
 /// A damage-listener spin: universal damage to every eligible unit around the damaged target.

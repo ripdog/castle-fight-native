@@ -297,6 +297,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     if kind == "orb-acid-bomb":
         from project_orb_acid_bomb import project
         return project(recipe, fields, protected, mechanics)
+    if kind == "orb-mana-burn":
+        from project_orb_mana_burn import project
+        return project(recipe, fields, protected, mechanics)
     if kind == "orb-charm":
         from project_orb_charm import project
         return project(recipe, fields, protected, mechanics)

@@ -16,7 +16,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 119;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 120;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -7543,6 +7543,60 @@ fn apply_pending_attack_effects(
             }
             TriggeredAttackEffect::Charm(profile) => {
                 result.charm = orb_charm_request(units, index, source, profile);
+            }
+            TriggeredAttackEffect::ManaBurn(profile) => {
+                if !units[index].classifications.spell_immune
+                    && !units[index].classifications.invulnerable
+                    && profile
+                        .targets
+                        .can_target_unit(units[index].target_movement_class())
+                {
+                    let drained = if let Some(mana) = units[index].mana_current.as_mut() {
+                        let drained = (*mana).min(profile.maximum_mana_drained).max(0);
+                        *mana -= drained;
+                        drained
+                    } else if let Some(charge) = units[index].status.damage_charge.as_mut() {
+                        let drained = damage_charge::mana_current(*charge)
+                            .min(profile.maximum_mana_drained)
+                            .max(0);
+                        damage_charge::restore_mana(charge, -drained);
+                        drained
+                    } else {
+                        0
+                    };
+                    // Mana Burn deals the burned mana as spell damage.
+                    let damage = damage_rules.apply_spell(drained, units[index].armor.armor_type);
+                    let damage = spell_damage_after_defend(units[index], damage, completed_tick);
+                    let event_damage = damage;
+                    source_damage_runtime::dispatch(
+                        source.id,
+                        index,
+                        event_damage,
+                        source_damage_runtime::SourceDamageState {
+                            units,
+                            health: unit_health,
+                            rules: damage_rules,
+                            tick: completed_tick,
+                        },
+                        retired_sources,
+                    );
+                    damage_thresholds::observe_damage_event(
+                        &mut units[index],
+                        unit_health[index],
+                        event_damage,
+                    );
+                    let after = unit_health[index]
+                        .checked_sub(event_damage)
+                        .expect("Mana Burn health overflow");
+                    death_healing::commit_split_health_from(
+                        units,
+                        unit_health,
+                        None,
+                        index,
+                        after,
+                        Some(source.id),
+                    );
+                }
             }
             TriggeredAttackEffect::AcidBomb(profile) => {
                 if native_actions::acid_bomb::eligible(&units[index], source.team, profile) {

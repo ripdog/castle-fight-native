@@ -2971,6 +2971,12 @@ fn hash_triggered_attack_effect(hash: &mut Fnv64, effect: &TriggeredAttackEffect
                 hash.write_u64(word);
             }
         }
+        TriggeredAttackEffect::ManaBurn(profile) => {
+            hash.write_u8(8);
+            for word in profile.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
         TriggeredAttackEffect::Whirlwind(profile) => {
             hash.write_u8(7);
             for word in profile.canonical_words() {

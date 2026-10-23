@@ -3,6 +3,91 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "orb-mana-burn",
+      "source_kind": "ability-effect",
+      "source_key": "A0C3",
+      "profile": {
+        "ability": 1093681971,
+        "maximum_mana_drained": 150,
+        "targets": 3
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "AEmb",
+        "targets": "air,enemies,ground,ward",
+        "protected_resources": {
+          "cooldown": "0.01",
+          "mana_cost": "0"
+        },
+        "native_child_cooldown_ticks": 1
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0C2",
+      "unit_rawcode": "n028",
+      "kind": "orb-spell-proc",
+      "chance_per_10k": 3000,
+      "effect_ability_rawcode": "A0C3",
+      "cooldown_ticks": 1,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A0C2",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0C1",
+      "unit_rawcode": "n028",
+      "spellcasting": {
+        "mana": {
+          "maximum": 250,
+          "starting": 170,
+          "regen_per_tick_per_10k": 2147503648
+        },
+        "ability": {
+          "id": 1093681969,
+          "mana_cost": 50,
+          "cooldown_ticks": 420,
+          "range": 256000,
+          "target_policy": "WoundedFriendlyUnit",
+          "effect": {
+            "Heal": {
+              "amount": 0,
+              "targets": 3,
+              "organic_only": true,
+              "nonancient_only": true,
+              "affects_invulnerable": true,
+              "resume_attack_ticks": 24,
+              "rejuvenation": {
+                "ability": 1093681496,
+                "buff": {
+                  "rawcode": 1114793322,
+                  "positive": true,
+                  "stealable": true,
+                  "organic_only": true
+                },
+                "regeneration_per_second_per_10k": 400000,
+                "duration_ticks": 300,
+                "hero_duration_ticks": 300,
+                "organic_only": true
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 20000,
+      "provenance": {
+        "unrepresented_trigger_heal": "0.01",
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "native": "resolved/object-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "semantics": "resolved/unit-spell-semantics.tsv"
+      }
+    },
+    {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
       "source_key": "A0C0",
