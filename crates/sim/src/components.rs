@@ -1337,6 +1337,20 @@ pub enum PassiveUnitEffect {
     DeathMastery(DeathMasteryProfile),
     /// Object-native Demolish (`ANde`) on the bearer's own weapon.
     Demolish(DemolishProfile),
+    /// Object-native True Sight (`Adtg`): the bearer reveals invisible units around it.
+    TrueSight(TrueSightProfile),
+}
+
+/// Native True Sight: invisible units inside the radius are visible to the bearer's team.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct TrueSightProfile {
+    pub ability: AbilityId,
+    pub radius: i32,
+}
+impl TrueSightProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 2] {
+        [u64::from(self.ability.0), self.radius as u64]
+    }
 }
 
 /// Native Demolish: a rolled weapon-damage multiplier against its target mask. It is not Critical

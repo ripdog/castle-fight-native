@@ -1283,6 +1283,7 @@ impl Simulation {
                 | PassiveUnitEffect::ContactSelfDestruct(_)
                 | PassiveUnitEffect::GobboRepair(_)
                 | PassiveUnitEffect::DiseaseCloud(_)
+                | PassiveUnitEffect::TrueSight(_)
                 | PassiveUnitEffect::KillBerserk(_)
                 | PassiveUnitEffect::Pulverize(_)
                 | PassiveUnitEffect::Evasion(_)

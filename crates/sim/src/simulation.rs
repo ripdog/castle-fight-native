@@ -16,7 +16,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 120;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 121;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -4285,6 +4285,30 @@ impl Simulation {
                     },
                 ),
         );
+        // Native True Sight reveals invisible units inside the bearer's radius to its team.
+        let detectors: Vec<(Team, SimPoint, i32)> = units
+            .iter()
+            .filter(|unit| unit.health > 0)
+            .flat_map(|unit| {
+                unit.passive_effects
+                    .iter()
+                    .filter_map(move |effect| match effect {
+                        PassiveUnitEffect::TrueSight(profile) => {
+                            Some((unit.team, unit.position, profile.radius))
+                        }
+                        _ => None,
+                    })
+            })
+            .collect();
+        if !detectors.is_empty() {
+            for unit in &mut units {
+                for &(team, position, radius) in &detectors {
+                    if position.distance_sq(unit.position) <= square_i32(radius) {
+                        unit.detection_teams |= 1 << team.0;
+                    }
+                }
+            }
+        }
         for unit in &mut units {
             self.project_building_spell_control(unit);
             unit.classifications.invulnerable |= unit

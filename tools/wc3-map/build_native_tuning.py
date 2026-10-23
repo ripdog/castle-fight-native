@@ -273,6 +273,16 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     if kind in {"siren-purge", "feral-spirit"}:
         from project_naga_unit import project
         return project(recipe, fields, unit, protected, mechanics)
+    if kind == "true-sight":
+        # Object-native Adtg: the detection radius is the only radius the row has (its Area is "-").
+        if (mechanics["native_base"] != "Adtg" or number("DataA1") != 3 or number("Rng1") <= 0
+                or any(number(key) != 0 for key in ["Cost1", "Cool1", "Dur1", "HeroDur1"])
+                or set(fields["targs1"].split(",")) != {"vuln", "invu"}):
+            raise ValueError("True Sight requires the passive free native detection row")
+        return {**recipe, "profile": {"ability": int.from_bytes(recipe["source_key"].encode(), "big"),
+            "radius": number("Rng1", 1024)},
+            "provenance": {"source": "resolved/object-fields.tsv", "native_base": mechanics["native_base"],
+                "detection_type": number("DataA1")}}
     if kind == "demolish":
         # Object-native passive Demolish on the bearer's own weapon (targets: enemy structures).
         if (mechanics["native_base"] != "ANde" or fields["targs1"] != "enemy,structure"

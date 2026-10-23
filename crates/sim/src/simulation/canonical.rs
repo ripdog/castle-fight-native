@@ -2842,6 +2842,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: &PassiveUnitEffects) {
                     hash.write_u64(word);
                 }
             }
+            PassiveUnitEffect::TrueSight(profile) => {
+                hash.write_u8(49);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
             PassiveUnitEffect::DeathMastery(profile) => {
                 hash.write_u8(47);
                 for word in profile.canonical_words() {

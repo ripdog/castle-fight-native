@@ -67,7 +67,8 @@ pub use components::{
     SimId, SirenPurgeProfile, SpeedAuraProfile, SpellcastingProfile, SphereAttachmentState,
     SphereProfile, SpikedShellProfile, SplashFalloffProfile, StatusState, Team, ThunderCallProfile,
     ThunderCallState, TravellingManaClapProfile, TriggeredAttackEffect, TriggeredSpellProcProfile,
-    UnitClassifications, UnitGameplayProperties, UnitSpawn, UnitTemplate, WhirlwindProfile,
+    TrueSightProfile, UnitClassifications, UnitGameplayProperties, UnitSpawn, UnitTemplate,
+    WhirlwindProfile,
 };
 pub use content::{
     CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION, CASTLE_FIGHT_CONTENT_REVISION_927,

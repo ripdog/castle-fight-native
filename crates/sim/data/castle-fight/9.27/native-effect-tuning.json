@@ -3,6 +3,37 @@
   "map_version": "9.27",
   "effects": [
     {
+      "source_kind": "unit-ability",
+      "source_key": "Adtg",
+      "unit_rawcode": "e00G",
+      "kind": "true-sight",
+      "profile": {
+        "ability": 1097102439,
+        "radius": 1228800
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "Adtg",
+        "detection_type": 3
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0FV",
+      "unit_rawcode": "e00G",
+      "kind": "demolish",
+      "profile": {
+        "ability": 1093682774,
+        "chance_per_10k": 10000,
+        "multiplier_per_10k": 30000,
+        "targets": 4
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "ANde"
+      }
+    },
+    {
       "kind": "orb-mana-burn",
       "source_kind": "ability-effect",
       "source_key": "A0C3",

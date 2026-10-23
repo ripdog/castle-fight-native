@@ -73,6 +73,7 @@ pub enum NativeEffectImplementationId {
     WarcraftDiseaseCloudV1,
     WarcraftDeathMasteryV1,
     WarcraftDemolishV1,
+    WarcraftTrueSightV1,
     WarcraftPowerPlantV1,
     WarcraftNativeAuraV1,
     WarcraftSpeedAuraV1,
@@ -171,6 +172,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftDiseaseCloudV1 => 116,
             Self::WarcraftDeathMasteryV1 => 117,
             Self::WarcraftDemolishV1 => 118,
+            Self::WarcraftTrueSightV1 => 191,
             Self::WarcraftPowerPlantV1 => 115,
             Self::WarcraftNativeAuraV1 => 22,
             Self::WarcraftSpeedAuraV1 => 69,
@@ -856,6 +858,15 @@ enum TuningEffect {
         #[allow(dead_code)]
         provenance: serde_json::Value,
     },
+    /// Object-native True Sight: the bearer reveals invisible units to its team.
+    TrueSight {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        profile: crate::TrueSightProfile,
+        #[allow(dead_code)]
+        provenance: serde_json::Value,
+    },
     /// Object-native Demolish on the bearer's own weapon.
     Demolish {
         source_kind: String,
@@ -1238,6 +1249,7 @@ impl TuningEffect {
             | Self::DiseaseCloud { source_kind, .. }
             | Self::DeathMastery { source_kind, .. }
             | Self::Demolish { source_kind, .. }
+            | Self::TrueSight { source_kind, .. }
             | Self::FrostAttack { source_kind, .. }
             | Self::ScriptedAutomatic { source_kind, .. }
             | Self::ElvenAutomatic { source_kind, .. }
@@ -1301,6 +1313,7 @@ impl TuningEffect {
             | Self::DiseaseCloud { source_key, .. }
             | Self::DeathMastery { source_key, .. }
             | Self::Demolish { source_key, .. }
+            | Self::TrueSight { source_key, .. }
             | Self::FrostAttack { source_key, .. }
             | Self::ScriptedAutomatic { source_key, .. }
             | Self::ElvenAutomatic { source_key, .. }
@@ -1352,6 +1365,7 @@ impl TuningEffect {
             | Self::DiseaseCloud { unit_rawcode, .. }
             | Self::DeathMastery { unit_rawcode, .. }
             | Self::Demolish { unit_rawcode, .. }
+            | Self::TrueSight { unit_rawcode, .. }
             | Self::FrostAttack { unit_rawcode, .. }
             | Self::ScriptedAutomatic { unit_rawcode, .. }
             | Self::ElvenAutomatic { unit_rawcode, .. }
@@ -1425,6 +1439,7 @@ impl TuningEffect {
             Self::DiseaseCloud { .. } => NativeEffectImplementationId::WarcraftDiseaseCloudV1,
             Self::DeathMastery { .. } => NativeEffectImplementationId::WarcraftDeathMasteryV1,
             Self::Demolish { .. } => NativeEffectImplementationId::WarcraftDemolishV1,
+            Self::TrueSight { .. } => NativeEffectImplementationId::WarcraftTrueSightV1,
             Self::DeathSpawn { .. } => NativeEffectImplementationId::WarcraftDeathSpawnV1,
             Self::Poison { .. } => NativeEffectImplementationId::WarcraftPoisonV1,
             Self::DamageThreshold { .. } => NativeEffectImplementationId::WarcraftDamageThresholdV1,
@@ -1496,6 +1511,7 @@ impl TuningEffect {
             Self::DiseaseCloud { .. } => "disease-cloud",
             Self::DeathMastery { .. } => "death-mastery",
             Self::Demolish { .. } => "demolish",
+            Self::TrueSight { .. } => "true-sight",
             Self::DeathSpawn { .. } => "death-spawn",
             Self::Poison { .. } => "poison",
             Self::DamageThreshold { .. } => "damage-threshold",
@@ -1845,6 +1861,7 @@ fn native_unit_mechanics_from_tuning(
                 | TuningEffect::DiseaseCloud { .. }
                 | TuningEffect::DeathMastery { .. }
                 | TuningEffect::Demolish { .. }
+                | TuningEffect::TrueSight { .. }
                 | TuningEffect::FrostAttack { .. }
                 | TuningEffect::Feedback { .. }
                 | TuningEffect::SpellResistance { .. }
@@ -2176,6 +2193,10 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
         TuningEffect::Demolish { profile, .. } => {
             assert!(profile.chance_per_10k <= 10_000 && profile.multiplier_per_10k >= 10_000);
             PassiveUnitEffect::Demolish(*profile)
+        }
+        TuningEffect::TrueSight { profile, .. } => {
+            assert!(profile.radius > 0);
+            PassiveUnitEffect::TrueSight(*profile)
         }
         TuningEffect::DeathMastery { profile, .. } => {
             assert!(
