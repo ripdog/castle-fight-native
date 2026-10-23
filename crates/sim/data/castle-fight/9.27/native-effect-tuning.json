@@ -4,6 +4,31 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0AO",
+      "unit_rawcode": "n00U",
+      "kind": "poison",
+      "profile": {
+        "ability": 1093681487,
+        "buff_rawcode": 1110454343,
+        "damage_per_second": 5,
+        "movement_percent_delta": 0,
+        "attack_speed_percent_delta": -10,
+        "duration_ticks": 300,
+        "hero_duration_ticks": 300,
+        "targets": 3,
+        "stack_damage": true,
+        "can_kill": false,
+        "organic_only": true
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "Aven",
+        "stacking_flags": 1,
+        "unrepresented_damage_per_second": "0"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A01T",
       "unit_rawcode": "h01Q",
       "kind": "permanent-immolation",

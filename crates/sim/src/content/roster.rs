@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    BlackSpider = 0x1000_00b7 => b"n00U",
     LesserVampire = 0x1000_00b6 => b"h01V",
     SkeletalGeneral = 0x1000_00b2 => b"n01M",
     GreaterSkeletonWarrior = 0x1000_00b3 => b"u00B",
@@ -215,6 +216,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    SpiderEggClutch = 0x2000_00a7 => b"h002",
     DragonCemetery = 0x2000_00a6 => b"h01S",
     SlaughterHouse = 0x2000_00a5 => b"h01T",
     HauntedMine = 0x2000_00a4 => b"h01L",

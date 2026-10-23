@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A0AO","implementation":"warcraft-poison-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A01T","implementation":"warcraft-permanent-immolation-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A065","implementation":"warcraft-cleave-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A066","implementation":"warcraft-critical-strike-v1","valid_from":"9.27","valid_through":"9.27"},
