@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0BM","unit_rawcode":"h02C","kind":"building-script"},
     {"source_kind":"unit-ability","source_key":"A0BN","unit_rawcode":"n02D","kind":"bash"},
     {"source_kind":"unit-ability","source_key":"A0BJ","unit_rawcode":"e00F","kind":"parasite-script"},
     {"source_kind":"unit-ability","source_key":"A0BC","unit_rawcode":"e00F","kind":"war-club"},

@@ -1,9 +1,9 @@
 //! Desert building scripts: Beacon replenish, Peyote illusions and the global Sandstorm.
 use super::*;
-use crate::MapVersion;
 use crate::components::{
     BuildingChild, BuildingScriptProfile, IllusionState, NativeAction, SandstormState,
 };
+use crate::{MapVersion, NativeDebuffProfile};
 
 impl Simulation {
     pub(super) fn cast_building_script(
@@ -100,6 +100,24 @@ impl Simulation {
                 profile.ability,
                 sequence,
                 (damage, excluded_ability, excluded_type),
+                units,
+            ),
+            BuildingChild::Banish {
+                debuff,
+                excluded_ability,
+                excluded_type,
+                vision_radius,
+                vision_ticks,
+            } => self.cast_banish(
+                source,
+                profile.ability,
+                sequence,
+                (
+                    debuff,
+                    excluded_ability,
+                    excluded_type,
+                    (vision_radius, vision_ticks),
+                ),
                 units,
             ),
             BuildingChild::Sandstorm {
@@ -406,6 +424,86 @@ impl Simulation {
             Some(source.id),
         );
         1
+    }
+
+    /// `banishGuardianSpell`: a random alive enemy that passes the shield check is banished by a
+    /// dummy that first reveals a hidden target.
+    fn cast_banish(
+        &mut self,
+        source: AbilitySourceSnapshot,
+        ability: AbilityId,
+        sequence: u64,
+        (debuff, excluded_ability, excluded_type, (vision_radius, vision_ticks)): (
+            NativeDebuffProfile,
+            AbilityId,
+            u32,
+            (i32, u16),
+        ),
+        units: &mut [UnitSnapshot],
+    ) -> usize {
+        let version = source.map_version.unwrap_or(MapVersion::CASTLE_FIGHT_9_27);
+        let Some(index) = units
+            .iter()
+            .enumerate()
+            .filter(|(_, unit)| {
+                unit.team != source.team
+                    && unit.health > 0
+                    && unit.classifications.combat_sapper
+                    && !unit.classifications.invulnerable
+                    && unit.rawcode != excluded_type
+                    && !crate::content::unit_has_ability_for_version(
+                        unit.rawcode,
+                        excluded_ability,
+                        version,
+                    )
+            })
+            .min_by_key(|(_, unit)| {
+                (
+                    deterministic_ability_target_rank(
+                        self.config.match_seed,
+                        source.id,
+                        ability,
+                        sequence,
+                        unit.id,
+                    ),
+                    unit.id,
+                )
+            })
+            .map(|(index, _)| index)
+        else {
+            return 0;
+        };
+        if self.check_negative_building_shield(&mut units[index], version, source.id, sequence) {
+            return 0;
+        }
+        let target = units[index];
+        if !target.visible_to(source.team, self.next_tick) {
+            self.reveal_area(
+                source.team,
+                target.position,
+                vision_radius,
+                u64::from(vision_ticks),
+                false,
+            );
+        }
+        // The dummy cast still fails on magic-immune or invulnerable bodies.
+        let applied = apply_ability_effect_to_unit(
+            &mut units[index],
+            AbilityEffect::NativeDebuff(debuff),
+            source.team,
+            self.next_tick,
+            self.combat_rules.damage_rules,
+        );
+        if applied {
+            self.last_ability_casts.push(AbilityCastEvent {
+                source: source.id,
+                ability: debuff.ability,
+                target: AbilityCastTarget::Unit(target.id),
+                target_position: Some(target.position),
+                effect: AbilityEffect::NativeDebuff(debuff),
+            });
+        }
+        usize::from(applied)
     }
 
     /// Random ally from the first non-empty tier: badly wounded, wounded, then partial mana.

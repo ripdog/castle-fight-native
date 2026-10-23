@@ -65,6 +65,17 @@ pub enum BuildingChild {
         /// When no unshielded ally exists, any ally is chosen and raised to `level`.
         upgrade_existing: bool,
     },
+    /// Banishes (a native ethereal debuff) a random hostile combat body after the shield check.
+    Banish {
+        debuff: NativeDebuffProfile,
+        /// Bodies carrying this ability (the tentacle marker) are never chosen.
+        excluded_ability: AbilityId,
+        /// This unit type is never chosen.
+        excluded_type: u32,
+        /// The dummy caster reveals a hidden target to the building's player for this long.
+        vision_radius: i32,
+        vision_ticks: u16,
+    },
     /// A map-wide debuff plus a pulsing immolation on every hostile unit for a fixed time.
     Sandstorm {
         debuff: NativeDebuffProfile,
@@ -159,6 +170,23 @@ impl BuildingChild {
                 damage_per_mana as u64,
                 u64::from(excluded_ability.0),
             ],
+            Self::Banish {
+                debuff,
+                excluded_ability,
+                excluded_type,
+                vision_radius,
+                vision_ticks,
+            } => {
+                let mut words = vec![
+                    9,
+                    u64::from(excluded_ability.0),
+                    u64::from(excluded_type),
+                    vision_radius as u64,
+                    u64::from(vision_ticks),
+                ];
+                words.extend(debuff.canonical_words());
+                words
+            }
             Self::Sandstorm {
                 debuff,
                 pulse_ability,

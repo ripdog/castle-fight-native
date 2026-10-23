@@ -111,6 +111,44 @@ def _death_pit(params, detail, number, raw):
     return {'DeathPit': {'damage': int(params['damage']), 'excluded_ability': int(filtered[2]), 'excluded_type': int(filtered[3])}}
 
 
+def _banish(params, detail, number, raw):
+    """Ancient Guardian: shield-checked random enemy receives a dummy-cast native Banish."""
+    functions = detail['functions']
+    body = functions['banishGuardianSpell']
+    picker = functions['ForGroupCallback_forUnitsInRect_SpellHelpers_callback_forUnitsInRect_SpellHelpers']
+    child = params['effect_ability_id']
+    code = child.to_bytes(4, 'big').decode()
+    banish = detail['all_fields'][code]
+    shape = (r'(\w+)=randomAliveEnemy\(\w+\)if\(\(\1==nil\)or checkForShield\(\1\)\)then return end \w+=\w+ \w+=\1 '
+        r'dummyCastTargetWithVision\(\w+,%d,%d,\w+,unit_getPos\(\w+\),([\d.]+)\)end$' % (child, params['order_id']))
+    matched = re.search(shape, body)
+    filtered = re.search(r'isAliveCombatSapper\((\w+)\)and unit_isEnemyOf\(\1,\w+\.p\)\)and\(unit_getAbilityLevel\(\1,%d\)<=0\)\)and'
+        r'\(unit_getAbilityLevel\(\1,(\d+)\)<=0\)\)and\(not\(unit_getTypeId\(\1\)==(\d+)\)\)' % raw('Avul'), picker)
+    vision = functions['dummyCastTargetWithVision1']
+    sight = re.search(r'CreateFogModifierRadius\(\w+,FOG_OF_WAR_VISIBLE,\w+\[1\],\w+\[2\],([\d.]+),', vision)
+    sight_time = re.search(r'doAfter\(([\d.]+),\w+\)return \w+ end$', vision)
+    tokens = set(banish['targs1'].split(','))
+    ethereal = detail['ethereal']
+    magic = ethereal['EtherealDamageBonus'].split(',')
+    if (matched is None or filtered is None or sight is None or sight_time is None
+            or Decimal(matched[2]) != Decimal(params['dummy_lifetime_seconds'])
+            or detail['all_bases'][code] != 'AHbn' or tokens != {'air', 'enemies', 'ground'}
+            or number(banish['cost1']) != 9999 or len(banish['buffid1']) != 4 or magic[3] != magic[5]
+            or 'group_getRandom(' not in functions['randomAliveEnemy']):
+        raise ValueError('Ancient Guardian control flow changed: shield-checked random alive enemy and a dummy-cast Banish with vision')
+    protected = detail['all_protected'].get(code, {})
+    if number(protected.get('mana_cost', 0)) != 0 and code in detail['all_protected']:
+        raise ValueError('Banish dummy must be a free cast')
+    return {'Banish': {'debuff': {'ability': raw(code), 'buff': raw(banish['buffid1']), 'targets': 3, 'organic_only': False,
+        'duration_ticks': number(banish['dur1'], 30), 'hero_duration_ticks': number(banish['herodur1'], 30),
+        'movement_percent_delta': -number(banish['dataa1'], 100), 'attack_speed_percent_delta': -number(banish['datab1'], 100),
+        'damage_bonus_per_10k': 0, 'ethereal': {'magic_damage_per_10k': number(magic[3], 10000),
+            'healing_per_10k': number(ethereal['EtherealHealBonus'], 10000),
+            'allied_damage_per_10k': number(ethereal['EtherealDamageBonusAlly'], 10000)}},
+        'excluded_ability': int(filtered[2]), 'excluded_type': int(filtered[3]),
+        'vision_radius': number(sight[1], 1024), 'vision_ticks': number(sight_time[1], 30)}}
+
+
 def _thunder(params, detail, number, raw):
     functions = detail['functions']
     cast = functions['BuildingSpellClosure_registerBuildingSpell_ThunderpawSpire_cast_registerBuildingSpell_ThunderpawSpire']
@@ -217,6 +255,8 @@ def project(recipe, fields, unit, protected, detail):
         child = _hallucination(params, detail, number, raw)
     elif kind == 'scripted-raise-random':
         child = _raise_from_corpse(params, detail, number, raw)
+    elif kind == 'dummy-target-ability':
+        child = _banish(params, detail, number, raw)
     elif kind == 'direct-random-target-damage':
         child = _death_pit(params, detail, number, raw)
     elif kind == 'armed-next-melee-attack-splash':

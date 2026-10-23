@@ -3,6 +3,68 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0BM",
+      "unit_rawcode": "h02C",
+      "spellcasting": {
+        "mana": {
+          "maximum": 14,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093681741,
+          "mana_cost": 12,
+          "cooldown_ticks": 30,
+          "range": 102398976,
+          "target_policy": "NativeBuildingSpellTrigger",
+          "effect": {
+            "BuildingScript": {
+              "ability": 1093681741,
+              "trigger_targets": 5,
+              "trigger_invulnerable": true,
+              "trigger_spell_immune": false,
+              "trigger_mechanical_only": false,
+              "child": {
+                "Banish": {
+                  "debuff": {
+                    "ability": 1093681740,
+                    "buff": 1112040046,
+                    "targets": 3,
+                    "organic_only": false,
+                    "duration_ticks": 900,
+                    "hero_duration_ticks": 450,
+                    "movement_percent_delta": -50,
+                    "attack_speed_percent_delta": 0,
+                    "damage_bonus_per_10k": 0,
+                    "ethereal": {
+                      "magic_damage_per_10k": 16600,
+                      "healing_per_10k": 16600,
+                      "allied_damage_per_10k": 10000
+                    }
+                  },
+                  "excluded_ability": 1093679176,
+                  "excluded_type": 1747990082,
+                  "vision_radius": 131072,
+                  "vision_ticks": 3
+                }
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/building-spell-mechanics.tsv",
+        "fields": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "functions": "BuildingSpellClosure_registerBuildingSpell_RaceNatureAbilities_cast_registerBuildingSpell_RaceNatureAbilities1,banishGuardianSpell"
+      }
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A0BN",
       "unit_rawcode": "n02D",
