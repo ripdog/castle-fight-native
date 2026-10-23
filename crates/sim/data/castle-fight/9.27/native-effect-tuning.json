@@ -4,6 +4,92 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0B4",
+      "unit_rawcode": "n02B",
+      "kind": "critical-strike",
+      "chance_per_10k": 3000,
+      "damage_multiplier_per_10k": 20000,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A0B4",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0B2",
+      "unit_rawcode": "n02B",
+      "kind": "bash",
+      "chance_per_10k": 3000,
+      "bonus_damage": 65,
+      "stun_duration_millis": 1000,
+      "hero_stun_duration_millis": 1000,
+      "targets": "ground-units",
+      "provenance": {
+        "ability": "A0B2",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0BZ",
+      "unit_rawcode": "n02B",
+      "kind": "cleave",
+      "radius_world": 175,
+      "damage_per_10k": 3500,
+      "targets": 1,
+      "provenance": {
+        "ability": "A0BZ",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0C5",
+      "unit_rawcode": "n02B",
+      "kind": "feral-bear",
+      "profile": {
+        "ability": 1093681973,
+        "rage_chance_per_10k": 2000,
+        "rage_duration_ticks": 300,
+        "rage_damage_ability": 1093681720,
+        "rage_damage_buff": {
+          "rawcode": 1110454837,
+          "positive": true,
+          "stealable": true,
+          "organic_only": false
+        },
+        "rage_damage_bonus_per_10k": 3000,
+        "rage_speed_ability": 1093681718,
+        "rage_speed_buff": {
+          "rawcode": 1114012281,
+          "positive": true,
+          "stealable": true,
+          "organic_only": true
+        },
+        "rage_attack_speed_percent_delta": 30,
+        "hibernate_below_health": 326,
+        "retreat_ticks": 150,
+        "retreat_speed_per_tick": 13653,
+        "sleep_ticks": 300,
+        "sleep_regeneration_ability": 1093681975,
+        "sleep_regeneration_per_second_per_10k": 400000,
+        "wake_bonus": {
+          "ability": 1093681976,
+          "effect": {
+            "AttackDamage": 115
+          }
+        }
+      },
+      "provenance": {
+        "source": "resolved/production-unit-special-mechanics.tsv",
+        "handler": "handleTargetDamageEffects",
+        "sleep_ability": 1098083425,
+        "sleep_speed": 270
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A0B3",
       "unit_rawcode": "n029",
       "kind": "critical-strike",
