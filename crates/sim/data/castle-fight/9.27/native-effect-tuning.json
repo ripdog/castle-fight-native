@@ -3,6 +3,21 @@
   "map_version": "9.27",
   "effects": [
     {
+      "source_kind": "unit-ability",
+      "source_key": "A0BN",
+      "unit_rawcode": "n02D",
+      "kind": "bash",
+      "chance_per_10k": 2500,
+      "bonus_damage": 45,
+      "stun_duration_millis": 2000,
+      "hero_stun_duration_millis": 1000,
+      "targets": "air-ground-units",
+      "provenance": {
+        "ability": "A0BN",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
       "source_key": "A0BJ",

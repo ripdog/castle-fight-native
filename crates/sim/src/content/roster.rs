@@ -400,6 +400,7 @@ roster!(CastleFightProductionKind, CastleFightBuildingId;
 );
 
 roster!(CastleFightTowerKind, CastleFightBuildingId;
+    AncientProtector = 0x2100_0043 => b"n02D",
     CityOfDecay = 0x2100_0042 => b"h01Q",
     TurretOfSouls = 0x2100_0041 => b"h01O",
     SkullShrine = 0x2100_0040 => b"h056",

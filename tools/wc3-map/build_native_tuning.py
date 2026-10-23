@@ -685,7 +685,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
                       duration_millis=number("Dur1", 1000), hero_duration_millis=number("HeroDur1", 1000),
                       always_autocast=bool(number("DataB1")))
     elif kind == "bash":
-        if any(number(field) != 0 for field in ("DataB1", "DataD1", "DataE1")):
+        # The hero form (`AHbh`) leaves its unused never-miss field as a dash.
+        unused = lambda field: 0 if fields[field.lower()].strip() in {"-", "_"} and field == "DataE1" else number(field)
+        if any(unused(field) != 0 for field in ("DataB1", "DataD1", "DataE1")):
             raise ValueError("Bash multiplier/miss/never-miss fields require explicit native coverage")
         effect.update(chance_per_10k=number("DataA1", 100),
                       bonus_damage=number("DataC1"),
