@@ -39,6 +39,7 @@ pub enum NativeEffectImplementationId {
     WarcraftWildernessV1,
     WarcraftCorruptionV1,
     WarcraftResistantSkinV1,
+    WarcraftSpellShieldV1,
     WarcraftBuildingImprovementV1,
     WarcraftBuildingDamageProcV1,
     WarcraftWeatherWaveV1,
@@ -140,6 +141,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftSilverGladeV1 => 85,
             Self::WarcraftCorruptionV1 => 84,
             Self::WarcraftResistantSkinV1 => 83,
+            Self::WarcraftSpellShieldV1 => 192,
             Self::WarcraftBuildingImprovementV1 => 79,
             Self::WarcraftBuildingDamageProcV1 => 82,
             Self::WarcraftWeatherWaveV1 => 81,
@@ -219,6 +221,7 @@ impl NativeEffectImplementationId {
         !matches!(
             self,
             Self::WarcraftResistantSkinV1
+                | Self::WarcraftSpellShieldV1
                 | Self::WarcraftCompanionProductionV1
                 | Self::WarcraftMarkerOnlyV1
                 | Self::WarcraftZeroDamageBarrageV1
@@ -850,6 +853,8 @@ enum TuningEffect {
         /// The carrier itself is not a recipient (the native mask lacks `self`).
         #[serde(default)]
         excludes_source: bool,
+        #[serde(default)]
+        life_regeneration_per_second_per_10k: u32,
         source_kind: String,
         source_key: String,
         unit_rawcode: String,
@@ -2193,6 +2198,7 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             mana_regeneration_per_second_per_10k,
             organic_only,
             excludes_source,
+            life_regeneration_per_second_per_10k,
             ..
         } => PassiveUnitEffect::Aura(crate::components::AuraEffectProfile {
             self_only: *self_only,
@@ -2209,6 +2215,7 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             suspend_during_spell_cooldown: false,
             organic_only: *organic_only,
             excludes_source: *excludes_source,
+            life_regeneration_per_second_per_10k: *life_regeneration_per_second_per_10k,
         }),
         TuningEffect::GobboRepair { profile, .. } => {
             assert!(
@@ -3287,6 +3294,17 @@ pub(crate) fn resistant_skin_for_version(version: MapVersion, abilities: &[u32])
             binding.source == NativeEffectSource::new(NativeEffectSourceKind::UnitAbility, *ability)
                 && binding.valid_versions.contains(version)
                 && binding.implementation == NativeEffectImplementationId::WarcraftResistantSkinV1
+        })
+    })
+}
+
+/// Audited native Spell Shield binding on the unit's ability inventory.
+pub(crate) fn spell_shield_for_version(version: MapVersion, abilities: &[u32]) -> bool {
+    abilities.iter().any(|ability| {
+        catalog().bindings.iter().any(|binding| {
+            binding.source == NativeEffectSource::new(NativeEffectSourceKind::UnitAbility, *ability)
+                && binding.valid_versions.contains(version)
+                && binding.implementation == NativeEffectImplementationId::WarcraftSpellShieldV1
         })
     })
 }

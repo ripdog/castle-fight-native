@@ -27,6 +27,79 @@ pub enum ParasiteChild {
     /// The Brood Mother's Infest: the Parasite damages its host over time, and the cast arms a
     /// two-step script that turns on the sibling Web autocast and then this ability's own.
     Infest(InfestProfile),
+    /// The Ancient Keeper's Treant Sprout: a tree wall around the caster that turns into Treants.
+    TreantSprout(TreantSproutProfile),
+}
+
+pub const MAX_SPROUT_TREES: usize = 8;
+
+/// `keeperSpell`: nearby ground combat bodies are thrown clear, a ring of wall trees blocks pathing
+/// for the transform delay, and the surviving trees become short-lived Treants.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct TreantSproutProfile {
+    pub ability: AbilityId,
+    pub map_version: crate::MapVersion,
+    /// Ground combat bodies this close to the caster (the caster excepted) are displaced.
+    pub clearance_radius: i32,
+    pub displacement_minimum: i32,
+    pub displacement_maximum: i32,
+    /// The displacement bearing is uniform in this window plus half a turn for the second side.
+    pub bearing_minimum_degrees: i16,
+    pub bearing_maximum_degrees: i16,
+    pub tree_count: u8,
+    pub tree_angles_degrees: [i16; MAX_SPROUT_TREES],
+    pub tree_radius: i32,
+    /// Side length of each tree's square pathing footprint, in navigation cells.
+    pub tree_cells: u16,
+    pub transform_delay_ticks: u16,
+    pub treant_rawcode: u32,
+    pub treant_radius: i32,
+    pub treant_life_ticks: u16,
+}
+
+impl TreantSproutProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 16] {
+        let pack = |from: usize| {
+            self.tree_angles_degrees[from..from + 4]
+                .iter()
+                .enumerate()
+                .fold(0_u64, |word, (i, a)| word | (*a as u16 as u64) << (16 * i))
+        };
+        [
+            7,
+            u64::from(self.ability.0),
+            u64::from(self.map_version.major) | u64::from(self.map_version.minor) << 16,
+            self.clearance_radius as u64,
+            self.displacement_minimum as u64,
+            self.displacement_maximum as u64,
+            self.bearing_minimum_degrees as u16 as u64
+                | (self.bearing_maximum_degrees as u16 as u64) << 16
+                | u64::from(self.tree_count) << 32
+                | u64::from(self.tree_cells) << 40
+                | u64::from(self.transform_delay_ticks) << 48,
+            pack(0),
+            pack(4),
+            self.tree_radius as u64,
+            u64::from(self.treant_rawcode),
+            self.treant_radius as u64,
+            u64::from(self.treant_life_ticks),
+            0,
+            0,
+            0,
+        ]
+    }
+}
+
+/// A live wall: its footprints block ground pathing until the transform tick.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TreantSproutState {
+    pub profile: TreantSproutProfile,
+    pub source: SimId,
+    pub owner: PlayerId,
+    pub team: Team,
+    pub center: SimPoint,
+    pub due_tick: u64,
+    pub footprints: [BuildingFootprint; MAX_SPROUT_TREES],
 }
 
 /// Native Parasite damage plus the map script that follows every cast of the Brood Mother's
@@ -116,6 +189,7 @@ impl ParasiteChild {
             }
             Self::LandMine(p) => p.canonical_words(),
             Self::Infest(p) => p.canonical_words(),
+            Self::TreantSprout(p) => p.canonical_words(),
         }
     }
 }

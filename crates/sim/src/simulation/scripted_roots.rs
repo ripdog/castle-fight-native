@@ -11,7 +11,7 @@ pub(super) fn primary_eligible(
         && unit.classifications.combat_sapper
         && unit.target_movement_class() == MovementClass::Ground
         && !unit.classifications.invulnerable
-        && !unit.classifications.spell_immune
+        && !unit.spell_blocked()
         && !(p.primary_nonhero_only && unit.classifications.uses_hero_spell_rules())
         && unit.visible_to(team, tick)
 }
@@ -91,7 +91,7 @@ impl Simulation {
             }
             if u.health <= 0
                 || u.classifications.invulnerable
-                || u.classifications.spell_immune
+                || u.spell_blocked()
                 || (u.is_invisible(self.next_tick) && !u.visible_to(source.team, self.next_tick))
                 || !p.roots.targets.can_target_unit(u.target_movement_class())
                 || (p.roots.nonhero_only && u.classifications.uses_hero_spell_rules())

@@ -314,6 +314,9 @@ impl Simulation {
                 NativeAction::EchoRemnant(state) => self.advance_echo_remnant(entity, state, units),
                 NativeAction::LandMine(state) => self.advance_land_mine(entity, state, units),
                 NativeAction::PlagueWard(state) => self.advance_plague_ward(entity, state, units),
+                NativeAction::TreantSprout(state) => {
+                    self.advance_treant_sprout(entity, state, units)
+                }
                 NativeAction::DeathAndDecay(state) => {
                     self.advance_death_and_decay(entity, state, units)
                 }

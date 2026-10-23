@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A03Q","unit_rawcode":"e00C","kind":"attack-dispel"},
+    {"source_kind":"unit-ability","source_key":"A0BX","unit_rawcode":"e00C","kind":"parasite-script"},
+    {"source_kind":"unit-ability","source_key":"A0B0","unit_rawcode":"e00C","kind":"native-aura"},
+    {"source_kind":"unit-ability","source_key":"A0BW","unit_rawcode":"e00C","kind":"evasion"},
     {"source_kind":"unit-ability","source_key":"A03Q","unit_rawcode":"e009","kind":"attack-dispel"},
     {"source_kind":"unit-ability","source_key":"A0BK","unit_rawcode":"e00D","kind":"spiked-shell"},
     {"source_kind":"unit-ability","source_key":"A0BU","unit_rawcode":"e009","kind":"feral-spirit"},

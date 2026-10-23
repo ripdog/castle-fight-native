@@ -13,7 +13,7 @@ pub(super) fn purge_primary_eligible(
         && u.classifications.combat_sapper
         && u.target_movement_class() == MovementClass::Ground
         && !u.classifications.invulnerable
-        && !u.classifications.spell_immune
+        && !u.spell_blocked()
         && !(p.parent_nonhero_only && u.classifications.uses_hero_spell_rules())
         && u.visible_to(team, tick)
 }
@@ -192,7 +192,7 @@ impl Simulation {
         let u = &mut units[target];
         if u.health <= 0
             || u.classifications.invulnerable
-            || u.classifications.spell_immune
+            || u.spell_blocked()
             || !u.visible_to(source.team, self.next_tick)
             || !p.child.targets.can_target_unit(u.target_movement_class())
             || self.ability_source_distance_sq(source.origin, u.position)

@@ -16,6 +16,7 @@ fn aura() -> PassiveUnitEffect {
         suspend_during_spell_cooldown: false,
         organic_only: false,
         excludes_source: false,
+        life_regeneration_per_second_per_10k: 0,
     })
 }
 

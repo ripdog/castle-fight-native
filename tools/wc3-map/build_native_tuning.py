@@ -605,9 +605,14 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         self_only = base == 'ACvp' and fields['targs1'] == 'self'
         # Vampiric Aura on friendly organic bodies: no `self` token, so the carrier is not a recipient.
         friends_only = base == 'ACvp' and set(fields['targs1'].split(',')) == {'air', 'friend', 'ground', 'invulnerable', 'organic', 'vulnerable'}
-        if not (self_only or friends_only) and set(fields["targs1"].split(",")) != {"air", "ground", "friend", "self", "vuln", "invu"}:
+        mask = {"vuln" if token == "vulnerable" else "invu" if token == "invulnerable" else token
+            for token in fields["targs1"].split(",")}
+        if base == "ACua":
+            # Unholy Aura names the sapper class beside the movement classes; every combat body has it.
+            mask.discard("sapper")
+        if not (self_only or friends_only) and mask != {"air", "ground", "friend", "self", "vuln", "invu"}:
             raise ValueError("native aura requires explicit target semantics")
-        damage, armor, mana, returned, melee, ranged = 0, 0, 0, 0, True, True
+        damage, armor, mana, returned, melee, ranged, life = 0, 0, 0, 0, True, True, 0
         if base in {"AIar", "ACac"}:
             if number("DataD1") != 0 or number("DataB1") not in {0, 1} or number("DataC1") not in {0, 1}:
                 raise ValueError("native damage aura requires percent damage and explicit weapon classes")
@@ -624,6 +629,11 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
             if not (self_only or friends_only) or number('DataA1', 10000) < 0:
                 raise ValueError('Vampiric Aura requires its exact native self or friendly organic mask and positive factor')
             melee, ranged = True, False
+        elif base == "ACua":
+            # Native Unholy Aura: DataA movement factor (unsupported), DataB life regeneration, DataC percent flag.
+            if number("DataA1") != 0 or number("DataC1") != 0 or number("DataB1") <= 0:
+                raise ValueError("native Unholy Aura requires flat life regeneration and no movement bonus")
+            life = number("DataB1", 10_000)
         elif base == "AEah":
             if number("DataB1") != 1 or number("DataA1", 10_000) < 0:
                 raise ValueError("native thorns aura requires nonnegative percent-return damage")
@@ -637,6 +647,8 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
             linger_ticks=int((Decimal(fields["dur1"]) * 30).to_integral_value(rounding="ROUND_CEILING")))
         if friends_only:
             effect.update(organic_only=True, excludes_source=True)
+        if life:
+            effect.update(life_regeneration_per_second_per_10k=life)
     elif kind == "pulverize":
         if set(fields["targs1"].split(",")) - {"ground", "enemy", "enemies", "neutral", "ward"}:
             raise ValueError("unsupported native Pulverize mask")
@@ -932,8 +944,10 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             field = row["source_field"].lower()
             if field:
                 abilities.setdefault(row["rawcode"], {})[field] = scalar(row["recovered_value_json"])
-    from project_native_reference import project as project_reference
+    from project_native_reference import destructable_reader, project as project_reference
     reference = project_reference(repo_root, retained)
+    destructables = destructable_reader(repo_root, retained)
+    pathing_textures = json.loads(retained("resolved/pathing-textures.json"))
     for code, fields in reference['abilities'].items():
         abilities.setdefault(code, {key: str(value) for key, value in fields.items()})
         ability_levels.setdefault(code, {key: str(value) for key, value in fields.items()})
@@ -1038,6 +1052,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             from project_attack_dispel import project as project_attack_dispel
             source_damage_rules.append(project_attack_dispel(recipe, {
                 "functions": functions, "attack_dispel": attack_dispels[recipe["unit_rawcode"]],
+                "map_version": dict(zip(["major", "minor"], map(int, release["map_version"].split(".")))),
                 "attack_dispel_sources": attack_dispel_sources[recipe["unit_rawcode"]]}))
             continue
         if recipe["source_kind"] not in {"unit-ability", "ability-effect"}:
@@ -1149,6 +1164,8 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             detail.update(all_bases=ability_bases, functions=functions, git_tree=tree,
                 support_system=system_mechanics["support-order-controller"],
                 map_version=dict(zip(["major", "minor"], map(int, release["map_version"].split(".")))))
+        if recipe["kind"] == "parasite-script":
+            detail.update(destructable=destructables, pathing_textures=pathing_textures)
         if recipe["kind"] in {"scripted-roots", "wind-walk", "native-heal", "orb-charm"}:
             detail.update(all_bases=ability_bases, functions=functions, git_tree=tree,
                 map_version=dict(zip(["major", "minor"], map(int, release["map_version"].split(".")))))

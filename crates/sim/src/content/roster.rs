@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    AncientKeeper = 0x1000_00c1 => b"e00C",
     Treant = 0x1000_00c0 => b"e00D",
     Keeper = 0x1000_00bf => b"e009",
     Dryad = 0x1000_00be => b"e006",
@@ -225,6 +226,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    AncientOfEternity = 0x2000_00af => b"h01J",
     AncientOfLife = 0x2000_00ae => b"h01H",
     AncientOfGrowth = 0x2000_00ad => b"h013",
     Enigma = 0x2000_00ac => b"h071",

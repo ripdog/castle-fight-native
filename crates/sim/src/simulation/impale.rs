@@ -13,7 +13,7 @@ pub(super) fn primary_eligible(u: &UnitSnapshot, team: Team, tick: u64) -> bool 
         && u.target_movement_class() == MovementClass::Ground
         && !u.classifications.uses_hero_spell_rules()
         && !u.classifications.invulnerable
-        && !u.classifications.spell_immune
+        && !u.spell_blocked()
         && !u.classifications.locust
         && u.visible_to(team, tick)
 }

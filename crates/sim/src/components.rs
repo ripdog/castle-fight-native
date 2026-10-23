@@ -34,8 +34,9 @@ pub use building_script::{
 pub use parasite_area_buff::ParasiteAreaBuffProfile;
 pub use parasite_script::{
     InfestProfile, LandMineProfile, LandMineState, LocustState, LocustSwarmProfile,
-    LocustSwarmState, MAX_LOCUSTS, ParasiteChild, ParasiteScriptProfile, PendingParasiteScript,
-    SandCloudProfile, SandCloudState, SandCloudVariant,
+    LocustSwarmState, MAX_LOCUSTS, MAX_SPROUT_TREES, ParasiteChild, ParasiteScriptProfile,
+    PendingParasiteScript, SandCloudProfile, SandCloudState, SandCloudVariant, TreantSproutProfile,
+    TreantSproutState,
 };
 pub use travelling_mana_clap::TravellingManaClapProfile;
 pub(crate) use travelling_mana_clap::TravellingManaClapState;
@@ -926,6 +927,9 @@ pub struct AuraEffectProfile {
     /// The carrier is not one of its own recipients.
     #[serde(default)]
     pub excludes_source: bool,
+    /// Hit points regenerated per second by every recipient (Unholy Aura's life regeneration).
+    #[serde(default)]
+    pub life_regeneration_per_second_per_10k: u32,
 }
 
 /// Script-ordered native Mirror Image. Values are version-scoped source projections.
@@ -1295,6 +1299,10 @@ pub struct UnitClassifications {
     pub hero: bool,
     /// Native Arsk: hero targeting/duration rules for negative spells only.
     pub resistant_skin: bool,
+    /// Native Spell Shield (`ANss`): absorbs hostile unit-targeted spells (area effects, orbs and
+    /// attacks are not spells aimed at the bearer).
+    #[serde(default)]
+    pub spell_shield: bool,
     /// Present only while the handle belongs to the native Neutral Hostile creep group.
     pub neutral_hostile_creep_level: Option<u16>,
     pub ancient: bool,
@@ -1403,13 +1411,39 @@ pub struct AttackDispelProfile {
     pub chance_per_10k: u16,
     /// Zero dispels the attacked unit only.
     pub radius: i32,
+    /// Which bodies around the attacked unit the area form may dispel.
+    #[serde(default)]
+    pub area: Option<DispelAreaRules>,
 }
+
+/// `isDispellableEnemyOf`: alive hostile combat bodies without the listed exclusions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct DispelAreaRules {
+    pub map_version: crate::MapVersion,
+    pub excluded_abilities: [AbilityId; 2],
+    pub excluded_unit_rawcode: u32,
+}
+
 impl AttackDispelProfile {
-    pub(crate) fn canonical_words(self) -> [u64; 3] {
+    pub(crate) fn canonical_words(self) -> [u64; 8] {
+        let area = self.area.map_or([0; 5], |area| {
+            [
+                1,
+                u64::from(area.map_version.major) | u64::from(area.map_version.minor) << 16,
+                u64::from(area.excluded_abilities[0].0),
+                u64::from(area.excluded_abilities[1].0),
+                u64::from(area.excluded_unit_rawcode),
+            ]
+        });
         [
             u64::from(self.ability.0),
             u64::from(self.chance_per_10k),
             self.radius as u64,
+            area[0],
+            area[1],
+            area[2],
+            area[3],
+            area[4],
         ]
     }
 }

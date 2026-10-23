@@ -5,7 +5,7 @@ use crate::components::{
     MasterProjectileProfile, MasterProjectileState, NativeAction,
 };
 
-const DIRECTION_SCALE: i64 = 1_000_000;
+pub(in crate::simulation) const DIRECTION_SCALE: i64 = 1_000_000;
 const RANDOM_BRANCH: u64 = 0x6d61_7374_6572_6272;
 const RANDOM_FAN: u64 = 0x6d61_7374_6572_6661;
 
@@ -55,7 +55,11 @@ pub(in crate::simulation) fn rotate(p: SimPoint, angle: i32) -> SimPoint {
         ((i64::from(p.x) * y + i64::from(p.y) * x) * sign / 1_000_000_000) as i32,
     ))
 }
-fn offset(origin: SimPoint, direction: SimPoint, distance: i32) -> SimPoint {
+pub(in crate::simulation) fn offset(
+    origin: SimPoint,
+    direction: SimPoint,
+    distance: i32,
+) -> SimPoint {
     SimPoint::new(
         origin.x + (i64::from(direction.x) * i64::from(distance) / DIRECTION_SCALE) as i32,
         origin.y + (i64::from(direction.y) * i64::from(distance) / DIRECTION_SCALE) as i32,

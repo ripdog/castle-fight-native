@@ -16,7 +16,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 122;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 123;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -58,6 +58,7 @@ mod starfall;
 mod thunder_call;
 mod training_variants;
 mod travelling_mana_clap;
+mod treant_sprout;
 mod weather;
 mod well_of_pain;
 mod whirlwind;
@@ -2000,11 +2001,13 @@ impl Simulation {
             Span::NativeBuildingAuras,
             self.refresh_native_building_auras(&mut units, &mut buildings)
         );
-        if self
-            .last_ability_casts
-            .iter()
-            .any(|c| matches!(c.effect, AbilityEffect::NagaCharm(_)))
-        {
+        if self.last_ability_casts.iter().any(|c| match c.effect {
+            AbilityEffect::NagaCharm(_) => true,
+            AbilityEffect::ParasiteScript(p) => {
+                matches!(p.child, crate::ParasiteChild::TreantSprout(_))
+            }
+            _ => false,
+        }) {
             // Ownership changes during spell resolution invalidate team partitions immediately.
             grid = timed!(
                 spans,
@@ -3287,7 +3290,15 @@ impl Simulation {
             return false;
         }
         let mut query = self.world.query::<&BuildingFootprint>();
-        let building_footprints: Vec<_> = query.iter(&self.world).copied().collect();
+        let mut building_footprints: Vec<_> = query.iter(&self.world).copied().collect();
+        // A live Treant Sprout wall blocks ground pathing until its trees are killed.
+        let mut actions = self.world.query::<&crate::components::NativeAction>();
+        building_footprints.extend(actions.iter(&self.world).flat_map(|action| match action {
+            crate::components::NativeAction::TreantSprout(state) => {
+                state.footprints[..usize::from(state.profile.tree_count)].to_vec()
+            }
+            _ => Vec::new(),
+        }));
         let blockers = self
             .config
             .static_blockers
@@ -3384,7 +3395,8 @@ impl Simulation {
                         id: ModifierId(profile.ability.0),
                         native_buff: None,
                         armor_bonus_per_100: profile.armor_bonus_per_100,
-                        regeneration_per_second_per_10k: 0,
+                        regeneration_per_second_per_10k: profile
+                            .life_regeneration_per_second_per_10k,
                         mana_regeneration_per_second_per_10k: profile
                             .mana_regeneration_per_second_per_10k,
                         damage_bonus_per_10k: profile.damage_bonus_per_10k,
@@ -4555,6 +4567,11 @@ impl UnitSnapshot {
         }
     }
 
+    /// Hostile unit-targeted spells cannot select this body: magic immunity or a native Spell Shield.
+    fn spell_blocked(&self) -> bool {
+        self.classifications.spell_immune || self.classifications.spell_shield
+    }
+
     fn is_invisible(&self, tick: u64) -> bool {
         self.classifications.invisible || self.status.wind_walk_invisible(tick)
     }
@@ -5614,6 +5631,17 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                     );
                     assert!(mine.initial_mana_minimum_10k <= mine.initial_mana_maximum_10k);
                     assert!(mine.explosion.delay_ticks > 0 && mine.explosion.partial_radius > 0);
+                }
+                crate::ParasiteChild::TreantSprout(sprout) => {
+                    assert!(
+                        (1..=crate::MAX_SPROUT_TREES as u8).contains(&sprout.tree_count)
+                            && sprout.tree_cells > 0
+                            && sprout.transform_delay_ticks > 0
+                            && sprout.treant_life_ticks > 0
+                            && 0 < sprout.displacement_minimum
+                            && sprout.displacement_minimum <= sprout.displacement_maximum
+                            && sprout.bearing_minimum_degrees <= sprout.bearing_maximum_degrees
+                    );
                 }
                 crate::ParasiteChild::Infest(infest) => {
                     assert!(infest.poison.damage_per_second > 0 && infest.poison.can_kill);
@@ -7571,8 +7599,31 @@ fn apply_pending_attack_effects(
             TriggeredAttackEffect::Dispel(profile) => {
                 // `isDispellableEnemyOf` applies to the area form only; the direct form removes
                 // the positive buffs of the attacked unit unconditionally.
-                if profile.radius == 0 {
-                    native_summons::dispel_positive_buffs(&mut units[index].status);
+                match profile.area {
+                    None => native_summons::dispel_positive_buffs(&mut units[index].status),
+                    Some(area) => {
+                        let center = units[index].position;
+                        let limit = square_i32(profile.radius);
+                        for other in 0..units.len() {
+                            let body = units[other];
+                            if unit_health[other] > 0
+                                && body.classifications.combat_sapper
+                                && body.team != source.team
+                                && !body.classifications.invulnerable
+                                && body.rawcode != area.excluded_unit_rawcode
+                                && center.distance_sq(body.position) <= limit
+                                && !area.excluded_abilities.iter().any(|ability| {
+                                    crate::content::unit_has_ability_for_version(
+                                        body.rawcode,
+                                        *ability,
+                                        area.map_version,
+                                    )
+                                })
+                            {
+                                native_summons::dispel_positive_buffs(&mut units[other].status);
+                            }
+                        }
+                    }
                 }
             }
             TriggeredAttackEffect::ManaBurn(profile) => {

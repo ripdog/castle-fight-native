@@ -17,7 +17,7 @@ pub(super) fn primary_eligible(
         && p.parent_targets.can_target_unit(u.target_movement_class())
         && !(p.parent_organic_only && u.mechanical)
         && !u.classifications.invulnerable
-        && !u.classifications.spell_immune
+        && !u.spell_blocked()
         && !(p.parent_nonhero_only && u.classifications.uses_hero_spell_rules())
         && u.visible_to(team, tick)
 }
@@ -43,6 +43,10 @@ impl Simulation {
             damage,
         );
         match p.child {
+            ParasiteChild::TreantSprout(sprout) => {
+                // The closure ignores the Parasite target and works at the caster.
+                self.cast_treant_sprout(source, sprout, units);
+            }
             ParasiteChild::Infest(infest) => {
                 // The script waits, then enables Web; its next step is armed when that one fires.
                 units[caster].status.pending_parasite_script = Some(PendingParasiteScript {
@@ -134,6 +138,7 @@ impl Simulation {
                 }
                 ParasiteChild::LocustSwarm(_)
                 | ParasiteChild::SandCloud(_)
+                | ParasiteChild::TreantSprout(_)
                 | ParasiteChild::LandMine(_) => {}
                 ParasiteChild::Berserk { berserk, .. } => {
                     let stunned = units[caster].status.is_stunned(self.next_tick);

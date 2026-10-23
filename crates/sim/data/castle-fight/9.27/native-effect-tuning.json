@@ -3,6 +3,124 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0BX",
+      "unit_rawcode": "e00C",
+      "spellcasting": {
+        "mana": {
+          "maximum": 400,
+          "starting": 250,
+          "regen_per_tick_per_10k": 2147513648
+        },
+        "ability": {
+          "id": 1093681752,
+          "mana_cost": 200,
+          "cooldown_ticks": 900,
+          "range": 409600,
+          "target_policy": "RandomEnemyUnit",
+          "effect": {
+            "ParasiteScript": {
+              "parent": {
+                "buff_rawcode": 1110454585,
+                "map_version": {
+                  "major": 9,
+                  "minor": 27
+                },
+                "speed_per_tick": 64853,
+                "affects_invulnerable": false,
+                "duration_ticks": 1,
+                "hero_duration_ticks": 1,
+                "body_rawcode": 1852203634,
+                "count": 1,
+                "body_duration_ticks": 1
+              },
+              "parent_targets": 1,
+              "parent_organic_only": false,
+              "parent_nonhero_only": false,
+              "ability": 1093681752,
+              "child": {
+                "TreantSprout": {
+                  "ability": 1093681752,
+                  "map_version": {
+                    "major": 9,
+                    "minor": 27
+                  },
+                  "clearance_radius": 147456,
+                  "displacement_minimum": 163840,
+                  "displacement_maximum": 223232,
+                  "bearing_minimum_degrees": 135,
+                  "bearing_maximum_degrees": 234,
+                  "tree_count": 5,
+                  "tree_angles_degrees": [
+                    0,
+                    72,
+                    144,
+                    216,
+                    288,
+                    0,
+                    0,
+                    0
+                  ],
+                  "tree_radius": 122880,
+                  "tree_cells": 4,
+                  "transform_delay_ticks": 90,
+                  "treant_rawcode": 1697656900,
+                  "treant_radius": 114688,
+                  "treant_life_ticks": 600
+                }
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 30000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "semantics": "resolved/unit-spell-semantics.tsv",
+        "functions": [
+          "UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceNatureAbilities_cast_registerUnitSpellWithTargetOrder_RaceNatureAbilities4",
+          "CallbackSingle_doAfter_RaceNatureAbilities_call_doAfter_RaceNatureAbilities4,CallbackSingle_doAfter_doAfter_RaceNatureAbilities_call_doAfter_doAfter_RaceNatureAbilities1"
+        ]
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0B0",
+      "unit_rawcode": "e00C",
+      "kind": "native-aura",
+      "radius_world": 350,
+      "damage_bonus_per_10k": 0,
+      "armor_bonus_per_100": 0,
+      "self_only": false,
+      "melee_life_steal_per_10k": 0,
+      "melee_damage_return_per_10k": 0,
+      "mana_regeneration_per_second_per_10k": 0,
+      "affects_melee": true,
+      "affects_ranged": true,
+      "linger_ticks": 0,
+      "life_regeneration_per_second_per_10k": 150000,
+      "provenance": {
+        "ability": "A0B0",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0BW",
+      "unit_rawcode": "e00C",
+      "kind": "evasion",
+      "chance_per_10k": 2500,
+      "provenance": {
+        "ability": "A0BW",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A0BK",
       "unit_rawcode": "e00D",
@@ -8477,6 +8595,41 @@
     }
   ],
   "unit_source_damage_rules": [
+    {
+      "unit_rawcode": "e00C",
+      "rule": {
+        "AttackDispel": {
+          "ability": 1093677905,
+          "chance_per_10k": 2500,
+          "radius": 102400,
+          "area": {
+            "map_version": {
+              "major": 9,
+              "minor": 27
+            },
+            "excluded_abilities": [
+              1098282348,
+              1093679176
+            ],
+            "excluded_unit_rawcode": 1747990082
+          }
+        }
+      },
+      "provenance": {
+        "source": "resolved/production-unit-special-mechanics.tsv",
+        "handler": "ancientKeeperDispelProc",
+        "dispatcher": "handleSourceDamageEffects",
+        "remove_buffs_ex": [
+          true,
+          false,
+          true,
+          false,
+          false,
+          false,
+          false
+        ]
+      }
+    },
     {
       "unit_rawcode": "e009",
       "rule": {

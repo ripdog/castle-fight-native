@@ -1,6 +1,11 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A0BX","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0B0","implementation":"warcraft-native-aura-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0BW","implementation":"warcraft-evasion-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A06Z","implementation":"warcraft-spell-shield-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0BV","implementation":"warcraft-resistant-skin-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0BK","implementation":"warcraft-spiked-shell-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0BU","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0BT","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},

@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r238";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r240";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -1053,6 +1053,7 @@ impl CastleFightUnitKind {
                         suspend_during_spell_cooldown: false,
                         organic_only: false,
                         excludes_source: false,
+                        life_regeneration_per_second_per_10k: 0,
                     }));
                 }
             }
@@ -1078,6 +1079,7 @@ impl CastleFightUnitKind {
                     suspend_during_spell_cooldown: false,
                     organic_only: false,
                     excludes_source: false,
+                    life_regeneration_per_second_per_10k: 0,
                 }));
             }
             Self::Warlock => effects.push(PassiveUnitEffect::Aura(AuraEffectProfile {
@@ -1095,6 +1097,7 @@ impl CastleFightUnitKind {
                 suspend_during_spell_cooldown: true,
                 organic_only: false,
                 excludes_source: false,
+                life_regeneration_per_second_per_10k: 0,
             })),
             _ => {}
         }
@@ -1729,6 +1732,7 @@ impl CastleFightTowerDefinition {
                     hero: false,
                     summoned: false,
                     resistant_skin: false,
+                    spell_shield: false,
                     neutral_hostile_creep_level: None,
                     ancient: false,
                     spell_immune: false,
@@ -1948,6 +1952,21 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0BX") => {
+            0x4000_028f
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0B0") => {
+            0x4000_028e
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0BW") => {
+            0x4000_028d
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A06Z") => {
+            0x4000_028c
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0BV") => {
+            0x4000_028b
+        }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0BK") => {
             0x4000_028a
         }
@@ -3622,6 +3641,7 @@ fn hash_classifications(hash: &mut ContentHash64, flags: UnitClassifications) {
     hash.write_u8(u8::from(flags.locust));
     hash.write_u8(u8::from(flags.hero));
     hash.write_u8(u8::from(flags.resistant_skin));
+    hash.write_u8(u8::from(flags.spell_shield));
     hash.write_u8(u8::from(flags.neutral_hostile_creep_level.is_some()));
     if let Some(level) = flags.neutral_hostile_creep_level {
         hash.write_u16(level);
@@ -4125,6 +4145,7 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
                 hash.write_u8(u8::from(profile.suspend_during_spell_cooldown));
                 hash.write_u8(u8::from(profile.organic_only));
                 hash.write_u8(u8::from(profile.excludes_source));
+                hash.write_u32(profile.life_regeneration_per_second_per_10k);
             }
             PassiveUnitEffect::Pulverize(profile) => {
                 hash.write_u8(12);
@@ -5616,6 +5637,10 @@ impl ExtractedContent927 {
                         .iter()
                         .any(|value| value.eq_ignore_ascii_case("ancient")),
                     resistant_skin: crate::native_effects::resistant_skin_for_version(
+                        MapVersion::CASTLE_FIGHT_9_27,
+                        &abilities,
+                    ),
+                    spell_shield: crate::native_effects::spell_shield_for_version(
                         MapVersion::CASTLE_FIGHT_9_27,
                         &abilities,
                     ),

@@ -756,6 +756,25 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u64(state.cast_tick);
                         hash.write_u64(state.expires_tick);
                     }
+                    NativeAction::TreantSprout(state) => {
+                        hash.write_u8(46);
+                        for word in state.profile.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                        hash.write_u64(state.source.0);
+                        hash.write_u8(state.owner.0);
+                        hash.write_u8(state.team.0);
+                        hash.write_i32(state.center.x);
+                        hash.write_i32(state.center.y);
+                        hash.write_u64(state.due_tick);
+                        for footprint in &state.footprints[..usize::from(state.profile.tree_count)]
+                        {
+                            hash.write_i32(footprint.min_x);
+                            hash.write_i32(footprint.min_y);
+                            hash.write_u16(footprint.width);
+                            hash.write_u16(footprint.height);
+                        }
+                    }
                     NativeAction::PlagueWard(state) => {
                         hash.write_u8(44);
                         hash.write_u64(state.source.0);
@@ -2909,6 +2928,7 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: &PassiveUnitEffects) {
                 hash.write_u8(u8::from(profile.suspend_during_spell_cooldown));
                 hash.write_u8(u8::from(profile.organic_only));
                 hash.write_u8(u8::from(profile.excludes_source));
+                hash.write_u32(profile.life_regeneration_per_second_per_10k);
             }
             PassiveUnitEffect::Pulverize(profile) => {
                 hash.write_u8(12);
@@ -3057,6 +3077,7 @@ fn hash_unit_classifications(hash: &mut Fnv64, flags: &UnitClassifications) {
     hash.write_u8(u8::from(flags.locust));
     hash.write_u8(u8::from(flags.hero));
     hash.write_u8(u8::from(flags.resistant_skin));
+    hash.write_u8(u8::from(flags.spell_shield));
     hash.write_u8(u8::from(flags.neutral_hostile_creep_level.is_some()));
     if let Some(level) = flags.neutral_hostile_creep_level {
         hash.write_u16(level);

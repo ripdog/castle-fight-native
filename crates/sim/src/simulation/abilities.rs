@@ -2211,7 +2211,7 @@ impl Simulation {
             if target.health <= 0
                 || target.team == source.team
                 || target.classifications.invulnerable
-                || target.classifications.spell_immune
+                || target.spell_blocked()
                 || !self.native_target_visible(source, ability, target)
                 || (ability.target_policy == AbilityTargetPolicy::FlyingEnemyUnit
                     && (target.target_movement_class() != MovementClass::Air
@@ -2429,7 +2429,11 @@ impl Simulation {
             && !target.classifications.invulnerable
             && (ability.target_policy == AbilityTargetPolicy::RandomEnemyDebuff
                 || target.visible_to(source.team, self.next_tick))
-            && (ensnare || !target.classifications.spell_immune)
+            && (if ensnare {
+                !target.classifications.spell_shield
+            } else {
+                !target.spell_blocked()
+            })
             && self.ability_source_distance_sq(source.origin, target.position)
                 <= square_i32(ability.range)
             && (ability.target_policy == AbilityTargetPolicy::RandomEnemyDebuff
@@ -2653,7 +2657,7 @@ impl Simulation {
                             target.team != source.team
                                 && self.native_target_visible(source, ability, target)
                                 && !target.classifications.invulnerable
-                                && !target.classifications.spell_immune
+                                && !target.spell_blocked()
                                 && (ability.target_policy != AbilityTargetPolicy::FlyingEnemyUnit
                                     || (target.target_movement_class() == MovementClass::Air
                                         && target.classifications.combat_sapper

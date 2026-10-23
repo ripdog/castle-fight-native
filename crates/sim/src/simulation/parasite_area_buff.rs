@@ -12,7 +12,7 @@ pub(super) fn primary_eligible(
         && u.classifications.combat_sapper
         && u.target_movement_class() == MovementClass::Ground
         && !u.classifications.invulnerable
-        && !u.classifications.spell_immune
+        && !u.spell_blocked()
         && !(p.parent_nonhero_only && u.classifications.uses_hero_spell_rules())
         && u.visible_to(team, tick)
 }

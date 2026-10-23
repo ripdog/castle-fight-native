@@ -219,6 +219,7 @@ pub(crate) enum NativeAction {
     EchoRemnant(super::EchoRemnantState),
     LandMine(super::LandMineState),
     PlagueWard(PlagueWardState),
+    TreantSprout(super::TreantSproutState),
     DeathAndDecay(super::DeathAndDecayState),
     Bolt(NativeBoltState),
     Hailstone(HailstoneState),

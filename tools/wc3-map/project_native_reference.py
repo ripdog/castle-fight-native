@@ -43,3 +43,19 @@ def project(root, retained):
     return {'abilities': {'ACsw': fields, 'Aap2': plague}, 'ethereal': {key: misc[key] for key in
         ['EtherealDamageBonus', 'EtherealDamageBonusAlly', 'EtherealHealBonus']},
         'source_sha256': sources, 'manifest_source': 'resolved/base-data-manifest.json'}
+
+
+def destructable_reader(root, retained):
+    """Return `row(code)` for stock destructable data, verified against the registered base manifest."""
+    manifest = {entry['path']: entry for entry in json.loads(retained('resolved/base-data-manifest.json'))}
+    path = 'base/units/destructabledata.slk'
+    file = root / '.wc3-base/source' / path
+    data = file.read_bytes()
+    if hashlib.sha256(data).hexdigest() != manifest[path]['sha256'] or len(data) != manifest[path]['bytes']:
+        raise ValueError(f'native reference {path} differs from registered extraction inputs')
+    spec = importlib.util.spec_from_file_location('resolve_base_data', Path(__file__).with_name('resolve-base-data.py'))
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    table = module.parse_slk(file)
+    return lambda code: table[code]

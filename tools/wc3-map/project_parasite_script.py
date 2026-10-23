@@ -218,6 +218,49 @@ def _infest(recipe, fields, detail, number, raw):
         'web_delay_ticks': number(opening[2], 30), 'reenable_delay_ticks': number(web_order[3], 30)}}, parent
 
 
+def _treant_sprout(recipe, fields, detail, number, raw):
+    """`keeperSpell`: displace nearby ground bodies, wall the caster in with trees, then raise Treants."""
+    parameters = detail['semantic_parameters']
+    names = detail['semantics_row']['source_functions'].split(',')
+    closure, spell, transform, spawn, remove = (detail['functions'][name] for name in names)
+    angles = parameters['tree_angles_degrees']
+    tree = parameters['tree_rawcode']
+    row = detail['destructable'](tree)
+    texture = detail['pathing_textures'][row['pathTex'].split('\\')[-1].lower()]
+    rows = texture['hex_rows']
+    scatter = re.search(r'randomAliveGroundSapperNear\(\w+,([\d.]+)\)', spell)
+    distance = re.search(r'=GetRandomReal\(([\d.]+),([\d.]+)\)\w+=tupleCopy2\(real_asAngleDegrees\(\(GetRandomReal\(([\d.]+),([\d.]+)\)\+\(180\.\*__wurst_ensureInt\(lGb\[player_getId\(unit_getOwner\(\w+\)\)\]\)\)\)\)\)', spell)
+    walls = re.findall(r'CreateDestructable\((\d+),\(\w+\[1\]\+\(([\d.]+)\*Cos\(\(([\d.]+)\*bj_DEGTORAD\)\)\)\)', spell)
+    wait = re.search(r'doAfter\(([\d.]+),\w+\)end$', spell)
+    births = re.findall(r'spawnTreantFromWall\(\w+\.p,\w+\.d\d,\w+\.pos,([\d.]+)\)', transform)
+    child = re.search(r'createUnit\(\w+,(\d+),\w+,real_asAngleDegrees\(\w+\)\)__wurst_safe_UnitApplyTimedLife\(\w+,1110454833,([\d.]+)\)', spawn)
+    ring = re.search(r'vec2_polarOffset\(\w+,real_asAngleDegrees\(\w+\),([\d.]+)\)', spawn)
+    if (closure.strip().count('keeperSpell(') != 1 or scatter is None or distance is None or wait is None or child is None
+            or ring is None or len(walls) != len(angles) or len(births) != len(angles)
+            or [Decimal(a) for _, _, a in walls] != [Decimal(a) for a in angles]
+            or [Decimal(a) for a in births] != [Decimal(a) for a in angles]
+            or any(int(code) != raw(tree) or Decimal(radius) != Decimal(parameters['tree_radius']) for code, radius, _ in walls)
+            or Decimal(scatter[1]) != Decimal(parameters['nearby_ground_clearance_radius'])
+            or [Decimal(distance[1]), Decimal(distance[2])] != [Decimal(v) for v in parameters['nearby_unit_displacement_radius']]
+            or Decimal(wait[1]) != Decimal(parameters['transform_delay_seconds'])
+            or int(child[1]) != raw(parameters['treant_rawcode']) or Decimal(child[2]) != Decimal(parameters['treant_timed_life_seconds'])
+            or Decimal(ring[1]) != Decimal(parameters['treant_spawn_radius'])
+            or 'orderCodeAttack(' not in transform or 'KillDestructable' not in transform
+            or parameters['tree_count'] != len(angles) or len(angles) > 8
+            or row['targType'] != 'tree' or texture['width_cells'] != texture['height_cells']
+            or any(set(r) != {'5'} for r in rows)):
+        raise ValueError('Treant Sprout control flow changed: displaced bystanders, tree ring, transform delay, timed Treants')
+    cells = texture['width_cells']
+    padded = list(angles) + [0] * (8 - len(angles))
+    return {'TreantSprout': {'ability': raw(recipe['source_key']), 'map_version': detail['map_version'],
+        'clearance_radius': number(scatter[1], 1024),
+        'displacement_minimum': number(distance[1], 1024), 'displacement_maximum': number(distance[2], 1024),
+        'bearing_minimum_degrees': number(distance[3]), 'bearing_maximum_degrees': number(distance[4]),
+        'tree_count': len(angles), 'tree_angles_degrees': padded, 'tree_radius': number(parameters['tree_radius'], 1024),
+        'tree_cells': cells, 'transform_delay_ticks': number(wait[1], 30), 'treant_rawcode': raw(parameters['treant_rawcode']),
+        'treant_radius': number(ring[1], 1024), 'treant_life_ticks': number(child[2], 30)}}
+
+
 def project(recipe, fields, unit, protected, detail):
     number, raw = _helpers()
     row, semantics = detail['mechanics_row'], detail['semantics_row']
@@ -237,7 +280,9 @@ def project(recipe, fields, unit, protected, detail):
         raise ValueError('Parasite script parent needs an audited hostile unit mask')
     detail = dict(detail, semantic_parameters=__import__('json').loads(semantics['parameters_json']))
     parent = None
-    if kind == 'registered-infest-then-enable-autocasts':
+    if kind == 'five-tree-wall-to-treants':
+        child = _treant_sprout(recipe, fields, detail, number, raw)
+    elif kind == 'registered-infest-then-enable-autocasts':
         child, parent = _infest(recipe, fields, detail, number, raw)
     elif kind == 'delayed-life-steal':
         child = _life_steal(recipe, detail, number)
