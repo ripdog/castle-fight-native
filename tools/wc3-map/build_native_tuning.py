@@ -454,6 +454,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
         return effect
     if kind == "ensnare":
         return project_ensnare(recipe, fields, unit, protected, mechanics)
+    if kind == "native-web":
+        from project_web import project
+        return project(recipe, fields, unit, protected, mechanics)
     if kind == "kill-berserk":
         trace = mechanics["kill_mechanics"]
         if not (trace["victim_requires_combat_sapper"] and trace["killer_must_not_be_structure"] and trace["resume_attack_immediately"]):
@@ -884,7 +887,8 @@ def project_ensnare(recipe, fields, unit, protected, mechanics):
     profile = {"ability": raw(child), "duration_ticks": tick(effect_fields["dur1"]), "hero_duration_ticks": tick(effect_fields["herodur1"]),
         "range": scaled(effect_fields["rng1"], 1024), "speed_per_tick": int(Decimal(effect_fields["missilespeed"]) * 1024 / 30),
         "lowering_ticks": tick(effect_fields["dataa1"]), "air_height": scaled(effect_fields["datab1"], 1024),
-        "melee_range": scaled(effect_fields["datac1"], 1024)}
+        "melee_range": scaled(effect_fields["datac1"], 1024),
+        "targets": 2}  # the scripted net only dispatches to flying bodies (AttackTargetMask air bit)
     rate = mana("mana_regen", 10_000)
     return {"kind": "scripted-automatic", "source_kind": recipe["source_kind"], "source_key": recipe["source_key"], "unit_rawcode": recipe["unit_rawcode"],
         "spellcasting": {"mana": {"maximum": mana("mana_max"), "starting": mana("mana_start"), "regen_per_tick_per_10k": (1 << 31) | rate},
@@ -1133,7 +1137,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             detail.update(reference_source_sha256=reference['source_sha256'], default_active_alias=default)
         detail["native_base"] = ability_bases[source]
         detail["source_unit_stats"] = unit_stats.get(recipe.get("unit_rawcode", ""), {})
-        if recipe["kind"] in {"impale-fan", "native-impale", "mana-attack-orb"}:
+        if recipe["kind"] in {"impale-fan", "native-impale", "mana-attack-orb", "native-web"}:
             detail["default_active_alias"] = default_autocast[recipe["unit_rawcode"]]
         if spell is not None and recipe["kind"] != "master-projectiles":
             semantics = spell_semantics_by_unit.get((spell["unit_rawcode"], spell["ability_rawcode"]),

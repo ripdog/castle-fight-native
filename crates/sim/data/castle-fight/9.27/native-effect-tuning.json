@@ -3,6 +3,89 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0AR",
+      "unit_rawcode": "n01N",
+      "spellcasting": {
+        "mana": {
+          "maximum": 0,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147483648
+        },
+        "ability": {
+          "id": 1093681490,
+          "mana_cost": 0,
+          "cooldown_ticks": 540,
+          "range": 460800,
+          "target_policy": "NearestEnemyInCombat",
+          "effect": {
+            "Ensnare": {
+              "profile": {
+                "ability": 1093681490,
+                "duration_ticks": 300,
+                "hero_duration_ticks": 300,
+                "range": 460800,
+                "speed_per_tick": 51200,
+                "lowering_ticks": 18,
+                "air_height": 204800,
+                "melee_range": 131072,
+                "targets": 3
+              },
+              "search_radius": 0,
+              "maximum_targets": 1
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 0,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "native_base": "Aweb",
+        "unit": "resolved/units.tsv",
+        "default_active_alias": "A0AR"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0AQ",
+      "unit_rawcode": "n01N",
+      "kind": "death-spawn",
+      "child_rawcode": 1848651860,
+      "count": 2,
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "Aspy"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0AP",
+      "unit_rawcode": "n01N",
+      "kind": "poison",
+      "profile": {
+        "ability": 1093681488,
+        "buff_rawcode": 1110454343,
+        "damage_per_second": 8,
+        "movement_percent_delta": 0,
+        "attack_speed_percent_delta": -15,
+        "duration_ticks": 300,
+        "hero_duration_ticks": 300,
+        "targets": 3,
+        "stack_damage": true,
+        "can_kill": false,
+        "organic_only": true
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "Aven",
+        "stacking_flags": 1,
+        "unrepresented_damage_per_second": "0"
+      }
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A0AO",
       "unit_rawcode": "n00U",
@@ -7633,7 +7716,8 @@
                 "speed_per_tick": 40960,
                 "lowering_ticks": 18,
                 "air_height": 204800,
-                "melee_range": 131072
+                "melee_range": 131072,
+                "targets": 2
               },
               "search_radius": 0,
               "maximum_targets": 1
@@ -7678,7 +7762,8 @@
                 "speed_per_tick": 40960,
                 "lowering_ticks": 18,
                 "air_height": 204800,
-                "melee_range": 131072
+                "melee_range": 131072,
+                "targets": 2
               },
               "search_radius": 0,
               "maximum_targets": 1
@@ -7736,7 +7821,8 @@
                 "speed_per_tick": 40960,
                 "lowering_ticks": 18,
                 "air_height": 204800,
-                "melee_range": 131072
+                "melee_range": 131072,
+                "targets": 2
               },
               "search_radius": 819200,
               "maximum_targets": 5
@@ -7781,7 +7867,8 @@
                 "speed_per_tick": 40960,
                 "lowering_ticks": 18,
                 "air_height": 204800,
-                "melee_range": 131072
+                "melee_range": 131072,
+                "targets": 2
               },
               "search_radius": 819200,
               "maximum_targets": 5

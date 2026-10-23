@@ -73,6 +73,7 @@ pub struct EnsnareProfile {
     pub lowering_ticks: u16,
     pub air_height: i32,
     pub melee_range: i32,
+    pub targets: AttackTargetMask,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

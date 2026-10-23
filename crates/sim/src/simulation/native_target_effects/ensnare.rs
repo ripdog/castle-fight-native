@@ -20,6 +20,7 @@ fn profile() -> SpellcastingProfile {
                     lowering_ticks: 2,
                     air_height: 0,
                     melee_range: 200 * SUBUNITS_PER_WORLD_UNIT,
+                    targets: AttackTargetMask::AIR_UNITS,
                 },
                 search_radius: 0,
                 maximum_targets: 1,

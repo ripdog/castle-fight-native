@@ -24,7 +24,9 @@ impl Simulation {
                     target.health > 0
                         && target.classifications.combat_sapper
                         && target.team != source.team
-                        && target.target_movement_class() == MovementClass::Air
+                        && profile
+                            .targets
+                            .can_target_unit(target.target_movement_class())
                         && center.distance_sq(target.position) <= square_i32(radius)
                 }
             })
@@ -36,7 +38,9 @@ impl Simulation {
             if target.health <= 0
                 || target.team == source.team
                 || target.classifications.invulnerable
-                || target.target_movement_class() != MovementClass::Air
+                || !profile
+                    .targets
+                    .can_target_unit(target.target_movement_class())
                 || origin.distance_sq(target.position) > square_i32(profile.range)
             {
                 continue;

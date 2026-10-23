@@ -2405,17 +2405,22 @@ impl Simulation {
                 }),
             ),
             AbilityEffect::Curse(p) => (ModifierId(p.ability.0), p.buff.organic_only, Some(p.buff)),
+            AbilityEffect::Ensnare { profile, .. } => (ModifierId(profile.ability.0), false, None),
             _ => return false,
         };
+        // Native Web/Ensnare is physical: spell immunity does not stop it, and a body that is
+        // already bound is not a candidate again.
+        let ensnare = matches!(ability.effect, AbilityEffect::Ensnare { .. });
         target.health > 0
             && target.team != source.team
             && !target.classifications.locust
             && (!matches!(ability.effect, AbilityEffect::NativeDebuff(p) if !p.targets.can_target_unit(target.target_movement_class())))
+            && (!matches!(ability.effect, AbilityEffect::Ensnare { profile, .. } if !profile.targets.can_target_unit(target.target_movement_class()) || target.status.ensnare.is_some()))
             && !(organic_only && target.mechanical)
             && !target.classifications.invulnerable
             && (ability.target_policy == AbilityTargetPolicy::RandomEnemyDebuff
                 || target.visible_to(source.team, self.next_tick))
-            && !target.classifications.spell_immune
+            && (ensnare || !target.classifications.spell_immune)
             && self.ability_source_distance_sq(source.origin, target.position)
                 <= square_i32(ability.range)
             && (ability.target_policy == AbilityTargetPolicy::RandomEnemyDebuff
@@ -2423,7 +2428,9 @@ impl Simulation {
                     && (self.enemy_is_in_combat(target, units)
                         || (matches!(
                             ability.effect,
-                            AbilityEffect::Curse(_) | AbilityEffect::NativeDebuff(_)
+                            AbilityEffect::Curse(_)
+                                | AbilityEffect::NativeDebuff(_)
+                                | AbilityEffect::Ensnare { .. }
                         ) && target
                             .target
                             .and_then(|id| find_building_index(buildings, id))

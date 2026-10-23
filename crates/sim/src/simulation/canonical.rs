@@ -3617,6 +3617,7 @@ fn hash_ensnare_profile(hash: &mut Fnv64, profile: &crate::components::EnsnarePr
     hash.write_u16(profile.lowering_ticks);
     hash.write_i32(profile.air_height);
     hash.write_i32(profile.melee_range);
+    hash.write_u8(profile.targets.bits());
 }
 
 fn hash_native_bolt_profile(hash: &mut Fnv64, profile: &crate::components::NativeBoltProfile) {
