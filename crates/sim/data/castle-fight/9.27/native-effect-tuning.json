@@ -4,6 +4,114 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0BK",
+      "unit_rawcode": "e00D",
+      "kind": "spiked-shell",
+      "profile": {
+        "ability": 1093681739,
+        "returned_damage_per_10k": 1000,
+        "received_damage_per_10k": 10000,
+        "armor_bonus_per_100": 0
+      },
+      "provenance": {
+        "ability": "A0BK",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0BU",
+      "unit_rawcode": "e009",
+      "spellcasting": {
+        "mana": {
+          "maximum": 200,
+          "starting": 160,
+          "regen_per_tick_per_10k": 2147503648
+        },
+        "ability": {
+          "id": 1093681749,
+          "mana_cost": 100,
+          "cooldown_ticks": 1800,
+          "range": 819200,
+          "target_policy": "ScriptedController",
+          "effect": {
+            "NativeSummon": {
+              "map_version": {
+                "major": 9,
+                "minor": 27
+              },
+              "ability": 1093681749,
+              "body_rawcode": 1697656900,
+              "count": 2,
+              "duration_ticks": 1350,
+              "forward_distance": 204800
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 20000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "functions": []
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0BT",
+      "unit_rawcode": "e009",
+      "spellcasting": {
+        "mana": {
+          "maximum": 200,
+          "starting": 160,
+          "regen_per_tick_per_10k": 2147503648
+        },
+        "ability": {
+          "id": 1093681748,
+          "mana_cost": 25,
+          "cooldown_ticks": 240,
+          "range": 460800,
+          "target_policy": "WoundedFriendlyUnit",
+          "effect": {
+            "Heal": {
+              "amount": 150,
+              "targets": 3,
+              "organic_only": true,
+              "nonancient_only": true,
+              "affects_invulnerable": true,
+              "resume_attack_ticks": 18,
+              "touch": {
+                "armor": {
+                  "ability": 1095328819,
+                  "effect": {
+                    "Armor": 300
+                  }
+                },
+                "summon": {
+                  "ability": 1093681749,
+                  "resume_delay_ticks": 30
+                }
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 20000,
+      "provenance": {
+        "unrepresented_trigger_heal": "0",
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "native": "resolved/object-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "semantics": "resolved/unit-spell-semantics.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "A0AY",
       "unit_rawcode": "e006",
       "kind": "spell-resistance",
@@ -4483,11 +4591,7 @@
         "source": "resolved/object-fields.tsv",
         "protected": "resolved/protected-ability-fields.tsv",
         "script": "resolved/unit-spell-mechanics.tsv",
-        "functions": [
-          "CallbackSingle_doAfter_RaceNagaAbilities_call_doAfter_RaceNagaAbilities",
-          "CallbackSingle_doAfter_doAfter_RaceNagaAbilities_call_doAfter_doAfter_RaceNagaAbilities",
-          "UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceNagaAbilities_cast_registerUnitSpellWithTargetOrder_RaceNagaAbilities"
-        ]
+        "functions": []
       }
     },
     {
@@ -8373,6 +8477,30 @@
     }
   ],
   "unit_source_damage_rules": [
+    {
+      "unit_rawcode": "e009",
+      "rule": {
+        "AttackDispel": {
+          "ability": 1093677905,
+          "chance_per_10k": 2000,
+          "radius": 0
+        }
+      },
+      "provenance": {
+        "source": "resolved/production-unit-special-mechanics.tsv",
+        "handler": "keeperDispelProc",
+        "dispatcher": "handleSourceDamageEffects",
+        "remove_buffs_ex": [
+          true,
+          false,
+          true,
+          false,
+          false,
+          false,
+          false
+        ]
+      }
+    },
     {
       "unit_rawcode": "e006",
       "rule": {

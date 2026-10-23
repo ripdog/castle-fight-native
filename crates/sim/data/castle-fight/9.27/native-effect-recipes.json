@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A03Q","unit_rawcode":"e009","kind":"attack-dispel"},
+    {"source_kind":"unit-ability","source_key":"A0BK","unit_rawcode":"e00D","kind":"spiked-shell"},
+    {"source_kind":"unit-ability","source_key":"A0BU","unit_rawcode":"e009","kind":"feral-spirit"},
+    {"source_kind":"unit-ability","source_key":"A0BT","unit_rawcode":"e009","kind":"native-heal"},
     {"source_kind":"unit-ability","source_key":"A03Q","unit_rawcode":"e006","kind":"attack-dispel"},
     {"source_kind":"unit-ability","source_key":"A0AY","unit_rawcode":"e006","kind":"spell-resistance"},
     {"source_kind":"unit-ability","source_key":"A004","unit_rawcode":"e006","kind":"native-heal"},

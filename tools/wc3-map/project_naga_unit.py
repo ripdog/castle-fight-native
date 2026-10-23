@@ -78,4 +78,4 @@ def project(recipe, fields, unit, protected, detail):
         'mana_regen_per_second_per_10k': rate, 'effect_ability_rawcode': effect_raw,
         'provenance': {'git_tree': detail['git_tree'], 'source': 'resolved/object-fields.tsv',
             'protected': 'resolved/protected-ability-fields.tsv', 'script': 'resolved/unit-spell-mechanics.tsv',
-            'functions': sorted(detail.get('naga_functions', {}))}}
+            'functions': [] if recipe['kind'] == 'feral-spirit' else sorted(detail.get('naga_functions', {}))}}
