@@ -511,6 +511,7 @@ fn cleanse_native_effects(
             PassiveUnitEffect::TrueSight(profile) => Some(profile.ability),
             PassiveUnitEffect::AttackDispel(profile) => Some(profile.ability),
             PassiveUnitEffect::FeralBear(profile) => Some(profile.ability),
+            PassiveUnitEffect::WarClub(profile) => Some(profile.ability),
             PassiveUnitEffect::DeathExplosion(p) => Some(p.ability),
             PassiveUnitEffect::ManaAttackOrb(p) => Some(p.ability),
             PassiveUnitEffect::Incinerate(p) => Some(p.ability),

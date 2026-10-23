@@ -1,6 +1,13 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A0BI","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Taunt (Atau): the immediate order the A0BJ script issues at the Mountain Giant; its effect is the Taunt child of the A0BJ Parasite script."},
+    {"source_kind":"unit-ability","source_key":"A0BJ","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0BC","implementation":"warcraft-war-club-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0BH","implementation":"warcraft-pulverize-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0BE","implementation":"warcraft-hardened-skin-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0BF","implementation":"warcraft-spiked-shell-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0CF","implementation":"warcraft-spell-resistance-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0B4","implementation":"warcraft-critical-strike-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0B2","implementation":"warcraft-bash-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0BZ","implementation":"warcraft-cleave-v1","valid_from":"9.27","valid_through":"9.27"},

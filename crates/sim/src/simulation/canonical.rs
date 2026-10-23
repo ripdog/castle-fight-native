@@ -2336,6 +2336,21 @@ fn hash_status_state(hash: &mut Fnv64, status: &StatusState) {
     if let Some(tick) = status.summon_order_refresh_tick {
         hash.write_u64(tick);
     }
+    hash.write_u8(u8::from(status.war_club.is_some()));
+    if let Some(club) = status.war_club {
+        for word in club.profile.canonical_words() {
+            hash.write_u64(word);
+        }
+        hash.write_u64(club.resume_tick);
+        match club.phase {
+            crate::components::ClubPhase::Gripping => hash.write_u8(0),
+            crate::components::ClubPhase::Armed { start_sequence } => {
+                hash.write_u8(1);
+                hash.write_u64(start_sequence);
+            }
+            crate::components::ClubPhase::Spent => hash.write_u8(2),
+        }
+    }
     hash.write_u8(u8::from(status.feral_bear.is_some()));
     if let Some(bear) = status.feral_bear {
         for word in bear.profile.canonical_words() {
@@ -2879,6 +2894,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: &PassiveUnitEffects) {
             }
             PassiveUnitEffect::Demolish(profile) => {
                 hash.write_u8(48);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
+            PassiveUnitEffect::WarClub(profile) => {
+                hash.write_u8(52);
                 for word in profile.canonical_words() {
                     hash.write_u64(word);
                 }

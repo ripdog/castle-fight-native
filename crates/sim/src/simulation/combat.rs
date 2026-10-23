@@ -1305,6 +1305,7 @@ impl Simulation {
                 | PassiveUnitEffect::DiseaseCloud(_)
                 | PassiveUnitEffect::TrueSight(_)
                 | PassiveUnitEffect::FeralBear(_)
+                | PassiveUnitEffect::WarClub(_)
                 | PassiveUnitEffect::KillBerserk(_)
                 | PassiveUnitEffect::Pulverize(_)
                 | PassiveUnitEffect::Evasion(_)

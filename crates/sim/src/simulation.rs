@@ -16,7 +16,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 124;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 125;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -60,6 +60,7 @@ mod thunder_call;
 mod training_variants;
 mod travelling_mana_clap;
 mod treant_sprout;
+mod war_club;
 mod weather;
 mod well_of_pain;
 mod whirlwind;
@@ -3196,6 +3197,7 @@ impl Simulation {
                 damage_charge: damage_charge::initial_state(properties.passive_effects),
                 mirror_image: mirror_images::initial_state(properties.passive_effects),
                 feral_bear: feral_bear::initial_state(properties.passive_effects),
+                war_club: war_club::initial_state(properties.passive_effects, self.next_tick),
                 ..Default::default()
             },
             NavigationState::default(),
@@ -4325,6 +4327,7 @@ impl Simulation {
         }
         for unit in &mut units {
             self.project_building_spell_control(unit);
+            war_club::project(unit, self.next_tick);
             unit.classifications.invulnerable |= unit
                 .status
                 .impale
@@ -5633,6 +5636,9 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                     );
                     assert!(mine.initial_mana_minimum_10k <= mine.initial_mana_maximum_10k);
                     assert!(mine.explosion.delay_ticks > 0 && mine.explosion.partial_radius > 0);
+                }
+                crate::ParasiteChild::Taunt(taunt) => {
+                    assert!(taunt.radius > 0 && taunt.resume_delay_ticks > 0);
                 }
                 crate::ParasiteChild::TreantSprout(sprout) => {
                     assert!(

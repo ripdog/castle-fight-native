@@ -1,6 +1,8 @@
 //! Map-script children released by a native targeted Parasite.
 use super::*;
-use crate::components::{ParasiteChild, ParasiteScriptProfile, PendingParasiteScript};
+use crate::components::{
+    NativeAction, ParasiteChild, ParasiteScriptProfile, PendingParasiteScript,
+};
 
 const RANDOM_PURPOSE_PARASITE_SCRIPT: u64 = 0x5041_5241_5343_5201;
 
@@ -43,6 +45,38 @@ impl Simulation {
             damage,
         );
         match p.child {
+            ParasiteChild::Taunt(taunt) => {
+                // `unit_issueImmediateOrderById(caster, taunt)`: the native Taunt acts at once,
+                // then the script restores the lane order.
+                let center = units[caster].position;
+                let team = units[caster].team;
+                let giant = units[caster].id;
+                let limit = square_i32(taunt.radius);
+                for index in 0..units.len() {
+                    let body = &mut units[index];
+                    if body.id == giant
+                        || body.health <= 0
+                        || body.team == team
+                        || body.classifications.locust
+                        || body.classifications.spell_immune
+                        || center.distance_sq(body.position) > limit
+                    {
+                        continue;
+                    }
+                    body.target = Some(giant);
+                    body.direct_retaliation_lock = true;
+                    body.ally_defense_lock = false;
+                    body.status.pending_attack = None;
+                }
+                let id = self.allocate_id();
+                self.world.spawn((
+                    id,
+                    NativeAction::ResumeAttack {
+                        source: giant,
+                        due_tick: self.next_tick + u64::from(taunt.resume_delay_ticks),
+                    },
+                ));
+            }
             ParasiteChild::TreantSprout(sprout) => {
                 // The closure ignores the Parasite target and works at the caster.
                 self.cast_treant_sprout(source, sprout, units);
@@ -139,6 +173,7 @@ impl Simulation {
                 ParasiteChild::LocustSwarm(_)
                 | ParasiteChild::SandCloud(_)
                 | ParasiteChild::TreantSprout(_)
+                | ParasiteChild::Taunt(_)
                 | ParasiteChild::LandMine(_) => {}
                 ParasiteChild::Berserk { berserk, .. } => {
                     let stunned = units[caster].status.is_stunned(self.next_tick);

@@ -276,6 +276,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     if kind == "feral-bear":
         from project_feral_bear import project
         return project(recipe, mechanics)
+    if kind == "war-club":
+        from project_war_club import project
+        return project(recipe, fields, mechanics)
     if kind == "true-sight":
         # Object-native Adtg: the detection radius is the only radius the row has (its Area is "-").
         if (mechanics["native_base"] != "Adtg" or number("DataA1") != 3 or number("Rng1") <= 0
@@ -987,6 +990,10 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
     death_masteries = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "source-damage-mastery-over-death"}
+    war_clubs = {row["unit_rawcode"]: json.loads(row["parameters_json"])
+        for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
+        if row["mechanic_kind"] == "auto-spawn-tree-and-grab-war-club"}
+    attack_rows = rows(retained("resolved/production-unit-attacks.tsv"))
     feral_bears = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "damage-triggered-feral-rage-and-hibernation"}
@@ -1170,6 +1177,8 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             detail.update(all_bases=ability_bases, functions=functions, git_tree=tree,
                 support_system=system_mechanics["support-order-controller"],
                 map_version=dict(zip(["major", "minor"], map(int, release["map_version"].split(".")))))
+        if recipe["kind"] == "war-club":
+            detail.update(war_club=war_clubs[recipe["unit_rawcode"]], functions=functions, attack_rows=attack_rows)
         if recipe["kind"] == "feral-bear":
             detail.update(feral_bear=feral_bears[recipe["unit_rawcode"]], functions=functions,
                 all_fields=abilities, all_bases=ability_bases)

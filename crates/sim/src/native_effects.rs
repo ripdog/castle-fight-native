@@ -75,6 +75,7 @@ pub enum NativeEffectImplementationId {
     WarcraftDeathMasteryV1,
     WarcraftDemolishV1,
     WarcraftTrueSightV1,
+    WarcraftWarClubV1,
     WarcraftPowerPlantV1,
     WarcraftNativeAuraV1,
     WarcraftSpeedAuraV1,
@@ -175,6 +176,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftDeathMasteryV1 => 117,
             Self::WarcraftDemolishV1 => 118,
             Self::WarcraftTrueSightV1 => 191,
+            Self::WarcraftWarClubV1 => 193,
             Self::WarcraftPowerPlantV1 => 115,
             Self::WarcraftNativeAuraV1 => 22,
             Self::WarcraftSpeedAuraV1 => 69,
@@ -880,6 +882,15 @@ enum TuningEffect {
         #[allow(dead_code)]
         provenance: serde_json::Value,
     },
+    /// Native Grab Tree: the club weapon used for the first attacks after spawning.
+    WarClub {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        profile: crate::WarClubProfile,
+        #[allow(dead_code)]
+        provenance: serde_json::Value,
+    },
     /// The Bears' target-damage listener (`feralRage`, `startBearHibernate`).
     FeralBear {
         source_kind: String,
@@ -1282,6 +1293,7 @@ impl TuningEffect {
             | Self::Demolish { source_kind, .. }
             | Self::TrueSight { source_kind, .. }
             | Self::FeralBear { source_kind, .. }
+            | Self::WarClub { source_kind, .. }
             | Self::FrostAttack { source_kind, .. }
             | Self::ScriptedAutomatic { source_kind, .. }
             | Self::ElvenAutomatic { source_kind, .. }
@@ -1347,6 +1359,7 @@ impl TuningEffect {
             | Self::Demolish { source_key, .. }
             | Self::TrueSight { source_key, .. }
             | Self::FeralBear { source_key, .. }
+            | Self::WarClub { source_key, .. }
             | Self::FrostAttack { source_key, .. }
             | Self::ScriptedAutomatic { source_key, .. }
             | Self::ElvenAutomatic { source_key, .. }
@@ -1400,6 +1413,7 @@ impl TuningEffect {
             | Self::Demolish { unit_rawcode, .. }
             | Self::TrueSight { unit_rawcode, .. }
             | Self::FeralBear { unit_rawcode, .. }
+            | Self::WarClub { unit_rawcode, .. }
             | Self::FrostAttack { unit_rawcode, .. }
             | Self::ScriptedAutomatic { unit_rawcode, .. }
             | Self::ElvenAutomatic { unit_rawcode, .. }
@@ -1474,6 +1488,7 @@ impl TuningEffect {
             Self::DeathMastery { .. } => NativeEffectImplementationId::WarcraftDeathMasteryV1,
             Self::Demolish { .. } => NativeEffectImplementationId::WarcraftDemolishV1,
             Self::TrueSight { .. } => NativeEffectImplementationId::WarcraftTrueSightV1,
+            Self::WarClub { .. } => NativeEffectImplementationId::WarcraftWarClubV1,
             Self::FeralBear { .. } => {
                 NativeEffectImplementationId::WarcraftScriptDamageControllerV1
             }
@@ -1549,6 +1564,7 @@ impl TuningEffect {
             Self::DeathMastery { .. } => "death-mastery",
             Self::Demolish { .. } => "demolish",
             Self::TrueSight { .. } => "true-sight",
+            Self::WarClub { .. } => "war-club",
             Self::FeralBear { .. } => "feral-bear",
             Self::DeathSpawn { .. } => "death-spawn",
             Self::Poison { .. } => "poison",
@@ -1900,6 +1916,7 @@ fn native_unit_mechanics_from_tuning(
                 | TuningEffect::DeathMastery { .. }
                 | TuningEffect::Demolish { .. }
                 | TuningEffect::TrueSight { .. }
+                | TuningEffect::WarClub { .. }
                 | TuningEffect::FeralBear { .. }
                 | TuningEffect::FrostAttack { .. }
                 | TuningEffect::Feedback { .. }
@@ -2250,6 +2267,14 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
         TuningEffect::FeralBear { profile, .. } => {
             assert!(profile.rage_chance_per_10k <= 10_000 && profile.hibernate_below_health > 0);
             PassiveUnitEffect::FeralBear(*profile)
+        }
+        TuningEffect::WarClub { profile, .. } => {
+            assert!(
+                profile.max_attacks > 0
+                    && profile.cooldown_ticks > 0
+                    && profile.resume_delay_ticks >= profile.attach_delay_ticks
+            );
+            PassiveUnitEffect::WarClub(*profile)
         }
         TuningEffect::TrueSight { profile, .. } => {
             assert!(profile.radius > 0);

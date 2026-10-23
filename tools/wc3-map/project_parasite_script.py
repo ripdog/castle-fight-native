@@ -261,6 +261,27 @@ def _treant_sprout(recipe, fields, detail, number, raw):
         'treant_radius': number(ring[1], 1024), 'treant_life_ticks': number(child[2], 30)}}
 
 
+def _taunt(recipe, fields, detail, number, raw):
+    """The Mountain Giant: the registered parasite spell issues the native Taunt order, then resumes the lane."""
+    parameters = detail['semantic_parameters']
+    closure, callback = (detail['functions'][name] for name in
+        (detail['semantics_row']['source_functions'], detail['mechanics_row']['delayed_callback_functions']))
+    taunt = parameters['taunt_ability_rawcode']
+    row = detail['all_fields'][taunt]
+    tokens = set(row['targs1'].split(','))
+    shape = (r'function \w+\(\w+,(\w+),\w+\)local \w+=nil local \w+=nil \w+=\1 unit_issueImmediateOrderById\(\w+,(\d+)\)'
+        r'(\w+)=\w+:create\d+\(\)\3\.caster=\w+ doAfter\(([\d.]+),\3\)end')
+    matched = re.fullmatch(shape, closure.strip())
+    if (detail['all_bases'][taunt] != 'Atau' or tokens != {'air', 'ground', 'enemy', 'vuln', 'invu'} or matched is None
+            or int(matched[2]) != parameters['immediate_order_id']
+            or Decimal(matched[4]) != Decimal(str(parameters['resume_attack_delay_seconds']))
+            or not re.fullmatch(r'function \w+\((\w+)\)orderCodeAttack\(\1\.caster\)end', callback.strip())
+            or number(row['area1']) != parameters['taunt_area'] or number(row['cost1']) != 0):
+        raise ValueError('Taunt control flow changed: immediate native Taunt at the caster and the resume callback')
+    return {'Taunt': {'ability': raw(taunt), 'radius': number(row['area1'], 1024),
+        'resume_delay_ticks': number(matched[4], 30)}}
+
+
 def project(recipe, fields, unit, protected, detail):
     number, raw = _helpers()
     row, semantics = detail['mechanics_row'], detail['semantics_row']
@@ -269,7 +290,7 @@ def project(recipe, fields, unit, protected, detail):
     tokens = set(fields['targs1'].split(','))
     movement = tokens & {'air', 'ground'}
     kind = semantics['semantic_kind']
-    allowed = {'air', 'ground', 'enemy', 'enemies', 'organic', 'neutral', 'nonhero'}
+    allowed = {'air', 'ground', 'enemy', 'enemies', 'organic', 'neutral', 'nonhero', 'sapper', 'ward'}
     if kind == 'random-offset-landmine-placement':
         # The Mine Layer's autocast mask also names structures, mechanical bodies and invulnerable
         # targets. The parent fires on the unit set below; the discrepancy is recorded in the
@@ -280,7 +301,9 @@ def project(recipe, fields, unit, protected, detail):
         raise ValueError('Parasite script parent needs an audited hostile unit mask')
     detail = dict(detail, semantic_parameters=__import__('json').loads(semantics['parameters_json']))
     parent = None
-    if kind == 'five-tree-wall-to-treants':
+    if kind == 'taunt-plus-resume':
+        child = _taunt(recipe, fields, detail, number, raw)
+    elif kind == 'five-tree-wall-to-treants':
         child = _treant_sprout(recipe, fields, detail, number, raw)
     elif kind == 'registered-infest-then-enable-autocasts':
         child, parent = _infest(recipe, fields, detail, number, raw)

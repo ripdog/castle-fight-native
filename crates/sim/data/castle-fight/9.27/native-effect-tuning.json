@@ -3,6 +3,153 @@
   "map_version": "9.27",
   "effects": [
     {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0BJ",
+      "unit_rawcode": "e00F",
+      "spellcasting": {
+        "mana": {
+          "maximum": 0,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147483648
+        },
+        "ability": {
+          "id": 1093681738,
+          "mana_cost": 0,
+          "cooldown_ticks": 450,
+          "range": 153600,
+          "target_policy": "RandomEnemyUnit",
+          "effect": {
+            "ParasiteScript": {
+              "parent": {
+                "buff_rawcode": 1110454585,
+                "map_version": {
+                  "major": 9,
+                  "minor": 27
+                },
+                "speed_per_tick": 64853,
+                "affects_invulnerable": false,
+                "duration_ticks": 1,
+                "hero_duration_ticks": 1,
+                "body_rawcode": 1852203634,
+                "count": 1,
+                "body_duration_ticks": 1
+              },
+              "parent_targets": 3,
+              "parent_organic_only": false,
+              "parent_nonhero_only": false,
+              "ability": 1093681738,
+              "child": {
+                "Taunt": {
+                  "ability": 1093681737,
+                  "radius": 358400,
+                  "resume_delay_ticks": 18
+                }
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 0,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "semantics": "resolved/unit-spell-semantics.tsv",
+        "functions": [
+          "UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceNatureAbilities_cast_registerUnitSpellWithTargetOrder_RaceNatureAbilities6",
+          "CallbackSingle_doAfter_RaceNatureAbilities_call_doAfter_RaceNatureAbilities6"
+        ]
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0BC",
+      "unit_rawcode": "e00F",
+      "kind": "war-club",
+      "profile": {
+        "ability": 1093681731,
+        "damage": 188,
+        "range": 153600,
+        "cooldown_ticks": 66,
+        "targets": 7,
+        "damage_type": "Siege",
+        "max_attacks": 10,
+        "attach_delay_ticks": 24,
+        "resume_delay_ticks": 48
+      },
+      "provenance": {
+        "source": "resolved/production-unit-attacks.tsv",
+        "native_base": "Agra",
+        "script": "castNatureAttackTree",
+        "remove_delay": "1.5"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0BH",
+      "unit_rawcode": "e00F",
+      "kind": "pulverize",
+      "chance_per_10k": 3000,
+      "damage": 200,
+      "full_radius_world": 175,
+      "half_radius_world": 0,
+      "targets": "ground-units",
+      "provenance": {
+        "ability": "A0BH",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0BE",
+      "unit_rawcode": "e00F",
+      "kind": "hardened-skin",
+      "profile": {
+        "ability": 1093681733,
+        "effect": {
+          "HardenedSkin": {
+            "chance_per_10k": 10000,
+            "minimum_damage": 5,
+            "ignored_damage": 25
+          }
+        }
+      },
+      "provenance": {
+        "ability": "A0BE",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0BF",
+      "unit_rawcode": "e00F",
+      "kind": "spiked-shell",
+      "profile": {
+        "ability": 1093681734,
+        "returned_damage_per_10k": 0,
+        "received_damage_per_10k": 8000,
+        "armor_bonus_per_100": 0
+      },
+      "provenance": {
+        "ability": "A0BF",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0CF",
+      "unit_rawcode": "e00F",
+      "kind": "spell-resistance",
+      "damage_taken_per_10k": 5000,
+      "provenance": {
+        "ability": "A0CF",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
       "source_kind": "unit-ability",
       "source_key": "A0B4",
       "unit_rawcode": "n02B",

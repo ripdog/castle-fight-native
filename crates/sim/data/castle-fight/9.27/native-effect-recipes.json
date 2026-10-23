@@ -1,6 +1,12 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0BJ","unit_rawcode":"e00F","kind":"parasite-script"},
+    {"source_kind":"unit-ability","source_key":"A0BC","unit_rawcode":"e00F","kind":"war-club"},
+    {"source_kind":"unit-ability","source_key":"A0BH","unit_rawcode":"e00F","kind":"pulverize"},
+    {"source_kind":"unit-ability","source_key":"A0BE","unit_rawcode":"e00F","kind":"hardened-skin"},
+    {"source_kind":"unit-ability","source_key":"A0BF","unit_rawcode":"e00F","kind":"spiked-shell"},
+    {"source_kind":"unit-ability","source_key":"A0CF","unit_rawcode":"e00F","kind":"spell-resistance"},
     {"source_kind":"unit-ability","source_key":"A0B4","unit_rawcode":"n02B","kind":"critical-strike"},
     {"source_kind":"unit-ability","source_key":"A0B2","unit_rawcode":"n02B","kind":"bash"},
     {"source_kind":"unit-ability","source_key":"A0BZ","unit_rawcode":"n02B","kind":"cleave"},

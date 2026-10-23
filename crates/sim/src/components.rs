@@ -17,6 +17,8 @@ pub(crate) use master_projectiles::{
 };
 pub use master_projectiles::{MasterMoverProfile, MasterProjectileProfile, NativeNovaProfile};
 mod feral_bear;
+mod war_club;
+pub use war_club::{ClubPhase, WarClubProfile, WarClubState};
 mod native_summons;
 pub use feral_bear::{BearPhase, FeralBearProfile, FeralBearState};
 mod travelling_mana_clap;
@@ -37,8 +39,8 @@ pub use parasite_area_buff::ParasiteAreaBuffProfile;
 pub use parasite_script::{
     InfestProfile, LandMineProfile, LandMineState, LocustState, LocustSwarmProfile,
     LocustSwarmState, MAX_LOCUSTS, MAX_SPROUT_TREES, ParasiteChild, ParasiteScriptProfile,
-    PendingParasiteScript, SandCloudProfile, SandCloudState, SandCloudVariant, TreantSproutProfile,
-    TreantSproutState,
+    PendingParasiteScript, SandCloudProfile, SandCloudState, SandCloudVariant, TauntProfile,
+    TreantSproutProfile, TreantSproutState,
 };
 pub use travelling_mana_clap::TravellingManaClapProfile;
 pub(crate) use travelling_mana_clap::TravellingManaClapState;
@@ -1405,6 +1407,8 @@ pub enum PassiveUnitEffect {
     AttackDispel(AttackDispelProfile),
     /// The Bears' target-damage listener: Feral Rage and the one-time hibernation.
     FeralBear(FeralBearProfile),
+    /// Native Grab Tree (`Agra`): the first attacks use the club weapon.
+    WarClub(WarClubProfile),
 }
 
 /// The Nature "Abolish Magic" listeners: a landed attack rolls once and then removes the positive
@@ -2735,6 +2739,7 @@ pub struct StatusState {
     pub summon_order_refresh_tick: Option<u64>,
     pub mirror_image: Option<MirrorImageState>,
     pub feral_bear: Option<FeralBearState>,
+    pub war_club: Option<WarClubState>,
     pub illusion: Option<IllusionState>,
     pub damage_charge: Option<DamageChargeState>,
     pub spheres: [Option<SphereAttachmentState>; 4],

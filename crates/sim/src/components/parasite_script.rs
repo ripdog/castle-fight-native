@@ -29,6 +29,17 @@ pub enum ParasiteChild {
     Infest(InfestProfile),
     /// The Ancient Keeper's Treant Sprout: a tree wall around the caster that turns into Treants.
     TreantSprout(TreantSproutProfile),
+    /// The Mountain Giant's Taunt: a self-cast native Taunt, then the lane order resumes.
+    Taunt(TauntProfile),
+}
+
+/// Native Taunt (`Atau`) issued as an immediate order by the script: every eligible hostile body in
+/// the area is ordered to attack the caster.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct TauntProfile {
+    pub ability: AbilityId,
+    pub radius: i32,
+    pub resume_delay_ticks: u16,
 }
 
 pub const MAX_SPROUT_TREES: usize = 8;
@@ -190,6 +201,16 @@ impl ParasiteChild {
             Self::LandMine(p) => p.canonical_words(),
             Self::Infest(p) => p.canonical_words(),
             Self::TreantSprout(p) => p.canonical_words(),
+            Self::Taunt(p) => {
+                let mut words = [0; 16];
+                words[..4].copy_from_slice(&[
+                    8,
+                    u64::from(p.ability.0),
+                    p.radius as u64,
+                    u64::from(p.resume_delay_ticks),
+                ]);
+                words
+            }
         }
     }
 }
