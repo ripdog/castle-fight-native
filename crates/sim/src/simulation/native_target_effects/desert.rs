@@ -87,6 +87,7 @@ fn parasite_life_steal_heals_the_requested_amount_even_when_armor_reduces_the_da
     let mut units = sim.snapshot_units();
     let c = find_unit_index(&units, caster).unwrap();
     units[c].status.pending_parasite_script = Some(PendingParasiteScript {
+        stage: 0,
         ability: AbilityId(941),
         child: ParasiteChild::LifeSteal {
             maximum_life: 75,

@@ -64,7 +64,10 @@ impl Simulation {
                     AutomaticAbilityState {
                         ready_tick: self.next_tick,
                         cast_sequence: 0,
-                        autocast_enabled: true,
+                        autocast_enabled: crate::components::initial_autocast_enabled(
+                            profile.id,
+                            std::iter::once(primary.ability).chain(profiles.iter().copied()),
+                        ),
                         manual_cast_requested: false,
                     },
                     |entry| entry.state,
@@ -213,6 +216,30 @@ impl Simulation {
         });
         source.ability_state = Some(entry.state);
         Some(source)
+    }
+
+    /// `unit_issueImmediateOrderById(<ability>on/off)`: turn one ability's autocast on or off.
+    pub(super) fn set_ability_autocast(
+        &mut self,
+        unit: &mut UnitSnapshot,
+        ability: AbilityId,
+        enabled: bool,
+    ) {
+        if unit
+            .spellcasting
+            .is_some_and(|profile| profile.ability.id == ability)
+        {
+            if let Some(state) = unit.ability_state.as_mut() {
+                state.autocast_enabled = enabled;
+            }
+        } else if let Some(mut set) = self
+            .world
+            .entity_mut(unit.entity)
+            .get_mut::<AdditionalAutomaticAbilities>()
+            && let Some(entry) = set.get_mut(ability)
+        {
+            entry.state.autocast_enabled = enabled;
+        }
     }
 
     pub(super) fn commit_additional_ability_state(

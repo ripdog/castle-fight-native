@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A0AV","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0AS","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0AU","implementation":"warcraft-death-spawn-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0AT","implementation":"warcraft-poison-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0AR","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0AQ","implementation":"warcraft-death-spawn-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0AP","implementation":"warcraft-poison-v1","valid_from":"9.27","valid_through":"9.27"},

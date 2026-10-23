@@ -31,8 +31,28 @@ impl Simulation {
         units: &mut [UnitSnapshot],
     ) -> usize {
         let caster = find_unit_index(units, source.id).expect("Parasite script caster");
-        self.launch_native_parasite(source, units[caster].owner, units[target].id, p.parent);
+        let damage = match p.child {
+            ParasiteChild::Infest(infest) => Some(infest.poison),
+            _ => None,
+        };
+        self.launch_damaging_native_parasite(
+            source,
+            units[caster].owner,
+            units[target].id,
+            p.parent,
+            damage,
+        );
         match p.child {
+            ParasiteChild::Infest(infest) => {
+                // The script waits, then enables Web; its next step is armed when that one fires.
+                units[caster].status.pending_parasite_script = Some(PendingParasiteScript {
+                    ability: p.ability,
+                    child: p.child,
+                    target: units[target].id,
+                    due_tick: self.next_tick + u64::from(infest.web_delay_ticks),
+                    stage: 0,
+                });
+            }
             ParasiteChild::Berserk {
                 minimum_delay_ticks,
                 maximum_delay_ticks,
@@ -58,6 +78,7 @@ impl Simulation {
                     child: p.child,
                     target: units[target].id,
                     due_tick: self.next_tick + delay,
+                    stage: 0,
                 });
             }
             ParasiteChild::SandCloud(profile) => {
@@ -81,7 +102,7 @@ impl Simulation {
 
     /// Fires due child callbacks in unit order. A callback does not recheck the parent's
     /// target mask: it reads the target's life when it fires.
-    pub(super) fn resolve_pending_parasite_scripts(&self, units: &mut [UnitSnapshot]) -> usize {
+    pub(super) fn resolve_pending_parasite_scripts(&mut self, units: &mut [UnitSnapshot]) -> usize {
         let mut effects = 0;
         for caster in 0..units.len() {
             let Some(pending) = units[caster].status.pending_parasite_script else {
@@ -92,6 +113,25 @@ impl Simulation {
             }
             units[caster].status.pending_parasite_script = None;
             match pending.child {
+                ParasiteChild::Infest(infest) => {
+                    // `unit_issueImmediateOrderById` on a dead caster does nothing, and the chain
+                    // ends there; the final `orderCodeAttack` only re-issues the lane order.
+                    if units[caster].health > 0 {
+                        if pending.stage == 0 {
+                            self.set_ability_autocast(&mut units[caster], infest.web, true);
+                            units[caster].status.pending_parasite_script =
+                                Some(PendingParasiteScript {
+                                    stage: 1,
+                                    due_tick: self.next_tick
+                                        + u64::from(infest.reenable_delay_ticks),
+                                    ..pending
+                                });
+                        } else {
+                            self.set_ability_autocast(&mut units[caster], pending.ability, true);
+                        }
+                        effects += 1;
+                    }
+                }
                 ParasiteChild::LocustSwarm(_)
                 | ParasiteChild::SandCloud(_)
                 | ParasiteChild::LandMine(_) => {}

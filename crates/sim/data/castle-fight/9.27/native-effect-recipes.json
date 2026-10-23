@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0AV","unit_rawcode":"n01W","kind":"parasite-script"},
+    {"source_kind":"unit-ability","source_key":"A0AS","unit_rawcode":"n01W","kind":"native-web"},
+    {"source_kind":"unit-ability","source_key":"A0AU","unit_rawcode":"n01W","kind":"death-spawn"},
+    {"source_kind":"unit-ability","source_key":"A0AT","unit_rawcode":"n01W","kind":"poison"},
     {"source_kind":"unit-ability","source_key":"A0AR","unit_rawcode":"n01N","kind":"native-web"},
     {"source_kind":"unit-ability","source_key":"A0AQ","unit_rawcode":"n01N","kind":"death-spawn"},
     {"source_kind":"unit-ability","source_key":"A0AP","unit_rawcode":"n01N","kind":"poison"},

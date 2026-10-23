@@ -49,15 +49,47 @@ impl Simulation {
         version: crate::MapVersion,
         profile: NativeDeathSpawn,
     ) -> usize {
-        let kind =
-            crate::CastleFightUnitKind::from_rawcode_for_version(profile.child_rawcode, version)
-                .expect("death-spawn version")
-                .expect("promoted native death-spawn child");
+        assert!(
+            matches!(
+                crate::CastleFightUnitKind::from_rawcode_for_version(
+                    profile.child_rawcode,
+                    version
+                ),
+                Ok(Some(_))
+            ),
+            "promoted native death-spawn child"
+        );
+        self.spawn_summoned_children(
+            owner,
+            team,
+            position,
+            version,
+            profile.child_rawcode,
+            profile.count,
+        )
+    }
+
+    /// Native summons of a promoted combat body (`Aspy` children and Parasite spawns of a
+    /// combat unit). A body that is not promoted has nothing the engine can build.
+    pub(super) fn spawn_summoned_children(
+        &mut self,
+        owner: PlayerId,
+        team: Team,
+        position: SimPoint,
+        version: crate::MapVersion,
+        child_rawcode: u32,
+        count: u8,
+    ) -> usize {
+        let Ok(Some(kind)) =
+            crate::CastleFightUnitKind::from_rawcode_for_version(child_rawcode, version)
+        else {
+            return 0;
+        };
         let mut definition = kind.definition_for_version(version).unwrap().resolved();
-        // Aspy creates native summoned units even when the object's class list lacks
+        // Native summoning creates summoned units even when the object's class list lacks
         // SUMMONED. The marker ability is a separate script classification.
         definition.properties.classifications.summoned = true;
-        for _ in 0..profile.count {
+        for _ in 0..count {
             self.spawn_resolved_unit_unchecked(
                 Some(owner),
                 UnitSpawn::from_template(team, position, definition.template),
@@ -67,7 +99,7 @@ impl Simulation {
         // Entry registers combat and issues the strategic attack order. Neither
         // train-finish nor setupUnit runs, so there is no factory provenance, shrine
         // replication, inherited damage/status, or unrelated timed life.
-        usize::from(profile.count)
+        usize::from(count)
     }
 }
 

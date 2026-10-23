@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    BroodMother = 0x1000_00ba => b"n01W",
     ForestSpider = 0x1000_00b9 => b"n00T",
     GiantSpider = 0x1000_00b8 => b"n01N",
     BlackSpider = 0x1000_00b7 => b"n00U",
@@ -218,6 +219,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    SpiderEggHatchery = 0x2000_00a9 => b"h00R",
     SpiderEggNest = 0x2000_00a8 => b"h00Q",
     SpiderEggClutch = 0x2000_00a7 => b"h002",
     DragonCemetery = 0x2000_00a6 => b"h01S",

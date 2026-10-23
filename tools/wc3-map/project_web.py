@@ -10,9 +10,10 @@ def project(recipe, fields, unit, protected, detail):
     tokens = set(fields['targs1'].split(','))
     movement = tokens & {'air', 'ground'}
     if (detail['native_base'] != 'Aweb' or not movement or tokens - {'air', 'ground', 'enemy', 'neutral'}
-            or not {'enemy', 'neutral'} <= tokens or fields['missilehoming'] != '1'
-            or detail['default_active_alias'] != recipe['source_key']):
-        raise ValueError('native Web requires its enemy unit mask, homing missile and default-active autocast')
+            or not {'enemy', 'neutral'} <= tokens or fields['missilehoming'] != '1'):
+        raise ValueError('native Web requires its enemy unit mask and homing missile')
+    # Web is either the unit's default-active autocast or is enabled later by a sibling's script
+    # (the Brood Mother's Infest, whose projection audits the enabling order).
     if number(fields['dur1']) <= 0 or number(fields['herodur1']) <= 0:
         raise ValueError('native Web requires positive normal and hero durations')
     bits = (TARGET_GROUND if 'ground' in movement else 0) | (TARGET_AIR if 'air' in movement else 0)

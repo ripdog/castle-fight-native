@@ -171,6 +171,53 @@ def _landmine(recipe, detail, number, raw):
         'initial_mana_maximum_10k': number(train['mana_random_max'], 10000)}}
 
 
+def _infest(recipe, fields, detail, number, raw):
+    """The stock damaging Parasite plus the map's two-step autocast script (`RaceNatureAbilities`)."""
+    parameters = detail['semantic_parameters']
+    names = detail['semantics_row']['source_functions'].split(',')
+    cast, first, second = (detail['functions'][name] for name in names)
+    source = recipe['source_key']
+    web = parameters['first_followup_ability_rawcode']
+    web_fields = detail['all_fields'][web]
+    wait = lambda text: re.search(r'doAfter\(([\d.]+),\w+\)end$', text)
+    web_order = re.search(r'^function \w+\((\w+)\)local \w+=nil unit_issueImmediateOrderById\(\1\.caster,(\d+)\)\w+=\w+:create\d+\(\)\w+\.caster=\1\.caster doAfter\(([\d.]+),\w+\)end$', first)
+    own_order = re.search(r'^function \w+\((\w+)\)unit_issueImmediateOrderById\(\1\.caster,(\d+)\)orderCodeAttack\(\1\.caster\)end$', second)
+    opening = re.search(r'^function \w+\(\w+,(\w+),\w+\).*?\.caster=\w+ doAfter\(([\d.]+),\w+\)end$', cast)
+    if (detail['all_bases'][source] != 'ACpa' or web_order is None or own_order is None or opening is None
+        or int(web_order[2]) != parameters['first_followup_order_id']
+        or int(own_order[2]) != parameters['second_followup_order_id']
+        or Decimal(opening[2]) != Decimal(str(parameters['first_followup_delay_seconds']))
+        or Decimal(web_order[3]) != Decimal(str(parameters['second_followup_delay_seconds']))
+        or web_fields['orderon'] != parameters['first_followup_order_name']
+        or fields['orderon'] != parameters['second_followup_order_name']
+        or parameters['second_followup_ability_rawcode'] != source
+        or not parameters['resume_attack_after_second_followup']
+        or detail['all_bases'][web] != 'Aweb'):
+        raise ValueError('Infest control flow changed: cast-time wait, Web autocast on, Infest autocast on, attack resume')
+    tokens = set(fields['targs1'].split(','))
+    movement = tokens & {'air', 'ground'}
+    if (detail['all_bases'][source] != 'ACpa' or number(fields['datab1']) != 0 or number(fields['datac1']) != 0
+        or len(fields['buffid1']) != 4 or len(fields['unitid1']) != 4 or fields['missilehoming'] != '1'
+        or number(fields['dataa1']) <= 0 or number(fields['datae1']) <= 0
+        or parameters['primary_effect_spawn_unit_rawcode'] != fields['unitid1']
+        or parameters['primary_effect_spawn_count_on_kill'] != number(fields['datae1'])
+        or parameters['primary_effect_damage_per_second'] != number(fields['dataa1'])):
+        raise ValueError('Infest requires the stock damaging Parasite with an audited summon')
+    ticks = lambda field: number(fields[field], 30)
+    parent = {'buff_rawcode': raw(fields['buffid1']), 'map_version': detail['map_version'],
+        'speed_per_tick': int(Decimal(str(fields['missilespeed'])) * 1024 / 30),
+        'affects_invulnerable': 'invulnerable' in tokens, 'duration_ticks': ticks('dur1'),
+        'hero_duration_ticks': ticks('herodur1'), 'body_rawcode': raw(fields['unitid1']),
+        'count': number(fields['datae1']), 'body_duration_ticks': ticks('cast1')}
+    poison = {'ability': raw(source), 'buff_rawcode': raw(fields['buffid1']), 'damage_per_second': number(fields['dataa1']),
+        'movement_percent_delta': -number(fields['datab1'], 100), 'attack_speed_percent_delta': -number(fields['datac1'], 100),
+        'duration_ticks': ticks('dur1'), 'hero_duration_ticks': ticks('herodur1'),
+        'targets': sum(bit for token, bit in [('ground', 1), ('air', 2)] if token in movement),
+        'stack_damage': False, 'can_kill': True, 'organic_only': 'organic' in tokens, 'ward': None}
+    return {'Infest': {'poison': poison, 'web': raw(web),
+        'web_delay_ticks': number(opening[2], 30), 'reenable_delay_ticks': number(web_order[3], 30)}}, parent
+
+
 def project(recipe, fields, unit, protected, detail):
     number, raw = _helpers()
     row, semantics = detail['mechanics_row'], detail['semantics_row']
@@ -189,7 +236,10 @@ def project(recipe, fields, unit, protected, detail):
         or number(fields['levels']) != 1):
         raise ValueError('Parasite script parent needs an audited hostile unit mask')
     detail = dict(detail, semantic_parameters=__import__('json').loads(semantics['parameters_json']))
-    if kind == 'delayed-life-steal':
+    parent = None
+    if kind == 'registered-infest-then-enable-autocasts':
+        child, parent = _infest(recipe, fields, detail, number, raw)
+    elif kind == 'delayed-life-steal':
         child = _life_steal(recipe, detail, number)
     elif kind == 'delayed-berserk-rage':
         child = _berserk(recipe, detail, number, raw)
@@ -203,7 +253,7 @@ def project(recipe, fields, unit, protected, detail):
         raise ValueError(f'unsupported Parasite script child {kind!r}')
     mana = lambda field, scale=1: 0 if unit[field].strip() in {'-', '_', ''} else number(unit[field], scale)
     rate = mana('mana_regen', 10000)
-    profile = {'parent': project_parasite(fields, detail['map_version']),
+    profile = {'parent': parent if parent is not None else project_parasite(fields, detail['map_version']),
         'parent_targets': sum(bit for token, bit in [('ground', 1), ('air', 2)] if token in movement),
         'parent_organic_only': 'organic' in tokens, 'parent_nonhero_only': 'nonhero' in tokens,
         'ability': raw(recipe['source_key']), 'child': child}

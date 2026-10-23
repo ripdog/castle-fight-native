@@ -560,6 +560,10 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_i32(p.position.y);
                         hash.write_u8(p.buff_until_tick.is_some() as u8);
                         hash.write_u64(p.buff_until_tick.unwrap_or(0));
+                        hash.write_u8(u8::from(p.damage.is_some()));
+                        if let Some(damage) = p.damage {
+                            hash_poison_profile(&mut hash, &damage);
+                        }
                     }
                     NativeAction::TimedLife {
                         child,

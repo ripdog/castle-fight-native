@@ -33,9 +33,9 @@ pub use building_script::{
 };
 pub use parasite_area_buff::ParasiteAreaBuffProfile;
 pub use parasite_script::{
-    LandMineProfile, LandMineState, LocustState, LocustSwarmProfile, LocustSwarmState, MAX_LOCUSTS,
-    ParasiteChild, ParasiteScriptProfile, PendingParasiteScript, SandCloudProfile, SandCloudState,
-    SandCloudVariant,
+    InfestProfile, LandMineProfile, LandMineState, LocustState, LocustSwarmProfile,
+    LocustSwarmState, MAX_LOCUSTS, ParasiteChild, ParasiteScriptProfile, PendingParasiteScript,
+    SandCloudProfile, SandCloudState, SandCloudVariant,
 };
 pub use travelling_mana_clap::TravellingManaClapProfile;
 pub(crate) use travelling_mana_clap::TravellingManaClapState;
@@ -69,11 +69,11 @@ pub use native_actions::{
 };
 mod automatic_abilities;
 mod mana;
-pub(crate) use automatic_abilities::compose_spellcasting_profiles;
 pub use automatic_abilities::{
     AbilityConfigurationError, AdditionalAutomaticAbilities, AdditionalAutomaticAbilityDefinitions,
     AutomaticAbilityInstance, MAX_AUTOMATIC_ABILITIES, SecondaryResurrectionState,
 };
+pub(crate) use automatic_abilities::{compose_spellcasting_profiles, initial_autocast_enabled};
 pub use mana::ManaRegeneration;
 pub(crate) use mana::per_second_increment;
 use serde::{Deserialize, Serialize};

@@ -39,6 +39,31 @@ impl std::fmt::Display for AbilityConfigurationError {
 }
 impl std::error::Error for AbilityConfigurationError {}
 
+impl AutomaticAbilityProfile {
+    /// The sibling ability whose autocast starts disabled because this ability's script turns it
+    /// on (the Brood Mother's Infest enables Web).
+    pub(crate) fn autocast_gated_sibling(&self) -> Option<AbilityId> {
+        match self.effect {
+            AbilityEffect::ParasiteScript(p) => match p.child {
+                ParasiteChild::Infest(infest) => Some(infest.web),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+}
+
+/// Whether an ability's autocast is on when its source is created: native abilities default on
+/// unless a sibling's script owns turning them on.
+pub(crate) fn initial_autocast_enabled(
+    id: AbilityId,
+    abilities: impl IntoIterator<Item = AutomaticAbilityProfile>,
+) -> bool {
+    !abilities
+        .into_iter()
+        .any(|profile| profile.autocast_gated_sibling() == Some(id))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AutomaticAbilityInstance {
     pub profile: AutomaticAbilityProfile,
@@ -64,6 +89,7 @@ pub struct AdditionalAutomaticAbilities {
 
 impl AdditionalAutomaticAbilities {
     pub(crate) fn from_definitions(
+        primary: Option<AutomaticAbilityProfile>,
         definitions: AdditionalAutomaticAbilityDefinitions,
         ready_tick: u64,
     ) -> Self {
@@ -77,7 +103,10 @@ impl AdditionalAutomaticAbilities {
                 state: AutomaticAbilityState {
                     ready_tick,
                     cast_sequence: 0,
-                    autocast_enabled: true,
+                    autocast_enabled: initial_autocast_enabled(
+                        profile.id,
+                        primary.into_iter().chain(definitions.iter()),
+                    ),
                     manual_cast_requested: false,
                 },
                 secondary_resurrection: SecondaryResurrectionState::default(),
@@ -328,7 +357,7 @@ mod tests {
             profile(2).ability,
         ])
         .unwrap();
-        let runtime = AdditionalAutomaticAbilities::from_definitions(definitions, 17);
+        let runtime = AdditionalAutomaticAbilities::from_definitions(None, definitions, 17);
         assert_eq!(
             AdditionalAutomaticAbilityDefinitions::from_runtime(runtime),
             definitions

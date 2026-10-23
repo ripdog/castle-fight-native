@@ -16,7 +16,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 117;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 118;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -3151,7 +3151,11 @@ impl Simulation {
             .additional_abilities
             .filter(|definitions| definitions.iter().next().is_some())
             .map(|definitions| {
-                AdditionalAutomaticAbilities::from_definitions(definitions, self.next_tick)
+                AdditionalAutomaticAbilities::from_definitions(
+                    spellcasting.map(|profile| profile.ability),
+                    definitions,
+                    self.next_tick,
+                )
             });
         let id = self.allocate_id();
         let timed_life = properties
@@ -3245,7 +3249,13 @@ impl Simulation {
                 AutomaticAbilityState {
                     ready_tick: self.next_tick,
                     cast_sequence: 0,
-                    autocast_enabled: true,
+                    autocast_enabled: crate::components::initial_autocast_enabled(
+                        spellcasting.ability.id,
+                        definition
+                            .additional_abilities
+                            .iter()
+                            .flat_map(|set| set.iter()),
+                    ),
                     manual_cast_requested: false,
                 },
             ));
@@ -5580,6 +5590,11 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                     );
                     assert!(mine.initial_mana_minimum_10k <= mine.initial_mana_maximum_10k);
                     assert!(mine.explosion.delay_ticks > 0 && mine.explosion.partial_radius > 0);
+                }
+                crate::ParasiteChild::Infest(infest) => {
+                    assert!(infest.poison.damage_per_second > 0 && infest.poison.can_kill);
+                    assert!(infest.web_delay_ticks > 0 && infest.reenable_delay_ticks > 0);
+                    assert_ne!(infest.web, spellcasting.ability.id);
                 }
                 crate::ParasiteChild::LocustSwarm(swarm) => {
                     assert!(swarm.count > 0 && usize::from(swarm.count) <= crate::MAX_LOCUSTS);

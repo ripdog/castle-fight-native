@@ -187,4 +187,7 @@ pub(crate) struct NativeParasiteState {
     pub profile: NativeParasiteProfile,
     pub position: SimPoint,
     pub buff_until_tick: Option<u64>,
+    /// Damage the host takes while the buff stands (Infest); the ordinary dummy parents deal none.
+    #[serde(default)]
+    pub damage: Option<PoisonProfile>,
 }

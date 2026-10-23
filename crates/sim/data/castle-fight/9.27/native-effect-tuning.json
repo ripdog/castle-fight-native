@@ -5,6 +5,165 @@
     {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
+      "source_key": "A0AV",
+      "unit_rawcode": "n01W",
+      "spellcasting": {
+        "mana": {
+          "maximum": 100,
+          "starting": 50,
+          "regen_per_tick_per_10k": 2147503648
+        },
+        "ability": {
+          "id": 1093681494,
+          "mana_cost": 50,
+          "cooldown_ticks": 300,
+          "range": 512000,
+          "target_policy": "RandomEnemyUnit",
+          "effect": {
+            "ParasiteScript": {
+              "parent": {
+                "buff_rawcode": 1110454834,
+                "map_version": {
+                  "major": 9,
+                  "minor": 27
+                },
+                "speed_per_tick": 64853,
+                "affects_invulnerable": false,
+                "duration_ticks": 300,
+                "hero_duration_ticks": 300,
+                "body_rawcode": 1848651860,
+                "count": 2,
+                "body_duration_ticks": 0
+              },
+              "parent_targets": 3,
+              "parent_organic_only": true,
+              "parent_nonhero_only": true,
+              "ability": 1093681494,
+              "child": {
+                "Infest": {
+                  "poison": {
+                    "ability": 1093681494,
+                    "buff_rawcode": 1110454834,
+                    "damage_per_second": 20,
+                    "movement_percent_delta": 0,
+                    "attack_speed_percent_delta": 0,
+                    "duration_ticks": 300,
+                    "hero_duration_ticks": 300,
+                    "targets": 3,
+                    "stack_damage": false,
+                    "can_kill": true,
+                    "organic_only": true,
+                    "ward": null
+                  },
+                  "web": 1093681491,
+                  "web_delay_ticks": 90,
+                  "reenable_delay_ticks": 90
+                }
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 20000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "semantics": "resolved/unit-spell-semantics.tsv",
+        "functions": [
+          "UnitSpellClosure_registerUnitSpellWithTargetOrder_RaceNatureAbilities_cast_registerUnitSpellWithTargetOrder_RaceNatureAbilities5",
+          "CallbackSingle_doAfter_RaceNatureAbilities_call_doAfter_RaceNatureAbilities5,CallbackSingle_doAfter_doAfter_RaceNatureAbilities_call_doAfter_doAfter_RaceNatureAbilities2"
+        ]
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A0AS",
+      "unit_rawcode": "n01W",
+      "spellcasting": {
+        "mana": {
+          "maximum": 100,
+          "starting": 50,
+          "regen_per_tick_per_10k": 2147503648
+        },
+        "ability": {
+          "id": 1093681491,
+          "mana_cost": 0,
+          "cooldown_ticks": 540,
+          "range": 460800,
+          "target_policy": "NearestEnemyInCombat",
+          "effect": {
+            "Ensnare": {
+              "profile": {
+                "ability": 1093681491,
+                "duration_ticks": 360,
+                "hero_duration_ticks": 360,
+                "range": 460800,
+                "speed_per_tick": 51200,
+                "lowering_ticks": 18,
+                "air_height": 204800,
+                "melee_range": 131072,
+                "targets": 3
+              },
+              "search_radius": 0,
+              "maximum_targets": 1
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 20000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "native_base": "Aweb",
+        "unit": "resolved/units.tsv",
+        "default_active_alias": "A0AV"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0AU",
+      "unit_rawcode": "n01W",
+      "kind": "death-spawn",
+      "child_rawcode": 1848652110,
+      "count": 1,
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "Aspy"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
+      "source_key": "A0AT",
+      "unit_rawcode": "n01W",
+      "kind": "poison",
+      "profile": {
+        "ability": 1093681492,
+        "buff_rawcode": 1114665828,
+        "damage_per_second": 32,
+        "movement_percent_delta": 0,
+        "attack_speed_percent_delta": -25,
+        "duration_ticks": 300,
+        "hero_duration_ticks": 300,
+        "targets": 3,
+        "stack_damage": true,
+        "can_kill": false,
+        "organic_only": true
+      },
+      "provenance": {
+        "source": "resolved/object-fields.tsv",
+        "native_base": "Aven",
+        "stacking_flags": 1,
+        "unrepresented_damage_per_second": "0"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
       "source_key": "A0AR",
       "unit_rawcode": "n01N",
       "spellcasting": {

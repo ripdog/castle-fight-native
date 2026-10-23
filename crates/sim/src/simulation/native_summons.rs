@@ -341,6 +341,18 @@ impl Simulation {
         target: SimId,
         profile: crate::NativeParasiteProfile,
     ) {
+        self.launch_damaging_native_parasite(source, owner, target, profile, None);
+    }
+
+    /// A native Parasite whose buff also damages its host (the stock, unmodified ability).
+    pub(super) fn launch_damaging_native_parasite(
+        &mut self,
+        source: AbilitySourceSnapshot,
+        owner: PlayerId,
+        target: SimId,
+        profile: crate::NativeParasiteProfile,
+        damage: Option<crate::PoisonProfile>,
+    ) {
         let id = self.allocate_id();
         self.world.spawn((
             id,
@@ -359,6 +371,7 @@ impl Simulation {
                     }
                 },
                 buff_until_tick: None,
+                damage,
             }),
         ));
     }
@@ -367,7 +380,7 @@ impl Simulation {
         &mut self,
         entity: Entity,
         mut p: crate::components::NativeParasiteState,
-        units: &[UnitSnapshot],
+        units: &mut [UnitSnapshot],
         buildings: &[BuildingSnapshot],
     ) {
         let target = find_unit_index(units, p.target)
@@ -431,6 +444,12 @@ impl Simulation {
                 } else {
                     self.next_tick + u64::from(duration)
                 });
+                if let Some(damage) = p.damage
+                    && let Some(index) = find_unit_index(units, p.target)
+                    && super::native_actions::poison::eligible(&units[index], damage)
+                {
+                    self.apply_poison(p.source, &mut units[index], damage, self.next_tick);
+                }
             }
         }
         p.position_tick = self.next_tick;
@@ -479,13 +498,22 @@ impl Simulation {
             .collect();
         deaths.sort_unstable_by_key(|(id, ..)| *id);
         for (_, entity, p, position) in deaths {
-            // A Parasite whose retained body is an armed vanilla unit (the building parents'
-            // unmodified base) has no body the engine can build: it ends without a spawn.
+            // A promoted combat body is created like a native death-spawn child. A Parasite whose
+            // retained body is an armed vanilla unit (the building parents' unmodified base) has
+            // no body the engine can build: it ends without a spawn.
             if !crate::content::is_native_noncombat_summon(
                 p.profile.map_version,
                 p.profile.body_rawcode,
             ) {
                 self.world.despawn(entity);
+                self.spawn_summoned_children(
+                    p.owner,
+                    p.team,
+                    position,
+                    p.profile.map_version,
+                    p.profile.body_rawcode,
+                    p.profile.count,
+                );
                 continue;
             }
             let definition = crate::content::native_noncombat_summon_for_version(

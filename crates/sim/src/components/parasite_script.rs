@@ -24,6 +24,47 @@ pub enum ParasiteChild {
     /// A hidden land mine planted at a random offset around the caster once a dummy carrier
     /// has flown there.
     LandMine(LandMineProfile),
+    /// The Brood Mother's Infest: the Parasite damages its host over time, and the cast arms a
+    /// two-step script that turns on the sibling Web autocast and then this ability's own.
+    Infest(InfestProfile),
+}
+
+/// Native Parasite damage plus the map script that follows every cast of the Brood Mother's
+/// Infest. The Parasite parent supplies the missile, the buff and the death summon.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct InfestProfile {
+    /// The damage the Parasite buff deals; lethal, one source at a time.
+    pub poison: PoisonProfile,
+    /// The sibling ability whose autocast starts off and is enabled by the first script step.
+    pub web: AbilityId,
+    pub web_delay_ticks: u16,
+    /// The second step re-enables this ability's own autocast this long after the first.
+    pub reenable_delay_ticks: u16,
+}
+
+impl InfestProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 16] {
+        let poison = self.poison;
+        let mut words = [0; 16];
+        words[..14].copy_from_slice(&[
+            6,
+            u64::from(self.web.0),
+            u64::from(self.web_delay_ticks) | u64::from(self.reenable_delay_ticks) << 16,
+            u64::from(poison.ability.0),
+            u64::from(poison.buff_rawcode),
+            poison.damage_per_second as u64,
+            poison.movement_percent_delta as u16 as u64
+                | (poison.attack_speed_percent_delta as u16 as u64) << 16,
+            u64::from(poison.duration_ticks) | u64::from(poison.hero_duration_ticks) << 16,
+            u64::from(poison.targets.bits()),
+            u64::from(poison.stack_damage),
+            u64::from(poison.can_kill),
+            u64::from(poison.organic_only),
+            u64::from(poison.ward.is_some()),
+            0,
+        ]);
+        words
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -74,6 +115,7 @@ impl ParasiteChild {
                 words
             }
             Self::LandMine(p) => p.canonical_words(),
+            Self::Infest(p) => p.canonical_words(),
         }
     }
 }
@@ -99,11 +141,19 @@ pub struct PendingParasiteScript {
     pub child: ParasiteChild,
     pub target: SimId,
     pub due_tick: u64,
+    /// Which step of a multi-step script is pending.
+    #[serde(default)]
+    pub stage: u8,
 }
 
 impl PendingParasiteScript {
     pub(crate) fn canonical_words(self) -> Vec<u64> {
-        let mut words = vec![u64::from(self.ability.0), self.target.0, self.due_tick];
+        let mut words = vec![
+            u64::from(self.ability.0),
+            self.target.0,
+            self.due_tick,
+            u64::from(self.stage),
+        ];
         words.extend(self.child.canonical_words());
         words
     }
