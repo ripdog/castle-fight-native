@@ -34,6 +34,7 @@ mod parasite_area_buff;
 mod parasite_script;
 pub use building_script::{
     BuildingChild, BuildingScriptProfile, SandstormState, ThunderCallProfile, ThunderCallState,
+    TornadoDamage, TornadoProfile, TornadoSlow, TornadoState,
 };
 pub use parasite_area_buff::ParasiteAreaBuffProfile;
 pub use parasite_script::{

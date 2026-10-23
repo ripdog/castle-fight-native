@@ -310,6 +310,9 @@ impl Simulation {
                 NativeAction::AcidBomb(state) => self.advance_acid_bomb(entity, state, units),
                 NativeAction::Poison(state) => self.advance_poison(entity, state, units, buildings),
                 NativeAction::Sandstorm(state) => self.advance_sandstorm(entity, state, units),
+                NativeAction::Tornado(state) => {
+                    self.advance_tornado(entity, state, units, buildings)
+                }
                 NativeAction::SandCloud(state) => self.advance_sand_cloud(entity, state, units),
                 NativeAction::EchoRemnant(state) => self.advance_echo_remnant(entity, state, units),
                 NativeAction::LandMine(state) => self.advance_land_mine(entity, state, units),

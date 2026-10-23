@@ -76,6 +76,15 @@ pub enum BuildingChild {
         vision_radius: i32,
         vision_ticks: u16,
     },
+    /// Summons a stationary Tornado on a random hostile combat body: `options[0]` while artillery
+    /// is enabled, `options[1]` otherwise.
+    Tornado {
+        options: [TornadoProfile; 2],
+        /// Bodies carrying this ability (the tentacle marker) are never chosen.
+        excluded_ability: AbilityId,
+        /// This unit type is never chosen.
+        excluded_type: u32,
+    },
     /// A map-wide debuff plus a pulsing immolation on every hostile unit for a fixed time.
     Sandstorm {
         debuff: NativeDebuffProfile,
@@ -187,6 +196,17 @@ impl BuildingChild {
                 words.extend(debuff.canonical_words());
                 words
             }
+            Self::Tornado {
+                options,
+                excluded_ability,
+                excluded_type,
+            } => {
+                let mut words = vec![10, u64::from(excluded_ability.0), u64::from(excluded_type)];
+                for option in options {
+                    words.extend(option.canonical_words());
+                }
+                words
+            }
             Self::Sandstorm {
                 debuff,
                 pulse_ability,
@@ -232,6 +252,99 @@ impl BuildingScriptProfile {
         words.extend(self.child.canonical_words());
         words
     }
+}
+
+/// One damage aura of a Tornado body (`Atdg`): damage per second inside a radius.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct TornadoDamage {
+    pub ability: AbilityId,
+    pub radius: i32,
+    pub damage_per_second: i32,
+    /// Movement classes of the combat bodies struck (the `sapper` token); empty when none are.
+    pub combat_bodies: AttackTargetMask,
+    /// Every mechanical unit is struck regardless of movement class (the `mechanical` token).
+    pub mechanical_units: bool,
+    /// Enemy structures are struck (the `structure` token).
+    pub structures: bool,
+    /// Bodies carrying the invulnerable marker are struck (the `invulnerable` token).
+    pub affects_invulnerable: bool,
+}
+
+/// The Tornado body's hostile slow aura (`Aasl`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct TornadoSlow {
+    pub ability: AbilityId,
+    pub buff: u32,
+    pub radius: i32,
+    pub movement_percent_delta: i16,
+    pub attack_speed_percent_delta: i16,
+    pub targets: AttackTargetMask,
+    pub affects_invulnerable: bool,
+}
+
+/// A summoned Tornado: a stationary locust body whose auras are the whole effect.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct TornadoProfile {
+    /// The Summon Tornado ability (and so the body) this option casts.
+    pub ability: AbilityId,
+    pub body_rawcode: u32,
+    pub duration_ticks: u16,
+    /// The damage auras are per-second rates, struck once per this period.
+    pub pulse_ticks: u16,
+    pub unit_damage: TornadoDamage,
+    pub structure_damage: Option<TornadoDamage>,
+    pub slow: TornadoSlow,
+}
+
+impl TornadoDamage {
+    pub(crate) fn canonical_words(self) -> [u64; 7] {
+        [
+            u64::from(self.ability.0),
+            self.radius as u64,
+            self.damage_per_second as u64,
+            u64::from(self.combat_bodies.bits()),
+            u64::from(self.mechanical_units),
+            u64::from(self.structures),
+            u64::from(self.affects_invulnerable),
+        ]
+    }
+}
+
+impl TornadoProfile {
+    pub(crate) fn canonical_words(self) -> Vec<u64> {
+        let mut words = vec![
+            u64::from(self.ability.0),
+            u64::from(self.body_rawcode),
+            u64::from(self.duration_ticks),
+            u64::from(self.pulse_ticks),
+        ];
+        words.extend(self.unit_damage.canonical_words());
+        words.push(u64::from(self.structure_damage.is_some()));
+        if let Some(damage) = self.structure_damage {
+            words.extend(damage.canonical_words());
+        }
+        words.extend([
+            u64::from(self.slow.ability.0),
+            u64::from(self.slow.buff),
+            self.slow.radius as u64,
+            self.slow.movement_percent_delta as u64,
+            self.slow.attack_speed_percent_delta as u64,
+            u64::from(self.slow.targets.bits()),
+            u64::from(self.slow.affects_invulnerable),
+        ]);
+        words
+    }
+}
+
+/// A live Tornado body. It strikes once per second starting one second after the summon.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TornadoState {
+    pub source: SimId,
+    pub team: Team,
+    pub center: SimPoint,
+    pub profile: TornadoProfile,
+    pub next_pulse_tick: u64,
+    pub expires_tick: u64,
 }
 
 /// A map-wide pulsing damage actor owned by the casting player.

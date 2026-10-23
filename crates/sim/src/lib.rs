@@ -68,9 +68,10 @@ pub use components::{
     SecondaryAttackProfile, SecondaryResurrectionState, SelfDestructProfile, SimId,
     SirenPurgeProfile, SpeedAuraProfile, SpellcastingProfile, SphereAttachmentState, SphereProfile,
     SpikedShellProfile, SplashFalloffProfile, StatusState, TauntProfile, Team, ThunderCallProfile,
-    ThunderCallState, TravellingManaClapProfile, TriggeredAttackEffect, TriggeredSpellProcProfile,
-    TrueSightProfile, UnitClassifications, UnitGameplayProperties, UnitSpawn, UnitTemplate,
-    WarClubProfile, WarClubState, WhirlwindProfile,
+    ThunderCallState, TornadoDamage, TornadoProfile, TornadoSlow, TornadoState,
+    TravellingManaClapProfile, TriggeredAttackEffect, TriggeredSpellProcProfile, TrueSightProfile,
+    UnitClassifications, UnitGameplayProperties, UnitSpawn, UnitTemplate, WarClubProfile,
+    WarClubState, WhirlwindProfile,
 };
 pub use content::{
     CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION, CASTLE_FIGHT_CONTENT_REVISION_927,

@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A0BO","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0BM","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0BN","implementation":"warcraft-bash-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0BI","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Taunt (Atau): the immediate order the A0BJ script issues at the Mountain Giant; its effect is the Taunt child of the A0BJ Parasite script."},

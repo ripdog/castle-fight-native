@@ -120,6 +120,17 @@ impl Simulation {
                 ),
                 units,
             ),
+            BuildingChild::Tornado {
+                options,
+                excluded_ability,
+                excluded_type,
+            } => self.cast_tornado(
+                source,
+                profile.ability,
+                sequence,
+                (options, excluded_ability, excluded_type),
+                units,
+            ),
             BuildingChild::Sandstorm {
                 debuff,
                 pulse_ability,

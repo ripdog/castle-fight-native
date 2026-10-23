@@ -111,6 +111,66 @@ def _death_pit(params, detail, number, raw):
     return {'DeathPit': {'damage': int(params['damage']), 'excluded_ability': int(filtered[2]), 'excluded_type': int(filtered[3])}}
 
 
+def _tornado(params, detail, number, raw):
+    """Ancient of Gale: a random alive enemy receives a dummy-cast Summon Tornado at its position."""
+    functions = detail['functions']
+    body = functions['galeSpell']
+    picker = functions['ForGroupCallback_forUnitsInRect_SpellHelpers_callback_forUnitsInRect_SpellHelpers']
+    selector = functions['setArtilleryModeAbilityIds']
+    normal, alternate = params['normal_ability_id'], params['alternate_mode_ability_id']
+    shape = re.fullmatch(r'function galeSpell\((\w+)\)local (\w+)=nil local (\w+)=nil \2=unit_getOwner\(\1\)\3=randomAliveEnemy\(\2\)'
+        r'if\(\3==nil\)then return end dummyCastPointFrom\(\2,(\w+),%d,unit_getPos\(\3\),unit_getPos\(\3\),([\d.]+)\)end' % params['order_id'], body.strip())
+    chosen = re.fullmatch(r'function setArtilleryModeAbilityIds\(\w+\)if \w+ then .*?%s=(\d+) .*? else .*?%s=(\d+) .*? end end' % ((shape[4],) * 2) if shape else r'$^', selector.strip())
+    filtered = re.search(r'isAliveCombatSapper\((\w+)\)and unit_isEnemyOf\(\1,\w+\.p\)\)and\(unit_getAbilityLevel\(\1,%d\)<=0\)\)and'
+        r'\(unit_getAbilityLevel\(\1,(\d+)\)<=0\)\)and\(not\(unit_getTypeId\(\1\)==(\d+)\)\)' % raw('Avul'), picker)
+    if (shape is None or chosen is None or filtered is None or 'checkForShield' in body
+            or [int(chosen[1]), int(chosen[2])] != [normal, alternate]
+            or 'group_getRandom(' not in functions['randomAliveEnemy']):
+        raise ValueError('Ancient of Gale control flow changed: unshielded random alive enemy and a dummy-cast Summon Tornado')
+    fields, bases, unit_fields = detail['all_fields'], detail['all_bases'], detail['all_unit_fields']
+    second = number(1, 30)
+
+    def damage(code):
+        aura = fields[code]
+        tokens = set(aura['targs1'].split(','))
+        if (bases[code] != 'Atdg' or 'enemies' not in tokens or tokens - {'air', 'ground', 'enemies', 'sapper', 'ward', 'mechanical', 'structure', 'invulnerable'}
+                or number(aura['dataa1']) != number(aura['datac1']) or number(aura['datab1']) > number(aura['area1'])
+                or number(aura['datad1']) != 0 or number(aura['datae1']) != 0):
+            raise ValueError('Tornado damage aura must be one flat per-second rate inside its radius (no distinct small tier)')
+        movement = sum(bit for token, bit in (('ground', 1), ('air', 2)) if token in tokens) or 3
+        return {'ability': raw(code), 'radius': number(aura['area1'], 1024), 'damage_per_second': number(aura['dataa1']),
+            'combat_bodies': movement if 'sapper' in tokens else 0, 'mechanical_units': 'mechanical' in tokens,
+            'structures': 'structure' in tokens, 'affects_invulnerable': 'invulnerable' in tokens}
+
+    options = []
+    for code in (normal, alternate):
+        ability = code.to_bytes(4, 'big').decode()
+        summon = fields[ability]
+        body_code = summon['unitid1']
+        unit = unit_fields[body_code]
+        abilities = [a for a in unit['abillist'].split(',') if a not in ('Aloc', 'Atwa')]
+        auras = [a for a in abilities if bases.get(a) == 'Atdg']
+        slows = [a for a in abilities if bases.get(a) == 'Aasl']
+        if (detail['all_bases'][ability] != 'ANto' or number(summon['dur1']) != number(summon['herodur1'])
+                or number(unit['spd']) != 0 or len(slows) != 1 or len(auras) != len(abilities) - 1
+                or 'Aloc' not in unit['abillist'].split(',')):
+            raise ValueError('Tornado body must be a stationary locust with damage auras and one slow aura')
+        damages = [damage(a) for a in auras]
+        units = [d for d in damages if not d['structures']]
+        structures = [d for d in damages if d['structures']]
+        slow = fields[slows[0]]
+        slow_tokens = set(slow['targs1'].split(','))
+        if len(units) != 1 or len(structures) > 1 or not {'enemies', 'sapper'} <= slow_tokens or len(slow['buffid1']) != 4:
+            raise ValueError('Tornado body needs one unit damage aura, at most one structure aura and a hostile combat slow')
+        options.append({'ability': raw(ability), 'body_rawcode': raw(body_code), 'duration_ticks': number(summon['dur1'], 30),
+            'pulse_ticks': second, 'unit_damage': units[0], 'structure_damage': structures[0] if structures else None,
+            'slow': {'ability': raw(slows[0]), 'buff': raw(slow['buffid1']), 'radius': number(slow['area1'], 1024),
+                'movement_percent_delta': number(slow['dataa1'], 100), 'attack_speed_percent_delta': number(slow['datab1'], 100),
+                'targets': sum(bit for token, bit in (('ground', 1), ('air', 2)) if token in slow_tokens),
+                'affects_invulnerable': 'invulnerable' in slow_tokens}})
+    return {'Tornado': {'options': options, 'excluded_ability': int(filtered[2]), 'excluded_type': int(filtered[3])}}
+
+
 def _banish(params, detail, number, raw):
     """Ancient Guardian: shield-checked random enemy receives a dummy-cast native Banish."""
     functions = detail['functions']
@@ -257,6 +317,8 @@ def project(recipe, fields, unit, protected, detail):
         child = _raise_from_corpse(params, detail, number, raw)
     elif kind == 'dummy-target-ability':
         child = _banish(params, detail, number, raw)
+    elif kind == 'dummy-point-ability':
+        child = _tornado(params, detail, number, raw)
     elif kind == 'direct-random-target-damage':
         child = _death_pit(params, detail, number, raw)
     elif kind == 'armed-next-melee-attack-splash':

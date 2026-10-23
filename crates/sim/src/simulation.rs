@@ -16,7 +16,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 126;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 127;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -57,6 +57,7 @@ mod power_plant;
 mod sand_cloud;
 mod starfall;
 mod thunder_call;
+mod tornado;
 mod training_variants;
 mod travelling_mana_clap;
 mod treant_sprout;
@@ -5508,6 +5509,16 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                     damage_per_mana,
                     ..
                 } => assert!(cap > 0 && damage_per_mana >= 0),
+                crate::BuildingChild::Tornado { options, .. } => {
+                    for option in options {
+                        assert!(
+                            option.duration_ticks > 0
+                                && option.pulse_ticks > 0
+                                && option.unit_damage.radius > 0
+                                && option.slow.radius > 0
+                        );
+                    }
+                }
                 crate::BuildingChild::Sandstorm {
                     pulse_interval_ticks,
                     duration_ticks,

@@ -5,6 +5,110 @@
     {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
+      "source_key": "A0BO",
+      "unit_rawcode": "h02A",
+      "spellcasting": {
+        "mana": {
+          "maximum": 15,
+          "starting": 0,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093681743,
+          "mana_cost": 14,
+          "cooldown_ticks": 30,
+          "range": 102398976,
+          "target_policy": "NativeBuildingSpellTrigger",
+          "effect": {
+            "BuildingScript": {
+              "ability": 1093681743,
+              "trigger_targets": 5,
+              "trigger_invulnerable": true,
+              "trigger_spell_immune": false,
+              "trigger_mechanical_only": false,
+              "child": {
+                "Tornado": {
+                  "options": [
+                    {
+                      "ability": 1093681732,
+                      "body_rawcode": 1848652357,
+                      "duration_ticks": 210,
+                      "pulse_ticks": 30,
+                      "unit_damage": {
+                        "ability": 1093681989,
+                        "radius": 256000,
+                        "damage_per_second": 40,
+                        "combat_bodies": 3,
+                        "mechanical_units": false,
+                        "structures": false,
+                        "affects_invulnerable": false
+                      },
+                      "structure_damage": {
+                        "ability": 1098146919,
+                        "radius": 256000,
+                        "damage_per_second": 15,
+                        "combat_bodies": 0,
+                        "mechanical_units": true,
+                        "structures": true,
+                        "affects_invulnerable": false
+                      },
+                      "slow": {
+                        "ability": 1096905580,
+                        "buff": 1113682796,
+                        "radius": 358400,
+                        "movement_percent_delta": -25,
+                        "attack_speed_percent_delta": -25,
+                        "targets": 3,
+                        "affects_invulnerable": true
+                      }
+                    },
+                    {
+                      "ability": 1093681745,
+                      "body_rawcode": 1848652358,
+                      "duration_ticks": 210,
+                      "pulse_ticks": 30,
+                      "unit_damage": {
+                        "ability": 1093681989,
+                        "radius": 256000,
+                        "damage_per_second": 40,
+                        "combat_bodies": 3,
+                        "mechanical_units": false,
+                        "structures": false,
+                        "affects_invulnerable": false
+                      },
+                      "structure_damage": null,
+                      "slow": {
+                        "ability": 1096905580,
+                        "buff": 1113682796,
+                        "radius": 358400,
+                        "movement_percent_delta": -25,
+                        "attack_speed_percent_delta": -25,
+                        "targets": 3,
+                        "affects_invulnerable": true
+                      }
+                    }
+                  ],
+                  "excluded_ability": 1093679176,
+                  "excluded_type": 1747990082
+                }
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "effect_ability_rawcode": null,
+      "provenance": {
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "source": "resolved/building-spell-mechanics.tsv",
+        "fields": "resolved/object-fields.tsv",
+        "protected": "resolved/protected-ability-fields.tsv",
+        "functions": "BuildingSpellClosure_registerBuildingSpell_RaceNatureAbilities_cast_registerBuildingSpell_RaceNatureAbilities2,galeSpell,setArtilleryModeAbilityIds"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
       "source_key": "A0BM",
       "unit_rawcode": "h02C",
       "spellcasting": {
