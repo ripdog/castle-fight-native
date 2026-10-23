@@ -970,6 +970,12 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
     death_masteries = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "source-damage-mastery-over-death"}
+    attack_dispels = {row["unit_rawcode"]: json.loads(row["parameters_json"])
+        for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
+        if row["mechanic_kind"] == "attack-proc-dispel-positive-buffs"}
+    attack_dispel_sources = {row["unit_rawcode"]: row["source_functions"].split(",")
+        for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
+        if row["mechanic_kind"] == "attack-proc-dispel-positive-buffs"}
     mirror_images = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "attack-proc-native-mirror-image"}
@@ -1018,10 +1024,22 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
     misc = dict(line.split("=", 1) for line in retained("war3mapMisc.txt").decode().splitlines() if "=" in line and not line.startswith("//"))
     effects = []
     seen = set()
+    source_damage_rules = []
     for recipe in recipes["effects"]:
         allowed = {"kind", "source_kind", "source_key", "unit_rawcode"}
         if set(recipe) - allowed:
             raise ValueError("native recipes may contain identities only, not tuning values")
+        if recipe["kind"] == "attack-dispel":
+            # A per-body branch of the shared source-damage listener, owned by the unit type and
+            # gated by the shared dispatcher marker the unit carries; it binds no ability of its own.
+            unit = units.get(recipe["unit_rawcode"])
+            if unit is None or recipe["source_key"] not in unit["abilities"].split(","):
+                raise ValueError("attack dispel must name the dispatcher marker in its unit's inventory")
+            from project_attack_dispel import project as project_attack_dispel
+            source_damage_rules.append(project_attack_dispel(recipe, {
+                "functions": functions, "attack_dispel": attack_dispels[recipe["unit_rawcode"]],
+                "attack_dispel_sources": attack_dispel_sources[recipe["unit_rawcode"]]}))
+            continue
         if recipe["source_kind"] not in {"unit-ability", "ability-effect"}:
             raise ValueError("unsupported native recipe source kind")
         key = (recipe["source_kind"], recipe["source_key"])
@@ -1172,6 +1190,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
     structure_damage = project_structure_damage(functions, [code.to_bytes(4, "big").decode() for code in swarm_bodies])
     flying_retargets = project_flying_retarget(rows(retained("resolved/production-unit-special-mechanics.tsv")), functions)
     return {"schema_version": 3, "map_version": release["map_version"], "effects": effects,
+        "unit_source_damage_rules": source_damage_rules,
         "unit_flying_retarget_rules": flying_retargets,
         "unit_structure_damage_rules": structure_damage,
         "unit_death_rules": death_rules, "unit_death_rules_source": {"git_tree": tree, "path": "resolved/production-unit-special-mechanics.tsv", "function": "fJ"},

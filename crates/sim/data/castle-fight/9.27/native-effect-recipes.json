@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A03Q","unit_rawcode":"e006","kind":"attack-dispel"},
+    {"source_kind":"unit-ability","source_key":"A0AY","unit_rawcode":"e006","kind":"spell-resistance"},
+    {"source_kind":"unit-ability","source_key":"A004","unit_rawcode":"e006","kind":"native-heal"},
     {"source_kind":"unit-ability","source_key":"Adtg","unit_rawcode":"e00G","kind":"true-sight"},
     {"source_kind":"unit-ability","source_key":"A0FV","unit_rawcode":"e00G","kind":"demolish"},
     {"source_kind":"ability-effect","source_key":"A0C3","unit_rawcode":"n028","kind":"orb-mana-burn"},

@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r233";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r236";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -1948,6 +1948,12 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0AY") => {
+            0x4000_0287
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A004") => {
+            0x4000_0286
+        }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"Adtg") => {
             0x4000_0285
         }
@@ -3849,6 +3855,12 @@ fn hash_passive_effects(hash: &mut ContentHash64, effects: PassiveUnitEffects) {
                     hash.write_u64(word);
                 }
             }
+            PassiveUnitEffect::AttackDispel(profile) => {
+                hash.write_u8(50);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
             PassiveUnitEffect::TrueSight(profile) => {
                 hash.write_u8(49);
                 for word in profile.canonical_words() {
@@ -4178,6 +4190,12 @@ fn hash_triggered_effect(hash: &mut ContentHash64, effect: TriggeredAttackEffect
         }
         TriggeredAttackEffect::Charm(profile) => {
             hash.write_u8(5);
+            for word in profile.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
+        TriggeredAttackEffect::Dispel(profile) => {
+            hash.write_u8(9);
             for word in profile.canonical_words() {
                 hash.write_u64(word);
             }

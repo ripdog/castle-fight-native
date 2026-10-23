@@ -582,6 +582,8 @@ pub enum TriggeredAttackEffect {
     EntanglingRoots(EntanglingRootsEffectProfile),
     /// Free native Mana Burn cast by a landed orb attack: the burned mana is the damage.
     ManaBurn(ManaBurnProfile),
+    /// A listener roll already resolved to a dispel of positive buffs.
+    Dispel(AttackDispelProfile),
     Charm(OrbCharmProfile),
     /// Free native Acid Bomb cast by a landed orb attack; the missile is an independent action.
     AcidBomb(AcidBombProfile),
@@ -1126,6 +1128,45 @@ pub struct NativeHealProfile {
     /// A script-cast Rejuvenation on the healed unit by the same cast (the Furbolg shamans).
     #[serde(default)]
     pub rejuvenation: Option<RejuvenationProfile>,
+    /// The dryads' Nature's Touch script: a permanent armor grant on the healed unit and, for the
+    /// Keeper, an attempted Spirit Wolf order afterwards.
+    #[serde(default)]
+    pub touch: Option<NaturesTouchProfile>,
+}
+
+/// Script released by the dryads' Nature's Touch heal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct NaturesTouchProfile {
+    /// Permanent (identity-scoped, non-stacking) armor installed on the healed unit.
+    pub armor: NativeAbilityGrant,
+    /// The follow-up immediate summon order attempted when the heal's resume delay elapses.
+    pub summon: Option<NaturesTouchSummon>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct NaturesTouchSummon {
+    pub ability: AbilityId,
+    /// Attack resumes this long after a successful order (a failed order resumes at once).
+    pub resume_delay_ticks: u16,
+}
+
+impl NaturesTouchProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 8] {
+        let armor = self.armor.canonical_words();
+        let summon = self.summon.map_or([0; 2], |s| {
+            [u64::from(s.ability.0), u64::from(s.resume_delay_ticks)]
+        });
+        [
+            1,
+            armor[0],
+            armor[1],
+            armor[2],
+            armor[3],
+            armor[4] | u64::from(self.summon.is_some()) << 63,
+            summon[0],
+            summon[1],
+        ]
+    }
 }
 
 /// Native Rejuvenation: the healed amount arrives evenly over the buff's lifetime as regeneration.
@@ -1156,10 +1197,13 @@ impl RejuvenationProfile {
     }
 }
 impl NativeHealProfile {
-    pub(crate) fn canonical_words(self) -> [u64; 20] {
+    pub(crate) fn canonical_words(self) -> [u64; 28] {
         let spray = self
             .spray
             .map_or([0; 8], HealingSprayProfile::canonical_words);
+        let touch = self
+            .touch
+            .map_or([0; 8], NaturesTouchProfile::canonical_words);
         let rejuvenation = self
             .rejuvenation
             .map_or([0; 6], RejuvenationProfile::canonical_words);
@@ -1184,6 +1228,14 @@ impl NativeHealProfile {
             rejuvenation[3],
             rejuvenation[4],
             rejuvenation[5],
+            touch[0],
+            touch[1],
+            touch[2],
+            touch[3],
+            touch[4],
+            touch[5],
+            touch[6],
+            touch[7],
         ]
     }
 }
@@ -1339,6 +1391,27 @@ pub enum PassiveUnitEffect {
     Demolish(DemolishProfile),
     /// Object-native True Sight (`Adtg`): the bearer reveals invisible units around it.
     TrueSight(TrueSightProfile),
+    /// A source-damage listener that dispels positive buffs from a landed hit's target(s).
+    AttackDispel(AttackDispelProfile),
+}
+
+/// The Nature "Abolish Magic" listeners: a landed attack rolls once and then removes the positive
+/// buffs from its target (and, with a radius, from every eligible enemy around the target).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct AttackDispelProfile {
+    pub ability: AbilityId,
+    pub chance_per_10k: u16,
+    /// Zero dispels the attacked unit only.
+    pub radius: i32,
+}
+impl AttackDispelProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 3] {
+        [
+            u64::from(self.ability.0),
+            u64::from(self.chance_per_10k),
+            self.radius as u64,
+        ]
+    }
 }
 
 /// Native True Sight: invisible units inside the radius are visible to the bearer's team.

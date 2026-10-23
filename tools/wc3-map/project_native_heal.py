@@ -76,9 +76,45 @@ def _rejuvenation(recipe, detail, handler, delay, tick):
         'hero_duration_ticks': tick(fields['herodur1']), 'organic_only': 'organic' in tokens}
 
 
+TOUCH_KINDS = {'registered-heal-plus-permanent-armor', 'registered-heal-armor-plus-summon'}
+
+
+def _touch(recipe, detail, handler, delay, tick):
+    """Nature's Touch: the heal order permanently adds an item armor ability to its target, then resumes."""
+    semantics, row, functions = detail['semantics_row'], detail['mechanics_row'], detail['functions']
+    p = json.loads(semantics['parameters_json'])
+    armor = p['permanent_armor_ability_rawcode']
+    shape = (r'addProtectedAbility\((\w+),(\d+)\)\w+=addEffect1\("[^"]+",\w+,"overhead"\)__wurst_safe_DestroyEffect\(\w+\)'
+        r'\w+=\w+:create\d+\(\)\w+\.caster=\w+ doAfter\(([0-9.]+),\w+\)end$')
+    matched = re.search(shape, handler.strip())
+    callbacks = [functions[name] for name in row['delayed_callback_functions'].split(',')]
+    resume = r'function \w+\((\w+)\)orderCodeAttack\(\1\.caster\)end'
+    if (matched is None or int(matched[2]) != int.from_bytes(armor.encode(), 'big')
+            or Decimal(matched[3]) != Decimal(delay) or row['mechanic_kind'] != 'apply-protected-ability'
+            or detail['all_bases'].get(armor, armor) != armor):
+        raise ValueError('Nature\'s Touch requires the permanent armor grant at the healed unit and the retained resume delay')
+    bonus = Decimal(str(p['permanent_armor_bonus']))
+    grant = {'ability': int.from_bytes(armor.encode(), 'big'), 'effect': {'Armor': int(bonus * 100)}}
+    summon = None
+    if semantics['semantic_kind'] == 'registered-heal-armor-plus-summon':
+        order = re.fullmatch(r'function \w+\((\w+)\)local \w+=nil if unit_issueImmediateOrderById\(\1\.caster,(\d+)\)then \w+=\w+:create\d+\(\)'
+            r'\w+\.caster=\1\.caster doAfter\(([0-9.]+),\w+\)else orderCodeAttack\(\1\.caster\)end end', callbacks[0].strip())
+        if (len(callbacks) != 2 or order is None or int(order[2]) != p['summon_order_id']
+                or Decimal(order[3]) != Decimal(str(p['resume_attack_after_summon_seconds']))
+                or Decimal(delay) != Decimal(str(p['post_heal_delay_seconds']))
+                or re.fullmatch(resume, callbacks[1].strip()) is None):
+            raise ValueError('Keeper\'s Nature\'s Touch must attempt its Spirit Wolf order and then resume')
+        summon = {'ability': int.from_bytes(p['summon_ability_rawcode'].encode(), 'big'),
+            'resume_delay_ticks': tick(order[3])}
+    elif len(callbacks) != 1 or re.fullmatch(resume, callbacks[0].strip()) is None or Decimal(delay) != Decimal(str(p['resume_attack_delay_seconds'])):
+        raise ValueError('Nature\'s Touch must resume the retained caster identity')
+    return {'armor': grant, 'summon': summon}
+
+
 def project(recipe, fields, unit, protected, detail):
     row, semantics = detail['mechanics_row'], detail['semantics_row']
     p = json.loads(semantics['parameters_json'])
+    touching = semantics['semantic_kind'] in TOUCH_KINDS
     rejuvenating = (semantics['semantic_kind'] == 'proxy-object-effect'
         and row['mechanic_kind'] == 'dummy-target-ability-from-owner')
     scripted_spray = semantics['semantic_kind'] == 'proxy-object-effect' and not rejuvenating
@@ -88,6 +124,9 @@ def project(recipe, fields, unit, protected, detail):
     if scripted_spray:
         if row['target_mode_label'] != 'ally-any' or row['mechanic_kind'] != 'dummy-point-ability':
             raise ValueError('Heal spray requires the any-ally dummy point dispatch')
+    elif touching:
+        if row['target_mode_label'] != 'ally-ground':
+            raise ValueError('Nature\'s Touch requires the ground-ally heal trigger')
     elif rejuvenating:
         if row['target_mode_label'] != 'ally-ground':
             raise ValueError('Rejuvenation requires the ground-ally heal trigger')
@@ -96,7 +135,7 @@ def project(recipe, fields, unit, protected, detail):
         or p['primary_effect_ability_rawcode'] != recipe['source_key']):
         raise ValueError('Heal requires distinct native friendly effect and ground script trigger')
     delays = json.loads(row['scheduled_delays_json'])
-    if len(delays) != 1 or (not scripted_spray and not rejuvenating
+    if len(delays) != 1 or (not scripted_spray and not rejuvenating and not touching
             and Decimal(delays[0]) != Decimal(str(p['resume_attack_delay_seconds']))):
         raise ValueError('Heal resume deadline differs from retained callback')
     functions = detail['functions']
@@ -104,7 +143,10 @@ def project(recipe, fields, unit, protected, detail):
     tick = lambda value: int((Decimal(str(value))*30).to_integral_value(rounding=ROUND_CEILING))
     spray = None
     rejuvenation = None
-    if rejuvenating:
+    touch = None
+    if touching:
+        touch = _touch(recipe, detail, handler, delays[0], tick)
+    elif rejuvenating:
         callback = functions[row['delayed_callback_functions'].split(',')[0]]
         if not re.fullmatch(r'function \w+\((\w+)\)orderCodeAttack\(\1\.caster\)end', callback.strip()):
             raise ValueError('Rejuvenation must resume the retained caster identity')
@@ -129,6 +171,8 @@ def project(recipe, fields, unit, protected, detail):
         heal['spray'] = spray
     if rejuvenation is not None:
         heal['rejuvenation'] = rejuvenation
+    if touch is not None:
+        heal['touch'] = touch
     return {'kind':'scripted-automatic','source_kind':recipe['source_kind'],'source_key':recipe['source_key'],'unit_rawcode':recipe['unit_rawcode'],
         'spellcasting':{'mana':{'maximum':mana('mana_max'),'starting':mana('mana_start'),'regen_per_tick_per_10k':(1<<31)|rate},
         'ability':{'id':raw,'mana_cost':int(protected.get('mana_cost',fields['cost1'])), 'cooldown_ticks':tick(protected.get('cooldown',fields['cool1'])),

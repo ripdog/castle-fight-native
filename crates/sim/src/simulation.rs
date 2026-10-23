@@ -16,7 +16,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 121;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 122;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -7567,6 +7567,13 @@ fn apply_pending_attack_effects(
             }
             TriggeredAttackEffect::Charm(profile) => {
                 result.charm = orb_charm_request(units, index, source, profile);
+            }
+            TriggeredAttackEffect::Dispel(profile) => {
+                // `isDispellableEnemyOf` applies to the area form only; the direct form removes
+                // the positive buffs of the attacked unit unconditionally.
+                if profile.radius == 0 {
+                    native_summons::dispel_positive_buffs(&mut units[index].status);
+                }
             }
             TriggeredAttackEffect::ManaBurn(profile) => {
                 if !units[index].classifications.spell_immune

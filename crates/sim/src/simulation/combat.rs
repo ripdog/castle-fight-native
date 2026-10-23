@@ -1214,6 +1214,26 @@ impl Simulation {
                         });
                     }
                 }
+                PassiveUnitEffect::AttackDispel(profile) => {
+                    // The listener is registered on combat bodies and acts on units only.
+                    let TargetIndex::Unit(_) = intent.target else {
+                        continue;
+                    };
+                    let roll = deterministic_random(
+                        self.config.match_seed,
+                        completed_tick,
+                        intent.source_id,
+                        RANDOM_PURPOSE_ATTACK_PROC ^ u64::from(profile.ability.0),
+                        intent.attack_sequence,
+                    ) % u64::from(ATTACK_PROC_CHANCE_SCALE);
+                    if roll < u64::from(profile.chance_per_10k) {
+                        assert!(
+                            on_hit.triggered_spell.is_none(),
+                            "multiple triggered spell procs on one attack are not yet supported"
+                        );
+                        on_hit.triggered_spell = Some(TriggeredAttackEffect::Dispel(profile));
+                    }
+                }
                 PassiveUnitEffect::FrostAttack(profile) => {
                     assert!(
                         on_hit.frost.replace(profile).is_none(),

@@ -613,7 +613,24 @@ struct TuningFile {
     unit_flying_retarget_rules: Vec<NativeUnitFlyingRetargetRule>,
     #[serde(default)]
     unit_structure_damage_rules: Vec<NativeUnitStructureDamageRule>,
+    #[serde(default)]
+    unit_source_damage_rules: Vec<NativeUnitSourceDamageRule>,
     effects: Vec<TuningEffect>,
+}
+
+/// A per-body branch of the map's shared source-damage listener (`handleSourceDamageEffects`),
+/// selected by unit type rather than by an ability the unit owns.
+#[derive(Debug, Clone, Deserialize)]
+struct NativeUnitSourceDamageRule {
+    unit_rawcode: String,
+    rule: NativeSourceDamageRule,
+    #[allow(dead_code)]
+    provenance: serde_json::Value,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+enum NativeSourceDamageRule {
+    AttackDispel(crate::AttackDispelProfile),
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1909,6 +1926,18 @@ fn native_unit_mechanics_from_tuning(
     }) {
         passive_effects.push(build_passive_effect(tuning, effect));
     }
+    for rule in tuning
+        .unit_source_damage_rules
+        .iter()
+        .filter(|rule| rawcode(&rule.unit_rawcode).ok() == Some(unit_rawcode))
+    {
+        passive_effects.push(match rule.rule {
+            NativeSourceDamageRule::AttackDispel(profile) => {
+                assert!(profile.chance_per_10k <= 10_000 && profile.radius >= 0);
+                PassiveUnitEffect::AttackDispel(profile)
+            }
+        });
+    }
     let (spellcasting, additional_abilities) =
         compose_spellcasting_profiles(None, automatic_profiles).map_err(|reason| {
             NativeEffectCatalogError::InvalidAutomaticAbilities {
@@ -2999,6 +3028,7 @@ mod tests {
                 unit_death_rules: Vec::new(),
                 unit_flying_retarget_rules: Vec::new(),
                 unit_structure_damage_rules: Vec::new(),
+                unit_source_damage_rules: Vec::new(),
                 map_version: "9.27".to_owned(),
                 effects: vec![TuningEffect::OrbSpellProc {
                     cooldown_ticks: 0,
@@ -3091,6 +3121,7 @@ mod tests {
             unit_death_rules: Vec::new(),
             unit_flying_retarget_rules: Vec::new(),
             unit_structure_damage_rules: Vec::new(),
+            unit_source_damage_rules: Vec::new(),
             map_version: "9.27".to_owned(),
             effects: vec![frost("F002", 100), frost("F001", 100)],
         };

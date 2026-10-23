@@ -2842,6 +2842,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: &PassiveUnitEffects) {
                     hash.write_u64(word);
                 }
             }
+            PassiveUnitEffect::AttackDispel(profile) => {
+                hash.write_u8(50);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
             PassiveUnitEffect::TrueSight(profile) => {
                 hash.write_u8(49);
                 for word in profile.canonical_words() {
@@ -2973,6 +2979,12 @@ fn hash_triggered_attack_effect(hash: &mut Fnv64, effect: &TriggeredAttackEffect
         }
         TriggeredAttackEffect::Charm(profile) => {
             hash.write_u8(5);
+            for word in profile.canonical_words() {
+                hash.write_u64(word);
+            }
+        }
+        TriggeredAttackEffect::Dispel(profile) => {
+            hash.write_u8(9);
             for word in profile.canonical_words() {
                 hash.write_u64(word);
             }

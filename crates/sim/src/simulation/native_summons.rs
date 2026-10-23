@@ -102,6 +102,60 @@ pub(super) fn dispel_magic_buffs(status: &mut StatusState) {
     status.rooted_until_tick = 0;
 }
 
+/// `UnitRemoveBuffsEx(positive, !negative, magical, ...)`: the same dispel as [`dispel_magic_buffs`]
+/// restricted to buffs that benefit their bearer. A buff with a native identity states its sign;
+/// a script modifier without one is positive when every effect it carries helps the bearer.
+pub(super) fn dispel_positive_buffs(status: &mut StatusState) {
+    let poison = status.poison.map(|p| p.profile.buff_rawcode);
+    let purge = status.purge.map(|p| p.profile.ability.0);
+    let acid = status.acid_bomb.map(|p| p.profile.ability.0);
+    let ensnare = status.ensnare.map(|p| p.profile.ability.0);
+    let aura_ids: [Option<ModifierId>; MAX_TIMED_ARMOR_MODIFIERS] = std::array::from_fn(|i| {
+        (i < usize::from(status.armor_modifier_count) && status.armor_modifiers[i].aura_membership)
+            .then_some(status.armor_modifiers[i].id)
+    });
+    let keep = |id: ModifierId, expiry: u64| {
+        expiry == u64::MAX
+            || poison == Some(id.0)
+            || purge == Some(id.0)
+            || acid == Some(id.0)
+            || ensnare == Some(id.0)
+            || aura_ids.contains(&Some(id))
+    };
+    super::native_carriers::retain_modifiers(
+        &mut status.movement_modifiers,
+        &mut status.movement_modifier_count,
+        |m| m.undispellable || keep(m.id, m.expires_tick) || m.percent_delta <= 0,
+    );
+    super::native_carriers::retain_modifiers(
+        &mut status.attack_speed_modifiers,
+        &mut status.attack_speed_modifier_count,
+        |m| m.undispellable || keep(m.id, m.expires_tick) || m.percent_delta <= 0,
+    );
+    super::native_carriers::retain_modifiers(
+        &mut status.armor_modifiers,
+        &mut status.armor_modifier_count,
+        |m| {
+            let positive = m.native_buff.map_or_else(
+                || {
+                    m.armor_bonus_per_100 >= 0
+                        && m.damage_bonus_per_10k >= 0
+                        && m.damage_taken_bonus_per_10k <= 0
+                        && m.attack_miss_chance_per_10k == 0
+                        && (m.armor_bonus_per_100 > 0
+                            || m.damage_bonus_per_10k > 0
+                            || m.regeneration_per_second_per_10k > 0
+                            || m.mana_regeneration_per_second_per_10k > 0
+                            || m.melee_life_steal_per_10k > 0
+                            || m.melee_damage_return_per_10k > 0)
+                },
+                |buff| buff.positive,
+            );
+            m.undispellable || keep(m.id, m.expires_tick) || !positive
+        },
+    );
+}
+
 fn resume_attack(u: &mut UnitSnapshot) {
     u.target = None;
     u.direct_retaliation_lock = false;

@@ -482,13 +482,22 @@ impl Simulation {
                     }
                     if let AbilityEffect::Heal(p) = intent.ability.effect {
                         let id = self.allocate_id();
-                        self.world.spawn((
-                            id,
-                            crate::components::NativeAction::ResumeAttack {
+                        let due_tick = self.next_tick + u64::from(p.resume_attack_ticks);
+                        // The Keeper's script tries to order its Spirit Wolf summon when the
+                        // heal's delay elapses; a failed order resumes the attack at once.
+                        let action = match p.touch.and_then(|touch| touch.summon) {
+                            Some(summon) => crate::components::NativeAction::ImmediateSummonOrder {
                                 source: source.id,
-                                due_tick: self.next_tick + u64::from(p.resume_attack_ticks),
+                                ability: summon.ability,
+                                due_tick,
+                                resume_delay_ticks: summon.resume_delay_ticks,
                             },
-                        ));
+                            None => crate::components::NativeAction::ResumeAttack {
+                                source: source.id,
+                                due_tick,
+                            },
+                        };
+                        self.world.spawn((id, action));
                     }
                     if let AbilityEffect::HealingWave(profile) = intent.ability.effect {
                         let recovery_end = self

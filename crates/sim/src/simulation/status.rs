@@ -163,6 +163,10 @@ pub(super) fn apply_ability_effect_to_unit(
             if let Some(rejuvenation) = p.rejuvenation {
                 apply_rejuvenation(target, rejuvenation, completed_tick);
             }
+            if let Some(touch) = p.touch {
+                // UnitAddAbility leaves an already installed identity unchanged.
+                target.status.native_grants.insert(touch.armor);
+            }
         }
         AbilityEffect::Curse(p) => {
             if target.team == source_team

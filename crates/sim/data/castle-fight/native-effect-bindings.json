@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A0AY","implementation":"warcraft-spell-resistance-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A004","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"Adtg","implementation":"warcraft-true-sight-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0FV","implementation":"warcraft-demolish-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"ability-effect","source_key":"A0C3","implementation":"warcraft-orb-mana-burn-v1","valid_from":"9.27","valid_through":"9.27"},

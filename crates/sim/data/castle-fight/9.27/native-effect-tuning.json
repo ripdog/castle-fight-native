@@ -4,6 +4,64 @@
   "effects": [
     {
       "source_kind": "unit-ability",
+      "source_key": "A0AY",
+      "unit_rawcode": "e006",
+      "kind": "spell-resistance",
+      "damage_taken_per_10k": 8500,
+      "provenance": {
+        "ability": "A0AY",
+        "source": "resolved/object-fields.tsv"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
+      "source_key": "A004",
+      "unit_rawcode": "e006",
+      "spellcasting": {
+        "mana": {
+          "maximum": 150,
+          "starting": 90,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093677108,
+          "mana_cost": 35,
+          "cooldown_ticks": 450,
+          "range": 256000,
+          "target_policy": "WoundedFriendlyUnit",
+          "effect": {
+            "Heal": {
+              "amount": 75,
+              "targets": 3,
+              "organic_only": true,
+              "nonancient_only": true,
+              "affects_invulnerable": true,
+              "resume_attack_ticks": 18,
+              "touch": {
+                "armor": {
+                  "ability": 1095328818,
+                  "effect": {
+                    "Armor": 200
+                  }
+                },
+                "summon": null
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "provenance": {
+        "unrepresented_trigger_heal": "0",
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "native": "resolved/object-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "semantics": "resolved/unit-spell-semantics.tsv"
+      }
+    },
+    {
+      "source_kind": "unit-ability",
       "source_key": "Adtg",
       "unit_rawcode": "e00G",
       "kind": "true-sight",
@@ -8311,6 +8369,32 @@
         "native_base": "ACvs",
         "stacking_flags": 1,
         "unrepresented_damage_per_second": "0"
+      }
+    }
+  ],
+  "unit_source_damage_rules": [
+    {
+      "unit_rawcode": "e006",
+      "rule": {
+        "AttackDispel": {
+          "ability": 1093677905,
+          "chance_per_10k": 1500,
+          "radius": 0
+        }
+      },
+      "provenance": {
+        "source": "resolved/production-unit-special-mechanics.tsv",
+        "handler": "dryadDispelProc",
+        "dispatcher": "handleSourceDamageEffects",
+        "remove_buffs_ex": [
+          true,
+          false,
+          true,
+          false,
+          false,
+          false,
+          false
+        ]
       }
     }
   ],

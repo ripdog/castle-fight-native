@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    Dryad = 0x1000_00be => b"e006",
     Visioneer = 0x1000_00bd => b"e00G",
     FurbolgElderShaman = 0x1000_00bc => b"n028",
     FurbolgShaman = 0x1000_00bb => b"n026",
@@ -222,6 +223,7 @@ roster!(CastleFightUnitKind, CastleFightUnitId;
 );
 
 roster!(CastleFightProductionKind, CastleFightBuildingId;
+    AncientOfGrowth = 0x2000_00ad => b"h013",
     Enigma = 0x2000_00ac => b"h071",
     FurbolgAbode = 0x2000_00ab => b"h012",
     FurbolgHut = 0x2000_00aa => b"h00Y",
