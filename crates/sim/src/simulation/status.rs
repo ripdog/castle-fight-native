@@ -160,6 +160,9 @@ pub(super) fn apply_ability_effect_to_unit(
             }
             let healing = native_healing_amount(&target.status, p.amount, completed_tick);
             target.health = target.health.saturating_add(healing).min(target.health_max);
+            if let Some(rejuvenation) = p.rejuvenation {
+                apply_rejuvenation(target, rejuvenation, completed_tick);
+            }
         }
         AbilityEffect::Curse(p) => {
             if target.team == source_team
@@ -765,6 +768,32 @@ pub(super) fn apply_timed_attack_speed_modifier(
                 .expect("attack-speed modifier count overflow");
         }
     }
+}
+
+/// A dummy-cast native Rejuvenation: regeneration for the buff's lifetime, replaced by a recast.
+fn apply_rejuvenation(
+    target: &mut UnitSnapshot,
+    profile: crate::RejuvenationProfile,
+    completed_tick: u64,
+) {
+    if profile.organic_only && target.mechanical {
+        return;
+    }
+    let duration = if target.classifications.uses_hero_spell_rules() {
+        profile.hero_duration_ticks
+    } else {
+        profile.duration_ticks
+    };
+    apply_timed_armor_modifier(
+        &mut target.status,
+        TimedArmorModifier {
+            id: ModifierId(profile.ability.0),
+            native_buff: Some(profile.buff),
+            regeneration_per_second_per_10k: profile.regeneration_per_second_per_10k,
+            expires_tick: completed_tick + u64::from(duration),
+            ..TimedArmorModifier::default()
+        },
+    );
 }
 
 pub(super) fn apply_timed_armor_modifier(status: &mut StatusState, incoming: TimedArmorModifier) {

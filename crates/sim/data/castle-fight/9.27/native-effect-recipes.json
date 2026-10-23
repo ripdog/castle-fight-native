@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0C0","unit_rawcode":"n026","kind":"native-heal"},
     {"source_kind":"unit-ability","source_key":"A0AV","unit_rawcode":"n01W","kind":"parasite-script"},
     {"source_kind":"unit-ability","source_key":"A0AS","unit_rawcode":"n01W","kind":"native-web"},
     {"source_kind":"unit-ability","source_key":"A0AU","unit_rawcode":"n01W","kind":"death-spawn"},

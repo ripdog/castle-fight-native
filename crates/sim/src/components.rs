@@ -1103,12 +1103,46 @@ pub struct NativeHealProfile {
     /// A script-cast area heal released at the healed unit's position by the same cast.
     #[serde(default)]
     pub spray: Option<HealingSprayProfile>,
+    /// A script-cast Rejuvenation on the healed unit by the same cast (the Furbolg shamans).
+    #[serde(default)]
+    pub rejuvenation: Option<RejuvenationProfile>,
+}
+
+/// Native Rejuvenation: the healed amount arrives evenly over the buff's lifetime as regeneration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct RejuvenationProfile {
+    pub ability: AbilityId,
+    pub buff: NativeBuffIdentity,
+    pub regeneration_per_second_per_10k: u32,
+    pub duration_ticks: u16,
+    pub hero_duration_ticks: u16,
+    pub organic_only: bool,
+}
+
+impl RejuvenationProfile {
+    pub(crate) fn canonical_words(self) -> [u64; 6] {
+        [
+            u64::from(self.ability.0),
+            u64::from(self.buff.rawcode)
+                | u64::from(self.buff.positive) << 32
+                | u64::from(self.buff.stealable) << 33
+                | u64::from(self.buff.organic_only) << 34
+                | u64::from(self.organic_only) << 35,
+            u64::from(self.regeneration_per_second_per_10k),
+            u64::from(self.duration_ticks) | u64::from(self.hero_duration_ticks) << 16 | 1 << 32,
+            0,
+            0,
+        ]
+    }
 }
 impl NativeHealProfile {
-    pub(crate) fn canonical_words(self) -> [u64; 14] {
+    pub(crate) fn canonical_words(self) -> [u64; 20] {
         let spray = self
             .spray
             .map_or([0; 8], HealingSprayProfile::canonical_words);
+        let rejuvenation = self
+            .rejuvenation
+            .map_or([0; 6], RejuvenationProfile::canonical_words);
         [
             self.amount as u64,
             u64::from(self.targets.bits()),
@@ -1124,6 +1158,12 @@ impl NativeHealProfile {
             spray[5],
             spray[6],
             spray[7],
+            rejuvenation[0],
+            rejuvenation[1],
+            rejuvenation[2],
+            rejuvenation[3],
+            rejuvenation[4],
+            rejuvenation[5],
         ]
     }
 }

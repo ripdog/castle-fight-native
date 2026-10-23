@@ -5,6 +5,57 @@
     {
       "kind": "scripted-automatic",
       "source_kind": "unit-ability",
+      "source_key": "A0C0",
+      "unit_rawcode": "n026",
+      "spellcasting": {
+        "mana": {
+          "maximum": 200,
+          "starting": 130,
+          "regen_per_tick_per_10k": 2147493648
+        },
+        "ability": {
+          "id": 1093681968,
+          "mana_cost": 50,
+          "cooldown_ticks": 480,
+          "range": 256000,
+          "target_policy": "WoundedFriendlyUnit",
+          "effect": {
+            "Heal": {
+              "amount": 0,
+              "targets": 3,
+              "organic_only": true,
+              "nonancient_only": true,
+              "affects_invulnerable": true,
+              "resume_attack_ticks": 24,
+              "rejuvenation": {
+                "ability": 1093681495,
+                "buff": {
+                  "rawcode": 1114793322,
+                  "positive": true,
+                  "stealable": true,
+                  "organic_only": true
+                },
+                "regeneration_per_second_per_10k": 200000,
+                "duration_ticks": 300,
+                "hero_duration_ticks": 300,
+                "organic_only": true
+              }
+            }
+          }
+        }
+      },
+      "mana_regen_per_second_per_10k": 10000,
+      "provenance": {
+        "unrepresented_trigger_heal": "0.01",
+        "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
+        "native": "resolved/object-fields.tsv",
+        "script": "resolved/unit-spell-mechanics.tsv",
+        "semantics": "resolved/unit-spell-semantics.tsv"
+      }
+    },
+    {
+      "kind": "scripted-automatic",
+      "source_kind": "unit-ability",
       "source_key": "A0AV",
       "unit_rawcode": "n01W",
       "spellcasting": {
@@ -2074,6 +2125,7 @@
       },
       "mana_regen_per_second_per_10k": 17500,
       "provenance": {
+        "unrepresented_trigger_heal": "0",
         "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
         "native": "resolved/object-fields.tsv",
         "script": "resolved/unit-spell-mechanics.tsv",
@@ -2122,6 +2174,7 @@
       },
       "mana_regen_per_second_per_10k": 10000,
       "provenance": {
+        "unrepresented_trigger_heal": "0",
         "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
         "native": "resolved/object-fields.tsv",
         "script": "resolved/unit-spell-mechanics.tsv",
@@ -4668,6 +4721,7 @@
       },
       "mana_regen_per_second_per_10k": 10000,
       "provenance": {
+        "unrepresented_trigger_heal": "0",
         "git_tree": "8ea806dca331ff254995e94e6f0baf225a14bf10",
         "native": "resolved/object-fields.tsv",
         "script": "resolved/unit-spell-mechanics.tsv",

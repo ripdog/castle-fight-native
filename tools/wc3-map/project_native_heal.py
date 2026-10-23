@@ -41,28 +41,75 @@ def _spray(recipe, detail, handler, delay, tick):
         'targets': (1 if 'ground' in tokens else 0) | (2 if 'air' in tokens else 0)}
 
 
+REJUVENATION_MASK = {'air', 'friend', 'ground', 'invulnerable', 'neutral', 'organic', 'self', 'vulnerable'}
+
+
+def _rejuvenation(recipe, detail, handler, delay, tick):
+    """Furbolg Shaman: the heal order triggers a free dummy-cast native Rejuvenation on the same unit."""
+    semantics = detail['semantics_row']
+    child, fields, bases = detail['effect_key'], detail['effect_fields'], detail['all_bases']
+    p = json.loads(semantics['parameters_json'])
+    sites = p['delivery_sites']
+    shape = (r'function \w+\((\w+),(\w+),(\w+)\)(?:local \w+=nil )+(\w+)=\2 (\w+)=\3 (\w+)=unit_getOwner\(\4\)(\w+)=\4 (\w+)=\5 '
+        r'dummyCastTargetFrom1\(\6,(\d+),(\d+),\8,unit_getPos\(\7\),([0-9.]+)\)(\w+)=\w+:create\d+\(\)\12\.caster=\4 doAfter\(([0-9.]+),\12\)end')
+    matched = re.fullmatch(shape, handler.strip())
+    if (semantics['semantic_kind'] != 'proxy-object-effect' or len(sites) != 1 or bases[child] != 'Arej'
+        or sites[0]['callee'] != 'dummyCastTargetFrom1' or sites[0]['effect_rawcodes'] != [child]
+        or tokens_of(fields['targs1']) != REJUVENATION_MASK or len(fields['buffid1']) != 4
+        or Decimal(fields['datab1']) != 0 or Decimal(fields['dataa1']) <= 0
+        or Decimal(fields['dur1']) <= 0 or Decimal(fields['herodur1']) <= 0
+        or matched is None or int(matched[9]) != int.from_bytes(child.encode(), 'big')
+        or Decimal(matched[13]) != Decimal(delay)):
+        raise ValueError('Rejuvenation requires a free dummy-cast native Arej at the healed unit with the retained resume delay')
+    raw = lambda code: int.from_bytes(code.encode(), 'big')
+    amount, seconds = Decimal(fields['dataa1']), Decimal(fields['dur1'])
+    if Decimal(fields['herodur1']) != seconds:
+        raise ValueError('Rejuvenation heals its retained amount over one lifetime for every recipient')
+    regeneration = amount * 10_000 / seconds
+    if regeneration != regeneration.to_integral_value():
+        raise ValueError('Rejuvenation regeneration is not exactly representable')
+    tokens = tokens_of(fields['targs1'])
+    return {'ability': raw(child),
+        'buff': {'rawcode': raw(fields['buffid1']), 'positive': True, 'stealable': fields.get('hero', '0') == '0',
+            'organic_only': 'organic' in tokens},
+        'regeneration_per_second_per_10k': int(regeneration), 'duration_ticks': tick(fields['dur1']),
+        'hero_duration_ticks': tick(fields['herodur1']), 'organic_only': 'organic' in tokens}
+
+
 def project(recipe, fields, unit, protected, detail):
     row, semantics = detail['mechanics_row'], detail['semantics_row']
     p = json.loads(semantics['parameters_json'])
-    scripted_spray = semantics['semantic_kind'] == 'proxy-object-effect'
+    rejuvenating = (semantics['semantic_kind'] == 'proxy-object-effect'
+        and row['mechanic_kind'] == 'dummy-target-ability-from-owner')
+    scripted_spray = semantics['semantic_kind'] == 'proxy-object-effect' and not rejuvenating
     if (detail['native_base'] != 'Ahea' or row['base_order'] != 'heal'
         or tokens_of(fields['targs1']) != HEAL_MASK):
         raise ValueError('Heal requires distinct native friendly effect and script trigger')
     if scripted_spray:
         if row['target_mode_label'] != 'ally-any' or row['mechanic_kind'] != 'dummy-point-ability':
             raise ValueError('Heal spray requires the any-ally dummy point dispatch')
+    elif rejuvenating:
+        if row['target_mode_label'] != 'ally-ground':
+            raise ValueError('Rejuvenation requires the ground-ally heal trigger')
     elif (row['target_mode_label'] != 'ally-ground' or row['mechanic_kind'] != 'scheduled-callback'
         or semantics['semantic_kind'] != 'registered-object-effect-plus-resume'
         or p['primary_effect_ability_rawcode'] != recipe['source_key']):
         raise ValueError('Heal requires distinct native friendly effect and ground script trigger')
     delays = json.loads(row['scheduled_delays_json'])
-    if len(delays) != 1 or (not scripted_spray and Decimal(delays[0]) != Decimal(str(p['resume_attack_delay_seconds']))):
+    if len(delays) != 1 or (not scripted_spray and not rejuvenating
+            and Decimal(delays[0]) != Decimal(str(p['resume_attack_delay_seconds']))):
         raise ValueError('Heal resume deadline differs from retained callback')
     functions = detail['functions']
     handler = functions[row['handler_function']]
     tick = lambda value: int((Decimal(str(value))*30).to_integral_value(rounding=ROUND_CEILING))
     spray = None
-    if scripted_spray:
+    rejuvenation = None
+    if rejuvenating:
+        callback = functions[row['delayed_callback_functions'].split(',')[0]]
+        if not re.fullmatch(r'function \w+\((\w+)\)orderCodeAttack\(\1\.caster\)end', callback.strip()):
+            raise ValueError('Rejuvenation must resume the retained caster identity')
+        rejuvenation = _rejuvenation(recipe, detail, handler, delays[0], tick)
+    elif scripted_spray:
         callback = functions[row['delayed_callback_functions'].split(',')[0]]
         if not re.fullmatch(r'function \w+\((\w+)\)if\(\(not\(\1\.u==nil\)\)and\(widget_getLife\(\1\.u\)>0\.405\)\)then orderCodeAttack\(\1\.u\)end end', callback.strip()):
             raise ValueError('Heal spray must resume the retained caster identity')
@@ -75,12 +122,15 @@ def project(recipe, fields, unit, protected, detail):
     raw = int.from_bytes(recipe['source_key'].encode(), 'big')
     mana = lambda key, scale=1: 0 if unit[key] in {'','-','_'} else int(Decimal(unit[key])*scale)
     rate = mana('mana_regen', 10000)
-    heal = {'amount':int(fields['dataa1']),'targets':3,'organic_only':True,'nonancient_only':True,
+    trigger_amount = Decimal(fields['dataa1'])
+    heal = {'amount':int(trigger_amount),'targets':3,'organic_only':True,'nonancient_only':True,
         'affects_invulnerable':True,'resume_attack_ticks':tick(delays[0])}
     if spray is not None:
         heal['spray'] = spray
+    if rejuvenation is not None:
+        heal['rejuvenation'] = rejuvenation
     return {'kind':'scripted-automatic','source_kind':recipe['source_kind'],'source_key':recipe['source_key'],'unit_rawcode':recipe['unit_rawcode'],
         'spellcasting':{'mana':{'maximum':mana('mana_max'),'starting':mana('mana_start'),'regen_per_tick_per_10k':(1<<31)|rate},
         'ability':{'id':raw,'mana_cost':int(protected.get('mana_cost',fields['cost1'])), 'cooldown_ticks':tick(protected.get('cooldown',fields['cool1'])),
         'range':int(Decimal(fields['rng1'])*1024),'target_policy':'WoundedFriendlyUnit','effect':{'Heal':heal}}}, 'mana_regen_per_second_per_10k':rate,
-        'provenance':{'git_tree':detail['git_tree'],'native':'resolved/object-fields.tsv','script':'resolved/unit-spell-mechanics.tsv','semantics':'resolved/unit-spell-semantics.tsv'}}
+        'provenance':{'unrepresented_trigger_heal':str(trigger_amount - int(trigger_amount)),'git_tree':detail['git_tree'],'native':'resolved/object-fields.tsv','script':'resolved/unit-spell-mechanics.tsv','semantics':'resolved/unit-spell-semantics.tsv'}}
