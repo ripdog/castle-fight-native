@@ -1761,13 +1761,14 @@ pub(super) fn effective_movement_speed(unit: &UnitSnapshot) -> i32 {
             },
         )
         .clamp(0, 1_000);
-    let speed = unit
-        .status
-        .damage_charge
-        .filter(|charge| charge.armed && !unit.abilities_disabled)
-        .map_or(unit.movement.speed_per_tick, |charge| {
-            charge.profile.armed_speed_per_tick
-        });
+    let speed = super::feral_bear::retreat_speed(unit).unwrap_or_else(|| {
+        unit.status
+            .damage_charge
+            .filter(|charge| charge.armed && !unit.abilities_disabled)
+            .map_or(unit.movement.speed_per_tick, |charge| {
+                charge.profile.armed_speed_per_tick
+            })
+    });
     let speed_after_modifiers = i32::try_from(i64::from(speed) * i64::from(percent) / 100)
         .expect("effective movement speed overflowed validated bounds");
     if speed > 0

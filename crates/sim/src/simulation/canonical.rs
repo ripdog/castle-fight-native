@@ -2336,6 +2336,28 @@ fn hash_status_state(hash: &mut Fnv64, status: &StatusState) {
     if let Some(tick) = status.summon_order_refresh_tick {
         hash.write_u64(tick);
     }
+    hash.write_u8(u8::from(status.feral_bear.is_some()));
+    if let Some(bear) = status.feral_bear {
+        for word in bear.profile.canonical_words() {
+            hash.write_u64(word);
+        }
+        match bear.phase {
+            crate::components::BearPhase::Ready => hash.write_u8(0),
+            crate::components::BearPhase::Retreating { until_tick } => {
+                hash.write_u8(1);
+                hash.write_u64(until_tick);
+            }
+            crate::components::BearPhase::Asleep { until_tick } => {
+                hash.write_u8(2);
+                hash.write_u64(until_tick);
+            }
+            crate::components::BearPhase::Spent => hash.write_u8(3),
+        }
+        hash.write_u64(bear.event_sequence);
+        hash.write_u8(bear.pending_events);
+        hash.write_i32(bear.pending_lowest_health);
+        hash.write_u8(u8::from(bear.bonus_pending));
+    }
     hash.write_u8(u8::from(status.mirror_image.is_some()));
     if let Some(mirror) = status.mirror_image {
         for word in mirror.profile.canonical_words() {
@@ -2857,6 +2879,12 @@ fn hash_passive_unit_effects(hash: &mut Fnv64, effects: &PassiveUnitEffects) {
             }
             PassiveUnitEffect::Demolish(profile) => {
                 hash.write_u8(48);
+                for word in profile.canonical_words() {
+                    hash.write_u64(word);
+                }
+            }
+            PassiveUnitEffect::FeralBear(profile) => {
+                hash.write_u8(51);
                 for word in profile.canonical_words() {
                     hash.write_u64(word);
                 }

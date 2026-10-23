@@ -1,6 +1,7 @@
 use super::*;
 
 pub(super) fn observe_damage_event(unit: &mut UnitSnapshot, current_health: i32, damage: i32) {
+    super::feral_bear::observe_target_damage(unit, current_health);
     observe_damage(unit, current_health);
     let armed = super::damage_charge::observe_damage_state(
         &mut unit.status.damage_charge,

@@ -880,6 +880,15 @@ enum TuningEffect {
         #[allow(dead_code)]
         provenance: serde_json::Value,
     },
+    /// The Bears' target-damage listener (`feralRage`, `startBearHibernate`).
+    FeralBear {
+        source_kind: String,
+        source_key: String,
+        unit_rawcode: String,
+        profile: crate::FeralBearProfile,
+        #[allow(dead_code)]
+        provenance: serde_json::Value,
+    },
     /// Object-native True Sight: the bearer reveals invisible units to its team.
     TrueSight {
         source_kind: String,
@@ -1272,6 +1281,7 @@ impl TuningEffect {
             | Self::DeathMastery { source_kind, .. }
             | Self::Demolish { source_kind, .. }
             | Self::TrueSight { source_kind, .. }
+            | Self::FeralBear { source_kind, .. }
             | Self::FrostAttack { source_kind, .. }
             | Self::ScriptedAutomatic { source_kind, .. }
             | Self::ElvenAutomatic { source_kind, .. }
@@ -1336,6 +1346,7 @@ impl TuningEffect {
             | Self::DeathMastery { source_key, .. }
             | Self::Demolish { source_key, .. }
             | Self::TrueSight { source_key, .. }
+            | Self::FeralBear { source_key, .. }
             | Self::FrostAttack { source_key, .. }
             | Self::ScriptedAutomatic { source_key, .. }
             | Self::ElvenAutomatic { source_key, .. }
@@ -1388,6 +1399,7 @@ impl TuningEffect {
             | Self::DeathMastery { unit_rawcode, .. }
             | Self::Demolish { unit_rawcode, .. }
             | Self::TrueSight { unit_rawcode, .. }
+            | Self::FeralBear { unit_rawcode, .. }
             | Self::FrostAttack { unit_rawcode, .. }
             | Self::ScriptedAutomatic { unit_rawcode, .. }
             | Self::ElvenAutomatic { unit_rawcode, .. }
@@ -1462,6 +1474,9 @@ impl TuningEffect {
             Self::DeathMastery { .. } => NativeEffectImplementationId::WarcraftDeathMasteryV1,
             Self::Demolish { .. } => NativeEffectImplementationId::WarcraftDemolishV1,
             Self::TrueSight { .. } => NativeEffectImplementationId::WarcraftTrueSightV1,
+            Self::FeralBear { .. } => {
+                NativeEffectImplementationId::WarcraftScriptDamageControllerV1
+            }
             Self::DeathSpawn { .. } => NativeEffectImplementationId::WarcraftDeathSpawnV1,
             Self::Poison { .. } => NativeEffectImplementationId::WarcraftPoisonV1,
             Self::DamageThreshold { .. } => NativeEffectImplementationId::WarcraftDamageThresholdV1,
@@ -1534,6 +1549,7 @@ impl TuningEffect {
             Self::DeathMastery { .. } => "death-mastery",
             Self::Demolish { .. } => "demolish",
             Self::TrueSight { .. } => "true-sight",
+            Self::FeralBear { .. } => "feral-bear",
             Self::DeathSpawn { .. } => "death-spawn",
             Self::Poison { .. } => "poison",
             Self::DamageThreshold { .. } => "damage-threshold",
@@ -1834,7 +1850,7 @@ fn native_unit_mechanics_from_tuning(
             .effects
             .iter()
             .filter(|effect| effect.source().ok() == Some(source))
-            .filter(|effect| !matches!(effect, TuningEffect::DamageCharge { unit_rawcode: code, .. } | TuningEffect::DamageRetaliation { unit_rawcode: code, .. } | TuningEffect::HealthScaledAftershock { unit_rawcode: code, .. } if rawcode(code).ok() != Some(unit_rawcode)))
+            .filter(|effect| !matches!(effect, TuningEffect::DamageCharge { unit_rawcode: code, .. } | TuningEffect::FeralBear { unit_rawcode: code, .. } | TuningEffect::DamageRetaliation { unit_rawcode: code, .. } | TuningEffect::HealthScaledAftershock { unit_rawcode: code, .. } if rawcode(code).ok() != Some(unit_rawcode)))
             // A scripted heal spray is selected per body: each body's script casts its own child.
             .filter(|effect| !matches!(effect, TuningEffect::ScriptedAutomatic { unit_rawcode: code, spellcasting, .. }
                 if matches!(spellcasting.ability.effect, crate::AbilityEffect::Heal(p) if p.spray.is_some())
@@ -1884,6 +1900,7 @@ fn native_unit_mechanics_from_tuning(
                 | TuningEffect::DeathMastery { .. }
                 | TuningEffect::Demolish { .. }
                 | TuningEffect::TrueSight { .. }
+                | TuningEffect::FeralBear { .. }
                 | TuningEffect::FrostAttack { .. }
                 | TuningEffect::Feedback { .. }
                 | TuningEffect::SpellResistance { .. }
@@ -2229,6 +2246,10 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
         TuningEffect::Demolish { profile, .. } => {
             assert!(profile.chance_per_10k <= 10_000 && profile.multiplier_per_10k >= 10_000);
             PassiveUnitEffect::Demolish(*profile)
+        }
+        TuningEffect::FeralBear { profile, .. } => {
+            assert!(profile.rage_chance_per_10k <= 10_000 && profile.hibernate_below_health > 0);
+            PassiveUnitEffect::FeralBear(*profile)
         }
         TuningEffect::TrueSight { profile, .. } => {
             assert!(profile.radius > 0);

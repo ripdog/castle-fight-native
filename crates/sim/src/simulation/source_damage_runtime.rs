@@ -254,6 +254,9 @@ fn dispatch_inner(
             }
         }
     }
+    if let Some(index) = find_unit_index(state.units, source) {
+        super::feral_bear::consume_wake_bonus(&mut state.units[index]);
+    }
     let dummy_killed = state.health(victim) <= 0;
     aftershock_inner(source, victim, state);
     deepen_armor_stack(source, victim, state);

@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"A0B3","implementation":"warcraft-critical-strike-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0B1","implementation":"warcraft-bash-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0BY","implementation":"warcraft-cleave-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0C4","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27","notes":"Hidden Channel: the Bears' one-time hibernation marker (consumed by the target-damage listener, modeled by the listener's phase)."},
     {"source_kind":"unit-ability","source_key":"A0BX","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0B0","implementation":"warcraft-native-aura-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0BW","implementation":"warcraft-evasion-v1","valid_from":"9.27","valid_through":"9.27"},

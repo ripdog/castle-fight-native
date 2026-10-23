@@ -16,7 +16,9 @@ pub(crate) use master_projectiles::{
     MasterFan, MasterMinion, MasterMover, MasterParasite, MasterProjectileState,
 };
 pub use master_projectiles::{MasterMoverProfile, MasterProjectileProfile, NativeNovaProfile};
+mod feral_bear;
 mod native_summons;
+pub use feral_bear::{BearPhase, FeralBearProfile, FeralBearState};
 mod travelling_mana_clap;
 pub(crate) use native_summons::NativeParasiteState;
 pub use native_summons::{
@@ -1401,6 +1403,8 @@ pub enum PassiveUnitEffect {
     TrueSight(TrueSightProfile),
     /// A source-damage listener that dispels positive buffs from a landed hit's target(s).
     AttackDispel(AttackDispelProfile),
+    /// The Bears' target-damage listener: Feral Rage and the one-time hibernation.
+    FeralBear(FeralBearProfile),
 }
 
 /// The Nature "Abolish Magic" listeners: a landed attack rolls once and then removes the positive
@@ -2730,6 +2734,7 @@ pub struct StatusState {
     pub lava_spawn: Option<LavaSpawnState>,
     pub summon_order_refresh_tick: Option<u64>,
     pub mirror_image: Option<MirrorImageState>,
+    pub feral_bear: Option<FeralBearState>,
     pub illusion: Option<IllusionState>,
     pub damage_charge: Option<DamageChargeState>,
     pub spheres: [Option<SphereAttachmentState>; 4],

@@ -273,6 +273,9 @@ def project_effect(recipe: dict[str, str], fields: dict[str, str],
     if kind in {"siren-purge", "feral-spirit"}:
         from project_naga_unit import project
         return project(recipe, fields, unit, protected, mechanics)
+    if kind == "feral-bear":
+        from project_feral_bear import project
+        return project(recipe, mechanics)
     if kind == "true-sight":
         # Object-native Adtg: the detection radius is the only radius the row has (its Area is "-").
         if (mechanics["native_base"] != "Adtg" or number("DataA1") != 3 or number("Rng1") <= 0
@@ -984,6 +987,9 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
     death_masteries = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "source-damage-mastery-over-death"}
+    feral_bears = {row["unit_rawcode"]: json.loads(row["parameters_json"])
+        for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
+        if row["mechanic_kind"] == "damage-triggered-feral-rage-and-hibernation"}
     attack_dispels = {row["unit_rawcode"]: json.loads(row["parameters_json"])
         for row in rows(retained("resolved/production-unit-special-mechanics.tsv"))
         if row["mechanic_kind"] == "attack-proc-dispel-positive-buffs"}
@@ -1058,7 +1064,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         if recipe["source_kind"] not in {"unit-ability", "ability-effect"}:
             raise ValueError("unsupported native recipe source kind")
         key = (recipe["source_kind"], recipe["source_key"])
-        if recipe["kind"] in {"damage-charge", "damage-retaliation", "health-scaled-aftershock", "native-heal"}:
+        if recipe["kind"] in {"damage-charge", "damage-retaliation", "health-scaled-aftershock", "native-heal", "feral-bear"}:
             key += (recipe["unit_rawcode"],)
         if key in seen:
             raise ValueError(f"duplicate recipe source: {key}")
@@ -1164,6 +1170,9 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
             detail.update(all_bases=ability_bases, functions=functions, git_tree=tree,
                 support_system=system_mechanics["support-order-controller"],
                 map_version=dict(zip(["major", "minor"], map(int, release["map_version"].split(".")))))
+        if recipe["kind"] == "feral-bear":
+            detail.update(feral_bear=feral_bears[recipe["unit_rawcode"]], functions=functions,
+                all_fields=abilities, all_bases=ability_bases)
         if recipe["kind"] == "parasite-script":
             detail.update(destructable=destructables, pathing_textures=pathing_textures)
         if recipe["kind"] in {"scripted-roots", "wind-walk", "native-heal", "orb-charm"}:

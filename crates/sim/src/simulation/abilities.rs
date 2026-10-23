@@ -124,7 +124,8 @@ impl Simulation {
         grid: &SpatialGrid,
     ) -> AbilityMetrics {
         let delayed_effects = self.resolve_delayed_secondary_resurrections(units)
-            + self.resolve_pending_parasite_scripts(units);
+            + self.resolve_pending_parasite_scripts(units)
+            + self.resolve_feral_bears(units);
         let due_pending_casts = units
             .iter()
             .enumerate()
