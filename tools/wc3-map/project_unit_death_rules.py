@@ -11,7 +11,7 @@ def project(rows, functions):
     result = {}
     for row in rows:
         kind = row['mechanic_kind']
-        if kind not in {'kill-heal-percent-max-hp', 'death-retaliation-damage-to-killer', 'organic-kill-eternal-servitude', 'source-damage-stacking-blood-corrosion'}:
+        if kind not in {'kill-heal-percent-max-hp', 'death-retaliation-damage-to-killer', 'organic-kill-eternal-servitude', 'source-damage-stacking-blood-corrosion', 'attack-stacking-corrosion'}:
             continue
         p = json.loads(row['parameters_json'])
         raw = int.from_bytes(row['unit_rawcode'].encode(), 'big')
@@ -27,6 +27,25 @@ def project(rows, functions):
                     or f"addProtectedAbility(lqq,{p['target_stack_ability_id']})" not in reducer
                     or f"elseif(mqq<{p['maximum_stack_level']})then" not in reducer):
                 raise ValueError('Blood Corrosion control flow changed')
+            value['armor_stack'] = {'ability': p['target_stack_ability_id'],
+                'armor_per_level_per_100': int(step * 100), 'maximum_level': p['maximum_stack_level']}
+        elif kind == 'attack-stacking-corrosion':
+            # The Emerald Dragon: its source-damage branch raises the victim's permanent armor
+            # penalty one level per damage event, up to the retained maximum.
+            levels = p['stack_levels']
+            step = levels[0]['defense_bonus']
+            stack = functions['tornadoStackProc']
+            dispatcher = functions['handleSourceDamageEffects']
+            marker = p['source_damage_marker_ability_id']
+            if (p['initial_stack_level'] != 1 or p['stack_increment_per_hit'] != 1
+                    or [lv['level'] for lv in levels] != list(range(1, p['maximum_stack_level'] + 1))
+                    or any(lv['defense_bonus'] != step * lv['level'] for lv in levels)
+                    or f"unit_getAbilityLevel(Qpq,{marker})<=0)then return end" not in dispatcher
+                    or f"Spq=={raw})then tornadoStackProc(Rpq)" not in dispatcher
+                    or f"addProtectedAbility(Joq,{p['target_stack_ability_id']})" not in stack
+                    or f"elseif(Koq<{p['maximum_stack_level']})then" not in stack
+                    or f"unit_getAbilityLevel(Joq,{p['target_stack_ability_id']})" not in stack):
+                raise ValueError('Corrosive Breath control flow changed')
             value['armor_stack'] = {'ability': p['target_stack_ability_id'],
                 'armor_per_level_per_100': int(step * 100), 'maximum_level': p['maximum_stack_level']}
         elif kind == 'organic-kill-eternal-servitude':
