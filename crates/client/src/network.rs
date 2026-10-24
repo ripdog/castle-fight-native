@@ -13,6 +13,8 @@ use castle_fight_protocol::{
 };
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
+/// Without a bound an unreachable address blocks for the operating system's connect timeout.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const RECONNECT_RETRY_INTERVAL: Duration = Duration::from_secs(1);
 const OUTBOUND_QUEUE_CAPACITY: usize = 256;
 
@@ -329,7 +331,7 @@ fn connect_with_message(
     address: SocketAddr,
     message: ClientMessage,
 ) -> Result<(TcpStream, SessionAssignment), NetworkClientError> {
-    let mut stream = TcpStream::connect(address)?;
+    let mut stream = TcpStream::connect_timeout(&address, CONNECT_TIMEOUT)?;
     stream.set_nodelay(true)?;
     stream.set_read_timeout(Some(HANDSHAKE_TIMEOUT))?;
     write_frame(&mut stream, &ProtocolEnvelope::new(message))?;

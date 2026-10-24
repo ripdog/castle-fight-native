@@ -1,8 +1,9 @@
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, ToSocketAddrs},
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
+        mpsc,
     },
     thread,
 };
@@ -53,6 +54,7 @@ impl Plugin for MainMenuPlugin {
                 (
                     handle_join_address_input,
                     handle_main_menu_buttons,
+                    finish_pending_session,
                     return_to_main_menu,
                 )
                     .chain(),
@@ -72,6 +74,49 @@ enum MainMenuScreen {
     Join,
 }
 
+/// A Host or Join attempt running on a worker thread. Dropping it abandons the attempt: the
+/// worker's result is discarded, which drops the half-built session and closes its connection.
+struct PendingSession {
+    description: String,
+    result: Mutex<mpsc::Receiver<Result<NetworkSession, String>>>,
+}
+
+impl PendingSession {
+    /// Runs `task` on its own thread so a slow or unreachable host cannot freeze the window.
+    fn start(
+        description: String,
+        task: impl FnOnce() -> Result<NetworkSession, String> + Send + 'static,
+    ) -> Result<Self, String> {
+        let (sender, receiver) = mpsc::channel();
+        thread::Builder::new()
+            .name("cf-session-setup".to_owned())
+            .spawn(move || {
+                // The receiver is gone when the player cancelled; the session is dropped here.
+                let _ = sender.send(task());
+            })
+            .map_err(|error| format!("Cannot start connection thread: {error}"))?;
+        Ok(Self {
+            description,
+            result: Mutex::new(receiver),
+        })
+    }
+
+    fn poll(&self) -> Option<Result<NetworkSession, String>> {
+        match self
+            .result
+            .lock()
+            .expect("session setup receiver mutex poisoned")
+            .try_recv()
+        {
+            Ok(result) => Some(result),
+            Err(mpsc::TryRecvError::Empty) => None,
+            Err(mpsc::TryRecvError::Disconnected) => {
+                Some(Err("The connection attempt ended unexpectedly.".to_owned()))
+            }
+        }
+    }
+}
+
 #[derive(Resource)]
 pub(crate) struct MainMenuState {
     options: ClientOptions,
@@ -79,7 +124,9 @@ pub(crate) struct MainMenuState {
     join_address: String,
     error: Option<String>,
     active: bool,
-    connect_requested: bool,
+    /// Action requested from the keyboard, run alongside button presses.
+    requested: Option<MainMenuAction>,
+    pending: Option<PendingSession>,
 }
 
 impl MainMenuState {
@@ -90,7 +137,8 @@ impl MainMenuState {
             join_address: "127.0.0.1".to_owned(),
             error: None,
             active: true,
-            connect_requested: false,
+            requested: None,
+            pending: None,
         }
     }
 
@@ -111,6 +159,7 @@ enum MainMenuAction {
     Host,
     JoinScreen,
     Connect,
+    CancelConnect,
     Back,
     Exit,
 }
@@ -164,6 +213,15 @@ fn spawn_main_menu(commands: &mut Commands, menu: &MainMenuState) {
                     MUTED,
                 );
 
+                if let Some(pending) = &menu.pending {
+                    panel.spawn(Node {
+                        height: px(12.0),
+                        ..default()
+                    });
+                    label(panel, pending.description.clone(), 16.0, TEXT);
+                    button(panel, "CANCEL", MainMenuAction::CancelConnect);
+                    return;
+                }
                 match menu.screen {
                     MainMenuScreen::Main => {
                         panel.spawn(Node {
@@ -271,12 +329,21 @@ fn handle_join_address_input(
         if event.state != ButtonState::Pressed {
             continue;
         }
+        if menu.pending.is_some() {
+            if event.logical_key == Key::Escape {
+                menu.requested = Some(MainMenuAction::CancelConnect);
+            }
+            continue;
+        }
         match &event.logical_key {
             Key::Backspace => {
                 changed |= menu.join_address.pop().is_some();
             }
             Key::Enter => {
-                menu.connect_requested = true;
+                menu.requested = Some(MainMenuAction::Connect);
+            }
+            Key::Escape => {
+                menu.requested = Some(MainMenuAction::Back);
             }
             Key::Character(character) => {
                 if menu.join_address.len() >= 255 {
@@ -336,8 +403,7 @@ fn handle_main_menu_buttons(
         return;
     };
 
-    let mut action_to_run = menu.connect_requested.then_some(MainMenuAction::Connect);
-    menu.connect_requested = false;
+    let mut action_to_run = menu.requested.take();
 
     for (interaction, action, mut background) in &mut buttons {
         match interaction {
@@ -375,35 +441,71 @@ fn handle_main_menu_buttons(
             exit.write(AppExit::Success);
         }
         MainMenuAction::Host => {
-            let result = start_hosted_session(&menu.options).and_then(|session| {
-                install_network_session(&mut commands, &menu.options, session, &mut game)
+            let options = menu.options.clone();
+            begin_session(&mut menu, "Starting game...".to_owned(), move || {
+                start_hosted_session(&options)
             });
-            match result {
-                Ok(()) => {
-                    menu.active = false;
-                    commands.entity(root).despawn();
-                }
-                Err(error) => {
-                    menu.error = Some(error);
-                    redraw(&mut commands, root, &menu);
-                }
-            }
+            redraw(&mut commands, root, &menu);
         }
         MainMenuAction::Connect => {
-            let result =
-                connect_to_session(&menu.options, &menu.join_address).and_then(|session| {
-                    install_network_session(&mut commands, &menu.options, session, &mut game)
-                });
-            match result {
-                Ok(()) => {
-                    menu.active = false;
-                    commands.entity(root).despawn();
-                }
-                Err(error) => {
-                    menu.error = Some(error);
-                    redraw(&mut commands, root, &menu);
-                }
-            }
+            let options = menu.options.clone();
+            let address = menu.join_address.clone();
+            begin_session(
+                &mut menu,
+                format!("Connecting to {}...", address.trim()),
+                move || connect_to_session(&options, &address),
+            );
+            redraw(&mut commands, root, &menu);
+        }
+        MainMenuAction::CancelConnect => {
+            menu.pending = None;
+            redraw(&mut commands, root, &menu);
+        }
+    }
+}
+
+fn begin_session(
+    menu: &mut MainMenuState,
+    description: String,
+    task: impl FnOnce() -> Result<NetworkSession, String> + Send + 'static,
+) {
+    if menu.pending.is_some() {
+        return;
+    }
+    menu.error = None;
+    match PendingSession::start(description, task) {
+        Ok(pending) => menu.pending = Some(pending),
+        Err(error) => menu.error = Some(error),
+    }
+}
+
+/// Completes a Host or Join attempt once its worker thread reports back.
+fn finish_pending_session(
+    mut commands: Commands,
+    mut menu: ResMut<MainMenuState>,
+    roots: Query<Entity, With<MainMenuRoot>>,
+    mut game: MenuGame<'_>,
+) {
+    if !menu.active {
+        return;
+    }
+    let Some(result) = menu.pending.as_ref().and_then(PendingSession::poll) else {
+        return;
+    };
+    menu.pending = None;
+    let Ok(root) = roots.single() else {
+        return;
+    };
+    match result.and_then(|session| {
+        install_network_session(&mut commands, &menu.options, session, &mut game)
+    }) {
+        Ok(()) => {
+            menu.active = false;
+            commands.entity(root).despawn();
+        }
+        Err(error) => {
+            menu.error = Some(error);
+            redraw(&mut commands, root, &menu);
         }
     }
 }
@@ -462,7 +564,8 @@ fn return_to_main_menu(
     menu.active = true;
     menu.screen = MainMenuScreen::Main;
     menu.error = None;
-    menu.connect_requested = false;
+    menu.requested = None;
+    menu.pending = None;
     for root in &roots {
         commands.entity(root).despawn();
     }
@@ -515,10 +618,11 @@ fn start_hosted_session(options: &ClientOptions) -> Result<NetworkSession, Strin
 
     let hosted = HostedServer { stop };
     // If the local client cannot join its own server, dropping `hosted` stops the thread again.
-    let mut session = connect_demo_to_address(
-        demo,
+    let joined = join_server(
+        &demo,
         SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), DEFAULT_MULTIPLAYER_PORT),
     )?;
+    let mut session = joined.into_session(demo);
     session.hosted = Some(hosted);
     Ok(session)
 }
@@ -531,10 +635,11 @@ impl Drop for HostedServer {
 
 fn connect_to_session(options: &ClientOptions, input: &str) -> Result<NetworkSession, String> {
     let addresses = resolve_server_addresses(input)?;
+    let demo = network_demo(options)?;
     let mut failures = Vec::new();
     for address in addresses {
-        match network_demo(options).and_then(|demo| connect_demo_to_address(demo, address)) {
-            Ok(session) => return Ok(session),
+        match join_server(&demo, address) {
+            Ok(joined) => return Ok(joined.into_session(demo)),
             Err(error) => failures.push(format!("{address}: {error}")),
         }
     }
@@ -551,11 +656,27 @@ fn network_demo(options: &ClientOptions) -> Result<crate::demo::DemoWorld, Strin
         .map_err(|error| error.to_string())
 }
 
-fn connect_demo_to_address(
-    demo: crate::demo::DemoWorld,
-    address: SocketAddr,
-) -> Result<NetworkSession, String> {
-    let compatibility = compatibility_identity_for_demo(&demo);
+/// A completed lobby handshake, not yet bound to the local world.
+struct JoinedServer {
+    client: NetworkClient,
+    local_player: PlayerId,
+    next_sequence: u64,
+}
+
+impl JoinedServer {
+    fn into_session(self, demo: crate::demo::DemoWorld) -> NetworkSession {
+        NetworkSession {
+            demo,
+            client: self.client,
+            local_player: self.local_player,
+            next_sequence: self.next_sequence,
+            hosted: None,
+        }
+    }
+}
+
+fn join_server(demo: &crate::demo::DemoWorld, address: SocketAddr) -> Result<JoinedServer, String> {
+    let compatibility = compatibility_identity_for_demo(demo);
     let (client, assignment) =
         NetworkClient::connect(address, compatibility, u64::from(std::process::id()))
             .map_err(|error| error.to_string())?;
@@ -582,12 +703,10 @@ fn connect_demo_to_address(
         ));
     }
 
-    Ok(NetworkSession {
-        demo,
+    Ok(JoinedServer {
         client,
         local_player,
         next_sequence: assignment.next_client_sequence,
-        hosted: None,
     })
 }
 
@@ -786,11 +905,24 @@ mod tests {
             authoritative.pending_status.push("stale".into());
         }
         app.world_mut().resource_mut::<SimulationPlayback>().paused = false;
-        assert!(app.world().get_resource::<LobbyState>().is_some());
+        app.update();
+        let lobby_screens = |app: &mut App| {
+            app.world_mut()
+                .query_filtered::<Entity, With<crate::lobby::LobbyRoot>>()
+                .iter(app.world())
+                .count()
+        };
+        assert_eq!(lobby_screens(&mut app), 1);
         assert!(!app.world().resource::<MainMenuState>().active());
 
         app.world_mut().write_message(LeaveMatchRequest);
         app.update();
+        app.update();
+        assert_eq!(
+            lobby_screens(&mut app),
+            0,
+            "an abandoned lobby must not stay on screen behind the main menu"
+        );
 
         assert!(app.world().resource::<MainMenuState>().active());
         assert!(app.world().get_resource::<LobbyState>().is_none());
