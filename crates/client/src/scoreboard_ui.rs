@@ -20,6 +20,10 @@ const BUTTON_BORDER: Color = Color::srgb(0.32, 0.43, 0.52);
 
 pub(crate) struct ScoreboardPlugin;
 
+/// Asks for the scoreboard to open or close, as F9 does.
+#[derive(Message)]
+pub(crate) struct ToggleScoreboardRequest;
+
 #[derive(Resource, Default)]
 struct ScoreboardState {
     expanded: bool,
@@ -69,6 +73,7 @@ enum ScoreColumn {
 impl Plugin for ScoreboardPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ScoreboardState>()
+            .add_message::<ToggleScoreboardRequest>()
             .add_message::<crate::game_menu::MatchSessionReset>()
             .add_message::<LeaveMatchRequest>()
             .add_systems(
@@ -335,11 +340,15 @@ fn result_banner(
 
 fn toggle_scoreboard(
     keys: Res<ButtonInput<KeyCode>>,
+    mut requests: MessageReader<ToggleScoreboardRequest>,
     lobby: Option<Res<LobbyState>>,
     authoritative: Res<AuthoritativeSimulation>,
     mut state: ResMut<ScoreboardState>,
 ) {
-    if keys.just_pressed(KeyCode::F9) && !lobby.as_ref().is_some_and(|lobby| lobby.active()) {
+    let requested = requests.read().count() > 0;
+    if (keys.just_pressed(KeyCode::F9) || requested)
+        && !lobby.as_ref().is_some_and(|lobby| lobby.active())
+    {
         if matches!(
             authoritative.simulation.lifecycle(),
             MatchLifecycle::Finished { .. }

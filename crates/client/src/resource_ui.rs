@@ -40,6 +40,9 @@ const MAP_GRID_BUTTON_RIGHT: f32 = 385.0;
 const MAP_GRID_BUTTON_BACKGROUND: Color = Color::srgba(0.025, 0.023, 0.020, 0.96);
 const MAP_GRID_BUTTON_HOVERED: Color = Color::srgba(0.16, 0.14, 0.10, 0.98);
 const MAP_GRID_BUTTON_ENABLED: Color = Color::srgba(0.18, 0.28, 0.16, 0.98);
+const SCORES_BUTTON_WIDTH: f32 = 64.0;
+const SCORES_BUTTON_RIGHT: f32 =
+    MAP_GRID_BUTTON_RIGHT + MAP_GRID_BUTTON_WIDTH + BUILDER_SHORTCUT_GAP;
 const GRID_SNAP_BUTTON_WIDTH: f32 = 72.0;
 const GRID_SNAP_BUTTON_RIGHT: f32 =
     MAP_GRID_BUTTON_RIGHT - MAP_GRID_BUTTON_WIDTH - BUILDER_SHORTCUT_GAP;
@@ -108,6 +111,7 @@ impl Plugin for ResourceUiPlugin {
             .init_resource::<BuildingGridSnapState>()
             .init_resource::<CameraFocusRequest>()
             .add_message::<crate::game_menu::MatchSessionReset>()
+            .add_message::<crate::scoreboard_ui::ToggleScoreboardRequest>()
             .add_systems(Update, reset_resource_ui_for_new_match)
             .add_systems(
                 Startup,
@@ -115,6 +119,7 @@ impl Plugin for ResourceUiPlugin {
                     setup_resource_bar,
                     setup_builder_shortcuts,
                     setup_map_grid_toggle,
+                    setup_scores_button,
                     setup_building_grid_snap_toggle,
                 ),
             )
@@ -125,6 +130,7 @@ impl Plugin for ResourceUiPlugin {
                     sync_builder_shortcuts,
                     handle_builder_shortcut_click,
                     update_builder_shortcut_visuals,
+                    handle_scores_button,
                     handle_map_grid_toggle_click,
                     update_map_grid_toggle_visual,
                     handle_building_grid_snap_toggle_click,
@@ -159,6 +165,61 @@ fn setup_builder_shortcuts(mut commands: Commands) {
         ZIndex(950),
         BuilderShortcutRoot,
     ));
+}
+
+#[derive(Component)]
+struct ScoresButton;
+
+/// Opens the scoreboard for players who do not know F9.
+fn setup_scores_button(mut commands: Commands) {
+    commands
+        .spawn((
+            Button,
+            Node {
+                position_type: PositionType::Absolute,
+                right: px(SCORES_BUTTON_RIGHT),
+                top: px(MAP_GRID_BUTTON_TOP),
+                width: px(SCORES_BUTTON_WIDTH),
+                height: px(MAP_GRID_BUTTON_HEIGHT),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border: UiRect::all(px(1.0)),
+                ..default()
+            },
+            BackgroundColor(MAP_GRID_BUTTON_BACKGROUND),
+            BorderColor::all(SLOT_BORDER),
+            ZIndex(1001),
+            ScoresButton,
+        ))
+        .with_child((
+            Text::new("SCORES"),
+            TextFont::from_font_size(9.0),
+            TextColor(LABEL_COLOR),
+            Pickable::IGNORE,
+        ));
+}
+
+type ScoresButtonQuery<'w, 's> = Query<
+    'w,
+    's,
+    (&'static Interaction, &'static mut BackgroundColor),
+    (Changed<Interaction>, With<ScoresButton>),
+>;
+
+fn handle_scores_button(
+    mut buttons: ScoresButtonQuery<'_, '_>,
+    mut requests: MessageWriter<crate::scoreboard_ui::ToggleScoreboardRequest>,
+) {
+    for (interaction, mut background) in &mut buttons {
+        background.0 = match interaction {
+            Interaction::Pressed => {
+                requests.write(crate::scoreboard_ui::ToggleScoreboardRequest);
+                MAP_GRID_BUTTON_HOVERED
+            }
+            Interaction::Hovered => MAP_GRID_BUTTON_HOVERED,
+            Interaction::None => MAP_GRID_BUTTON_BACKGROUND,
+        };
+    }
 }
 
 fn setup_map_grid_toggle(mut commands: Commands) {
@@ -625,7 +686,7 @@ fn update_building_grid_snap_toggle_visual(
 
 #[must_use]
 pub(crate) fn cursor_over_map_controls(cursor: Vec2, window_width: f32) -> bool {
-    let left = window_width - MAP_GRID_BUTTON_RIGHT - MAP_GRID_BUTTON_WIDTH;
+    let left = window_width - SCORES_BUTTON_RIGHT - SCORES_BUTTON_WIDTH;
     let right = window_width - GRID_SNAP_BUTTON_RIGHT;
     cursor.x >= left
         && cursor.x <= right
@@ -955,9 +1016,9 @@ mod tests {
     }
 
     #[test]
-    fn map_control_hit_box_covers_grid_and_snap_buttons() {
+    fn map_control_hit_box_covers_scores_grid_and_snap_buttons() {
         let window_width = 1_440.0;
-        let left = window_width - MAP_GRID_BUTTON_RIGHT - MAP_GRID_BUTTON_WIDTH;
+        let left = window_width - SCORES_BUTTON_RIGHT - SCORES_BUTTON_WIDTH;
         let right = window_width - GRID_SNAP_BUTTON_RIGHT;
         assert!(cursor_over_map_controls(
             Vec2::new(left + 2.0, MAP_GRID_BUTTON_TOP + 5.0),
