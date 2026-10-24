@@ -495,6 +495,8 @@ def build_supplement(release: dict[str, Any], repo_root: Path) -> dict[str, Any]
         if row['mechanic_kind'] == 'scripted-raise-random':
             for outcome in json.loads(row['parameters_json'])['summon_outcomes']:
                 native_summon_bodies.add(int(outcome['unit_id']).to_bytes(4, 'big').decode())
+        if row['mechanic_kind'] == 'periodic-preplaced-unit-release':
+            native_summon_bodies.add(int(json.loads(row['parameters_json'])['pool_unit_id']).to_bytes(4, 'big').decode())
         if row['building_rawcode'] == 'h04K':
             native_summon_bodies.add(int(json.loads(row['parameters_json'])['on_kill_unit_id']).to_bytes(4, 'big').decode())
     for row in csv.DictReader(io.StringIO(_retained_file_bytes(repo_root, git_tree,

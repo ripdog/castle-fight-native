@@ -2331,18 +2331,14 @@ fn build_passive_effect(tuning: &TuningFile, effect: &TuningEffect) -> PassiveUn
             targets,
             ..
         } => {
-            assert!(
-                *chance_per_10k <= 10_000
-                    && *damage >= 0
-                    && *full_radius_world >= 0
-                    && *half_radius_world >= *full_radius_world
-            );
+            assert!(*chance_per_10k <= 10_000 && *damage >= 0 && *full_radius_world >= 0);
             PassiveUnitEffect::Pulverize(crate::components::PulverizeEffectProfile {
                 ability: AbilityId(rawcode(source_key).expect("Pulverize source")),
                 chance_per_10k: *chance_per_10k,
                 damage: *damage,
                 full_radius: world(*full_radius_world),
-                half_radius: world(*half_radius_world),
+                // A retained half-damage radius inside the full one leaves no half band.
+                half_radius: world((*half_radius_world).max(*full_radius_world)),
                 targets: target_mask(targets),
             })
         }

@@ -71,6 +71,8 @@ fn healing_spray_waves_share_the_cap_heal_every_friend_in_the_area_and_outlive_t
                     affects_invulnerable: false,
                     resume_attack_ticks: 1,
                     spray: Some(spray),
+                    rejuvenation: None,
+                    touch: None,
                 }),
             },
         },

@@ -52,8 +52,7 @@ impl Simulation {
                 let team = units[caster].team;
                 let giant = units[caster].id;
                 let limit = square_i32(taunt.radius);
-                for index in 0..units.len() {
-                    let body = &mut units[index];
+                for body in units.iter_mut() {
                     if body.id == giant
                         || body.health <= 0
                         || body.team == team

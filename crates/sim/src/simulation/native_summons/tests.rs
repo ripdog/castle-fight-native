@@ -454,6 +454,7 @@ fn native_parent_flight_buff_ownership_and_timed_body_survive_wire_restore() {
             profile,
             position: SimPoint::new(200, 200),
             buff_until_tick: None,
+            damage: None,
         }),
     ));
     sim.step();
@@ -554,6 +555,7 @@ fn native_parent_flight_buff_ownership_and_timed_body_survive_wire_restore() {
                 profile,
                 position: SimPoint::new(200, 200),
                 buff_until_tick: None,
+                damage: None,
             }),
         ));
     }

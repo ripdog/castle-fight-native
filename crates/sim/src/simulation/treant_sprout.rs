@@ -32,8 +32,8 @@ impl Simulation {
             && center.y <= bounds[3]
         {
             let limit = square_i32(p.clearance_radius);
-            for index in 0..units.len() {
-                let unit = units[index];
+            for (index, slot) in units.iter_mut().enumerate() {
+                let unit = *slot;
                 if index == caster
                     || unit.health <= 0
                     || !unit.classifications.combat_sapper
@@ -61,7 +61,7 @@ impl Simulation {
                 let millidegrees = i64::from(p.bearing_minimum_degrees) * 1000
                     + window * 1000 * roll(1) as i64 / ROLL_SCALE as i64
                     + 180_000 * i64::from(unit.team.0);
-                units[index].position = offset(
+                slot.position = offset(
                     center,
                     bearing(i32::try_from(millidegrees).expect("sprout bearing fits")),
                     distance,

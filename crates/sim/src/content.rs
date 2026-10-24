@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r255";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r258";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -1952,6 +1952,9 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"Atol") => {
+            0x4000_02a7
+        }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0ES") => {
             0x4000_02a6
         }
@@ -8105,19 +8108,8 @@ mod tests {
     #[test]
     fn retained_extraction_indexes_content_beyond_the_playable_subset() {
         let extracted = extracted_content_927();
-        let unpromoted = extracted
-            .production
-            .keys()
-            .find(|&&rawcode| {
-                CastleFightProductionKind::from_rawcode_for_version(
-                    rawcode,
-                    MapVersion::CASTLE_FIGHT_9_27,
-                )
-                .unwrap()
-                .is_none()
-            })
-            .expect("retained production evidence extends beyond promoted races");
-        assert!(extracted.buildings.contains_key(unpromoted));
+        // Every race is promoted; the retained extraction still indexes the rest of the map.
+        assert!(extracted.units.len() > CastleFightUnitKind::ALL.len());
         assert!(extracted.buildings.len() > CastleFightProductionKind::ALL.len());
     }
 

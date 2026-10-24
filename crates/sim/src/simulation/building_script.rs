@@ -706,7 +706,11 @@ impl Simulation {
         1
     }
 
-    pub(super) fn source_entity(&self, source: AbilitySourceSnapshot, units: &[UnitSnapshot]) -> Entity {
+    pub(super) fn source_entity(
+        &self,
+        source: AbilitySourceSnapshot,
+        units: &[UnitSnapshot],
+    ) -> Entity {
         match source.source {
             AbilitySourceIndex::Unit(index) => units[index].entity,
             AbilitySourceIndex::Building(_) => self
