@@ -42,9 +42,9 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 
 ### Connection status and messages
 
-- [ ] Disconnect / reconnecting / reconnect-failed state shown as a persistent banner or modal with the reason, not only as a replaceable line. (`pending_status` is copied into the single `action_panel.status` text, so a later message overwrites an earlier one.)
-- [ ] A transient message/log area for command rejections ("Not enough gold", blocked placement, out of range) so they are noticeable and not overwritten immediately. The spec (§10 of `31-input-building-ui.md`) already asks for structured rejection reasons to reach the user.
-- [ ] Optional audio cue for rejected commands and alerts.
+- [x] A persistent "CONNECTION LOST" banner shows the reason and the latest reconnect failure while the connection is down, and points at F10 to leave. It is hidden once the match has finished.
+- [x] Messages stack as toasts under the top bar for five seconds (newest repeat refreshes its timer), and command rejections are worded for players ("Not enough gold (50/200).", "Another builder is already building there.") instead of `{reason:?}`.
+- [ ] Optional audio cue for rejected commands and alerts. Blocked on assets: the Warcraft III asset converter only extracts unit and effect sounds, so there is no interface/error sound to play yet. Extend `cf-wc3-assets` to extract the stock interface sounds first.
 
 ## P2 — Settings and discoverability
 

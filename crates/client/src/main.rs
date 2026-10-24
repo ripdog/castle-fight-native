@@ -16,6 +16,7 @@ mod lobby;
 mod main_menu;
 mod match_ui;
 mod network;
+mod notifications;
 mod particle_renderer;
 mod performance_ui;
 mod presentation;
@@ -136,6 +137,8 @@ pub(crate) struct AuthoritativeSimulation {
     authority: AuthorityMode,
     network_lobby_status: Option<castle_fight_protocol::LobbyStatus>,
     network_lobby_error: Option<String>,
+    /// Why the connection to the server is down, shown by the connection banner.
+    connection_issue: Option<String>,
     commands_enabled: bool,
 }
 
@@ -153,6 +156,7 @@ impl AuthoritativeSimulation {
             authority: AuthorityMode::Local,
             network_lobby_status: None,
             network_lobby_error: None,
+            connection_issue: None,
             commands_enabled: true,
         }
     }
@@ -184,6 +188,7 @@ impl AuthoritativeSimulation {
             },
             network_lobby_status: None,
             network_lobby_error: None,
+            connection_issue: None,
             commands_enabled: true,
         }
     }
@@ -687,6 +692,7 @@ fn main() {
             InspectionPlugin,
             BuilderControlPlugin,
             DebugMenuPlugin,
+            notifications::NotificationsPlugin,
         ))
         .add_systems(Startup, setup_simulation_pause_ui)
         .add_systems(
@@ -1585,9 +1591,11 @@ fn process_network_events(
                     authoritative
                         .pending_status
                         .push(format!("Disconnected from server: {reason}"));
+                    authoritative.connection_issue = Some(reason);
                 }
             }
             NetworkEvent::Reconnected(assignment) => {
+                authoritative.connection_issue = None;
                 presentation.freeze_network_timeline();
                 let (assigned_player, expected_team) = match &authoritative.authority {
                     AuthorityMode::Network {
@@ -1627,9 +1635,10 @@ fn process_network_events(
                     .push("Reconnected; synchronizing authoritative state.".to_owned());
             }
             NetworkEvent::ReconnectFailed(reason) => {
-                authoritative
-                    .pending_status
-                    .push(format!("Reconnect attempt failed: {reason}"));
+                // Retried every second, so it updates the connection banner rather than adding a
+                // new message each time.
+                authoritative.connection_issue =
+                    Some(format!("Reconnect attempt failed: {reason}"));
             }
             NetworkEvent::Message(message) => match message {
                 ServerMessage::LobbyStatus { status } => {
@@ -2208,8 +2217,16 @@ fn sync_local_command_feedback(
     debug_menu: Res<debug_menu::DebugMenuState>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
     mut action_panel: ResMut<ActionPanelState>,
+    mut notifications: ResMut<notifications::Notifications>,
 ) {
     for status in std::mem::take(&mut authoritative.pending_status) {
+        let severity =
+            if status.starts_with("Command not sent") || status.starts_with("Disconnected") {
+                notifications::Severity::Warning
+            } else {
+                notifications::Severity::Info
+            };
+        notifications.push(severity, status.clone());
         action_panel.status = status;
     }
     let feedback = std::mem::take(&mut authoritative.pending_feedback);
@@ -2219,7 +2236,13 @@ fn sync_local_command_feedback(
         {
             continue;
         }
-        action_panel.status = local_command_feedback_text(execution);
+        if let CommandOutcome::Rejected(_) = execution.outcome {
+            let text = local_command_feedback_text(execution);
+            notifications.push(notifications::Severity::Warning, text.clone());
+            action_panel.status = text;
+        } else {
+            action_panel.status = local_command_feedback_text(execution);
+        }
     }
 }
 
@@ -2253,10 +2276,9 @@ fn local_command_feedback_text(execution: CommandExecution) -> String {
         | CommandOutcome::Executed(CommandExecutionResult::Applied) => {
             format!("{action} executed on tick {}.", execution.scheduled.tick)
         }
-        CommandOutcome::Rejected(reason) => format!(
-            "{action} rejected on tick {}: {reason:?}.",
-            execution.scheduled.tick
-        ),
+        CommandOutcome::Rejected(reason) => {
+            format!("{action} failed: {}", notifications::rejection_text(reason))
+        }
     }
 }
 
