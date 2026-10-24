@@ -460,6 +460,10 @@ fn spawn_writer(
                     break;
                 }
             }
+            // The outbound channel closes when the client is dropped (leaving a match). The reader
+            // thread owns another handle to this socket, so close it explicitly or the server would
+            // keep seeing a live connection.
+            let _ = stream.shutdown(std::net::Shutdown::Both);
         })
         .expect("network writer thread creation must succeed");
 }
@@ -481,6 +485,42 @@ mod tests {
             content_gameplay_hash: 7,
             configuration_identity: 9,
         }
+    }
+
+    #[test]
+    fn dropping_the_client_closes_the_server_connection() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap();
+        let assignment = SessionAssignment {
+            session_id: 3,
+            reconnect_token: ReconnectToken {
+                bytes: [1; RECONNECT_TOKEN_BYTES],
+            },
+            player_id: 0,
+            team: 0,
+            next_stream_position: 0,
+            next_client_sequence: 0,
+            completed_tick: None,
+        };
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let _: ProtocolEnvelope<ClientMessage> = read_frame(&mut stream).unwrap();
+            write_frame(
+                &mut stream,
+                &ProtocolEnvelope::new(ServerMessage::HelloAccepted { assignment }),
+            )
+            .unwrap();
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            // A leaked client socket would time out here instead of reporting end of stream.
+            let closed: Result<ProtocolEnvelope<ClientMessage>, _> = read_frame(&mut stream);
+            closed.is_err()
+        });
+
+        let (client, _) = NetworkClient::connect(address, compatibility(), 5).unwrap();
+        drop(client);
+        assert!(server.join().unwrap());
     }
 
     #[test]
