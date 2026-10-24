@@ -50,9 +50,7 @@ impl fmt::Display for NetworkClientError {
                 formatter,
                 "server protocol schema mismatch: expected {expected}, got {actual}"
             ),
-            Self::HandshakeRejected(reason) => {
-                write!(formatter, "server rejected join: {reason:?}")
-            }
+            Self::HandshakeRejected(reason) => formatter.write_str(&rejection_text(reason)),
             Self::UnexpectedHandshakeMessage(message) => {
                 write!(
                     formatter,
@@ -68,6 +66,42 @@ impl fmt::Display for NetworkClientError {
 }
 
 impl std::error::Error for NetworkClientError {}
+
+/// Plain-language reason a server refused a join, written for the person reading the menu.
+/// In a mismatch the server's value is `expected` and this client's is `actual`.
+fn rejection_text(reason: &HandshakeRejectReason) -> String {
+    use castle_fight_protocol::CompatibilityMismatch as Mismatch;
+    const SAME_BUILD: &str = "Everyone must run the same build of Castle Fight.";
+    match reason {
+        HandshakeRejectReason::ProtocolSchema { expected, actual } => format!(
+            "This game and the server use different network versions (server {expected}, yours {actual}). {SAME_BUILD}"
+        ),
+        HandshakeRejectReason::Incompatible { mismatch } => match mismatch {
+            Mismatch::SnapshotSchema { .. } | Mismatch::ChecksumSchema { .. } => format!(
+                "The server runs a different build of the game. {SAME_BUILD}"
+            ),
+            Mismatch::MapRelease {
+                expected_version,
+                expected_revision,
+                actual_version,
+                actual_revision,
+            } => format!(
+                "The server is playing map {expected_version} / {expected_revision}, but you have {actual_version} / {actual_revision}. Start the game with the same map version."
+            ),
+            Mismatch::Content { .. } => format!(
+                "Your game data differs from the server's. {SAME_BUILD}"
+            ),
+            Mismatch::Configuration { .. } => "Your match setup differs from the host's. Both players must start the game with the same options (map version, seed and players per team).".to_owned(),
+        },
+        HandshakeRejectReason::InvalidHello | HandshakeRejectReason::InvalidReconnect => {
+            "The server did not accept the join request.".to_owned()
+        }
+        HandshakeRejectReason::MatchFull => "This game is full.".to_owned(),
+        HandshakeRejectReason::MatchUnavailable => {
+            "The server cannot take new players right now.".to_owned()
+        }
+    }
+}
 
 impl From<io::Error> for NetworkClientError {
     fn from(error: io::Error) -> Self {

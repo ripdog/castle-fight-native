@@ -9,6 +9,7 @@ use std::{
 };
 
 use bevy::{
+    clipboard::Clipboard,
     ecs::system::SystemParam,
     input::{
         ButtonState,
@@ -24,7 +25,9 @@ use castle_fight_sim::PlayerId;
 use crate::{
     AuthoritativeSimulation, ClientOptions, SelectedMatch, SimulationPlayback,
     bridge::{PresentationSamples, PresentationSnapshot},
-    client_match_config, compatibility_identity_for_demo, create_demo_world_for_match_config,
+    client_match_config,
+    client_settings::ClientSettings,
+    compatibility_identity_for_demo, create_demo_world_for_match_config,
     debug_menu::DebugMenuState,
     default_worker_count,
     game_menu::{LeaveMatchRequest, MatchSessionReset},
@@ -52,7 +55,7 @@ impl Plugin for MainMenuPlugin {
             .add_systems(
                 Update,
                 (
-                    handle_join_address_input,
+                    handle_menu_text_input,
                     handle_main_menu_buttons,
                     finish_pending_session,
                     return_to_main_menu,
@@ -66,25 +69,58 @@ impl Plugin for MainMenuPlugin {
 #[derive(Resource)]
 pub(crate) struct HostedServer {
     stop: Arc<AtomicBool>,
+    port: u16,
+    /// This machine's address on its local network, when it could be determined.
+    lan_address: Option<IpAddr>,
 }
+
+impl HostedServer {
+    /// The `address:port` other players on the same network type into Join Game.
+    fn invite_address(&self) -> String {
+        match self.lan_address {
+            Some(address) => SocketAddr::new(address, self.port).to_string(),
+            None => format!("<this computer's IP>:{}", self.port),
+        }
+    }
+}
+
+/// The local interface the operating system would use to reach the internet. Connecting a UDP
+/// socket only selects a route; no packet is sent.
+fn local_network_address() -> Option<IpAddr> {
+    let socket = std::net::UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).ok()?;
+    socket.connect((Ipv4Addr::new(192, 0, 2, 1), 9)).ok()?;
+    let address = socket.local_addr().ok()?.ip();
+    (!address.is_unspecified() && !address.is_loopback()).then_some(address)
+}
+
+const MIN_HOST_PORT: u16 = 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MainMenuScreen {
     Main,
     Join,
+    Host,
 }
 
 /// A Host or Join attempt running on a worker thread. Dropping it abandons the attempt: the
 /// worker's result is discarded, which drops the half-built session and closes its connection.
 struct PendingSession {
     description: String,
+    /// What to remember in the saved settings once the attempt succeeds.
+    remember: Remember,
     result: Mutex<mpsc::Receiver<Result<NetworkSession, String>>>,
+}
+
+enum Remember {
+    JoinAddress(String),
+    HostPort(u16),
 }
 
 impl PendingSession {
     /// Runs `task` on its own thread so a slow or unreachable host cannot freeze the window.
     fn start(
         description: String,
+        remember: Remember,
         task: impl FnOnce() -> Result<NetworkSession, String> + Send + 'static,
     ) -> Result<Self, String> {
         let (sender, receiver) = mpsc::channel();
@@ -97,6 +133,7 @@ impl PendingSession {
             .map_err(|error| format!("Cannot start connection thread: {error}"))?;
         Ok(Self {
             description,
+            remember,
             result: Mutex::new(receiver),
         })
     }
@@ -122,6 +159,8 @@ pub(crate) struct MainMenuState {
     options: ClientOptions,
     screen: MainMenuScreen,
     join_address: String,
+    host_port_text: String,
+    settings: ClientSettings,
     error: Option<String>,
     active: bool,
     /// Action requested from the keyboard, run alongside button presses.
@@ -131,10 +170,16 @@ pub(crate) struct MainMenuState {
 
 impl MainMenuState {
     pub(crate) fn new(options: ClientOptions) -> Self {
+        Self::with_settings(options, ClientSettings::load())
+    }
+
+    fn with_settings(options: ClientOptions, settings: ClientSettings) -> Self {
         Self {
             options,
             screen: MainMenuScreen::Main,
-            join_address: "127.0.0.1".to_owned(),
+            join_address: settings.last_join_address.clone(),
+            host_port_text: settings.host_port.to_string(),
+            settings,
             error: None,
             active: true,
             requested: None,
@@ -145,17 +190,46 @@ impl MainMenuState {
     pub(crate) fn active(&self) -> bool {
         self.active
     }
+
+    /// The text the keyboard currently edits.
+    fn field_mut(&mut self) -> &mut String {
+        match self.screen {
+            MainMenuScreen::Host => &mut self.host_port_text,
+            MainMenuScreen::Main | MainMenuScreen::Join => &mut self.join_address,
+        }
+    }
+
+    /// Appends typed or pasted text, dropping what the field cannot hold. Returns whether
+    /// anything was added.
+    fn insert_text(&mut self, text: &str) -> bool {
+        let digits_only = self.screen == MainMenuScreen::Host;
+        let limit = if digits_only { 5 } else { 255 };
+        let field = self.field_mut();
+        let before = field.len();
+        for ch in text.chars() {
+            let allowed = if digits_only {
+                ch.is_ascii_digit()
+            } else {
+                !ch.is_control() && !ch.is_whitespace()
+            };
+            if allowed && field.len() < limit {
+                field.push(ch);
+            }
+        }
+        field.len() != before
+    }
 }
 
 #[derive(Component)]
 struct MainMenuRoot;
 
 #[derive(Component)]
-struct JoinAddressText;
+struct MenuTextField;
 
 #[derive(Component, Clone, Copy)]
 enum MainMenuAction {
     SinglePlayer,
+    HostScreen,
     Host,
     JoinScreen,
     Connect,
@@ -229,40 +303,29 @@ fn spawn_main_menu(commands: &mut Commands, menu: &MainMenuState) {
                             ..default()
                         });
                         button(panel, "SINGLE PLAYER", MainMenuAction::SinglePlayer);
-                        button(panel, "HOST GAME", MainMenuAction::Host);
+                        button(panel, "HOST GAME", MainMenuAction::HostScreen);
                         button(panel, "JOIN GAME", MainMenuAction::JoinScreen);
                         button(panel, "EXIT", MainMenuAction::Exit);
+                    }
+                    MainMenuScreen::Host => {
+                        label(panel, "PORT", 16.0, TEXT);
+                        text_field(panel, field_label(&menu.host_port_text));
                         label(
                             panel,
-                            format!("Host port: {DEFAULT_MULTIPLAYER_PORT}"),
-                            13.0,
+                            "Other players join this computer at its IP address and this port. Forward the port on your router for internet play.",
+                            12.0,
                             MUTED,
                         );
+                        button(panel, "START HOSTING", MainMenuAction::Host);
+                        button(panel, "BACK", MainMenuAction::Back);
                     }
                     MainMenuScreen::Join => {
                         label(panel, "SERVER ADDRESS", 16.0, TEXT);
-                        panel
-                            .spawn((
-                                Node {
-                                    width: percent(100.0),
-                                    min_height: px(38.0),
-                                    padding: UiRect::axes(px(10.0), px(7.0)),
-                                    border: UiRect::all(px(1.0)),
-                                    ..default()
-                                },
-                                BackgroundColor(Color::srgb(0.045, 0.06, 0.085)),
-                                BorderColor::all(Color::srgb(0.32, 0.43, 0.52)),
-                            ))
-                            .with_child((
-                                JoinAddressText,
-                                Text::new(join_address_label(&menu.join_address)),
-                                TextFont::from_font_size(16.0),
-                                TextColor(TEXT),
-                            ));
+                        text_field(panel, field_label(&menu.join_address));
                         label(
                             panel,
                             format!(
-                                "Enter an IP or domain. If no port is supplied, {DEFAULT_MULTIPLAYER_PORT} is used."
+                                "Enter an IP or domain. If no port is supplied, {DEFAULT_MULTIPLAYER_PORT} is used. Ctrl+V pastes, Ctrl+Backspace clears."
                             ),
                             12.0,
                             MUTED,
@@ -279,8 +342,30 @@ fn spawn_main_menu(commands: &mut Commands, menu: &MainMenuState) {
         });
 }
 
-fn join_address_label(address: &str) -> String {
-    format!("> {address}_")
+fn field_label(value: &str) -> String {
+    format!("> {value}_")
+}
+
+/// The single-line text box of the current screen.
+fn text_field(parent: &mut ChildSpawnerCommands, value: String) {
+    parent
+        .spawn((
+            Node {
+                width: percent(100.0),
+                min_height: px(38.0),
+                padding: UiRect::axes(px(10.0), px(7.0)),
+                border: UiRect::all(px(1.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgb(0.045, 0.06, 0.085)),
+            BorderColor::all(Color::srgb(0.32, 0.43, 0.52)),
+        ))
+        .with_child((
+            MenuTextField,
+            Text::new(value),
+            TextFont::from_font_size(16.0),
+            TextColor(TEXT),
+        ));
 }
 
 fn label(parent: &mut ChildSpawnerCommands, value: impl Into<String>, size: f32, color: Color) {
@@ -315,14 +400,21 @@ fn button(parent: &mut ChildSpawnerCommands, value: impl Into<String>, action: M
         ));
 }
 
-fn handle_join_address_input(
+fn handle_menu_text_input(
     mut keyboard: MessageReader<KeyboardInput>,
+    keys: Option<Res<ButtonInput<KeyCode>>>,
+    mut clipboard: Option<ResMut<Clipboard>>,
     mut menu: ResMut<MainMenuState>,
-    mut address_text: Query<&mut Text, With<JoinAddressText>>,
+    mut field_text: Query<&mut Text, With<MenuTextField>>,
 ) {
-    if !menu.active || menu.screen != MainMenuScreen::Join {
+    if !menu.active || menu.screen == MainMenuScreen::Main {
+        keyboard.clear();
         return;
     }
+    let control = keys.is_some_and(|keys| {
+        keys.pressed(KeyCode::ControlLeft) || keys.pressed(KeyCode::ControlRight)
+    });
+    let screen = menu.screen;
 
     let mut changed = false;
     for event in keyboard.read() {
@@ -335,35 +427,41 @@ fn handle_join_address_input(
             }
             continue;
         }
+        let confirm = match screen {
+            MainMenuScreen::Join => MainMenuAction::Connect,
+            _ => MainMenuAction::Host,
+        };
         match &event.logical_key {
+            Key::Backspace if control => {
+                changed |= !menu.field_mut().is_empty();
+                menu.field_mut().clear();
+            }
             Key::Backspace => {
-                changed |= menu.join_address.pop().is_some();
+                changed |= menu.field_mut().pop().is_some();
             }
-            Key::Enter => {
-                menu.requested = Some(MainMenuAction::Connect);
-            }
-            Key::Escape => {
-                menu.requested = Some(MainMenuAction::Back);
-            }
-            Key::Character(character) => {
-                if menu.join_address.len() >= 255 {
-                    continue;
-                }
-                for ch in character.chars() {
-                    if !ch.is_control() && !ch.is_whitespace() {
-                        menu.join_address.push(ch);
-                        changed = true;
-                    }
+            Key::Enter => menu.requested = Some(confirm),
+            Key::Escape => menu.requested = Some(MainMenuAction::Back),
+            // Shortcuts never type their letter into the field.
+            Key::Character(character) if control => {
+                if character.eq_ignore_ascii_case("v")
+                    && let Some(text) = clipboard
+                        .as_mut()
+                        .and_then(|clipboard| clipboard.fetch_text().poll_result())
+                        .and_then(Result::ok)
+                {
+                    changed |= menu.insert_text(text.lines().next().unwrap_or_default());
                 }
             }
+            Key::Character(character) => changed |= menu.insert_text(character),
             _ => {}
         }
     }
 
     if changed {
         menu.error = None;
-        if let Ok(mut text) = address_text.single_mut() {
-            **text = join_address_label(&menu.join_address);
+        let value = field_label(menu.field_mut());
+        if let Ok(mut text) = field_text.single_mut() {
+            **text = value;
         }
     }
 }
@@ -440,11 +538,26 @@ fn handle_main_menu_buttons(
         MainMenuAction::Exit => {
             exit.write(AppExit::Success);
         }
+        MainMenuAction::HostScreen => {
+            menu.screen = MainMenuScreen::Host;
+            menu.error = None;
+            redraw(&mut commands, root, &menu);
+        }
         MainMenuAction::Host => {
-            let options = menu.options.clone();
-            begin_session(&mut menu, "Starting game...".to_owned(), move || {
-                start_hosted_session(&options)
-            });
+            match menu.host_port_text.parse::<u16>() {
+                Ok(port) if port >= MIN_HOST_PORT => {
+                    let options = menu.options.clone();
+                    begin_session(
+                        &mut menu,
+                        format!("Starting game on port {port}..."),
+                        Remember::HostPort(port),
+                        move || start_hosted_session(&options, port),
+                    );
+                }
+                _ => {
+                    menu.error = Some(format!("Choose a port between {MIN_HOST_PORT} and 65535."));
+                }
+            }
             redraw(&mut commands, root, &menu);
         }
         MainMenuAction::Connect => {
@@ -453,6 +566,7 @@ fn handle_main_menu_buttons(
             begin_session(
                 &mut menu,
                 format!("Connecting to {}...", address.trim()),
+                Remember::JoinAddress(address.trim().to_owned()),
                 move || connect_to_session(&options, &address),
             );
             redraw(&mut commands, root, &menu);
@@ -467,13 +581,14 @@ fn handle_main_menu_buttons(
 fn begin_session(
     menu: &mut MainMenuState,
     description: String,
+    remember: Remember,
     task: impl FnOnce() -> Result<NetworkSession, String> + Send + 'static,
 ) {
     if menu.pending.is_some() {
         return;
     }
     menu.error = None;
-    match PendingSession::start(description, task) {
+    match PendingSession::start(description, remember, task) {
         Ok(pending) => menu.pending = Some(pending),
         Err(error) => menu.error = Some(error),
     }
@@ -492,7 +607,7 @@ fn finish_pending_session(
     let Some(result) = menu.pending.as_ref().and_then(PendingSession::poll) else {
         return;
     };
-    menu.pending = None;
+    let remember = menu.pending.take().map(|pending| pending.remember);
     let Ok(root) = roots.single() else {
         return;
     };
@@ -500,6 +615,12 @@ fn finish_pending_session(
         install_network_session(&mut commands, &menu.options, session, &mut game)
     }) {
         Ok(()) => {
+            match remember {
+                Some(Remember::JoinAddress(address)) => menu.settings.last_join_address = address,
+                Some(Remember::HostPort(port)) => menu.settings.host_port = port,
+                None => {}
+            }
+            menu.settings.save();
             menu.active = false;
             commands.entity(root).despawn();
         }
@@ -593,7 +714,7 @@ struct NetworkSession {
     hosted: Option<HostedServer>,
 }
 
-fn start_hosted_session(options: &ClientOptions) -> Result<NetworkSession, String> {
+fn start_hosted_session(options: &ClientOptions, port: u16) -> Result<NetworkSession, String> {
     let demo = network_demo(options)?;
     let authoritative = AuthoritativeMatch::new(
         demo.match_config.clone(),
@@ -602,13 +723,11 @@ fn start_hosted_session(options: &ClientOptions) -> Result<NetworkSession, Strin
     )
     .map_err(|error| format!("Cannot create hosted match: {error}"))?;
     let server = TcpAuthoritativeServer::bind_lobby(
-        SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), DEFAULT_MULTIPLAYER_PORT),
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port),
         authoritative,
     )
     .map_err(|error| {
-        format!(
-            "Cannot host on port {DEFAULT_MULTIPLAYER_PORT}: {error}. Is another server already running?"
-        )
+        format!("Cannot host on port {port}: {error}. Is another server already running?")
     })?;
 
     let stop = Arc::new(AtomicBool::new(false));
@@ -622,11 +741,15 @@ fn start_hosted_session(options: &ClientOptions) -> Result<NetworkSession, Strin
         })
         .map_err(|error| format!("Cannot start hosted server thread: {error}"))?;
 
-    let hosted = HostedServer { stop };
+    let hosted = HostedServer {
+        stop,
+        port,
+        lan_address: local_network_address(),
+    };
     // If the local client cannot join its own server, dropping `hosted` stops the thread again.
     let joined = join_server(
         &demo,
-        SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), DEFAULT_MULTIPLAYER_PORT),
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port),
     )?;
     let mut session = joined.into_session(demo);
     session.hosted = Some(hosted);
@@ -733,6 +856,7 @@ fn install_network_session(
         next_sequence,
         hosted,
     } = session;
+    let invite = hosted.as_ref().map(HostedServer::invite_address);
     if let Some(hosted) = hosted {
         commands.insert_resource(hosted);
     }
@@ -759,7 +883,9 @@ fn install_network_session(
     game.selected_match.direct_buildings = demo.direct_buildings;
     game.selected_match.local_player = local_player;
     game.playback.paused = true;
-    commands.insert_resource(LobbyState::new(options.clone(), local_player, true));
+    let mut lobby = LobbyState::new(options.clone(), local_player, true);
+    lobby.set_invite_address(invite);
+    commands.insert_resource(lobby);
     Ok(())
 }
 
@@ -832,19 +958,22 @@ mod tests {
         let mut authoritative = AuthoritativeSimulation::new(demo.simulation, demo.content);
         authoritative.commands_enabled = false;
         let mut app = App::new();
-        app.insert_resource(MainMenuState::new(options))
-            .insert_resource(authoritative)
-            .insert_resource(PresentationSamples::new(snapshot))
-            .insert_resource(SelectedMatch {
-                content: demo.content,
-                direct_buildings: demo.direct_buildings,
-                local_player: PlayerId(0),
-            })
-            .insert_resource(SimulationPlayback { paused: true })
-            .init_resource::<DebugMenuState>()
-            .add_message::<AppExit>()
-            .add_message::<KeyboardInput>()
-            .add_plugins((MainMenuPlugin, crate::lobby::LobbyPlugin));
+        app.insert_resource(MainMenuState::with_settings(
+            options,
+            ClientSettings::default(),
+        ))
+        .insert_resource(authoritative)
+        .insert_resource(PresentationSamples::new(snapshot))
+        .insert_resource(SelectedMatch {
+            content: demo.content,
+            direct_buildings: demo.direct_buildings,
+            local_player: PlayerId(0),
+        })
+        .insert_resource(SimulationPlayback { paused: true })
+        .init_resource::<DebugMenuState>()
+        .add_message::<AppExit>()
+        .add_message::<KeyboardInput>()
+        .add_plugins((MainMenuPlugin, crate::lobby::LobbyPlugin));
         app.update();
         let button = app
             .world_mut()
@@ -876,19 +1005,22 @@ mod tests {
         let mut authoritative = AuthoritativeSimulation::new(demo.simulation, demo.content);
         authoritative.commands_enabled = false;
         let mut app = App::new();
-        app.insert_resource(MainMenuState::new(test_options()))
-            .insert_resource(authoritative)
-            .insert_resource(PresentationSamples::new(snapshot))
-            .insert_resource(SelectedMatch {
-                content: demo.content,
-                direct_buildings: demo.direct_buildings,
-                local_player: PlayerId(0),
-            })
-            .insert_resource(SimulationPlayback { paused: true })
-            .init_resource::<DebugMenuState>()
-            .add_message::<AppExit>()
-            .add_message::<KeyboardInput>()
-            .add_plugins((MainMenuPlugin, crate::lobby::LobbyPlugin));
+        app.insert_resource(MainMenuState::with_settings(
+            test_options(),
+            ClientSettings::default(),
+        ))
+        .insert_resource(authoritative)
+        .insert_resource(PresentationSamples::new(snapshot))
+        .insert_resource(SelectedMatch {
+            content: demo.content,
+            direct_buildings: demo.direct_buildings,
+            local_player: PlayerId(0),
+        })
+        .insert_resource(SimulationPlayback { paused: true })
+        .init_resource::<DebugMenuState>()
+        .add_message::<AppExit>()
+        .add_message::<KeyboardInput>()
+        .add_plugins((MainMenuPlugin, crate::lobby::LobbyPlugin));
         app
     }
 
@@ -958,7 +1090,7 @@ mod tests {
             app.world_mut()
                 .query::<&MainMenuAction>()
                 .iter(app.world())
-                .any(|action| matches!(action, MainMenuAction::Host))
+                .any(|action| matches!(action, MainMenuAction::HostScreen))
         );
     }
 

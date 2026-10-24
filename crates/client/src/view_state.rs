@@ -123,7 +123,8 @@ impl ViewStatePersistence {
     }
 }
 
-fn config_path() -> PathBuf {
+/// Directory holding the client's local preference files.
+pub(crate) fn config_directory() -> PathBuf {
     let base = std::env::var_os("XDG_CONFIG_HOME")
         .filter(|path| !path.is_empty())
         .map(PathBuf::from)
@@ -131,7 +132,10 @@ fn config_path() -> PathBuf {
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".config")));
     base.unwrap_or_else(|| PathBuf::from("."))
         .join("castle-fight-native")
-        .join("view-state.json")
+}
+
+fn config_path() -> PathBuf {
+    config_directory().join("view-state.json")
 }
 
 pub(crate) fn toggle_fullscreen(

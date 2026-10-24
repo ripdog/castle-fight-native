@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
-bevy = { workspace = true, features = ["3d", "png", "ui", "custom_cursor", "bevy_audio", "flac", "vorbis"] }
+bevy = { workspace = true, features = ["3d", "png", "ui", "custom_cursor", "bevy_audio", "flac", "vorbis", "system_clipboard"] }
 bytemuck.workspace = true
 castle-fight-protocol = { path = "../protocol" }
 castle-fight-server = { path = "../server" }

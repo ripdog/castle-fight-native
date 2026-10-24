@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use bevy::{
+    clipboard::Clipboard,
     ecs::system::SystemParam,
     input::{
         ButtonState,
@@ -81,6 +82,9 @@ pub(crate) struct LobbyState {
     connected_players: Vec<PlayerId>,
     /// Display names by slot, as announced by the server. Empty for unclaimed slots.
     names: BTreeMap<u8, String>,
+    /// `address:port` the host shares so others can join; set only for a hosted game.
+    invite: Option<String>,
+    invite_copied: bool,
     host_player: Option<PlayerId>,
     required_players: usize,
     open_race: Option<u8>,
@@ -100,6 +104,8 @@ impl LobbyState {
             required_players: options.team_size * 2,
             connected_players: vec![local_player],
             names: BTreeMap::new(),
+            invite: None,
+            invite_copied: false,
             host_player: None,
             options,
             networked,
@@ -145,7 +151,7 @@ impl LobbyState {
             LobbyAction::Position(player) => player == self.local_player,
             LobbyAction::Race(player, race) => self.race(player) == race,
             LobbyAction::Start => true,
-            LobbyAction::Leave => false,
+            LobbyAction::Leave | LobbyAction::CopyInvite => false,
             LobbyAction::RoundTarget(wins) => self.options.rules.rounds_to_win == wins,
             LobbyAction::RescueStrikes(enabled) => {
                 self.options.rules.rescue_strikes_enabled == enabled
@@ -160,6 +166,10 @@ impl LobbyState {
             | LobbyAction::CloseRaceMenu
             | LobbyAction::DismissRaceMenu => false,
         }
+    }
+
+    pub(crate) fn set_invite_address(&mut self, invite: Option<String>) {
+        self.invite = invite;
     }
 
     fn is_occupied(&self, player: PlayerId) -> bool {
@@ -213,7 +223,10 @@ impl LobbyState {
             LobbyAction::RaceDropdown(player) | LobbyAction::Race(player, _) => {
                 player != self.local_player.0
             }
-            LobbyAction::CloseRaceMenu | LobbyAction::DismissRaceMenu | LobbyAction::Leave => false,
+            LobbyAction::CloseRaceMenu
+            | LobbyAction::DismissRaceMenu
+            | LobbyAction::Leave
+            | LobbyAction::CopyInvite => false,
         }
     }
 
@@ -265,6 +278,8 @@ enum LobbyAction {
     Start,
     /// Abandons the lobby and returns to the main menu.
     Leave,
+    /// Copies the host's join address to the clipboard.
+    CopyInvite,
 }
 
 /// Applies `rules` locally, or requests them from the host when networked.
@@ -479,6 +494,29 @@ fn spawn_header(panel: &mut ChildSpawnerCommands, lobby: &LobbyState) {
                         FONT_BODY,
                         MUTED,
                     );
+                    if let Some(invite) = &lobby.invite {
+                        title
+                            .spawn(Node {
+                                align_items: AlignItems::Center,
+                                column_gap: px(12.0),
+                                ..default()
+                            })
+                            .with_children(|row| {
+                                label(row, format!("Players join at {invite}"), FONT_BODY, ACCENT);
+                                styled_button(
+                                    row,
+                                    if lobby.invite_copied {
+                                        "Copied"
+                                    } else {
+                                        "Copy"
+                                    },
+                                    LobbyAction::CopyInvite,
+                                    lobby.invite_copied,
+                                    false,
+                                    ButtonStyle::fixed(88.0).min_height(36.0),
+                                );
+                            });
+                    }
                 });
             header
                 .spawn(Node {
@@ -1122,6 +1160,7 @@ struct LobbyGame<'w> {
     camera_focus: Option<ResMut<'w, CameraFocusRequest>>,
     debug_menu: ResMut<'w, DebugMenuState>,
     leave: MessageWriter<'w, LeaveMatchRequest>,
+    clipboard: Option<ResMut<'w, Clipboard>>,
 }
 
 impl LobbyGame<'_> {
@@ -1342,6 +1381,15 @@ fn handle_lobby_buttons(
                     }
                     LobbyAction::Leave => {
                         game.leave.write(LeaveMatchRequest);
+                    }
+                    LobbyAction::CopyInvite => {
+                        if let (Some(invite), Some(clipboard)) =
+                            (lobby.invite.clone(), game.clipboard.as_deref_mut())
+                            && clipboard.set_text(invite).is_ok()
+                        {
+                            lobby.invite_copied = true;
+                            redraw = true;
+                        }
                     }
                     LobbyAction::Start => {
                         if lobby.networked {

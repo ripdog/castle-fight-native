@@ -31,14 +31,14 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 
 ### Join / host flow (main menu)
 
-- [ ] Paste support in the server-address field. `Ctrl+V` currently arrives as `Key::Character("v")` and inserts a literal `v`.
-- [ ] Ignore text input while a control modifier is held, and add basic editing (caret movement, clear, select-all).
+- [x] Paste (`Ctrl+V`) in the server-address and port fields via the system clipboard (bevy `system_clipboard`); not verified on every desktop environment.
+- [x] Shortcuts no longer type their letter into the field, and `Ctrl+Backspace` clears it. Caret movement and select-all are not implemented (the box is append-only).
 - [x] `Esc` returns from the Join screen to the main menu (and cancels a connection attempt in progress); `Enter` already connects.
 - [x] Host and Connect run off the UI thread with a visible "Connecting..." state and a Cancel button (`Esc` also cancels). The TCP connect is bounded to 5 seconds instead of the operating system's timeout. Failures return to the Join screen with the error.
-- [ ] Remember the last-used server address (and optionally a short recent-servers list) instead of defaulting to `127.0.0.1`.
-- [ ] Host sees their reachable address/port and can copy it (LAN IP, port 6112).
-- [ ] Host port is configurable (it is fixed at `DEFAULT_GAME_PORT` and only displayed).
-- [ ] Version/compatibility mismatch on join is explained in plain language rather than surfaced as a raw error string.
+- [x] The last server address that connected successfully is saved in `settings.json` (next to the view state) and offered again. A recent-servers list is not implemented.
+- [x] The hosted lobby shows `LAN-IP:port` with a Copy button. Only the LAN address can be determined; for internet play the host still has to know their public IP and forward the port.
+- [x] Host Game opens a port screen (default 6112, remembered; 1024-65535).
+- [x] Join rejections are explained in plain language (different network version, different map, different game data, different match setup, game full).
 
 ### Connection status and messages
 

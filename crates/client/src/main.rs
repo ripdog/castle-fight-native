@@ -3,6 +3,7 @@ mod build_orders;
 mod build_ui;
 mod builder_controls;
 mod building_models;
+mod client_settings;
 mod compact_material;
 mod cursor;
 mod debug_menu;
