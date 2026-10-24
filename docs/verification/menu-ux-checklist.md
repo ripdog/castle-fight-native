@@ -1,6 +1,6 @@
 # Menu, lobby and HUD UX checklist
 
-Status: **audit of 2026-10-24; nothing below is implemented unless ticked.**
+Status: **audit of 2026-10-24; nothing below is implemented unless ticked.** Ticked items are covered by focused tests, but the visual flow has not yet been checked by hand.
 
 This is a progress tracker, not a specification. It was produced by reading the client code (`crates/client/src/{main_menu,lobby,match_ui,resource_ui,scoreboard_ui,inspection,build_ui,main,presentation}.rs`) and was not validated by playing the game. Re-check each item against the code before starting it; line references drift.
 
@@ -12,12 +12,12 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 
 ### Esc menu, leaving, and end of match
 
-- [ ] `Esc` with no modal/targeting state active opens an in-game menu (currently `Esc` only cancels build/targeting modes).
-- [ ] In-game menu offers Resume, Settings, Leave match / Return to main menu, and Quit.
-- [ ] Leaving a networked match disconnects cleanly and returns to the main menu with state reset (authoritative sim, presentation samples, selection, action panel, lobby).
-- [ ] Leaving an offline match returns to the main menu, optionally with a confirmation.
+- [x] In-game menu opens on `F10` (as in Warcraft III), **not** `Esc`: `Esc` is spammed to clear selection and cancel targeting, so it must never open a menu. `Esc` only closes the menu or backs out of a confirmation once it is open. Implemented in `game_menu.rs`; spec §15.1 of `31-input-building-ui.md`.
+- [x] In-game menu offers Resume, Main Menu and Exit. (Settings is added to it by the Settings screen items below.)
+- [x] Leaving a networked match disconnects cleanly and returns to the main menu with state reset (authoritative sim, presentation samples, selection, action panel, lobby). The client socket is now actually closed on drop, and a hosted server is stopped and its port released. Follow-up: the server treats this as an ordinary disconnect (teammates see the disconnect pause) because there is no explicit "leave" message in the protocol.
+- [x] Leaving an offline match returns to the main menu, with a confirmation.
 - [ ] End-of-match screen (win/loss/draw, final scoreboard) with Return to menu; currently only the `F9` scoreboard shows results and the player must kill the process.
-- [ ] Destructive actions (Leave, Quit) ask for confirmation.
+- [x] Destructive actions (Leave, Exit) ask for confirmation, skipped once the match has finished.
 - [ ] Decide whether Surrender exists in Castle Fight DE; if so it needs a protocol command and a vote/host rule. (Open question — do not add without map evidence.)
 
 ### Lobby

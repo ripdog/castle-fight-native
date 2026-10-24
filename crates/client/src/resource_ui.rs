@@ -107,6 +107,8 @@ impl Plugin for ResourceUiPlugin {
             .init_resource::<MapGridState>()
             .init_resource::<BuildingGridSnapState>()
             .init_resource::<CameraFocusRequest>()
+            .add_message::<crate::game_menu::MatchSessionReset>()
+            .add_systems(Update, reset_resource_ui_for_new_match)
             .add_systems(
                 Startup,
                 (
@@ -130,6 +132,17 @@ impl Plugin for ResourceUiPlugin {
                 )
                     .chain(),
             );
+    }
+}
+
+fn reset_resource_ui_for_new_match(
+    mut resets: MessageReader<crate::game_menu::MatchSessionReset>,
+    mut shortcuts: ResMut<BuilderShortcutState>,
+    mut focus: ResMut<CameraFocusRequest>,
+) {
+    if resets.read().count() > 0 {
+        *shortcuts = BuilderShortcutState::default();
+        focus.0 = None;
     }
 }
 

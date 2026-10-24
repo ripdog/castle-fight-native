@@ -1,5 +1,9 @@
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr, ToSocketAddrs},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     thread,
 };
 
@@ -22,6 +26,7 @@ use crate::{
     client_match_config, compatibility_identity_for_demo, create_demo_world_for_match_config,
     debug_menu::DebugMenuState,
     default_worker_count,
+    game_menu::{LeaveMatchRequest, MatchSessionReset},
     lobby::LobbyState,
     network::NetworkClient,
 };
@@ -40,11 +45,25 @@ pub(crate) struct MainMenuPlugin;
 
 impl Plugin for MainMenuPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, setup_main_menu).add_systems(
-            Update,
-            (handle_join_address_input, handle_main_menu_buttons).chain(),
-        );
+        app.add_message::<LeaveMatchRequest>()
+            .add_message::<MatchSessionReset>()
+            .add_systems(Startup, setup_main_menu)
+            .add_systems(
+                Update,
+                (
+                    handle_join_address_input,
+                    handle_main_menu_buttons,
+                    return_to_main_menu,
+                )
+                    .chain(),
+            );
     }
+}
+
+/// Handle to the server thread started by Host Game. Present only while that session is open.
+#[derive(Resource)]
+pub(crate) struct HostedServer {
+    stop: Arc<AtomicBool>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -389,6 +408,68 @@ fn handle_main_menu_buttons(
     }
 }
 
+/// Abandons the current match and shows the main menu again. The old simulation and its network
+/// client are dropped (closing the connection), a hosted server is stopped, and a fresh offline
+/// world replaces them exactly as at startup so the presentation has nothing stale to show.
+fn return_to_main_menu(
+    mut commands: Commands,
+    mut requests: MessageReader<LeaveMatchRequest>,
+    menu: Option<ResMut<MainMenuState>>,
+    roots: Query<Entity, With<MainMenuRoot>>,
+    mut game: MenuGame<'_>,
+    mut reset: MessageWriter<MatchSessionReset>,
+) {
+    if requests.read().count() == 0 {
+        return;
+    }
+    let Some(mut menu) = menu else {
+        return;
+    };
+    let demo = match network_demo(&menu.options) {
+        Ok(demo) => demo,
+        Err(error) => {
+            game.authoritative
+                .pending_status
+                .push(format!("Cannot return to the main menu: {error}"));
+            return;
+        }
+    };
+    let local_player = demo
+        .match_config
+        .participants
+        .first()
+        .expect("playable Castle Fight match must contain a local participant")
+        .id;
+    let observer_team = demo
+        .simulation
+        .player(local_player)
+        .map(|player| player.team);
+    let snapshot = PresentationSnapshot::capture(&demo.simulation);
+
+    // Dropping the old resources closes the network client; removing the handle stops a hosted
+    // server and releases its port.
+    commands.remove_resource::<HostedServer>();
+    commands.remove_resource::<LobbyState>();
+    *game.authoritative = AuthoritativeSimulation::new(demo.simulation, demo.content);
+    game.authoritative.commands_enabled = false;
+    *game.presentation = PresentationSamples::new(snapshot).with_observer(observer_team);
+    game.selected_match.content = demo.content;
+    game.selected_match.direct_buildings = demo.direct_buildings;
+    game.selected_match.local_player = local_player;
+    game.playback.paused = true;
+    *game.debug_menu = DebugMenuState::default();
+
+    menu.active = true;
+    menu.screen = MainMenuScreen::Main;
+    menu.error = None;
+    menu.connect_requested = false;
+    for root in &roots {
+        commands.entity(root).despawn();
+    }
+    spawn_main_menu(&mut commands, &menu);
+    reset.write(MatchSessionReset);
+}
+
 fn redraw(commands: &mut Commands, root: Entity, menu: &MainMenuState) {
     commands.entity(root).despawn();
     spawn_main_menu(commands, menu);
@@ -399,6 +480,8 @@ struct NetworkSession {
     client: NetworkClient,
     local_player: PlayerId,
     next_sequence: u64,
+    /// Set when this client also runs the server, so leaving can stop it.
+    hosted: Option<HostedServer>,
 }
 
 fn start_hosted_session(options: &ClientOptions) -> Result<NetworkSession, String> {
@@ -419,19 +502,31 @@ fn start_hosted_session(options: &ClientOptions) -> Result<NetworkSession, Strin
         )
     })?;
 
+    let stop = Arc::new(AtomicBool::new(false));
+    let server_stop = Arc::clone(&stop);
     thread::Builder::new()
         .name("cf-hosted-server".to_owned())
         .spawn(move || {
-            if let Err(error) = server.run_until_match_end() {
+            if let Err(error) = server.run_until_match_end_or_stopped(&server_stop) {
                 eprintln!("hosted Castle Fight server stopped: {error}");
             }
         })
         .map_err(|error| format!("Cannot start hosted server thread: {error}"))?;
 
-    connect_demo_to_address(
+    let hosted = HostedServer { stop };
+    // If the local client cannot join its own server, dropping `hosted` stops the thread again.
+    let mut session = connect_demo_to_address(
         demo,
         SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), DEFAULT_MULTIPLAYER_PORT),
-    )
+    )?;
+    session.hosted = Some(hosted);
+    Ok(session)
+}
+
+impl Drop for HostedServer {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Release);
+    }
 }
 
 fn connect_to_session(options: &ClientOptions, input: &str) -> Result<NetworkSession, String> {
@@ -492,6 +587,7 @@ fn connect_demo_to_address(
         client,
         local_player,
         next_sequence: assignment.next_client_sequence,
+        hosted: None,
     })
 }
 
@@ -506,7 +602,11 @@ fn install_network_session(
         client,
         local_player,
         next_sequence,
+        hosted,
     } = session;
+    if let Some(hosted) = hosted {
+        commands.insert_resource(hosted);
+    }
     *game.authoritative = AuthoritativeSimulation::new_networked(
         demo.simulation,
         demo.content,
@@ -568,9 +668,8 @@ fn resolve_server_addresses(input: &str) -> Result<Vec<SocketAddr>, String> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn single_player_button_opens_an_offline_lobby_without_starting_the_match() {
-        let options = ClientOptions {
+    fn test_options() -> ClientOptions {
+        ClientOptions {
             stress_units: None,
             stress_visual: None,
             health_bars: true,
@@ -593,7 +692,12 @@ mod tests {
             builder_rawcodes: [None; 9],
             server: None,
             list_map_versions: false,
-        };
+        }
+    }
+
+    #[test]
+    fn single_player_button_opens_an_offline_lobby_without_starting_the_match() {
+        let options = test_options();
         let demo = crate::demo::create_demo_world(1, None);
         let snapshot = PresentationSnapshot::capture(&demo.simulation);
         let mut authoritative = AuthoritativeSimulation::new(demo.simulation, demo.content);
@@ -635,6 +739,96 @@ mod tests {
         assert!(!authoritative.is_networked());
         assert!(!authoritative.commands_enabled);
         assert_eq!(authoritative.simulation.tick(), 0);
+    }
+
+    fn menu_test_app() -> App {
+        let demo = crate::demo::create_demo_world(1, None);
+        let snapshot = PresentationSnapshot::capture(&demo.simulation);
+        let mut authoritative = AuthoritativeSimulation::new(demo.simulation, demo.content);
+        authoritative.commands_enabled = false;
+        let mut app = App::new();
+        app.insert_resource(MainMenuState::new(test_options()))
+            .insert_resource(authoritative)
+            .insert_resource(PresentationSamples::new(snapshot))
+            .insert_resource(SelectedMatch {
+                content: demo.content,
+                direct_buildings: demo.direct_buildings,
+                local_player: PlayerId(0),
+            })
+            .insert_resource(SimulationPlayback { paused: true })
+            .init_resource::<DebugMenuState>()
+            .add_message::<AppExit>()
+            .add_message::<KeyboardInput>()
+            .add_plugins((MainMenuPlugin, crate::lobby::LobbyPlugin));
+        app
+    }
+
+    #[test]
+    fn leaving_a_match_restores_a_fresh_main_menu() {
+        let mut app = menu_test_app();
+        app.update();
+        let single_player = app
+            .world_mut()
+            .query::<(Entity, &MainMenuAction)>()
+            .iter(app.world())
+            .find_map(|(entity, action)| {
+                matches!(action, MainMenuAction::SinglePlayer).then_some(entity)
+            })
+            .unwrap();
+        *app.world_mut()
+            .get_mut::<Interaction>(single_player)
+            .unwrap() = Interaction::Pressed;
+        app.update();
+        // Start the match as the lobby would.
+        {
+            let mut authoritative = app.world_mut().resource_mut::<AuthoritativeSimulation>();
+            authoritative.commands_enabled = true;
+            authoritative.pending_status.push("stale".into());
+        }
+        app.world_mut().resource_mut::<SimulationPlayback>().paused = false;
+        assert!(app.world().get_resource::<LobbyState>().is_some());
+        assert!(!app.world().resource::<MainMenuState>().active());
+
+        app.world_mut().write_message(LeaveMatchRequest);
+        app.update();
+
+        assert!(app.world().resource::<MainMenuState>().active());
+        assert!(app.world().get_resource::<LobbyState>().is_none());
+        assert!(app.world().resource::<SimulationPlayback>().paused);
+        assert!(
+            !app.world()
+                .resource::<DebugMenuState>()
+                .controls_all_players()
+        );
+        let authoritative = app.world().resource::<AuthoritativeSimulation>();
+        assert!(!authoritative.is_networked());
+        assert!(!authoritative.commands_enabled);
+        assert!(authoritative.pending_status.is_empty());
+        assert_eq!(authoritative.simulation.tick(), 0);
+        // Exactly one menu is on screen, and it is the top-level one.
+        let roots = app
+            .world_mut()
+            .query_filtered::<Entity, With<MainMenuRoot>>()
+            .iter(app.world())
+            .count();
+        assert_eq!(roots, 1);
+        assert!(
+            app.world_mut()
+                .query::<&MainMenuAction>()
+                .iter(app.world())
+                .any(|action| matches!(action, MainMenuAction::Host))
+        );
+    }
+
+    #[test]
+    fn dropping_the_hosted_server_handle_stops_the_server() {
+        let stop = Arc::new(AtomicBool::new(false));
+        let hosted = HostedServer {
+            stop: Arc::clone(&stop),
+        };
+        assert!(!stop.load(Ordering::Acquire));
+        drop(hosted);
+        assert!(stop.load(Ordering::Acquire));
     }
 
     #[test]

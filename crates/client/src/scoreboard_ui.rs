@@ -47,8 +47,22 @@ enum ScoreColumn {
 impl Plugin for ScoreboardPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ScoreboardState>()
+            .add_message::<crate::game_menu::MatchSessionReset>()
+            .add_systems(
+                Update,
+                reset_scoreboard_for_new_match.before(toggle_scoreboard),
+            )
             .add_systems(Startup, setup_scoreboard)
             .add_systems(Update, (toggle_scoreboard, update_scoreboard).chain());
+    }
+}
+
+fn reset_scoreboard_for_new_match(
+    mut resets: MessageReader<crate::game_menu::MatchSessionReset>,
+    mut state: ResMut<ScoreboardState>,
+) {
+    if resets.read().count() > 0 {
+        *state = ScoreboardState::default();
     }
 }
 

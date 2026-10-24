@@ -9,6 +9,7 @@ mod debug_menu;
 mod demo;
 mod doodads;
 mod fog;
+mod game_menu;
 mod inspection;
 mod lobby;
 mod main_menu;
@@ -682,7 +683,7 @@ fn main() {
         .add_systems(FixedUpdate, advance_authoritative_simulation);
 
     if interactive_frontend {
-        app.add_plugins(LobbyPlugin);
+        app.add_plugins((LobbyPlugin, game_menu::GameMenuPlugin));
     }
     if show_main_menu {
         app.insert_resource(MainMenuState::new(options.clone()))

@@ -237,6 +237,12 @@ Controls should be configurable and may include:
 
 Input bindings are client configuration and are not part of deterministic state.
 
+### 15.1 In-game menu
+
+As in Warcraft III, the in-game **Game Menu** opens on `F10`, not `Esc`. `Esc` is used constantly to clear selection and cancel targeting or placement, so a menu on that key would repeatedly interrupt play. `Esc` never opens the menu; it only closes the menu, or steps back from a confirmation, while the menu is already open.
+
+The menu offers Resume, Main Menu (when the client was started with a main menu) and Exit. Leaving the match and exiting ask for confirmation unless the match has already finished. While the menu is open, keyboard and mouse input does not reach gameplay, camera or selection. An offline match is paused while the menu is open, restoring the previous pause state on close; a networked match keeps running, because the menu is client-local. Returning to the main menu abandons the match: the network connection is closed, a server hosted by this client is stopped, and the client-local selection and action-panel state is reset so it cannot alias the next match's reused entity identifiers. This is client UI only and MUST NOT emit gameplay commands.
+
 ## 16. Latency display and command feedback
 
 Because gameplay commands are discrete and relatively low frequency, clear acknowledgement may be more valuable than aggressive prediction.

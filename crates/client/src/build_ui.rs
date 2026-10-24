@@ -384,6 +384,11 @@ impl Plugin for BuildUiPlugin {
             .init_resource::<ActionPanelHotkeyCapture>()
             .init_resource::<BuildTooltipState>()
             .init_resource::<BuildPreviewMaterials>()
+            .add_message::<crate::game_menu::MatchSessionReset>()
+            .add_systems(
+                Update,
+                reset_action_panel_for_new_match.before(sync_action_panel_to_selection),
+            )
             .insert_resource(UiIconAssets::load_for_version(map_version))
             .add_systems(Startup, setup_action_panel)
             .add_systems(PreUpdate, capture_action_panel_hotkeys.after(InputSystems))
@@ -414,6 +419,20 @@ impl Plugin for BuildUiPlugin {
                     setup_build_preview_ghost_animation_players.after(sync_placed_build_ghosts),
                 ),
             );
+    }
+}
+
+/// A new match reuses `SimId`s, so the previous match's actor, mode and tooltip must not survive.
+fn reset_action_panel_for_new_match(
+    mut resets: MessageReader<crate::game_menu::MatchSessionReset>,
+    mut panel: ResMut<ActionPanelState>,
+    mut capture: ResMut<ActionPanelHotkeyCapture>,
+    mut tooltip: ResMut<BuildTooltipState>,
+) {
+    if resets.read().count() > 0 {
+        *panel = ActionPanelState::default();
+        *capture = ActionPanelHotkeyCapture::default();
+        tooltip.0 = None;
     }
 }
 

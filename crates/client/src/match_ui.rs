@@ -53,6 +53,11 @@ impl Plugin for MatchUiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<RescueImpactDisplay>()
             .init_resource::<RescueArtTracker>()
+            .add_message::<crate::game_menu::MatchSessionReset>()
+            .add_systems(
+                Update,
+                reset_rescue_display_for_new_match.before(update_match_hud),
+            )
             .add_systems(Startup, spawn_match_hud)
             .add_systems(
                 Update,
@@ -63,6 +68,17 @@ impl Plugin for MatchUiPlugin {
                     sync_rescue_wc3_art,
                 ),
             );
+    }
+}
+
+fn reset_rescue_display_for_new_match(
+    mut resets: MessageReader<crate::game_menu::MatchSessionReset>,
+    mut display: ResMut<RescueImpactDisplay>,
+    mut tracker: ResMut<RescueArtTracker>,
+) {
+    if resets.read().count() > 0 {
+        *display = RescueImpactDisplay::default();
+        *tracker = RescueArtTracker::default();
     }
 }
 

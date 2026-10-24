@@ -427,7 +427,12 @@ impl Plugin for InspectionPlugin {
         app.init_resource::<InspectionSelection>()
             .init_resource::<SelectionDrag>()
             .init_resource::<PortraitCameraHold>()
+            .add_message::<crate::game_menu::MatchSessionReset>()
             .add_systems(Startup, setup_inspector_ui)
+            .add_systems(
+                Update,
+                reset_selection_for_new_match.before(handle_world_selection),
+            )
             .add_systems(
                 Update,
                 (
@@ -449,6 +454,20 @@ impl Plugin for InspectionPlugin {
                     .chain()
                     .after(crate::advance_network_presentation),
             );
+    }
+}
+
+/// A new match reuses `SimId`s, so selection state from the previous match must not survive.
+fn reset_selection_for_new_match(
+    mut resets: MessageReader<crate::game_menu::MatchSessionReset>,
+    mut selection: ResMut<InspectionSelection>,
+    mut drag: ResMut<SelectionDrag>,
+    mut portrait_hold: ResMut<PortraitCameraHold>,
+) {
+    if resets.read().count() > 0 {
+        *selection = InspectionSelection::default();
+        *drag = SelectionDrag::default();
+        portrait_hold.0 = None;
     }
 }
 
