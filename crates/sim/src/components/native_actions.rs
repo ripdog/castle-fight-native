@@ -213,6 +213,8 @@ pub(crate) enum NativeAction {
     SandCloud(super::SandCloudState),
     Sandstorm(super::SandstormState),
     Tornado(super::TornadoState),
+    WispRelease(super::WispReleaseState),
+    DeathBurst(super::DeathBurstState),
     Ensnare(EnsnareMissileState),
     HealingWave(HealingWaveState),
     HealingSpray(super::HealingSprayState),

@@ -33,6 +33,7 @@ macro_rules! roster {
 }
 
 roster!(CastleFightUnitKind, CastleFightUnitId;
+    Wisp = 0x1000_00c6 => b"h06B",
     MountainGiant = 0x1000_00c5 => b"e00F",
     EmeraldDragon = 0x1000_00c4 => b"n02A",
     AncientBear = 0x1000_00c3 => b"n02B",

@@ -1217,7 +1217,8 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
                 effect_protected=protected.get(effect_key, {}), mechanics_row=spell, semantics_row=semantics)
         effects.append(project_effect(recipe, abilities[source], unit, protected.get(source, {}), detail))
     from project_unit_death_rules import project as project_death_rules
-    death_rules = project_death_rules(rows(retained("resolved/production-unit-special-mechanics.tsv")), functions)
+    death_rules = project_death_rules(rows(retained("resolved/production-unit-special-mechanics.tsv")), functions,
+        {"system": system_mechanics["ancient-of-wonders-call-of-nature-wisps"], "abilities": abilities})
     families = [{"source_key": key, "buff": buff_identity(abilities[key], positive=base != "ACff")}
         for key, base in sorted(ability_bases.items()) if base in {"Ainf", "ACf2", "ACff", "AIrr", "AEer", "Aenr"}]
     from project_flying_retarget import project as project_flying_retarget, project_structure_damage

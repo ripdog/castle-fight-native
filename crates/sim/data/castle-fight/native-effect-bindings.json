@@ -1,6 +1,12 @@
 {
   "schema_version": 1,
   "bindings": [
+    {"source_kind":"unit-ability","source_key":"ACmi","implementation":"warcraft-magic-immunity-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"Awha","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Gather: the pooled forest Wisp is released by the A0BS script, which removes this ability before the wisp enters play. It has no gameplay effect afterwards."},
+    {"source_kind":"unit-ability","source_key":"Arav","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27","notes":"Native Raven Form carried by the forest Wisp; the unit has no morph target in this map, so it is never usable."},
+    {"source_kind":"unit-ability","source_key":"A0ES","implementation":"warcraft-marker-only-v1","valid_from":"9.27","valid_through":"9.27","notes":"Slow Aura granted to the dummy the Wisp death script creates; its effect is the death_burst slow field of the Wisp death rule."},
+    {"source_kind":"unit-ability","source_key":"A0EM","implementation":"warcraft-bash-v1","valid_from":"9.27","valid_through":"9.27"},
+    {"source_kind":"unit-ability","source_key":"A0BS","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0BO","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0BM","implementation":"warcraft-scripted-automatic-v1","valid_from":"9.27","valid_through":"9.27"},
     {"source_kind":"unit-ability","source_key":"A0BN","implementation":"warcraft-bash-v1","valid_from":"9.27","valid_through":"9.27"},

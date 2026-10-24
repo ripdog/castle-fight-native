@@ -35,7 +35,7 @@ pub use roster::{CastleFightProductionKind, CastleFightTowerKind, CastleFightUni
 
 pub const CASTLE_FIGHT_SIMULATION_HZ: i32 = 30;
 pub const CASTLE_FIGHT_DEFAULT_MAP_VERSION: MapVersion = MapVersion::CASTLE_FIGHT_9_27;
-pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r250";
+pub const CASTLE_FIGHT_CONTENT_REVISION_927: &str = "cf-native-dev-slice-r255";
 const CASTLE_FIGHT_EXTRACTION_TREE_927_R1: &str = "8ea806dca331ff254995e94e6f0baf225a14bf10";
 // The stock Warcraft Build command (`AHbu`) has no editable cast-range field; workers use the
 // engine's 50-world-unit construction contact range, matching the stock Repair contact range.
@@ -1952,6 +1952,24 @@ fn stable_ability_id(
     source: NativeEffectSource,
 ) -> Result<CastleFightAbilityId, CastleFightContentError> {
     let id = match (source.kind, source.key) {
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0ES") => {
+            0x4000_02a6
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"Arav") => {
+            0x4000_02a5
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"Awha") => {
+            0x4000_02a4
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"ACmi") => {
+            0x4000_02a3
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0EM") => {
+            0x4000_02a2
+        }
+        (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0BS") => {
+            0x4000_02a1
+        }
         (NativeEffectSourceKind::UnitAbility, v) if v == u32::from_be_bytes(*b"A0BO") => {
             0x4000_02a0
         }
@@ -3499,6 +3517,11 @@ fn canonical_content_bundle_hash(bundle: &CastleFightContentBundle) -> u64 {
         if let Some(servitude) = rule.servitude {
             hash.write_u32(servitude.spawn_rawcode);
             hash.write_u32(servitude.excluded_ability);
+        }
+        if let Some(burst) = rule.death_burst {
+            for word in burst.canonical_words() {
+                hash.write_u64(word);
+            }
         }
     }
     for rule in crate::native_effects::unit_structure_damage_rules_for_version(bundle.map_version) {
@@ -5716,7 +5739,10 @@ impl ExtractedContent927 {
                     summoned: classifications
                         .iter()
                         .any(|value| value.eq_ignore_ascii_case("summoned")),
-                    spell_immune: false,
+                    spell_immune: crate::native_effects::magic_immunity_for_version(
+                        MapVersion::CASTLE_FIGHT_9_27,
+                        &abilities,
+                    ),
                     combat_sapper: sapper,
                     invulnerable: columns[23].split(',').any(|ability| ability == "Avul"),
                     legendary: abilities.contains(

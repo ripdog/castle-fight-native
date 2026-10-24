@@ -40,6 +40,7 @@ pub enum NativeEffectImplementationId {
     WarcraftCorruptionV1,
     WarcraftResistantSkinV1,
     WarcraftSpellShieldV1,
+    WarcraftMagicImmunityV1,
     WarcraftBuildingImprovementV1,
     WarcraftBuildingDamageProcV1,
     WarcraftWeatherWaveV1,
@@ -143,6 +144,7 @@ impl NativeEffectImplementationId {
             Self::WarcraftCorruptionV1 => 84,
             Self::WarcraftResistantSkinV1 => 83,
             Self::WarcraftSpellShieldV1 => 192,
+            Self::WarcraftMagicImmunityV1 => 194,
             Self::WarcraftBuildingImprovementV1 => 79,
             Self::WarcraftBuildingDamageProcV1 => 82,
             Self::WarcraftWeatherWaveV1 => 81,
@@ -224,6 +226,7 @@ impl NativeEffectImplementationId {
             self,
             Self::WarcraftResistantSkinV1
                 | Self::WarcraftSpellShieldV1
+                | Self::WarcraftMagicImmunityV1
                 | Self::WarcraftCompanionProductionV1
                 | Self::WarcraftMarkerOnlyV1
                 | Self::WarcraftZeroDamageBarrageV1
@@ -3355,6 +3358,17 @@ pub(crate) fn spell_shield_for_version(version: MapVersion, abilities: &[u32]) -
     })
 }
 
+/// Audited native Magic Immunity (`ACmi`) binding on the unit's ability inventory.
+pub(crate) fn magic_immunity_for_version(version: MapVersion, abilities: &[u32]) -> bool {
+    abilities.iter().any(|ability| {
+        catalog().bindings.iter().any(|binding| {
+            binding.source == NativeEffectSource::new(NativeEffectSourceKind::UnitAbility, *ability)
+                && binding.valid_versions.contains(version)
+                && binding.implementation == NativeEffectImplementationId::WarcraftMagicImmunityV1
+        })
+    })
+}
+
 #[derive(Debug, Clone, Copy, Default, Deserialize)]
 pub(crate) struct NativeUnitDeathRule {
     pub rawcode: u32,
@@ -3366,6 +3380,9 @@ pub(crate) struct NativeUnitDeathRule {
     /// Each damage event of this bearer deepens a permanent armor reduction on its victim.
     #[serde(default)]
     pub armor_stack: Option<NativeArmorStackRule>,
+    /// The bearer's death blast and lingering slow field (the Ancient of Wonders' wisps).
+    #[serde(default)]
+    pub death_burst: Option<crate::components::DeathBurstRule>,
 }
 
 /// Blood Corrosion: stacking permanent armor reduction, one level per damage event.

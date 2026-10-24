@@ -171,6 +171,31 @@ def _tornado(params, detail, number, raw):
     return {'Tornado': {'options': options, 'excluded_ability': int(filtered[2]), 'excluded_type': int(filtered[3])}}
 
 
+def _wisp_release(params, detail, number, raw):
+    """Ancient of Wonders: six pooled forest wisps are given to the owner over successive periods."""
+    functions = detail['functions']
+    names = detail['building_spell']['source_functions'].split(',')
+    cast, periodic, take, pool = (functions[name] for name in names[:2] + ['sA', 'MC'])
+    wisp, removed = params['pool_unit_id'], params['removed_ability_id']
+    cast_shape = re.search(r'(\w+)=\(2\*__wurst_ensureInt\(lGb\[player_getId\((\w+)\)\]\)\)(\w+)=Ov:create908\(\)\3\.iteration=0 \3\.p=\2 \3\.baseSlot=\1 '
+        r'\3\.building=\w+ doPeriodically\(([\d.]+),\3\)end$', cast.strip())
+    release = re.search(r'(\w+)=__wurst_modInt\((\w+)\.iteration,2\)(\w+)=\2\.p (\w+)=\(\2\.baseSlot\+\1\)(\w+)=sA\(\4\)unit_removeAbility\(\5,%d\)'
+        r'(\w+)=\5 (\w+)=\3 __wurst_safe_SetUnitOwner\(\6,\7,false\)__wurst_safe_UnitAddType\(\5,UNIT_TYPE_SAPPER\)orderCodeAttack\(\5\)'
+        r'(\w+)=\5 (\w+)=\8 __wurst_safe_UnitApplyTimedLife\(\9,1112820806,([\d.]+)\)' % removed, periodic)
+    iterations = re.search(r'\w+\.iteration=\(\w+\.iteration\+1\)if\(\w+\.iteration>=(\d+)\)then', periodic)
+    x_limit = re.search(r'CreateUnit\(\w+,%d,\(_b\[.*?\]\(\(Seo<10\),\(-1\),1\)\*_b\[.*?\]\(([\d.]+),wHb\)\)' % wisp, pool)
+    y_inset = re.search(r'\(Seo,10\)<5\),\(-1\),1\)\*\(uHb-([\d.]+)\)\),270\.\)', pool)
+    if (cast_shape is None or release is None or iterations is None or x_limit is None or y_inset is None
+            or Decimal(cast_shape[4]) != Decimal(params['period_seconds']) or int(iterations[1]) != params['iterations']
+            or Decimal(release[10]) != Decimal(params['timed_life_seconds']) or not params['sets_owner_to_building_owner']
+            or not params['issues_attack_order'] or params['adds_unit_type'] != 'UNIT_TYPE_SAPPER'
+            or params['pool_group_count'] != 4 or params['pool_slots_per_group'] != 5 or 'WHb[deo]=nil return UHb' not in take):
+        raise ValueError('Ancient of Wonders control flow changed: periodic release of pooled wisps for the owner')
+    return {'WispRelease': {'map_version': detail['map_version'], 'wisp_rawcode': wisp, 'releases': params['iterations'],
+        'period_ticks': number(params['period_seconds'], 30), 'life_ticks': number(params['timed_life_seconds'], 30),
+        'x_limit': number(x_limit[1], 1024), 'y_inset': number(y_inset[1], 1024)}}
+
+
 def _banish(params, detail, number, raw):
     """Ancient Guardian: shield-checked random enemy receives a dummy-cast native Banish."""
     functions = detail['functions']
@@ -317,6 +342,8 @@ def project(recipe, fields, unit, protected, detail):
         child = _raise_from_corpse(params, detail, number, raw)
     elif kind == 'dummy-target-ability':
         child = _banish(params, detail, number, raw)
+    elif kind == 'periodic-preplaced-unit-release':
+        child = _wisp_release(params, detail, number, raw)
     elif kind == 'dummy-point-ability':
         child = _tornado(params, detail, number, raw)
     elif kind == 'direct-random-target-damage':

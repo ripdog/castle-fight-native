@@ -16,7 +16,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 127;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 128;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -65,6 +65,7 @@ mod war_club;
 mod weather;
 mod well_of_pain;
 mod whirlwind;
+mod wisp;
 mod world_freezer;
 use world_freezer::WorldFreezerState;
 mod attack_proxy;
@@ -2363,6 +2364,7 @@ impl Simulation {
         );
         let death_observers_start = Instant::now();
         self.observe_native_death_explosions(&units, &unit_health, &positions);
+        self.observe_death_bursts(&units, &unit_health, &positions);
         self.observe_plague_deaths(&units, &unit_health, &positions);
         self.observe_incinerate_deaths(&units, &unit_health, &positions);
         self.observe_master_parasite_deaths(&units, &unit_health, &positions);
@@ -5509,6 +5511,9 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                     damage_per_mana,
                     ..
                 } => assert!(cap > 0 && damage_per_mana >= 0),
+                crate::BuildingChild::WispRelease(profile) => assert!(
+                    profile.releases > 0 && profile.period_ticks > 0 && profile.life_ticks > 0
+                ),
                 crate::BuildingChild::Tornado { options, .. } => {
                     for option in options {
                         assert!(

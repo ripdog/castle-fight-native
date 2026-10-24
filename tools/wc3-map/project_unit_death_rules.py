@@ -3,7 +3,7 @@ import json
 import re
 
 
-def project(rows, functions):
+def project(rows, functions, wisp=None):
     source = functions['fJ']
     if ('if isCombatSapper(M2q)then' not in source
         or 'if(not(N2q==nil))then if(not unit_isType(N2q,UNIT_TYPE_STRUCTURE))then' not in source):
@@ -72,4 +72,41 @@ def project(rows, functions):
             if not match or float(match[1]) != p['damage']:
                 raise ValueError('native retaliation must precede killer heal/type branch')
             value['retaliation_damage'] = p['damage']
+    if wisp is not None:
+        _death_burst(result, wisp, functions)
     return [result[k] for k in sorted(result)]
+
+
+def _death_burst(result, wisp, functions):
+    """The Ancient of Wonders' wisp: a spell blast on death plus a lingering Slow Aura dummy."""
+    from decimal import Decimal, ROUND_CEILING
+    number = lambda value, scale=1: int((Decimal(str(value)) * scale).to_integral_value(rounding=ROUND_CEILING))
+    params, fields = wisp['system'], wisp['abilities']
+    raw = params['wisp_unit_id']
+    death, callback = functions['fJ'], functions['ForGroupCallback_forUnitsInRange_RaceElementalAbilities_callback_forUnitsInRange_RaceElementalAbilities']
+    branch = re.search(r'elseif\(unit_getTypeId\(M2q\)==%d\)then (\w+)=M2q (\w+)=unit_getOwner\(\1\)(\w+)=tupleCopy1\(unit_getPos\(\1\)\)'
+        r'(\w+)=qu:create834\(\)\4\.p=\2 \4\.wisp=\1 (\w+)=tupleCopy1\(\3\)(\w+)=\4 forUnitsInRange\(\5,([\d.]+),false,\6\)'
+        r'(\w+)=__wurst_safe_CreateUnit\(\2,(\w+),unit_getX\(\1\),unit_getY\(\1\),0\.\)(\w+)=\8 addProtectedAbility\(\10,%d\)'
+        r'__wurst_safe_UnitApplyTimedLife\(\8,1112820806,([\d.]+)\)' % (raw, params['slow_aura_ability_id']), death)
+    filtered = re.search(r'isAliveCombatSapper\((\w+)\)and unit_isEnemyOf\(\1,\w+\.p\)\)and\(unit_getAbilityLevel\(\1,%d\)<=0\)\)and'
+        r'\(unit_getAbilityLevel\(\1,(\d+)\)<=0\)\)and\(not\(unit_getTypeId\(\1\)==%d\)\)' % (int.from_bytes(b'Avul', 'big'), raw), callback)
+    damage = re.search(r'(\w+)=ATTACK_TYPE_NORMAL (\w+)=DAMAGE_TYPE_MAGIC (\w+)=WEAPON_TYPE_WHOKNOWS '
+        r'__wurst_safe_UnitDamageTarget\(\w+,\w+,([\d.]+),true,false,\1,\2,\3\)', callback)
+    code = params['slow_aura_ability_rawcode']
+    slow = fields[code]
+    tokens = set(slow['targs1'].split(','))
+    if (branch is None or filtered is None or damage is None or Decimal(damage[4]) != params['death_damage_amount']
+            or Decimal(branch[7]) != params['death_damage_radius'] or Decimal(branch[11]) != Decimal(params['slow_aura_timed_life_seconds'])
+            or number(slow['area1']) != params['slow_aura_radius'] or params['death_damage_attack_type'] != 'normal'
+            or params['death_damage_type'] != 'magic' or 'sapper' not in tokens or 'enemies' not in tokens
+            or Decimal(slow['dataa1']) != Decimal(str(params['movement_speed_factor']))
+            or Decimal(str(params['attack_speed_factor'])) != 0 or len(slow['buffid1']) != 4):
+        raise ValueError('Wisp death control flow changed: spell blast on a dying combat wisp, then a timed Slow Aura dummy')
+    movement = sum(bit for token, bit in (('ground', 1), ('air', 2)) if token in tokens)
+    entry = result.setdefault(raw, {'rawcode': raw, 'heal_percent': 0, 'retaliation_damage': 0})
+    entry['death_burst'] = {'damage': number(damage[4]), 'radius': number(branch[7], 1024),
+        'excluded_ability': int(filtered[2]), 'excluded_type': raw,
+        'slow': {'ability': params['slow_aura_ability_id'], 'buff': int.from_bytes(slow['buffid1'].encode(), 'big'),
+            'radius': number(slow['area1'], 1024), 'movement_percent_delta': number(slow['dataa1'], 100),
+            'attack_speed_percent_delta': number(params['attack_speed_factor'], 100), 'targets': movement,
+            'affects_invulnerable': 'invulnerable' in tokens, 'duration_ticks': number(branch[11], 30)}}

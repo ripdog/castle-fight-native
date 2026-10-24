@@ -310,6 +310,8 @@ impl Simulation {
                 NativeAction::AcidBomb(state) => self.advance_acid_bomb(entity, state, units),
                 NativeAction::Poison(state) => self.advance_poison(entity, state, units, buildings),
                 NativeAction::Sandstorm(state) => self.advance_sandstorm(entity, state, units),
+                NativeAction::WispRelease(state) => self.advance_wisp_release(entity, state),
+                NativeAction::DeathBurst(state) => self.advance_death_burst(entity, state, units),
                 NativeAction::Tornado(state) => {
                     self.advance_tornado(entity, state, units, buildings)
                 }

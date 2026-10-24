@@ -30,6 +30,10 @@ pub use native_summons::{
 mod curse;
 pub use curse::CurseProfile;
 mod building_script;
+mod wisp;
+pub use wisp::{
+    DeathBurstRule, DeathBurstState, DeathSlowField, WispReleaseProfile, WispReleaseState,
+};
 mod parasite_area_buff;
 mod parasite_script;
 pub use building_script::{

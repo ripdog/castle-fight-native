@@ -120,6 +120,7 @@ impl Simulation {
                 ),
                 units,
             ),
+            BuildingChild::WispRelease(wisps) => self.cast_wisp_release(source, wisps, units),
             BuildingChild::Tornado {
                 options,
                 excluded_ability,
@@ -705,7 +706,7 @@ impl Simulation {
         1
     }
 
-    fn source_entity(&self, source: AbilitySourceSnapshot, units: &[UnitSnapshot]) -> Entity {
+    pub(super) fn source_entity(&self, source: AbilitySourceSnapshot, units: &[UnitSnapshot]) -> Entity {
         match source.source {
             AbilitySourceIndex::Unit(index) => units[index].entity,
             AbilitySourceIndex::Building(_) => self

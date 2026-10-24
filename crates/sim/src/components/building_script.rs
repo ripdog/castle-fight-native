@@ -85,6 +85,8 @@ pub enum BuildingChild {
         /// This unit type is never chosen.
         excluded_type: u32,
     },
+    /// Releases forest wisps for the casting player over the following seconds.
+    WispRelease(WispReleaseProfile),
     /// A map-wide debuff plus a pulsing immolation on every hostile unit for a fixed time.
     Sandstorm {
         debuff: NativeDebuffProfile,
@@ -205,6 +207,11 @@ impl BuildingChild {
                 for option in options {
                     words.extend(option.canonical_words());
                 }
+                words
+            }
+            Self::WispRelease(profile) => {
+                let mut words = vec![11];
+                words.extend(profile.canonical_words());
                 words
             }
             Self::Sandstorm {

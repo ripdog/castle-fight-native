@@ -95,48 +95,21 @@ impl Simulation {
     /// `Aasl`: hostile combat bodies inside the radius are slowed for as long as they stay in it.
     fn apply_tornado_slow(&self, state: &TornadoState, units: &mut [UnitSnapshot]) {
         let slow = state.profile.slow;
-        let expiry = self.next_tick + 1;
-        let id = ModifierId(slow.ability.0);
-        for unit in units.iter_mut() {
-            if unit.team == state.team
-                || unit.health <= 0
-                || unit.classifications.locust
-                || !unit.classifications.combat_sapper
-                || (unit.classifications.invulnerable && !slow.affects_invulnerable)
-                || !slow.targets.can_target_unit(unit.target_movement_class())
-                || state.center.distance_sq(unit.position) > square_i32(slow.radius)
-            {
-                continue;
-            }
-            apply_timed_armor_modifier(
-                &mut unit.status,
-                TimedArmorModifier {
-                    undispellable: false,
-                    aura_membership: true,
-                    id,
-                    native_buff: Some(crate::NativeBuffIdentity {
-                        rawcode: slow.buff,
-                        positive: false,
-                        stealable: false,
-                        organic_only: false,
-                    }),
-                    expires_tick: expiry,
-                    ..Default::default()
-                },
-            );
-            apply_timed_movement_modifier(
-                &mut unit.status,
-                id,
+        super::wisp::apply_slow_aura(
+            self.next_tick,
+            state.center,
+            state.team,
+            (
+                slow.ability,
+                slow.buff,
+                slow.radius,
                 slow.movement_percent_delta,
-                expiry,
-            );
-            apply_timed_attack_speed_modifier(
-                &mut unit.status,
-                id,
                 slow.attack_speed_percent_delta,
-                expiry,
-            );
-        }
+                slow.targets,
+                slow.affects_invulnerable,
+            ),
+            units,
+        );
     }
 
     /// `Atdg`: one second of damage to every hostile body (and structure) the aura selects. The

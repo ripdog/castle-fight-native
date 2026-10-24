@@ -1,6 +1,8 @@
 {
   "schema_version": 1,
   "effects": [
+    {"source_kind":"unit-ability","source_key":"A0EM","unit_rawcode":"h06B","kind":"bash"},
+    {"source_kind":"unit-ability","source_key":"A0BS","unit_rawcode":"h02D","kind":"building-script"},
     {"source_kind":"unit-ability","source_key":"A0BO","unit_rawcode":"h02A","kind":"building-script"},
     {"source_kind":"unit-ability","source_key":"A0BM","unit_rawcode":"h02C","kind":"building-script"},
     {"source_kind":"unit-ability","source_key":"A0BN","unit_rawcode":"n02D","kind":"bash"},

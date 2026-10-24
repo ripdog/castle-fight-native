@@ -728,6 +728,28 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u64(state.next_pulse_tick);
                         hash.write_u64(state.expires_tick);
                     }
+                    NativeAction::WispRelease(state) => {
+                        hash.write_u8(48);
+                        hash.write_u8(state.owner.0);
+                        hash.write_u8(state.team.0);
+                        for word in state.profile.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                        hash.write_u8(state.iteration);
+                        hash.write_u64(state.next_tick);
+                    }
+                    NativeAction::DeathBurst(state) => {
+                        hash.write_u8(49);
+                        hash.write_u64(state.source.0);
+                        hash.write_u8(state.team.0);
+                        hash.write_i32(state.center.x);
+                        hash.write_i32(state.center.y);
+                        for word in state.rule.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                        hash.write_u8(u8::from(state.struck));
+                        hash.write_u64(state.expires_tick);
+                    }
                     NativeAction::ThunderCall(state) => {
                         hash.write_u8(42);
                         for word in state.profile.canonical_words() {

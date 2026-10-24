@@ -43,9 +43,10 @@ pub use components::{
     ClubPhase, CollisionRadius, ConeWaveProfile, ContentIdentity, CorpseDefinitionId,
     CorpseProfile, CriticalStrikeEffectProfile, CurseProfile, DamageChargeProfile,
     DamageChargeState, DamageRetaliationProfile, DamageThreshold, DamageThresholdProfile,
-    DamageThresholdState, DeathAndDecayProfile, DeathExplosionProfile, DeathMasteryProfile,
-    DefendEffectProfile, DemolishProfile, DiseaseCloudProfile, DispelAreaRules, EchoRemnantProfile,
-    EchoRemnantState, EchoStepProfile, EnsnareProfile, EnsnareState, EntanglingRootsEffectProfile,
+    DamageThresholdState, DeathAndDecayProfile, DeathBurstRule, DeathBurstState,
+    DeathExplosionProfile, DeathMasteryProfile, DeathSlowField, DefendEffectProfile,
+    DemolishProfile, DiseaseCloudProfile, DispelAreaRules, EchoRemnantProfile, EchoRemnantState,
+    EchoStepProfile, EnsnareProfile, EnsnareState, EntanglingRootsEffectProfile,
     EtherealEffectProfile, EvasionEffectProfile, FeedbackEffectProfile, FeralBearProfile,
     FeralBearState, ForkedLightningProfile, FrostAttackEffectProfile, GameplayBundleIdentity,
     GobboRepairProfile, HealingSprayProfile, HealingSprayState, HealingWaveProfile,
@@ -71,7 +72,7 @@ pub use components::{
     ThunderCallState, TornadoDamage, TornadoProfile, TornadoSlow, TornadoState,
     TravellingManaClapProfile, TriggeredAttackEffect, TriggeredSpellProcProfile, TrueSightProfile,
     UnitClassifications, UnitGameplayProperties, UnitSpawn, UnitTemplate, WarClubProfile,
-    WarClubState, WhirlwindProfile,
+    WarClubState, WhirlwindProfile, WispReleaseProfile, WispReleaseState,
 };
 pub use content::{
     CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION, CASTLE_FIGHT_CONTENT_REVISION_927,
