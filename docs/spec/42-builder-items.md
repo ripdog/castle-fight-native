@@ -278,7 +278,7 @@ BlinkBuilder
 RepairBuilder
 SetBuilderRepairAutocast
 PlaceBuilding
-SellBuilding
+CancelBuildingConstruction
 PurchaseUpgrade
 UseItem
 ActivateBuildingAbility

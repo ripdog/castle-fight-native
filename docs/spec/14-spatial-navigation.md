@@ -115,7 +115,7 @@ The exact idle behavior is a gameplay detail to refine during compatibility work
 Navigation topology changes when blockers change, such as:
 
 - building constructed;
-- building sold/destroyed;
+- building destroyed;
 - destructible terrain changes if supported;
 - gate opens/closes if supported.
 

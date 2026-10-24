@@ -93,12 +93,5 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 
 ## Not applicable / spec corrections
 
-- **Selling buildings does not exist in Castle Fight.** Do not add a Sell command or button. `docs/spec` still mentions sell/sale in several places and should be corrected (a spec change, so keep it a separate commit):
-  - [ ] `31-input-building-ui.md` §3 ("sell/destroy owned building where rules permit")
-  - [ ] `42-builder-items.md` (the `SellBuilding` entry)
-  - [ ] `20-networking.md` ("a sale target still exists and is sellable")
-  - [ ] `13-time-and-scheduling.md` ("place/sell buildings")
-  - [ ] `10-simulation-core.md` ("construct/sell/destroy building")
-  - [ ] `40-content-data.md` ("sell behavior")
-  - [ ] `41-match-gameplay.md` and `50-testing-observability-performance.md` (tests that mention selling/destroying a cage wall; a wall can still be destroyed in combat, so only the selling wording is wrong)
+- **Selling buildings does not exist in Castle Fight.** Do not add a Sell command or button. The `docs/spec` mentions of selling/sale were removed or reworded (cancelling unfinished construction, which refunds, remains).
 - **Builder inventory slots.** The six empty slots in the selection console (`InventoryPlaceholder`) are a layout placeholder until builder items and `UseItem` exist. Either hide them until then or leave them, but don't treat them as a UI bug on their own. Tracked by the builder-items work in `docs/spec/42-builder-items.md`.

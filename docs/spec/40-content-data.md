@@ -202,7 +202,6 @@ ability definitions/references
 activation mode for abilities (automatic/passive/player-targeted)
 legendary classification/limits if applicable
 upgrade relationships
-sell behavior
 spawn location/offset policy
 build/construction time if present
 ```

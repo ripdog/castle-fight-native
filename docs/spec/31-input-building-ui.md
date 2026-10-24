@@ -25,7 +25,7 @@ The first playable game is expected to need commands such as:
 - move the player's builder;
 - activate the builder's Build command and select a building type for placement;
 - place production/attack/spell/utility/legendary building within the owning team's build region;
-- sell/destroy owned building where rules permit;
+- cancel an owned unfinished construction or upgrade (Castle Fight has no sell command; completed buildings leave play only through combat destruction);
 - purchase upgrade;
 - use an active builder-held item, including a point/area target where required;
 - activate a player-targeted building ability where that building explicitly exposes one;

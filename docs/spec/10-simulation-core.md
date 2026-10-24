@@ -136,7 +136,7 @@ Examples requiring explicit rules:
 - healing and damage affect the same target;
 - multiple spawn requests compete for nearby placement;
 - units attempt to occupy overlapping space;
-- a building is sold/destroyed while it produces a unit;
+- a building is destroyed while it produces a unit;
 - a guaranteed-hit projectile reaches a target on the same tick the target dies/is removed;
 - a ballistic projectile impacts while units enter/leave its captured target zone;
 - an automatic caster regenerates enough mana on the same tick an ability becomes ready;
@@ -160,7 +160,7 @@ Examples:
 - add/remove a status component;
 - transform one unit type into another;
 - create/destroy gameplay projectile;
-- construct/sell/destroy building;
+- construct/destroy building;
 - add/remove inventory item or persistent aura source where represented structurally.
 
 Where Bevy `Commands` are used internally, their application order MUST NOT be relied upon unless explicitly made deterministic. Gameplay-critical structural changes SHOULD be represented as canonical simulation operations with explicit stable ordering.

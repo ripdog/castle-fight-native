@@ -139,7 +139,7 @@ Tests MUST verify:
 - legal final wall placement is accepted;
 - trapped units do not escape through topology;
 - trapped units remain attackable under ordinary ranged targeting;
-- destroying/selling a cage wall updates navigation deterministically;
+- destroying a cage wall updates navigation deterministically;
 - navigation cache rebuild does not differ across worker counts.
 
 Any anti-stuck optimization requires specific cage regression tests before merge.

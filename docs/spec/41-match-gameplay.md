@@ -69,7 +69,7 @@ Resource mutations occur through explicit deterministic operations such as:
 - periodic income;
 - building purchase;
 - the lumber award from completing a zero-lumber-cost building;
-- building sale/refund if the selected Castle Fight mode supports one;
+- refund for cancelled construction or upgrade;
 - bounty/reward;
 - upgrade purchase;
 - game-mode grants.
@@ -132,18 +132,18 @@ Placement cost is charged according to one explicit atomic rule. Recommended: se
 
 There MUST NOT be a state where another command can spend the same resource balance because validation/commit ordering was ambiguous.
 
-## 9. Building destruction and sale
+## 9. Building destruction
 
-Sale and combat destruction are distinct reasons even if both remove the building.
+Castle Fight has no sell command: a completed building leaves play only by combat destruction (or ends an unfinished state through cancellation, which removes the site and refunds its cost).
 
 Rules must define:
 
-- refund amount/timing;
+- refund amount/timing for cancelled construction;
 - whether a building remains blocking until the structural commit phase;
 - what happens to an in-progress production timer;
 - what happens to authoritative projectiles already fired;
 - when navigation topology is invalidated;
-- whether death/sale effects trigger.
+- whether death effects trigger.
 
 Removing a cage wall may reconnect previously trapped navigation cells. The navigation field update must occur at a deterministic phase boundary.
 
@@ -408,7 +408,7 @@ The eventual gameplay suite should include:
 5. if an entire team disconnects, the match pauses at a tick boundary, resumes if a teammate returns before timeout, and ends on canonical timeout if nobody returns;
 6. two same-tick production buildings yield identical state across worker counts;
 7. bounded spiral spawning selects the same first valid location and drops the spawn attempt when the search is exhausted;
-8. selling/destroying cage wall invalidates topology at the documented phase;
+8. destroying cage wall invalidates topology at the documented phase;
 9. same-tick income/purchase follows documented ordering;
 10. upgrade starts affecting entities at the documented tick;
 11. simultaneous objective destruction resolves according to explicit draw/priority rule;

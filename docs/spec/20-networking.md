@@ -102,7 +102,7 @@ Execution-time examples:
 - a build position is still legal and unoccupied;
 - an item/ability is still ready and affordable;
 - an entity target still exists and remains eligible where the ability requires that;
-- a sale target still exists and is sellable.
+- a cancellation target (unfinished construction or upgrade) still exists and is cancellable.
 
 The server MUST NOT trust a client's local prediction or resource count.
 

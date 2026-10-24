@@ -193,7 +193,7 @@ Interpolation is cosmetic. Hit tests, target acquisition, placement validation, 
 
 Local player input occurs in wall-clock/presentation time, but becomes authoritative only after conversion to a protocol command assigned to a simulation tick/order by the authoritative server.
 
-Normal commands may move the player's builder, place/sell buildings, use builder-held active items, purchase upgrades, or activate explicitly player-targeted building abilities. Ordinary combat units have no direct player-order command path.
+Normal commands may move the player's builder, place buildings, use builder-held active items, purchase upgrades, or activate explicitly player-targeted building abilities. Ordinary combat units have no direct player-order command path.
 
 A client MAY provide immediate visual movement/placement/targeting feedback, but a command is not authoritative merely because local UI accepted it.
 
