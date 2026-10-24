@@ -16,7 +16,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 129;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 130;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -238,6 +238,8 @@ pub struct SimulationConfig {
     pub economy: EconomyRules,
     pub match_rules: crate::MatchRules,
     pub rescue_strike_rules: Option<crate::RescueStrikeRules>,
+    /// Enables the castle item system (shop, inventory and item effects) for this map version.
+    pub item_system: Option<crate::MapVersion>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -272,6 +274,7 @@ impl Default for SimulationConfig {
             economy: EconomyRules::default(),
             match_rules: crate::MatchRules::default(),
             rescue_strike_rules: None,
+            item_system: None,
         }
     }
 }
@@ -763,6 +766,7 @@ pub struct Simulation {
     externally_slain: Vec<Entity>,
     pending_rescue_strikes: Vec<PendingRescueStrike>,
     player_strikes: Vec<PlayerStrikeState>,
+    items: crate::ItemSystemState,
     team_rescue_ready_ticks: [u64; 2],
     round_index: u16,
     round_wins: [u8; 2],
@@ -924,6 +928,11 @@ impl Simulation {
         });
         let mut world = World::new();
         register_simulation_components(&mut world);
+        let items = crate::ItemSystemState::for_catalog(
+            config
+                .item_system
+                .and_then(crate::items::item_catalog_for_version),
+        );
         Self {
             fog,
             world,
@@ -957,6 +966,7 @@ impl Simulation {
                     cooldown_until_tick: 0,
                 })
                 .collect(),
+            items,
             team_rescue_ready_ticks: [0; 2],
             round_index: 1,
             round_wins: [0; 2],
@@ -2793,6 +2803,7 @@ impl Simulation {
                 round_wins: self.round_wins,
                 player_strikes: &self.player_strikes,
                 pending_rescue_strikes: &self.pending_rescue_strikes,
+                items: &self.items,
                 team_rescue_ready_ticks: self.team_rescue_ready_ticks,
                 review_until_tick: self.review_until_tick,
                 last_round_scoreboard: self.last_round_scoreboard.as_ref(),
@@ -5196,6 +5207,8 @@ pub(crate) fn register_simulation_components(world: &mut World) {
     world.register_component::<crate::components::NativeAction>();
     world.register_component::<BuildingSpellTargetState>();
     world.register_component::<WorldFreezerState>();
+    world.register_component::<crate::Inventory>();
+    world.register_component::<crate::GroundItem>();
 }
 
 fn validate_player_configs(players: &[PlayerConfig]) -> Vec<PlayerConfig> {

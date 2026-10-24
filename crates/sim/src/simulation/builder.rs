@@ -356,6 +356,7 @@ impl Simulation {
                 repair_autocast_enabled: builder.repair_autocast_enabled,
                 ..BuilderState::default()
             },
+            crate::Inventory::default(),
         ));
         Ok(id)
     }
@@ -426,6 +427,7 @@ impl Simulation {
         state.destination = Some(destination);
         state.follow_target = None;
         state.repair_target = None;
+        state.item_order = None;
         state.repair_progress_remainder = 0;
         Ok(())
     }
@@ -456,6 +458,7 @@ impl Simulation {
         state.destination = None;
         state.follow_target = Some(target);
         state.repair_target = None;
+        state.item_order = None;
         state.repair_progress_remainder = 0;
         Ok(())
     }
@@ -561,6 +564,7 @@ impl Simulation {
         state.destination = None;
         state.follow_target = None;
         state.repair_target = Some(target);
+        state.item_order = None;
         state.repair_progress_remainder = 0;
         Ok(())
     }
@@ -807,6 +811,7 @@ impl Simulation {
         builder_state.destination = None;
         builder_state.follow_target = None;
         builder_state.repair_target = None;
+        builder_state.item_order = None;
         builder_state.repair_progress_remainder = 0;
         Ok(())
     }

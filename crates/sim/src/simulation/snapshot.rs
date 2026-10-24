@@ -7,7 +7,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 132;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 133;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -29,6 +29,7 @@ pub struct SimulationSnapshot {
     last_round_scoreboard: Option<RoundScoreboard>,
     player_strikes: Vec<PlayerStrikeState>,
     pending_rescue_strikes: Vec<PendingRescueStrike>,
+    items: crate::ItemSystemState,
     team_rescue_ready_ticks: [u64; 2],
     shrine_death_generation: u64,
     retired_damage_sources: BTreeMap<SimId, super::source_damage_runtime::RetiredDamageSource>,
@@ -299,6 +300,7 @@ impl SimulationSnapshot {
                 | CanonicalEntity::LineProjectile(_)
                 | CanonicalEntity::BounceProjectile(_)
                 | CanonicalEntity::BurningOil(_)
+                | CanonicalEntity::GroundItem { .. }
                 | CanonicalEntity::ChainLightning(_) => {}
             }
         }
@@ -440,6 +442,7 @@ impl Simulation {
         self.player_strikes.clone_from(&template.player_strikes);
         self.team_rescue_ready_ticks = [0; 2];
         self.pending_rescue_strikes.clear();
+        self.items.clone_from(&template.items);
         self.defense_alerts.clear();
         self.clear_presentation_events();
         self.pursuit_cache.clear();
@@ -473,6 +476,7 @@ impl Simulation {
             last_round_scoreboard: self.last_round_scoreboard.clone(),
             player_strikes: self.player_strikes.clone(),
             pending_rescue_strikes: self.pending_rescue_strikes.clone(),
+            items: self.items.clone(),
             team_rescue_ready_ticks: self.team_rescue_ready_ticks,
             shrine_death_generation: self.shrine_death_generation,
             retired_damage_sources: self.retired_damage_sources.clone(),
@@ -578,6 +582,7 @@ impl Simulation {
                 last_round_scoreboard: snapshot.last_round_scoreboard.as_ref(),
                 player_strikes: &snapshot.player_strikes,
                 pending_rescue_strikes: &snapshot.pending_rescue_strikes,
+                items: &snapshot.items,
                 team_rescue_ready_ticks: snapshot.team_rescue_ready_ticks,
                 shrine_death_generation: snapshot.shrine_death_generation,
                 retired_damage_sources: &snapshot.retired_damage_sources,
@@ -612,6 +617,7 @@ impl Simulation {
         self.player_strikes.clone_from(&snapshot.player_strikes);
         self.pending_rescue_strikes
             .clone_from(&snapshot.pending_rescue_strikes);
+        self.items.clone_from(&snapshot.items);
         self.team_rescue_ready_ticks = snapshot.team_rescue_ready_ticks;
         self.shrine_death_generation = snapshot.shrine_death_generation;
         self.retired_damage_sources
@@ -675,6 +681,9 @@ pub(super) fn canonical_entities(world: &World) -> Vec<CanonicalEntity> {
 /// component required by its authoritative shape.
 pub(super) fn canonical_entity(entity: EntityRef<'_>) -> Option<CanonicalEntity> {
     let id = *entity.get::<SimId>()?;
+    if let Some(item) = entity.get::<crate::GroundItem>() {
+        return Some(CanonicalEntity::GroundItem { id, item: *item });
+    }
     if let Some(state) = entity.get::<WorldFreezerState>() {
         return Some(CanonicalEntity::WorldFreezer {
             id,
@@ -774,6 +783,10 @@ pub(super) fn canonical_entity(entity: EntityRef<'_>) -> Option<CanonicalEntity>
             state: *entity.get::<BuilderState>()?,
             orders: entity
                 .get::<BuilderOrderQueue>()
+                .cloned()
+                .unwrap_or_default(),
+            inventory: entity
+                .get::<crate::Inventory>()
                 .cloned()
                 .unwrap_or_default(),
         }));
@@ -985,6 +998,9 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                     entity.insert(abilities);
                 }
             }
+            CanonicalEntity::GroundItem { id, item } => {
+                world.spawn((*id, *item));
+            }
             CanonicalEntity::WorldFreezer { id, state } => {
                 world.spawn((*id, state.clone()));
             }
@@ -1168,6 +1184,7 @@ fn restore_entities(world: &mut World, entities: &[CanonicalEntity]) {
                 if !builder.orders.0.is_empty() {
                     entity.insert(builder.orders.clone());
                 }
+                entity.insert(builder.inventory.clone());
             }
         }
     }

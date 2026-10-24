@@ -5,6 +5,9 @@ mod content;
 mod damage;
 pub mod debug;
 mod economy;
+mod inventory;
+mod item_state;
+pub mod items;
 mod match_driver;
 mod match_rules;
 mod match_setup;
@@ -98,6 +101,13 @@ pub use damage::{
 pub use economy::{
     BuildingEconomyProfile, EconomyRules, PlayerEconomyView, PlayerResources, RESOURCE_FIXED_SCALE,
     ResourcePurchaseError,
+};
+pub use inventory::{
+    AcquireOutcome, INVENTORY_SLOTS, Inventory, InventoryError, ItemCooldown, ItemStack,
+};
+pub use item_state::{
+    GroundItem, ItemOrder, ItemSystemState, ItemUseTarget, PendingItemImpact, PendingItemOrder,
+    ShopSlotState, TeamItemBuff,
 };
 pub use match_driver::{
     BoundaryControlRecord, CanonicalStreamError, CanonicalStreamRecord, ClientCommandSequence,
@@ -385,6 +395,7 @@ mod tests {
             economy: EconomyRules::default(),
             match_rules: MatchRules::default(),
             rescue_strike_rules: None,
+            item_system: None,
         }
     }
 

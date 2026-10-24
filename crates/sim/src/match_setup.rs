@@ -725,6 +725,8 @@ fn simulation_config_927(
         economy: content.economy,
         match_rules: crate::MatchRules::for_version(content.map_version),
         rescue_strike_rules: crate::RescueStrikeRules::for_version(content.map_version),
+        item_system: crate::items::item_catalog_for_version(content.map_version)
+            .map(|_| content.map_version),
     }
 }
 

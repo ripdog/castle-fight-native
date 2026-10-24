@@ -95,6 +95,14 @@ pub(super) fn canonical_configuration_identity(
         config.match_rules.time_limit_outcome,
         crate::TimeLimitOutcome::Draw
     )));
+    match config.item_system {
+        Some(version) => {
+            hash.write_u8(1);
+            hash.write_u16(version.major);
+            hash.write_u16(version.minor);
+        }
+        None => hash.write_u8(0),
+    }
     if let Some(strike) = config.rescue_strike_rules {
         hash.write_u8(1);
         hash.write_i32(strike.radius_subunits);
@@ -225,6 +233,7 @@ pub(super) struct CanonicalMatchState<'a> {
     pub(super) last_round_scoreboard: Option<&'a RoundScoreboard>,
     pub(super) player_strikes: &'a [PlayerStrikeState],
     pub(super) pending_rescue_strikes: &'a [PendingRescueStrike],
+    pub(super) items: &'a crate::ItemSystemState,
     pub(super) team_rescue_ready_ticks: [u64; 2],
     pub(super) shrine_death_generation: u64,
     pub(super) retired_damage_sources:
@@ -251,6 +260,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
         last_round_scoreboard,
         player_strikes,
         pending_rescue_strikes,
+        items,
         team_rescue_ready_ticks,
         shrine_death_generation,
         retired_damage_sources,
@@ -371,6 +381,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
             None => hash.write_u8(0),
         }
     }
+    hash_item_system(&mut hash, items);
     hash.write_u64(next_id);
     hash.write_u64(next_visual_id);
     hash.write_u64(shrine_death_generation);
@@ -456,6 +467,14 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
             );
         };
         match &entity {
+            CanonicalEntity::GroundItem { id, item } => {
+                hash.write_u8(17);
+                hash.write_u64(id.0);
+                hash.write_u32(item.item.0);
+                hash.write_u8(item.charges);
+                hash.write_i32(item.position.x);
+                hash.write_i32(item.position.y);
+            }
             CanonicalEntity::WorldFreezer { id, state } => {
                 hash.write_u8(16);
                 hash.write_u64(id.0);
@@ -1715,6 +1734,8 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 }
                 hash_optional_sim_id(&mut hash, builder.state.follow_target);
                 hash_optional_sim_id(&mut hash, builder.state.repair_target);
+                hash_pending_item_order(&mut hash, builder.state.item_order);
+                hash_inventory(&mut hash, &builder.inventory);
                 hash.write_u64(u64::from(builder.state.repair_progress_remainder));
                 hash.write_u8(u8::from(builder.state.repair_autocast_enabled));
                 hash.write_u64(builder.orders.0.len() as u64);
@@ -1810,6 +1831,10 @@ pub(super) enum CanonicalEntity {
         id: SimId,
         state: crate::native_carriers::NativeCarrierState,
     },
+    GroundItem {
+        id: SimId,
+        item: crate::GroundItem,
+    },
 }
 
 impl CanonicalEntity {
@@ -1832,6 +1857,7 @@ impl CanonicalEntity {
             Self::BuildingSpellTarget { id, .. } => *id,
             Self::NativeCarrier { id, .. } => *id,
             Self::Snowveil { id, .. } => *id,
+            Self::GroundItem { id, .. } => *id,
         }
     }
 }
@@ -1852,6 +1878,7 @@ pub(super) struct CanonicalBuilder {
     pub(super) configuration: BuilderConfiguration,
     pub(super) state: BuilderState,
     pub(super) orders: BuilderOrderQueue,
+    pub(super) inventory: crate::Inventory,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2062,6 +2089,103 @@ fn hash_content_identity(hash: &mut Fnv64, content: Option<&ContentIdentity>) {
             hash.write_u64(u64::from(content.rawcode));
         }
         None => hash.write_u8(0),
+    }
+}
+
+fn hash_inventory(hash: &mut Fnv64, inventory: &crate::Inventory) {
+    for slot in inventory.slots() {
+        match slot {
+            Some(stack) => {
+                hash.write_u8(1);
+                hash.write_u32(stack.item.0);
+                hash.write_u8(stack.charges);
+                hash.write_u64(stack.ready_tick);
+            }
+            None => hash.write_u8(0),
+        }
+    }
+    hash.write_u64(inventory.cooldowns().len() as u64);
+    for cooldown in inventory.cooldowns() {
+        hash.write_u32(cooldown.group);
+        hash.write_u64(cooldown.ready_tick);
+    }
+}
+
+fn hash_pending_item_order(hash: &mut Fnv64, order: Option<crate::PendingItemOrder>) {
+    use crate::{ItemOrder, ItemUseTarget};
+    let Some(pending) = order else {
+        hash.write_u8(0);
+        return;
+    };
+    hash.write_u8(1);
+    hash.write_u8(u8::from(pending.walking));
+    match pending.order {
+        ItemOrder::Pickup { item } => {
+            hash.write_u8(0);
+            hash.write_u64(item.0);
+        }
+        ItemOrder::Use { slot, target } => {
+            hash.write_u8(1);
+            hash.write_u8(slot);
+            match target {
+                ItemUseTarget::None => hash.write_u8(0),
+                ItemUseTarget::Point(point) => {
+                    hash.write_u8(1);
+                    hash.write_i32(point.x);
+                    hash.write_i32(point.y);
+                }
+                ItemUseTarget::Unit(id) => {
+                    hash.write_u8(2);
+                    hash.write_u64(id.0);
+                }
+            }
+        }
+        ItemOrder::Drop { slot, position } => {
+            hash.write_u8(2);
+            hash.write_u8(slot);
+            hash.write_i32(position.x);
+            hash.write_i32(position.y);
+        }
+        ItemOrder::Give { slot, recipient } => {
+            hash.write_u8(3);
+            hash.write_u8(slot);
+            hash.write_u64(recipient.0);
+        }
+    }
+}
+
+fn hash_item_system(hash: &mut Fnv64, items: &crate::ItemSystemState) {
+    for shop in &items.shops {
+        hash.write_u64(shop.len() as u64);
+        for slot in shop {
+            hash.write_u8(u8::from(slot.opened));
+            hash.write_u8(slot.stock);
+            match slot.restock_tick {
+                Some(tick) => {
+                    hash.write_u8(1);
+                    hash.write_u64(tick);
+                }
+                None => hash.write_u8(0),
+            }
+        }
+    }
+    hash.write_u64(items.team_buffs.len() as u64);
+    for buff in &items.team_buffs {
+        hash.write_u8(buff.team.0);
+        hash.write_u32(buff.item.0);
+        hash.write_u64(buff.expires_tick);
+    }
+    hash.write_u64(items.impacts.len() as u64);
+    for impact in &items.impacts {
+        hash.write_u64(impact.source.0);
+        hash.write_u8(impact.source_team.0);
+        hash.write_u64(impact.target.0);
+        hash.write_u32(impact.item.0);
+        hash.write_i32(impact.damage);
+        hash.write_i32(impact.launch_position.x);
+        hash.write_i32(impact.launch_position.y);
+        hash.write_u64(impact.launch_tick);
+        hash.write_u64(impact.impact_tick);
     }
 }
 

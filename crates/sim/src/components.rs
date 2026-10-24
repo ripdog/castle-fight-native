@@ -2036,6 +2036,8 @@ pub(crate) struct BuilderState {
     pub repair_target: Option<SimId>,
     pub repair_progress_remainder: u32,
     pub repair_autocast_enabled: bool,
+    /// A walk-then-act inventory order (pick up, use, drop, give), resolved in the item phase.
+    pub item_order: Option<crate::item_state::PendingItemOrder>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]

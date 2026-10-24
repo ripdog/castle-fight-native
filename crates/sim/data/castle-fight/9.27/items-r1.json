@@ -1,0 +1,597 @@
+{
+  "inventory": {
+    "slots": 6,
+    "upgrades": [
+      {
+        "replacement_item": "I002",
+        "required_count": 4,
+        "trigger_item": "I001"
+      }
+    ]
+  },
+  "items": [
+    {
+      "class": "permanent",
+      "cooldown_group": "AIs6",
+      "drop_on_death": false,
+      "droppable": true,
+      "effects": [
+        {
+          "ability": "A008",
+          "kind": "regeneration-aura",
+          "radius": 700,
+          "regeneration_per_second_per_10k": 25000,
+          "targets": "air,friend,ground,invulnerable,nonsapper,self,structure,vulnerable"
+        }
+      ],
+      "gold_cost": 400,
+      "icon": "ReplaceableTextures\\CommandButtons\\BTNRune.blp",
+      "initial_charges": 0,
+      "lumber_cost": 0,
+      "name": "Rune of Repair",
+      "pawnable": true,
+      "perishable": false,
+      "powerup": false,
+      "rawcode": "I009",
+      "rawcode_integer": 1227894841,
+      "sellable": true,
+      "stack_maximum": 0,
+      "tooltip": "Repairs buildings near the worker. Stacks with other Runes and Coral Statues.",
+      "tooltip_title": "Buy Rune of Repair",
+      "usable": false
+    },
+    {
+      "class": "permanent",
+      "cooldown_group": "AOac",
+      "drop_on_death": false,
+      "droppable": true,
+      "effects": [
+        {
+          "ability": "A03T",
+          "attack_speed_percent": 30,
+          "buff": "B00L",
+          "kind": "speed-aura",
+          "movement_percent": 15,
+          "radius": 25000,
+          "targets": "air,ground,friend,self,vuln,invu"
+        }
+      ],
+      "gold_cost": 600,
+      "icon": "ReplaceableTextures\\CommandButtons\\BTNHornOfFog.blp",
+      "initial_charges": 0,
+      "lumber_cost": 0,
+      "name": "Drum'n'Bass Bassline Generator",
+      "pawnable": true,
+      "perishable": false,
+      "powerup": false,
+      "rawcode": "I00A",
+      "rawcode_integer": 1227894849,
+      "sellable": true,
+      "stack_maximum": 0,
+      "tooltip": "Increases the movementspeed of all friendly units by 15% and their attackspeed by 30%. |cffFF0000Does not stack, dont buy twice!|r",
+      "tooltip_title": "Buy Drum'n'Bass Bassline Generator",
+      "usable": false
+    },
+    {
+      "class": "charged",
+      "cooldown_group": "A02G",
+      "drop_on_death": false,
+      "droppable": true,
+      "effects": [
+        {
+          "armor_bonus": 8,
+          "buff": "B01C",
+          "carrier_lifetime_seconds": 1.0,
+          "carrier_unit": "e008",
+          "duration_seconds": 30.0,
+          "effect_ability": "A02G",
+          "kind": "point-scroll-restoration",
+          "life": 400,
+          "mana": 200,
+          "radius": 1000,
+          "range": 25000,
+          "targets": "ground,air,friend,self,invu,vuln",
+          "trigger_ability": "A08Y"
+        }
+      ],
+      "gold_cost": 150,
+      "icon": "ReplaceableTextures\\CommandButtons\\BTNScrollOfHealing.blp",
+      "initial_charges": 1,
+      "lumber_cost": 0,
+      "name": "Scroll of Stone",
+      "pawnable": true,
+      "perishable": true,
+      "powerup": false,
+      "rawcode": "I005",
+      "rawcode_integer": 1227894837,
+      "sellable": true,
+      "stack_maximum": 5,
+      "tooltip": "When used, the scroll heals 400 hitpoints, 200 mana and gives 8 bonus armor for 30 seconds to all allied units in a huge area.",
+      "tooltip_title": "Buy Scroll of Stone",
+      "usable": true
+    },
+    {
+      "class": "permanent",
+      "cooldown_group": "AIs6",
+      "drop_on_death": false,
+      "droppable": true,
+      "effects": [
+        {
+          "ability": "A02D",
+          "cooldown_seconds": 1.0,
+          "copies": 1,
+          "damage": 60,
+          "kind": "blast",
+          "missile_art": "Abilities\\Weapons\\DruidoftheTalonMissile\\DruidoftheTalonMissile.mdl",
+          "missile_speed": 1000,
+          "radius": 750,
+          "targets": "ground,air,enemy"
+        }
+      ],
+      "gold_cost": 150,
+      "icon": "ReplaceableTextures\\CommandButtons\\BTNWandOfManaSteal.blp",
+      "initial_charges": 0,
+      "lumber_cost": 300,
+      "name": "Blast Staff",
+      "pawnable": true,
+      "perishable": false,
+      "powerup": false,
+      "rawcode": "I001",
+      "rawcode_integer": 1227894833,
+      "sellable": true,
+      "stack_maximum": 0,
+      "tooltip": "Launches one magic projectile per second at a random nearby enemy.\nProjectiles deal 60 |cff8080ffspell damage|r.\n\n|cff00FF00Others: 100%|r|n|cffFF0000Hero: 70%|nDivine: 25%|r",
+      "tooltip_title": "Buy Blast Staff",
+      "usable": false
+    },
+    {
+      "class": "permanent",
+      "cooldown_group": "AOae",
+      "drop_on_death": false,
+      "droppable": true,
+      "effects": [
+        {
+          "ability": "A02F",
+          "buff": "B008",
+          "damage_per_10k": 3300,
+          "kind": "damage-aura",
+          "radius": 15000,
+          "targets": "air,ground,friend,self,vuln,invu"
+        }
+      ],
+      "gold_cost": 650,
+      "icon": "ReplaceableTextures\\CommandButtons\\BTNDrum.blp",
+      "initial_charges": 0,
+      "lumber_cost": 0,
+      "name": "Drum'n'Bass Bass Drums",
+      "pawnable": true,
+      "perishable": false,
+      "powerup": false,
+      "rawcode": "I003",
+      "rawcode_integer": 1227894835,
+      "sellable": true,
+      "stack_maximum": 0,
+      "tooltip": "Gives all allied units +33% damage. |cffFF0000Does not stack, dont buy twice!|r",
+      "tooltip_title": "Buy Drum'n'Bass Bass Drums",
+      "usable": false
+    },
+    {
+      "class": "permanent",
+      "cooldown_group": "AIlu",
+      "drop_on_death": false,
+      "droppable": true,
+      "effects": [
+        {
+          "kind": "legendary-point",
+          "legendary_points": 1,
+          "refund_gold_when_inactive": 1750
+        }
+      ],
+      "gold_cost": 1750,
+      "icon": "ReplaceableTextures\\CommandButtons\\BTNCheese.blp",
+      "initial_charges": 1,
+      "lumber_cost": 0,
+      "name": "Cheese",
+      "pawnable": true,
+      "perishable": true,
+      "powerup": true,
+      "rawcode": "I004",
+      "rawcode_integer": 1227894836,
+      "sellable": false,
+      "stack_maximum": 5,
+      "tooltip": "Allowing you to build one more legendary structure.",
+      "tooltip_title": "Buy Cheese",
+      "usable": true
+    },
+    {
+      "class": "permanent",
+      "cooldown_group": "AOcl",
+      "drop_on_death": false,
+      "droppable": true,
+      "effects": [
+        {
+          "dummy_recycle_delay_seconds": 15.0,
+          "effect_ability": "cfOL",
+          "effect_levels": [
+            {
+              "damage": 1000,
+              "damage_reduction_per_target_per_10k": 1000,
+              "jump_radius": 600,
+              "level": 1,
+              "targets": 4
+            },
+            {
+              "damage": 1000,
+              "damage_reduction_per_target_per_10k": 1000,
+              "jump_radius": 600,
+              "level": 2,
+              "targets": 6
+            },
+            {
+              "damage": 1000,
+              "damage_reduction_per_target_per_10k": 1000,
+              "jump_radius": 600,
+              "level": 3,
+              "targets": 8
+            },
+            {
+              "damage": 1000,
+              "damage_reduction_per_target_per_10k": 1000,
+              "jump_radius": 600,
+              "level": 4,
+              "targets": 10
+            },
+            {
+              "damage": 1000,
+              "damage_reduction_per_target_per_10k": 1000,
+              "jump_radius": 600,
+              "level": 5,
+              "targets": 12
+            }
+          ],
+          "kind": "orb-chain-lightning",
+          "level_step_minutes": 5,
+          "missile_speed": 1500,
+          "range": 2500,
+          "targets": "air,enemies,ground,neutral",
+          "trigger_ability": "A02H",
+          "use_cooldown_seconds": 60.0
+        }
+      ],
+      "gold_cost": 550,
+      "icon": "ReplaceableTextures\\CommandButtons\\BTNOrbOfLightning.blp",
+      "initial_charges": 0,
+      "lumber_cost": 0,
+      "name": "Orb of Lightning",
+      "pawnable": true,
+      "perishable": false,
+      "powerup": false,
+      "rawcode": "I006",
+      "rawcode_integer": 1227894838,
+      "sellable": true,
+      "stack_maximum": 0,
+      "tooltip": "Allows your worker to fire a chainlightning at target enemy unit once every minute. The chainlightning hits [4, 6, 8, 10, 12] targets, dealing 1000 damage to the first target. The number of targets scales with the round timer [0, 5, 10, 15, 20] minutes.\n\n|cff00FF00Others: 100%|r|n|cffFF0000Hero: 70%|nDivine: 25%|r",
+      "tooltip_title": "Buy Orb of Lightning",
+      "usable": true
+    },
+    {
+      "class": "charged",
+      "cooldown_group": "AIsa",
+      "drop_on_death": false,
+      "droppable": true,
+      "effects": [
+        {
+          "buff": "Bspe",
+          "carrier_lifetime_seconds": 1.0,
+          "carrier_unit": "e008",
+          "duration_seconds": 15.0,
+          "effect_ability": "A0HB",
+          "kind": "point-scroll-speed",
+          "movement_speed_increase_per_10k": 20000,
+          "radius": 1000,
+          "range": 25000,
+          "targets": "air,ground,friend,self,vuln,invu",
+          "trigger_ability": "A0HJ"
+        }
+      ],
+      "gold_cost": 100,
+      "icon": "ReplaceableTextures\\CommandButtons\\BTNScrollOfHaste.blp",
+      "initial_charges": 1,
+      "lumber_cost": 0,
+      "name": "Scroll of Speed",
+      "pawnable": true,
+      "perishable": true,
+      "powerup": false,
+      "rawcode": "I00F",
+      "rawcode_integer": 1227894854,
+      "sellable": true,
+      "stack_maximum": 5,
+      "tooltip": "When used, the scroll increases movespeed by up to 2x for 15 seconds of all allied units in a huge area.",
+      "tooltip_title": "Buy Scroll of Speed",
+      "usable": true
+    },
+    {
+      "class": "charged",
+      "cooldown_group": "A03F",
+      "drop_on_death": false,
+      "droppable": true,
+      "effects": [
+        {
+          "aura_ability": "A06D",
+          "buff": "B00H",
+          "carrier_lifetime_seconds": 29.0,
+          "carrier_unit": "e008",
+          "damage_per_10k": 10000,
+          "kind": "team-damage-carrier",
+          "radius": 25000,
+          "targets": "air,ground,friend,self,vuln,invu"
+        }
+      ],
+      "gold_cost": 600,
+      "icon": "ReplaceableTextures\\CommandButtons\\BTNOrbOfVenom.blp",
+      "initial_charges": 1,
+      "lumber_cost": 0,
+      "name": "Double Damage",
+      "pawnable": true,
+      "perishable": true,
+      "powerup": true,
+      "rawcode": "I008",
+      "rawcode_integer": 1227894840,
+      "sellable": true,
+      "stack_maximum": 5,
+      "tooltip": "Increases the damage of all allied units by 100% for 30 seconds.",
+      "tooltip_title": "Buy Double Damage",
+      "usable": true
+    },
+    {
+      "class": "charged",
+      "cooldown_group": "A03E",
+      "drop_on_death": false,
+      "droppable": true,
+      "effects": [
+        {
+          "aura_ability": "A06C",
+          "buff": "B00I",
+          "carrier_lifetime_seconds": 29.0,
+          "carrier_unit": "e008",
+          "damage_per_10k": 30000,
+          "kind": "team-damage-carrier",
+          "radius": 25000,
+          "targets": "air,ground,friend,self,vuln,invu"
+        }
+      ],
+      "gold_cost": 1400,
+      "icon": "ReplaceableTextures\\CommandButtons\\BTNHeartOfSearinox.blp",
+      "initial_charges": 1,
+      "lumber_cost": 0,
+      "name": "Quad Damage",
+      "pawnable": true,
+      "perishable": true,
+      "powerup": true,
+      "rawcode": "I007",
+      "rawcode_integer": 1227894839,
+      "sellable": true,
+      "stack_maximum": 5,
+      "tooltip": "Increases the damage of all allied units by 300% for 30 seconds.",
+      "tooltip_title": "Buy Quad Damage",
+      "usable": true
+    },
+    {
+      "class": "permanent",
+      "cooldown_group": "AIs6",
+      "drop_on_death": false,
+      "droppable": true,
+      "effects": [
+        {
+          "ability": "A02D",
+          "cooldown_seconds": 1.0,
+          "copies": 4,
+          "damage": 60,
+          "kind": "blast",
+          "missile_art": "Abilities\\Weapons\\DruidoftheTalonMissile\\DruidoftheTalonMissile.mdl",
+          "missile_speed": 1000,
+          "radius": 750,
+          "targets": "ground,air,enemy"
+        }
+      ],
+      "gold_cost": 600,
+      "icon": "ReplaceableTextures\\CommandButtons\\BTNWandOfCyclone.blp",
+      "initial_charges": 0,
+      "lumber_cost": 1200,
+      "name": "Multi Blast Staff",
+      "pawnable": true,
+      "perishable": false,
+      "powerup": false,
+      "rawcode": "I002",
+      "rawcode_integer": 1227894834,
+      "sellable": true,
+      "stack_maximum": 0,
+      "tooltip": "Launches four magic projectiles per second at a random nearby enemy. One projectile deals 60 |cff8080ffspell damage|r.\n\n|cff00FF00Others: 100%|r|n|cffFF0000Hero: 70%|nDivine: 25%|r",
+      "tooltip_title": "Buy Blast Staff",
+      "usable": false
+    }
+  ],
+  "map_version": "9.27",
+  "retained_revision": "r1",
+  "shop": {
+    "entries": [
+      {
+        "button_ability": "IBA8",
+        "button_icon": "ReplaceableTextures\\CommandButtons\\BTNRune.blp",
+        "hotkey": "Q",
+        "item": "I009",
+        "position": 0,
+        "runtime_button_cooldown_seconds": 1.0,
+        "slot": 8,
+        "stock": {
+          "initial": 1,
+          "maximum": 1,
+          "replenish_interval_seconds": 180,
+          "start_delay_seconds": 30
+        }
+      },
+      {
+        "button_ability": "IBA6",
+        "button_icon": "ReplaceableTextures\\CommandButtons\\BTNHornOfFog.blp",
+        "hotkey": "W",
+        "item": "I00A",
+        "position": 1,
+        "runtime_button_cooldown_seconds": 1.0,
+        "slot": 6,
+        "stock": {
+          "initial": 1,
+          "maximum": 1,
+          "replenish_interval_seconds": 3600,
+          "start_delay_seconds": 30
+        }
+      },
+      {
+        "button_ability": "IBA5",
+        "button_icon": "ReplaceableTextures\\CommandButtons\\BTNScrollOfHealing.blp",
+        "hotkey": "E",
+        "item": "I005",
+        "position": 2,
+        "runtime_button_cooldown_seconds": 1.0,
+        "slot": 5,
+        "stock": {
+          "initial": 1,
+          "maximum": 2,
+          "replenish_interval_seconds": 180,
+          "start_delay_seconds": 30
+        }
+      },
+      {
+        "button_ability": "IBA7",
+        "button_icon": "ReplaceableTextures\\CommandButtons\\BTNWandOfManaSteal.blp",
+        "hotkey": "R",
+        "item": "I001",
+        "position": 3,
+        "runtime_button_cooldown_seconds": 1.0,
+        "slot": 7,
+        "stock": {
+          "initial": 1,
+          "maximum": 1,
+          "replenish_interval_seconds": 300,
+          "start_delay_seconds": 30
+        }
+      },
+      {
+        "button_ability": "IBA3",
+        "button_icon": "ReplaceableTextures\\CommandButtons\\BTNDrum.blp",
+        "hotkey": "A",
+        "item": "I003",
+        "position": 4,
+        "runtime_button_cooldown_seconds": 1.0,
+        "slot": 3,
+        "stock": {
+          "initial": 1,
+          "maximum": 1,
+          "replenish_interval_seconds": 3600,
+          "start_delay_seconds": 30
+        }
+      },
+      {
+        "button_ability": "IBA4",
+        "button_icon": "ReplaceableTextures\\CommandButtons\\BTNCheese.blp",
+        "hotkey": "S",
+        "item": "I004",
+        "position": 5,
+        "runtime_button_cooldown_seconds": 1.0,
+        "slot": 4,
+        "stock": {
+          "initial": 1,
+          "maximum": 2,
+          "replenish_interval_seconds": 210,
+          "start_delay_seconds": 30
+        }
+      },
+      {
+        "button_ability": "IBA2",
+        "button_icon": "ReplaceableTextures\\CommandButtons\\BTNOrbOfLightning.blp",
+        "hotkey": "D",
+        "item": "I006",
+        "position": 6,
+        "runtime_button_cooldown_seconds": 1.0,
+        "slot": 2,
+        "stock": {
+          "initial": 1,
+          "maximum": 1,
+          "replenish_interval_seconds": 150,
+          "start_delay_seconds": 0
+        }
+      },
+      {
+        "button_ability": "IBA9",
+        "button_icon": "ReplaceableTextures\\CommandButtons\\BTNScrollOfHaste.blp",
+        "hotkey": "F",
+        "item": "I00F",
+        "position": 7,
+        "runtime_button_cooldown_seconds": 1.0,
+        "slot": 9,
+        "stock": {
+          "initial": 1,
+          "maximum": 1,
+          "replenish_interval_seconds": 160,
+          "start_delay_seconds": 30
+        }
+      },
+      {
+        "button_ability": "IBA0",
+        "button_icon": "ReplaceableTextures\\CommandButtons\\BTNOrbOfVenom.blp",
+        "hotkey": "Z",
+        "item": "I008",
+        "position": 8,
+        "runtime_button_cooldown_seconds": 1.0,
+        "slot": 0,
+        "stock": {
+          "initial": 1,
+          "maximum": 1,
+          "replenish_interval_seconds": 120,
+          "start_delay_seconds": 300
+        }
+      },
+      {
+        "button_ability": "IBA1",
+        "button_icon": "ReplaceableTextures\\CommandButtons\\BTNHeartOfSearinox.blp",
+        "hotkey": "X",
+        "item": "I007",
+        "position": 9,
+        "runtime_button_cooldown_seconds": 1.0,
+        "slot": 1,
+        "stock": {
+          "initial": 1,
+          "maximum": 1,
+          "replenish_interval_seconds": 120,
+          "start_delay_seconds": 600
+        }
+      }
+    ],
+    "filler_position": 8,
+    "spellbook_ability": "A0A5",
+    "spellbook_columns": 4,
+    "spellbook_hotkey": "R"
+  },
+  "source": {
+    "abilities_sha256": "24590f6ce5eb51d50ef7272517ace98a2d0abd8c54b328007fb86f364d5a5059",
+    "castle_shop_items_sha256": "3bf1960ea8b7cb0a8e90b8576ce0f8ae24d7466b1291ef3f2937d0b721a3c826",
+    "item_mechanics_sha256": "a383aaa1fc0238d8f9f948d66e3d1e0020e3672388837ecf61e1ffcdd2eecf73",
+    "items_sha256": "5ae47178458dd7cfd1fd5abce6d6b6dc5ac1baedc7832bd3958fd68e702447c2",
+    "object_fields_sha256": "01040f03e4a625ac1d960a0a2d43d0732d64b797e9357f4f40e8c2c0d6d9710d",
+    "protected_ability_fields_sha256": "fb1e46e318321e0e3a4c2f948efccaa0c5419d14ed9f071724ff647862b3b676",
+    "script_functions": [
+      "castleItemIdForSlot",
+      "buyCastleItem",
+      "TH",
+      "UH",
+      "VH",
+      "WH",
+      "YH",
+      "ZH",
+      "gL",
+      "iJ",
+      "xD"
+    ],
+    "script_sha256": "e478835f6c2bd79320f463472a7f043bf1d40770c74c3647cdfed655ed33874a",
+    "spellbook_ability": "A0A5"
+  }
+}
