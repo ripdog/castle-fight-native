@@ -28,6 +28,8 @@ const MIN_TEXTURE_HEIGHT: u32 = 48;
 const REFRESH_SECONDS: f32 = 0.2;
 const ALLY: [u8; 4] = [96, 170, 255, 255];
 const ENEMY: [u8; 4] = [255, 86, 74, 255];
+/// Orange stays apart from the ally blue for red-green colour blindness.
+const ENEMY_COLOUR_BLIND: [u8; 4] = [235, 160, 20, 255];
 const BUILDER: [u8; 4] = [255, 232, 96, 255];
 const VIEW_OUTLINE: [u8; 4] = [245, 245, 245, 255];
 const PING: [u8; 4] = [255, 214, 64, 255];
@@ -239,6 +241,7 @@ struct MinimapInputs<'w> {
     metrics: Res<'w, WorldMetrics>,
     terrain: Res<'w, TerrainSurface>,
     ping: Res<'w, AlertPing>,
+    settings: Res<'w, crate::client_settings::ClientSettings>,
 }
 
 fn draw_minimap(
@@ -256,7 +259,13 @@ fn draw_minimap(
         metrics,
         terrain,
         ping,
+        settings,
     } = inputs;
+    let enemy = if settings.colour_blind_friendly {
+        ENEMY_COLOUR_BLIND
+    } else {
+        ENEMY
+    };
     state.since_refresh += time.delta_secs();
     let Some(handle) = state.texture.clone() else {
         return;
@@ -276,11 +285,11 @@ fn draw_minimap(
     // A viewer controlling both teams sees fixed team colours instead of ally/enemy.
     let team_color = |team: Team| {
         if debug_menu.controls_all_players() || local_team.is_none() {
-            if team == Team(0) { ALLY } else { ENEMY }
+            if team == Team(0) { ALLY } else { enemy }
         } else if Some(team) == local_team {
             ALLY
         } else {
-            ENEMY
+            enemy
         }
     };
 

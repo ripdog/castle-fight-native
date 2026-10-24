@@ -90,6 +90,7 @@ enum SettingsAction {
     VolumeDelta(f32),
     ToggleFullscreen,
     ToggleEdgeScroll,
+    ToggleColourBlind,
     PanDelta(f32),
     ZoomDelta(f32),
     EditName,
@@ -206,6 +207,9 @@ fn handle_settings_buttons(
             changed = false;
         }
         SettingsAction::ToggleEdgeScroll => settings.edge_scroll = !settings.edge_scroll,
+        SettingsAction::ToggleColourBlind => {
+            settings.colour_blind_friendly = !settings.colour_blind_friendly;
+        }
         SettingsAction::PanDelta(delta) => {
             settings.pan_speed = round_to_step(
                 settings.pan_speed + delta,
@@ -328,6 +332,16 @@ fn spawn_settings_rows(
         "Edge scrolling",
         if settings.edge_scroll { "On" } else { "Off" },
         SettingsAction::ToggleEdgeScroll,
+    );
+    toggle_row(
+        body,
+        "Colour-blind friendly minimap",
+        if settings.colour_blind_friendly {
+            "On"
+        } else {
+            "Off"
+        },
+        SettingsAction::ToggleColourBlind,
     );
     stepper_row(
         body,

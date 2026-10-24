@@ -25,6 +25,8 @@ pub(crate) struct ClientSettings {
     pub(crate) pan_speed: f32,
     /// Multiplier on mouse-wheel zoom.
     pub(crate) zoom_speed: f32,
+    /// Use an orange/blue pair that stays distinguishable with red-green colour blindness.
+    pub(crate) colour_blind_friendly: bool,
 }
 
 pub(crate) const MIN_SPEED_MULTIPLIER: f32 = 0.5;
@@ -40,6 +42,7 @@ impl Default for ClientSettings {
             edge_scroll: true,
             pan_speed: 1.0,
             zoom_speed: 1.0,
+            colour_blind_friendly: false,
         }
     }
 }

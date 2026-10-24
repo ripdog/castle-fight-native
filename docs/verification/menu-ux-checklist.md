@@ -18,7 +18,8 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 - [x] Leaving an offline match returns to the main menu, with a confirmation.
 - [x] End-of-match screen: the final scoreboard opens automatically with a Victory / Defeat / Draw headline (relative to the local player's team; just the winning side's name when one player controls both teams) and View battlefield, Main Menu and Exit buttons. `F9` shows or hides the result afterwards. Also stops a finished networked client from retrying to reconnect to the server that ended the match.
 - [x] Destructive actions (Leave, Exit) ask for confirmation, skipped once the match has finished.
-- [ ] Decide whether Surrender exists in Castle Fight DE; if so it needs a protocol command and a vote/host rule. (Open question — do not add without map evidence.)
+- [x] Decided: Castle Fight DE has a **team forfeit vote** (`docs/original_map/extracted/resolved/runtime-session-mechanics.tsv`, row `team-forfeit-vote`): any eligible player (in game, not away/AFK) can start a vote; the initiator's vote counts immediately; it passes when the eligible votes reach the number of non-away human players on the team at vote start; it times out after 60 seconds; success kills the forfeiting team's own castle.
+- [ ] Implement the team forfeit vote. It needs a protocol message and server-side vote tracking, and a canonical control event that kills the team's castle so replays and reconnects agree (a simulation change, so it should follow the engine's control-event process rather than be done from the UI). The F10 menu is the natural place for the command.
 
 ### Lobby
 
@@ -81,11 +82,11 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 - [x] Menu buttons get an accent border on hover/focus and a distinct pressed colour; disabled buttons are excluded.
 - [x] The main menu warns, with a pointer to `cf-wc3-assets` and the README, when `assets/wc3/manifest.json` is missing.
 - [x] The main menu footer shows the version and the unofficial-fan-project / Blizzard-assets notice. A dedicated About screen was judged unnecessary.
-- [ ] Colour-blind friendly team indication (team colour is currently the main cue).
+- [x] Settings has a colour-blind friendly option that switches the minimap enemy colour from red to orange. In-world team colours and the scoreboard are unchanged, so this is partial; the top bar already spells out YOU / ALLY / ENEMY.
 - [x] In-match text chat: Enter talks to allies, Shift+Enter to everyone, lines fade after about 14 seconds. Quick pings are not implemented (they need the minimap).
 - [x] A "Your castle/base is under attack!" message appears (at most every 10 seconds) when a building of yours loses health, and `.` jumps the camera to the last attacked building. No sound or minimap flash yet (no interface sounds are extracted; no minimap).
-- [ ] Replay or spectate entry point in the menu, if the replay machinery in the sim is wired to the client.
-- [ ] Gamepad support (low priority; not required for a Warcraft-style RTS).
+- [ ] Replay or spectate entry point in the menu, if the replay machinery in the sim is wired to the client. Not done: the client has no replay loader or spectator mode to attach a menu entry to yet.
+- [ ] Gamepad support (low priority; not required for a Warcraft-style RTS). Not attempted.
 
 ## P4 — Large, deferred
 
