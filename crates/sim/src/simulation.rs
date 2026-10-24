@@ -34,6 +34,7 @@ mod disease_cloud;
 mod scripted_roots;
 mod support_orders;
 pub use death_healing::DeathHealVisualEvent;
+pub use items::ItemCommandError;
 mod building_damage_procs;
 mod building_script;
 mod echo_step;
@@ -73,6 +74,7 @@ mod building_spells;
 mod eraser;
 mod flame_strike;
 mod frost_launcher;
+mod items;
 mod magic_ruin;
 mod snowveil;
 mod speed_auras;
@@ -592,6 +594,9 @@ pub struct BuilderView {
     pub build_content: Option<ContentIdentity>,
     pub orders: Vec<BuilderOrderView>,
     pub repair_autocast_enabled: bool,
+    pub inventory: crate::Inventory,
+    /// A committed walk-then-act item order, shown so the client can reflect it.
+    pub item_order: Option<crate::PendingItemOrder>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1838,6 +1843,7 @@ impl Simulation {
             Span::NativeBuildingAurasTimers,
             self.refresh_power_plants_for_timers()
         );
+        timed!(spans, Span::ItemSystem, self.advance_item_system());
         timed!(spans, Span::AdvanceCooldowns, self.advance_cooldowns());
         timed!(
             spans,
@@ -1861,6 +1867,7 @@ impl Simulation {
             Span::PauseFrozenBuildingActivities,
             self.pause_frozen_building_activities()
         );
+        timed!(spans, Span::ItemOrders, self.advance_item_orders());
         timed!(spans, Span::AdvanceBuilders, self.advance_builders());
         timed!(
             spans,
@@ -2168,6 +2175,11 @@ impl Simulation {
                 &positions,
                 completed_tick,
             )
+        );
+        timed!(
+            spans,
+            Span::ItemProjectiles,
+            self.resolve_item_projectiles(&mut units, &mut unit_health, &positions, completed_tick)
         );
         let chain_lightning_updates = chain_lightning_hops.updates;
         let chain_lightning_entities_to_remove = chain_lightning_hops.removals;
@@ -6444,6 +6456,11 @@ fn builder_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<Bu
             })
             .unwrap_or_default(),
         repair_autocast_enabled: state.repair_autocast_enabled,
+        inventory: entity
+            .get::<crate::Inventory>()
+            .cloned()
+            .unwrap_or_default(),
+        item_order: state.item_order,
     })
 }
 

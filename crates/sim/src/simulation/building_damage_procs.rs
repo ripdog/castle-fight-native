@@ -116,7 +116,7 @@ impl Simulation {
 
     /// The dummy's Chain Lightning order on the damaged unit: the first bolt strikes that unit
     /// itself on the next chain phase, then jumps follow the ordinary hop cadence.
-    fn launch_dummy_chain_lightning(
+    pub(super) fn launch_dummy_chain_lightning(
         &mut self,
         source: SimId,
         team: Team,

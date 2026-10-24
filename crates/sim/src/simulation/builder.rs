@@ -816,6 +816,23 @@ impl Simulation {
         Ok(())
     }
 
+    /// Starts (or retargets) the walk of a committed item order, abandoning any other order the
+    /// way a move command does.
+    pub(super) fn begin_item_walk(&mut self, builder_entity: Entity, destination: SimPoint) {
+        self.cancel_builder_order_queue(builder_entity);
+        let mut entity = self.world.entity_mut(builder_entity);
+        let mut state = entity
+            .get_mut::<BuilderState>()
+            .expect("builder missing command state");
+        state.destination = Some(destination);
+        state.follow_target = None;
+        state.repair_target = None;
+        state.repair_progress_remainder = 0;
+        if let Some(pending) = &mut state.item_order {
+            pending.walking = true;
+        }
+    }
+
     fn cancel_builder_order_queue(&mut self, builder_entity: Entity) -> bool {
         let queue = self
             .world

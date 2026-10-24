@@ -14,6 +14,8 @@ pub struct ShopSlotState {
     pub opened: bool,
     pub stock: u8,
     pub restock_tick: Option<u64>,
+    /// First tick on which this button may be pressed again (the authored runtime cooldown).
+    pub button_ready_tick: u64,
 }
 
 /// A consumed damage power-up's map-wide aura (the source map's timed `e008` carrier).

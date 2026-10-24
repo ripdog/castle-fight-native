@@ -8,6 +8,11 @@ use serde::{Deserialize, Serialize};
 /// Every unit in the source map shows the stock six-slot inventory.
 pub const INVENTORY_SLOTS: usize = 6;
 
+/// Reach, in world units, within which a builder picks up, drops or hands over an item. The
+/// source map leaves this to the engine's default item interaction range, so it is an engine
+/// behaviour rather than extracted content (recorded in docs/verification).
+pub const ITEM_INTERACTION_RANGE_WORLD_UNITS: i32 = 150;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ItemStack {
     pub item: ItemId,

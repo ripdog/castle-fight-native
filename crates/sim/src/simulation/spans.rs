@@ -46,6 +46,7 @@ define_spans! {
     CarrierAurasTimers => ("carrier-auras-timers", "timers"),
     NativeManaAurasTimers => ("native-mana-auras-timers", "timers"),
     NativeBuildingAurasTimers => ("native-building-auras-timers", "timers"),
+    ItemSystem => ("item-system", "timers"),
     AdvanceCooldowns => ("cooldowns", "timers"),
     RescueStrikes => ("rescue-strikes", "timers"),
     ShrineRevivals => ("shrine-revivals", "timers"),
@@ -53,6 +54,7 @@ define_spans! {
     MirrorImagesAndLava => ("mirror-images-and-lava", "timers"),
     ExpireCorpses => ("expire-corpses", "timers"),
     PauseFrozenBuildingActivities => ("pause-frozen-buildings", "timers"),
+    ItemOrders => ("item-orders", "timers"),
     AdvanceBuilders => ("advance-builders", "timers"),
     BuildingConstruction => ("building-construction", "timers"),
     // other (top-level phases without a dedicated span group)
@@ -89,6 +91,7 @@ define_spans! {
     // combat
     CombatPrep => ("combat-prep", "combat"),
     ChainLightning => ("chain-lightning", "combat"),
+    ItemProjectiles => ("item-projectiles", "combat"),
     NativeCarriers => ("native-carriers", "combat"),
     TargetProjectiles => ("target-projectiles", "combat"),
     Attacks => ("attacks", "combat"),

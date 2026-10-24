@@ -103,7 +103,8 @@ pub use economy::{
     ResourcePurchaseError,
 };
 pub use inventory::{
-    AcquireOutcome, INVENTORY_SLOTS, Inventory, InventoryError, ItemCooldown, ItemStack,
+    AcquireOutcome, INVENTORY_SLOTS, ITEM_INTERACTION_RANGE_WORLD_UNITS, Inventory, InventoryError,
+    ItemCooldown, ItemStack,
 };
 pub use item_state::{
     GroundItem, ItemOrder, ItemSystemState, ItemUseTarget, PendingItemImpact, PendingItemOrder,
@@ -140,7 +141,7 @@ pub use simulation::{
     BuildingConstructionCancelOutcome, BuildingPlacementError, BuildingSpellVisualEvent,
     BuildingSpellVisualKind, BuildingUpgradeError, BuildingView, BurningOilView,
     CANONICAL_CHECKSUM_SCHEMA_VERSION, ChainLightningEvent, CombatRules, CorpseView,
-    DeathHealVisualEvent, HexState, MatchLifecycle, MatchOutcome, PlayerConfig,
+    DeathHealVisualEvent, HexState, ItemCommandError, MatchLifecycle, MatchOutcome, PlayerConfig,
     PlayerConnectionStatus, PlayerRoundScore, PlayerView, ProjectileView, ProjectileViewKind,
     RoundScoreboard, ShrineRevivalEvent, Simulation, SimulationConfig, SimulationSnapshot,
     SnapshotRestoreError, SnapshotWireError, Span, SpanTimings, TargetlessLane, TeamObjectiveError,

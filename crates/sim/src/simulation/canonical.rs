@@ -2160,6 +2160,7 @@ fn hash_item_system(hash: &mut Fnv64, items: &crate::ItemSystemState) {
         for slot in shop {
             hash.write_u8(u8::from(slot.opened));
             hash.write_u8(slot.stock);
+            hash.write_u64(slot.button_ready_tick);
             match slot.restock_tick {
                 Some(tick) => {
                     hash.write_u8(1);
