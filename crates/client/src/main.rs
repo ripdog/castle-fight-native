@@ -2421,6 +2421,12 @@ fn local_command_feedback_text(execution: CommandExecution) -> String {
         PlayerCommand::CastBuildingSpellAt { .. } => "Winter’s Wrath",
         PlayerCommand::CastBuildingSpell { .. } => "Cast spell",
         PlayerCommand::SetBuildingSpellAutocast { .. } => "Spell autocast",
+        PlayerCommand::BuyItem { .. } => "Buy item",
+        PlayerCommand::MoveItem { .. } => "Move item",
+        PlayerCommand::UseItem { .. } => "Use item",
+        PlayerCommand::DropItem { .. } => "Drop item",
+        PlayerCommand::GiveItem { .. } => "Give item",
+        PlayerCommand::PickUpItem { .. } => "Pick up item",
     };
     match execution.outcome {
         CommandOutcome::Executed(CommandExecutionResult::BuilderBlinkedTo(position)) => format!(

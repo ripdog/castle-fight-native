@@ -1,8 +1,8 @@
 use crate::{
     BuilderBuildError, BuilderCommandError, BuildingCommandError, BuildingConstructionCancelError,
     BuildingConstructionCancelOutcome, BuildingFootprint, BuildingUpgradeError,
-    CastleFightBuildingId, CastleFightBuildingKind, CastleFightContentBundle, MatchLifecycle,
-    PlayerId, SimId, SimPoint, Simulation,
+    CastleFightBuildingId, CastleFightBuildingKind, CastleFightContentBundle, ItemCommandError,
+    ItemUseTarget, MatchLifecycle, PlayerId, SimId, SimPoint, Simulation,
 };
 
 /// A gameplay action authored by one player.
@@ -138,6 +138,35 @@ pub enum PlayerCommand {
         building: SimId,
         enabled: bool,
     },
+    /// Presses a castle shop button; the bought item goes to `builder`.
+    BuyItem {
+        builder: SimId,
+        shop_position: u8,
+    },
+    MoveItem {
+        builder: SimId,
+        from: u8,
+        to: u8,
+    },
+    UseItem {
+        builder: SimId,
+        slot: u8,
+        target: ItemUseTarget,
+    },
+    DropItem {
+        builder: SimId,
+        slot: u8,
+        position: SimPoint,
+    },
+    GiveItem {
+        builder: SimId,
+        slot: u8,
+        recipient: SimId,
+    },
+    PickUpItem {
+        builder: SimId,
+        item: SimId,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -165,6 +194,7 @@ pub enum CommandRejectReason {
     CancelConstruction(BuildingConstructionCancelError),
     Upgrade(BuildingUpgradeError),
     Building(BuildingCommandError),
+    Item(ItemCommandError),
     UnknownBuildingDefinition(CastleFightBuildingId),
     InvalidBuildPosition(BuildPosition),
     SourceDefinitionMismatch,
@@ -203,7 +233,13 @@ pub fn admit_player_command(
         | PlayerCommand::BlinkBuilder { builder, .. }
         | PlayerCommand::RescueStrike { builder, .. }
         | PlayerCommand::RepairWithBuilder { builder, .. }
-        | PlayerCommand::SetBuilderRepairAutocast { builder, .. } => {
+        | PlayerCommand::SetBuilderRepairAutocast { builder, .. }
+        | PlayerCommand::BuyItem { builder, .. }
+        | PlayerCommand::MoveItem { builder, .. }
+        | PlayerCommand::UseItem { builder, .. }
+        | PlayerCommand::DropItem { builder, .. }
+        | PlayerCommand::GiveItem { builder, .. }
+        | PlayerCommand::PickUpItem { builder, .. } => {
             if simulation.can_player_control_builder(player, builder) {
                 Ok(())
             } else {
@@ -376,6 +412,45 @@ pub(crate) fn execute_player_command(
             .set_building_spell_autocast_for_player(player, building, enabled)
             .map(|()| CommandExecutionResult::Applied)
             .map_err(CommandRejectReason::Building),
+        PlayerCommand::BuyItem {
+            builder,
+            shop_position,
+        } => simulation
+            .buy_item_as(player, builder, shop_position)
+            .map(|()| CommandExecutionResult::Applied)
+            .map_err(CommandRejectReason::Item),
+        PlayerCommand::MoveItem { builder, from, to } => simulation
+            .move_item_as(player, builder, from, to)
+            .map(|()| CommandExecutionResult::Applied)
+            .map_err(CommandRejectReason::Item),
+        PlayerCommand::UseItem {
+            builder,
+            slot,
+            target,
+        } => simulation
+            .use_item_as(player, builder, slot, target)
+            .map(|()| CommandExecutionResult::Applied)
+            .map_err(CommandRejectReason::Item),
+        PlayerCommand::DropItem {
+            builder,
+            slot,
+            position,
+        } => simulation
+            .drop_item_as(player, builder, slot, position)
+            .map(|()| CommandExecutionResult::Applied)
+            .map_err(CommandRejectReason::Item),
+        PlayerCommand::GiveItem {
+            builder,
+            slot,
+            recipient,
+        } => simulation
+            .give_item_as(player, builder, slot, recipient)
+            .map(|()| CommandExecutionResult::Applied)
+            .map_err(CommandRejectReason::Item),
+        PlayerCommand::PickUpItem { builder, item } => simulation
+            .pickup_item_as(player, builder, item)
+            .map(|()| CommandExecutionResult::Applied)
+            .map_err(CommandRejectReason::Item),
     };
 
     match result {

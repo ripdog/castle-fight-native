@@ -8,8 +8,8 @@ use std::collections::VecDeque;
 use bevy::prelude::*;
 use castle_fight_sim::{
     BuilderBuildError, BuilderCommandError, BuildingCommandError, BuildingConstructionCancelError,
-    BuildingPlacementError, BuildingUpgradeError, CommandRejectReason, MatchLifecycle,
-    ResourcePurchaseError,
+    BuildingPlacementError, BuildingUpgradeError, CommandRejectReason, ItemCommandError,
+    MatchLifecycle, ResourcePurchaseError,
 };
 
 use crate::{
@@ -265,6 +265,7 @@ pub(crate) fn rejection_text(reason: CommandRejectReason) -> String {
         },
         CommandRejectReason::Upgrade(error) => upgrade_error(error),
         CommandRejectReason::Building(error) => building_error(error).to_owned(),
+        CommandRejectReason::Item(error) => item_error(error),
         CommandRejectReason::UnknownBuildingDefinition(_)
         | CommandRejectReason::SourceDefinitionMismatch => {
             "That building is not available.".to_owned()
@@ -272,6 +273,42 @@ pub(crate) fn rejection_text(reason: CommandRejectReason) -> String {
         CommandRejectReason::InvalidBuildPosition(_) => {
             "That is not a valid building position.".to_owned()
         }
+    }
+}
+
+fn item_error(error: ItemCommandError) -> String {
+    match error {
+        ItemCommandError::NotAuthorized => "You cannot control that builder.".to_owned(),
+        ItemCommandError::BuilderNotFound => "That builder no longer exists.".to_owned(),
+        ItemCommandError::ItemSystemUnavailable => {
+            "Items are not available in this match.".to_owned()
+        }
+        ItemCommandError::UnknownShopEntry => "The castle does not sell that.".to_owned(),
+        ItemCommandError::ShopClosed => "The castle shop has not opened yet.".to_owned(),
+        ItemCommandError::OutOfStock => "The castle is out of stock of that item.".to_owned(),
+        ItemCommandError::ShopButtonCooling => "Wait a moment before buying again.".to_owned(),
+        ItemCommandError::InsufficientGold {
+            available,
+            required,
+        } => {
+            format!("Not enough gold ({available}/{required}).")
+        }
+        ItemCommandError::InsufficientLumber {
+            available,
+            required,
+        } => {
+            format!("Not enough lumber ({available}/{required}).")
+        }
+        ItemCommandError::InventoryFull => "Your inventory is full.".to_owned(),
+        ItemCommandError::InvalidSlot | ItemCommandError::EmptySlot => {
+            "There is no item in that slot.".to_owned()
+        }
+        ItemCommandError::NotUsable => "That item cannot be used.".to_owned(),
+        ItemCommandError::OnCooldown => "That item is not ready yet.".to_owned(),
+        ItemCommandError::InvalidTarget => "That is not a valid target for the item.".to_owned(),
+        ItemCommandError::NotDroppable => "That item cannot be dropped.".to_owned(),
+        ItemCommandError::GroundItemNotFound => "That item is gone.".to_owned(),
+        ItemCommandError::RecipientNotFound => "There is no ally there to give it to.".to_owned(),
     }
 }
 

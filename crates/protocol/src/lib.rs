@@ -9,13 +9,13 @@ use castle_fight_sim::{
     BuildingConstructionCancelOutcome, BuildingPlacementError, BuildingUpgradeError,
     CanonicalStreamRecord, CastleFightBuildingId, ClientCommandSequence, CommandAdmissionError,
     CommandExecution, CommandExecutionResult, CommandOrder, CommandOutcome, CommandSubmission,
-    FinalizedTickInputs, InputStreamPosition, MapVersion, MatchControlEvent, MatchOutcome,
-    MatchRules, PlayerCommand, PlayerConnectionStatus, PlayerId, ResourcePurchaseError,
-    ScheduledCommand, SimId, SimPoint, Team,
+    FinalizedTickInputs, InputStreamPosition, ItemCommandError, ItemUseTarget, MapVersion,
+    MatchControlEvent, MatchOutcome, MatchRules, PlayerCommand, PlayerConnectionStatus, PlayerId,
+    ResourcePurchaseError, ScheduledCommand, SimId, SimPoint, Team,
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-pub const PROTOCOL_SCHEMA_VERSION: u32 = 18;
+pub const PROTOCOL_SCHEMA_VERSION: u32 = 19;
 pub const MAX_PLAYER_NAME_CHARS: usize = 24;
 pub const MAX_CHAT_CHARS: usize = 200;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
@@ -937,6 +937,64 @@ pub enum WirePlayerCommand {
         building: u64,
         enabled: bool,
     },
+    BuyItem {
+        builder: u64,
+        shop_position: u8,
+    },
+    MoveItem {
+        builder: u64,
+        from: u8,
+        to: u8,
+    },
+    UseItem {
+        builder: u64,
+        slot: u8,
+        target: WireItemUseTarget,
+    },
+    DropItem {
+        builder: u64,
+        slot: u8,
+        position: WirePoint,
+    },
+    GiveItem {
+        builder: u64,
+        slot: u8,
+        recipient: u64,
+    },
+    PickUpItem {
+        builder: u64,
+        item: u64,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum WireItemUseTarget {
+    None,
+    Point { point: WirePoint },
+    Unit { unit: u64 },
+}
+
+impl From<ItemUseTarget> for WireItemUseTarget {
+    fn from(value: ItemUseTarget) -> Self {
+        match value {
+            ItemUseTarget::None => Self::None,
+            ItemUseTarget::Point(point) => Self::Point {
+                point: point.into(),
+            },
+            ItemUseTarget::Unit(unit) => Self::Unit { unit: unit.0 },
+        }
+    }
+}
+
+impl From<WireItemUseTarget> for ItemUseTarget {
+    fn from(value: WireItemUseTarget) -> Self {
+        match value {
+            WireItemUseTarget::None => Self::None,
+            WireItemUseTarget::Point { point } => Self::Point(SimPoint::new(point.x, point.y)),
+            WireItemUseTarget::Unit { unit } => Self::Unit(SimId(unit)),
+        }
+    }
 }
 
 impl From<PlayerCommand> for WirePlayerCommand {
@@ -1026,6 +1084,49 @@ impl From<PlayerCommand> for WirePlayerCommand {
                     enabled,
                 }
             }
+            PlayerCommand::BuyItem {
+                builder,
+                shop_position,
+            } => Self::BuyItem {
+                builder: builder.0,
+                shop_position,
+            },
+            PlayerCommand::MoveItem { builder, from, to } => Self::MoveItem {
+                builder: builder.0,
+                from,
+                to,
+            },
+            PlayerCommand::UseItem {
+                builder,
+                slot,
+                target,
+            } => Self::UseItem {
+                builder: builder.0,
+                slot,
+                target: target.into(),
+            },
+            PlayerCommand::DropItem {
+                builder,
+                slot,
+                position,
+            } => Self::DropItem {
+                builder: builder.0,
+                slot,
+                position: position.into(),
+            },
+            PlayerCommand::GiveItem {
+                builder,
+                slot,
+                recipient,
+            } => Self::GiveItem {
+                builder: builder.0,
+                slot,
+                recipient: recipient.0,
+            },
+            PlayerCommand::PickUpItem { builder, item } => Self::PickUpItem {
+                builder: builder.0,
+                item: item.0,
+            },
         }
     }
 }
@@ -1125,6 +1226,49 @@ impl From<WirePlayerCommand> for PlayerCommand {
                     enabled,
                 }
             }
+            WirePlayerCommand::BuyItem {
+                builder,
+                shop_position,
+            } => Self::BuyItem {
+                builder: SimId(builder),
+                shop_position,
+            },
+            WirePlayerCommand::MoveItem { builder, from, to } => Self::MoveItem {
+                builder: SimId(builder),
+                from,
+                to,
+            },
+            WirePlayerCommand::UseItem {
+                builder,
+                slot,
+                target,
+            } => Self::UseItem {
+                builder: SimId(builder),
+                slot,
+                target: target.into(),
+            },
+            WirePlayerCommand::DropItem {
+                builder,
+                slot,
+                position,
+            } => Self::DropItem {
+                builder: SimId(builder),
+                slot,
+                position: SimPoint::new(position.x, position.y),
+            },
+            WirePlayerCommand::GiveItem {
+                builder,
+                slot,
+                recipient,
+            } => Self::GiveItem {
+                builder: SimId(builder),
+                slot,
+                recipient: SimId(recipient),
+            },
+            WirePlayerCommand::PickUpItem { builder, item } => Self::PickUpItem {
+                builder: SimId(builder),
+                item: SimId(item),
+            },
         }
     }
 }
@@ -1418,6 +1562,7 @@ pub enum WireRejectReason {
     CancelConstruction { reason: WireConstructionCancelError },
     Upgrade { reason: WireBuildingUpgradeError },
     Building { reason: WireBuildingCommandError },
+    Item { reason: WireItemCommandError },
     UnknownBuildingDefinition { building: u32 },
     InvalidBuildPosition { position: WireBuildPosition },
     SourceDefinitionMismatch,
@@ -1440,6 +1585,9 @@ impl From<castle_fight_sim::CommandRejectReason> for WireRejectReason {
                 reason: reason.into(),
             },
             CommandRejectReason::Building(reason) => Self::Building {
+                reason: reason.into(),
+            },
+            CommandRejectReason::Item(reason) => Self::Item {
                 reason: reason.into(),
             },
             CommandRejectReason::UnknownBuildingDefinition(building) => {
@@ -1605,6 +1753,66 @@ impl From<BuildingCommandError> for WireBuildingCommandError {
             BuildingCommandError::FriendlyTarget => Self::FriendlyTarget,
             BuildingCommandError::InvalidTargetType => Self::InvalidTargetType,
             BuildingCommandError::TargetOutOfRange => Self::TargetOutOfRange,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum WireItemCommandError {
+    NotAuthorized,
+    BuilderNotFound,
+    ItemSystemUnavailable,
+    UnknownShopEntry,
+    ShopClosed,
+    OutOfStock,
+    ShopButtonCooling,
+    InsufficientGold { available: u32, required: u32 },
+    InsufficientLumber { available: u32, required: u32 },
+    InventoryFull,
+    InvalidSlot,
+    EmptySlot,
+    NotUsable,
+    OnCooldown,
+    InvalidTarget,
+    NotDroppable,
+    GroundItemNotFound,
+    RecipientNotFound,
+}
+
+impl From<ItemCommandError> for WireItemCommandError {
+    fn from(value: ItemCommandError) -> Self {
+        match value {
+            ItemCommandError::NotAuthorized => Self::NotAuthorized,
+            ItemCommandError::BuilderNotFound => Self::BuilderNotFound,
+            ItemCommandError::ItemSystemUnavailable => Self::ItemSystemUnavailable,
+            ItemCommandError::UnknownShopEntry => Self::UnknownShopEntry,
+            ItemCommandError::ShopClosed => Self::ShopClosed,
+            ItemCommandError::OutOfStock => Self::OutOfStock,
+            ItemCommandError::ShopButtonCooling => Self::ShopButtonCooling,
+            ItemCommandError::InsufficientGold {
+                available,
+                required,
+            } => Self::InsufficientGold {
+                available,
+                required,
+            },
+            ItemCommandError::InsufficientLumber {
+                available,
+                required,
+            } => Self::InsufficientLumber {
+                available,
+                required,
+            },
+            ItemCommandError::InventoryFull => Self::InventoryFull,
+            ItemCommandError::InvalidSlot => Self::InvalidSlot,
+            ItemCommandError::EmptySlot => Self::EmptySlot,
+            ItemCommandError::NotUsable => Self::NotUsable,
+            ItemCommandError::OnCooldown => Self::OnCooldown,
+            ItemCommandError::InvalidTarget => Self::InvalidTarget,
+            ItemCommandError::NotDroppable => Self::NotDroppable,
+            ItemCommandError::GroundItemNotFound => Self::GroundItemNotFound,
+            ItemCommandError::RecipientNotFound => Self::RecipientNotFound,
         }
     }
 }
