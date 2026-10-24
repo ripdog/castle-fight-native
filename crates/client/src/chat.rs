@@ -5,6 +5,7 @@
 //! cancels. Chat is presentation only and never touches the simulation.
 use std::collections::VecDeque;
 
+use crate::console::wc3;
 use bevy::{
     input::{
         ButtonState,
@@ -27,7 +28,8 @@ const LINE_SECONDS: f32 = 14.0;
 const VISIBLE_LINES: usize = 8;
 const STORED_LINES: usize = 40;
 /// Distance of the log above the bottom edge, clearing the match console.
-const MATCH_BOTTOM: f32 = 316.0;
+/// In a match the chat floats above the console's tallest tile (0.192 layout units).
+const MATCH_BOTTOM_UNITS: f32 = 0.2;
 const LOBBY_BOTTOM: f32 = 200.0;
 const ALL_COLOR: Color = Color::srgb(0.94, 0.94, 0.92);
 const ALLY_COLOR: Color = Color::srgb(0.55, 0.88, 0.55);
@@ -90,7 +92,7 @@ fn setup_chat(mut commands: Commands) {
         Node {
             position_type: PositionType::Absolute,
             left: px(16.0),
-            bottom: px(MATCH_BOTTOM),
+            bottom: wc3(MATCH_BOTTOM_UNITS),
             width: px(520.0),
             flex_direction: FlexDirection::Column,
             row_gap: px(2.0),
@@ -265,12 +267,12 @@ fn redraw_chat(
 ) {
     let (root, mut node, children) = root.into_inner();
     let bottom = if lobby.as_ref().is_some_and(|lobby| lobby.active()) {
-        LOBBY_BOTTOM
+        px(LOBBY_BOTTOM)
     } else {
-        MATCH_BOTTOM
+        wc3(MATCH_BOTTOM_UNITS)
     };
-    if node.bottom != px(bottom) {
-        node.bottom = px(bottom);
+    if node.bottom != bottom {
+        node.bottom = bottom;
     }
     if !std::mem::take(&mut chat.dirty) {
         return;

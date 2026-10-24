@@ -15,6 +15,7 @@ use crate::{
     AuthoritativeSimulation, ClientCommandSubmission, SelectedMatch,
     bridge::{BuildingSample, BuildingVisualKind, PresentationSamples},
     building_models::BuildingModelSet,
+    console::{COMMAND_SLOT, ConsoleMetrics, ConsoleSlots, vfont, vpx, wc3, wc3_font},
     control_modifier_pressed,
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
     demo::{BuildKind, ProductionKind},
@@ -24,10 +25,7 @@ use crate::{
         WorldMetrics, building_terrain_height, draw_footprint_outline, player_color,
         viewport_ground_point,
     },
-    resource_ui::{
-        BuilderShortcutState, TOP_BAR_HEIGHT, cursor_over_builder_shortcuts,
-        cursor_over_map_controls,
-    },
+    resource_ui::{BuilderShortcutState, cursor_over_builder_shortcuts, cursor_over_map_controls},
     terrain::TerrainSurface,
     ui_icons::{
         CastleFightPresentationCatalog, UiFeedbackTexture, UiIconAssets, UiIconKey, UiIconRole,
@@ -36,25 +34,19 @@ use crate::{
     wc3_text::{Wc3Color, parse_wc3_text},
 };
 
-const PANEL_RIGHT: f32 = 12.0;
-const PANEL_BOTTOM: f32 = 12.0;
-const PANEL_PADDING: f32 = 8.0;
-const GRID_GAP: f32 = 4.0;
-const CELL_SIZE: f32 = 66.0;
 const GRID_COLUMNS: usize = 4;
 const GRID_ROWS: usize = 3;
 const SLOT_COUNT: usize = GRID_COLUMNS * GRID_ROWS;
-const PANEL_WIDTH: f32 =
-    PANEL_PADDING * 2.0 + CELL_SIZE * GRID_COLUMNS as f32 + GRID_GAP * (GRID_COLUMNS as f32 - 1.0);
-const PANEL_HEIGHT: f32 =
-    PANEL_PADDING * 2.0 + CELL_SIZE * GRID_ROWS as f32 + GRID_GAP * (GRID_ROWS as f32 - 1.0);
+/// Warcraft's command card geometry, in layout units (`ConsoleUI.fdf`).
+const CARD_BUTTON_SIZE: f32 = 0.039;
+const CARD_COLUMN_PITCH: f32 = 0.0434;
+const CARD_ROW_PITCH: f32 = 0.044;
 
-const PANEL_BACKGROUND: Color = Color::srgba(0.105, 0.070, 0.040, 0.97);
-const PANEL_BORDER: Color = Color::srgb(0.28, 0.25, 0.20);
 const SLOT_BORDER: Color = Color::srgb(0.34, 0.34, 0.32);
 const AUTOCAST_BORDER: Color = Color::srgb(0.78, 0.70, 0.24);
 const AUTOCAST_EMITTER_COUNT: usize = 4;
-const AUTOCAST_PARTICLE_SIZE: f32 = 18.0;
+/// Autocast particle edge as a fraction of the command button edge.
+const AUTOCAST_PARTICLE_FRACTION: f32 = 0.27;
 const AUTOCAST_LOOP_SECONDS: f32 = 10.0 / 3.0;
 const AUTOCAST_TRAIL_PHASE: f32 = 0.018;
 const AUTOCAST_PARTICLE_HEAD: Color = Color::srgb(1.0, 0.86, 0.26);
@@ -68,7 +60,6 @@ const BUTTON_TEXT_DISABLED: Color = Color::srgb(0.42, 0.40, 0.37);
 const BUTTON_ICON_DISABLED: Color = Color::srgb(0.38, 0.38, 0.38);
 const BUTTON_LABEL_BACKGROUND: Color = Color::srgba(0.02, 0.015, 0.01, 0.72);
 const TOOLTIP_WIDTH: f32 = 500.0;
-const TOOLTIP_GAP: f32 = 8.0;
 const TOOLTIP_BACKGROUND: Color = Color::srgba(0.025, 0.020, 0.015, 0.98);
 const TOOLTIP_BORDER: Color = Color::srgb(0.48, 0.39, 0.22);
 const TOOLTIP_TITLE_COLOR: Color = Color::srgb(1.0, 0.82, 0.25);
@@ -380,7 +371,8 @@ pub(crate) struct BuildUiPlugin;
 impl Plugin for BuildUiPlugin {
     fn build(&self, app: &mut App) {
         let map_version = app.world().resource::<SelectedMatch>().content.map_version;
-        app.init_resource::<ActionPanelState>()
+        app.init_resource::<ConsoleSlots>()
+            .init_resource::<ActionPanelState>()
             .init_resource::<ActionPanelHotkeyCapture>()
             .init_resource::<BuildTooltipState>()
             .init_resource::<BuildPreviewMaterials>()
@@ -438,6 +430,7 @@ fn reset_action_panel_for_new_match(
 
 fn setup_action_panel(
     mut commands: Commands,
+    slots: Res<ConsoleSlots>,
     asset_server: Res<AssetServer>,
     mut icon_assets: ResMut<UiIconAssets>,
 ) {
@@ -445,209 +438,202 @@ fn setup_action_panel(
         UiIconKey::Feedback(UiFeedbackTexture::AutocastParticle),
         &asset_server,
     );
+    let card = COMMAND_SLOT;
 
-    commands
-        .spawn((
+    commands.entity(slots.command).with_children(|area| {
+        area.spawn((
             Node {
-                position_type: PositionType::Absolute,
-                right: px(PANEL_RIGHT),
-                bottom: px(PANEL_BOTTOM),
-                width: px(PANEL_WIDTH),
-                height: px(PANEL_HEIGHT),
-                padding: UiRect::all(px(PANEL_PADDING)),
-                border: UiRect::all(px(3.0)),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(GRID_GAP),
+                width: percent(100.0),
+                height: percent(100.0),
                 ..default()
             },
-            BackgroundColor(PANEL_BACKGROUND),
-            BorderColor::all(PANEL_BORDER),
             Visibility::Hidden,
             ActionPanel,
         ))
         .with_children(|panel| {
             for row_index in 0..GRID_ROWS {
-                panel
-                    .spawn((Node {
-                        width: percent(100.0),
-                        height: px(CELL_SIZE),
-                        column_gap: px(GRID_GAP),
-                        ..default()
-                    },))
-                    .with_children(|row| {
-                        for column_index in 0..GRID_COLUMNS {
-                            let slot = row_index * GRID_COLUMNS + column_index;
-                            row.spawn((
-                                Button,
+                for column_index in 0..GRID_COLUMNS {
+                    let slot = row_index * GRID_COLUMNS + column_index;
+                    panel
+                        .spawn((
+                            Button,
+                            Node {
+                                position_type: PositionType::Absolute,
+                                left: percent(
+                                    column_index as f32 * CARD_COLUMN_PITCH / card.width * 100.0,
+                                ),
+                                top: percent(
+                                    row_index as f32 * CARD_ROW_PITCH / card.height * 100.0,
+                                ),
+                                width: percent(CARD_BUTTON_SIZE / card.width * 100.0),
+                                height: percent(CARD_BUTTON_SIZE / card.height * 100.0),
+                                border: UiRect::all(px(2.0)),
+                                align_items: AlignItems::Center,
+                                justify_content: JustifyContent::Center,
+                                ..default()
+                            },
+                            BackgroundColor(BUTTON_NORMAL),
+                            BorderColor::all(SLOT_BORDER),
+                            Visibility::Hidden,
+                            CommandSlot(slot),
+                            SlotAction::default(),
+                        ))
+                        .with_children(|button| {
+                            button.spawn((
+                                ImageNode::default(),
                                 Node {
-                                    width: px(CELL_SIZE),
-                                    height: px(CELL_SIZE),
-                                    border: UiRect::all(px(2.0)),
-                                    align_items: AlignItems::Center,
-                                    justify_content: JustifyContent::Center,
-                                    flex_shrink: 0.0,
+                                    position_type: PositionType::Absolute,
+                                    left: px(0.0),
+                                    right: px(0.0),
+                                    top: px(0.0),
+                                    bottom: px(0.0),
                                     ..default()
                                 },
-                                BackgroundColor(BUTTON_NORMAL),
-                                BorderColor::all(SLOT_BORDER),
-                                Visibility::Hidden,
+                                Pickable::IGNORE,
                                 CommandSlot(slot),
-                                SlotAction::default(),
-                            ))
-                            .with_children(|button| {
-                                button.spawn((
-                                    ImageNode::default(),
-                                    Node {
-                                        position_type: PositionType::Absolute,
-                                        left: px(2.0),
-                                        right: px(2.0),
-                                        top: px(2.0),
-                                        bottom: px(2.0),
-                                        ..default()
-                                    },
-                                    Pickable::IGNORE,
-                                    CommandSlot(slot),
-                                    SlotIcon,
-                                ));
-                                for emitter in 0..AUTOCAST_EMITTER_COUNT {
-                                    for trail in [true, false] {
-                                        let mut image = autocast_particle
-                                            .clone()
-                                            .map_or_else(ImageNode::default, ImageNode::new);
-                                        image.color = if trail {
-                                            AUTOCAST_PARTICLE_TRAIL
-                                        } else {
-                                            AUTOCAST_PARTICLE_HEAD
-                                        };
-                                        button.spawn((
-                                            image,
-                                            Node {
-                                                position_type: PositionType::Absolute,
-                                                width: px(AUTOCAST_PARTICLE_SIZE),
-                                                height: px(AUTOCAST_PARTICLE_SIZE),
-                                                ..default()
-                                            },
-                                            Visibility::Hidden,
-                                            GlobalZIndex(if trail { 3 } else { 4 }),
-                                            Pickable::IGNORE,
-                                            CommandSlot(slot),
-                                            SlotAutocastParticle { emitter, trail },
-                                        ));
-                                    }
+                                SlotIcon,
+                            ));
+                            for emitter in 0..AUTOCAST_EMITTER_COUNT {
+                                for trail in [true, false] {
+                                    let mut image = autocast_particle
+                                        .clone()
+                                        .map_or_else(ImageNode::default, ImageNode::new);
+                                    image.color = if trail {
+                                        AUTOCAST_PARTICLE_TRAIL
+                                    } else {
+                                        AUTOCAST_PARTICLE_HEAD
+                                    };
+                                    button.spawn((
+                                        image,
+                                        Node {
+                                            position_type: PositionType::Absolute,
+                                            width: percent(AUTOCAST_PARTICLE_FRACTION * 100.0),
+                                            height: percent(AUTOCAST_PARTICLE_FRACTION * 100.0),
+                                            ..default()
+                                        },
+                                        Visibility::Hidden,
+                                        GlobalZIndex(if trail { 3 } else { 4 }),
+                                        Pickable::IGNORE,
+                                        CommandSlot(slot),
+                                        SlotAutocastParticle { emitter, trail },
+                                    ));
                                 }
-                                button.spawn((
-                                    Text::new(""),
-                                    TextFont::from_font_size(12.0),
-                                    TextColor(BUTTON_TEXT),
-                                    TextLayout::justify(Justify::Center),
-                                    Node {
-                                        position_type: PositionType::Absolute,
-                                        right: px(2.0),
-                                        top: px(2.0),
-                                        min_width: px(16.0),
-                                        padding: UiRect::axes(px(3.0), px(1.0)),
-                                        justify_content: JustifyContent::Center,
-                                        ..default()
-                                    },
-                                    BackgroundColor(BUTTON_LABEL_BACKGROUND),
-                                    GlobalZIndex(2),
-                                    Pickable::IGNORE,
-                                    CommandSlot(slot),
-                                    SlotHotkey,
-                                ));
-                                button.spawn((
-                                    Text::new(""),
-                                    TextFont::from_font_size(9.0),
-                                    TextColor(BUTTON_TEXT),
-                                    TextLayout::justify(Justify::Center),
-                                    Node {
-                                        position_type: PositionType::Absolute,
-                                        left: px(1.0),
-                                        right: px(1.0),
-                                        bottom: px(1.0),
-                                        padding: UiRect::axes(px(2.0), px(1.0)),
-                                        justify_content: JustifyContent::Center,
-                                        ..default()
-                                    },
-                                    BackgroundColor(BUTTON_LABEL_BACKGROUND),
-                                    GlobalZIndex(1),
-                                    Pickable::IGNORE,
-                                    CommandSlot(slot),
-                                    SlotLabel,
-                                ));
-                            });
-                        }
-                    });
+                            }
+                            button.spawn((
+                                Text::new(""),
+                                TextFont::from_font_size(wc3_font(0.0075)),
+                                TextColor(BUTTON_TEXT),
+                                TextLayout::justify(Justify::Center),
+                                Node {
+                                    position_type: PositionType::Absolute,
+                                    right: px(1.0),
+                                    top: px(1.0),
+                                    min_width: wc3(0.008),
+                                    padding: UiRect::axes(px(2.0), px(0.0)),
+                                    justify_content: JustifyContent::Center,
+                                    ..default()
+                                },
+                                BackgroundColor(BUTTON_LABEL_BACKGROUND),
+                                GlobalZIndex(2),
+                                Pickable::IGNORE,
+                                CommandSlot(slot),
+                                SlotHotkey,
+                            ));
+                            button.spawn((
+                                Text::new(""),
+                                TextFont::from_font_size(wc3_font(0.0055)),
+                                TextColor(BUTTON_TEXT),
+                                TextLayout::justify(Justify::Center),
+                                Node {
+                                    position_type: PositionType::Absolute,
+                                    left: px(0.0),
+                                    right: px(0.0),
+                                    bottom: px(0.0),
+                                    padding: UiRect::axes(px(1.0), px(0.0)),
+                                    justify_content: JustifyContent::Center,
+                                    ..default()
+                                },
+                                BackgroundColor(BUTTON_LABEL_BACKGROUND),
+                                GlobalZIndex(1),
+                                Pickable::IGNORE,
+                                CommandSlot(slot),
+                                SlotLabel,
+                            ));
+                        });
+                }
             }
         });
+    });
 
-    commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                right: px(PANEL_RIGHT),
-                bottom: px(PANEL_BOTTOM + PANEL_HEIGHT + TOOLTIP_GAP),
-                width: px(TOOLTIP_WIDTH),
-                padding: UiRect::all(px(10.0)),
-                border: UiRect::all(px(2.0)),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(6.0),
-                ..default()
-            },
-            BackgroundColor(TOOLTIP_BACKGROUND),
-            BorderColor::all(TOOLTIP_BORDER),
-            GlobalZIndex(20),
-            Pickable::IGNORE,
-            Visibility::Hidden,
-            BuildTooltip,
-        ))
-        .with_children(|tooltip| {
-            tooltip
-                .spawn(Node {
-                    width: percent(100.0),
-                    align_items: AlignItems::FlexStart,
-                    column_gap: px(12.0),
-                    ..default()
-                })
-                .with_children(|header| {
-                    header.spawn((
-                        Text::new(""),
-                        TextFont::from_font_size(12.0),
-                        TextColor(TOOLTIP_TITLE_COLOR),
-                        TextLayout::default(),
-                        Node {
-                            flex_basis: px(0.0),
-                            flex_grow: 1.0,
-                            min_width: px(0.0),
-                            ..default()
-                        },
-                        BuildTooltipTitle,
-                    ));
-                    header.spawn((
-                        Text::new(""),
-                        TextFont::from_font_size(10.0),
-                        TextColor(TOOLTIP_TEXT_COLOR),
-                        TextLayout::justify(Justify::Right),
-                        Node {
-                            display: Display::None,
-                            flex_shrink: 0.0,
-                            ..default()
-                        },
-                        BuildTooltipCost,
-                    ));
-                });
-            tooltip.spawn((
-                Text::new(""),
-                TextFont::from_font_size(10.0),
-                TextColor(TOOLTIP_TEXT_COLOR),
-                TextLayout::default(),
+    commands.entity(slots.tooltips).with_children(|anchor| {
+        anchor
+            .spawn((
                 Node {
-                    width: percent(100.0),
+                    position_type: PositionType::Absolute,
+                    right: px(0.0),
+                    bottom: px(0.0),
+                    width: vpx(TOOLTIP_WIDTH),
+                    padding: UiRect::all(vpx(10.0)),
+                    border: UiRect::all(px(2.0)),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: vpx(6.0),
                     ..default()
                 },
-                BuildTooltipBody,
-            ));
-        });
+                BackgroundColor(TOOLTIP_BACKGROUND),
+                BorderColor::all(TOOLTIP_BORDER),
+                GlobalZIndex(20),
+                Pickable::IGNORE,
+                Visibility::Hidden,
+                BuildTooltip,
+            ))
+            .with_children(|tooltip| {
+                tooltip
+                    .spawn(Node {
+                        width: percent(100.0),
+                        align_items: AlignItems::FlexStart,
+                        column_gap: vpx(12.0),
+                        ..default()
+                    })
+                    .with_children(|header| {
+                        header.spawn((
+                            Text::new(""),
+                            TextFont::from_font_size(vfont(12.0)),
+                            TextColor(TOOLTIP_TITLE_COLOR),
+                            TextLayout::default(),
+                            Node {
+                                flex_basis: px(0.0),
+                                flex_grow: 1.0,
+                                min_width: px(0.0),
+                                ..default()
+                            },
+                            BuildTooltipTitle,
+                        ));
+                        header.spawn((
+                            Text::new(""),
+                            TextFont::from_font_size(vfont(10.0)),
+                            TextColor(TOOLTIP_TEXT_COLOR),
+                            TextLayout::justify(Justify::Right),
+                            Node {
+                                display: Display::None,
+                                flex_shrink: 0.0,
+                                ..default()
+                            },
+                            BuildTooltipCost,
+                        ));
+                    });
+                tooltip.spawn((
+                    Text::new(""),
+                    TextFont::from_font_size(vfont(10.0)),
+                    TextColor(TOOLTIP_TEXT_COLOR),
+                    TextLayout::default(),
+                    Node {
+                        width: percent(100.0),
+                        ..default()
+                    },
+                    BuildTooltipBody,
+                ));
+            });
+    });
 }
 
 fn sync_action_panel_to_selection(
@@ -1700,7 +1686,7 @@ fn action_autocast_active(
 }
 
 fn autocast_particle_position(phase: f32) -> Vec2 {
-    let span = CELL_SIZE - AUTOCAST_PARTICLE_SIZE;
+    let span = 1.0 - AUTOCAST_PARTICLE_FRACTION;
     let perimeter_phase = phase.rem_euclid(1.0) * 4.0;
     match perimeter_phase {
         value if value < 1.0 => Vec2::new(span * value, 0.0),
@@ -1747,8 +1733,8 @@ fn animate_autocast_particles(
         let phase =
             animation_phase + particle.emitter as f32 / AUTOCAST_EMITTER_COUNT as f32 - trail_phase;
         let position = autocast_particle_position(phase);
-        node.left = px(position.x);
-        node.top = px(position.y);
+        node.left = percent(position.x * 100.0);
+        node.top = percent(position.y * 100.0);
     }
 }
 
@@ -1983,8 +1969,8 @@ fn update_build_preview(
         resources.state.actor.is_some(),
     ) || cursor_over_inspector_panel(cursor, window.width(), window.height())
         || cursor_over_debug_menu(cursor, resources.debug_menu.is_open())
-        || cursor_over_builder_shortcuts(cursor, &resources.builder_shortcuts)
-        || cursor_over_map_controls(cursor, window.width())
+        || cursor_over_builder_shortcuts(cursor, &resources.builder_shortcuts, window.height())
+        || cursor_over_map_controls(cursor, window.width(), window.height())
     {
         hide_build_preview_ghosts(&mut ghosts);
         return;
@@ -2599,18 +2585,9 @@ pub(crate) fn cursor_over_action_panel(
     window_height: f32,
     panel_visible: bool,
 ) -> bool {
-    if cursor.y <= TOP_BAR_HEIGHT {
-        return true;
-    }
-    if !panel_visible {
-        return false;
-    }
-    let panel_top = window_height - PANEL_BOTTOM - PANEL_HEIGHT;
-    let panel_left = window_width - PANEL_RIGHT - PANEL_WIDTH;
-    cursor.x >= panel_left
-        && cursor.x <= panel_left + PANEL_WIDTH
-        && cursor.y >= panel_top
-        && cursor.y <= panel_top + PANEL_HEIGHT
+    let metrics = ConsoleMetrics::new(window_width, window_height);
+    metrics.over_top_bar(cursor)
+        || (panel_visible && metrics.slot(window_height, COMMAND_SLOT).contains(cursor))
 }
 
 fn building_is_attack_capable(kind: BuildingVisualKind) -> bool {
@@ -2701,25 +2678,30 @@ mod tests {
     }
 
     #[test]
-    fn panel_capture_matches_visible_bottom_right_panel_bounds() {
-        let window_width = 1280.0;
-        let window_height = 720.0;
-        let panel_top = window_height - PANEL_BOTTOM - PANEL_HEIGHT;
-        let panel_left = window_width - PANEL_RIGHT - PANEL_WIDTH;
+    fn panel_capture_matches_command_card_and_top_bar() {
+        let (window_width, window_height) = (1280.0, 720.0);
+        let card =
+            ConsoleMetrics::new(window_width, window_height).slot(window_height, COMMAND_SLOT);
         assert!(cursor_over_action_panel(
-            Vec2::new(panel_left, panel_top),
+            card.min,
             window_width,
             window_height,
-            true,
+            true
         ));
         assert!(!cursor_over_action_panel(
-            Vec2::new(panel_left - 1.0, panel_top),
+            card.min - Vec2::X,
             window_width,
             window_height,
-            true,
+            true
+        ));
+        assert!(!cursor_over_action_panel(
+            card.min,
+            window_width,
+            window_height,
+            false
         ));
         assert!(cursor_over_action_panel(
-            Vec2::new(900.0, TOP_BAR_HEIGHT / 2.0),
+            Vec2::new(900.0, 4.0),
             window_width,
             window_height,
             false,
@@ -3254,7 +3236,7 @@ mod tests {
 
     #[test]
     fn autocast_particles_follow_command_button_perimeter() {
-        let span = CELL_SIZE - AUTOCAST_PARTICLE_SIZE;
+        let span = 1.0 - AUTOCAST_PARTICLE_FRACTION;
         assert_eq!(autocast_particle_position(0.0), Vec2::new(0.0, 0.0));
         assert_eq!(autocast_particle_position(0.25), Vec2::new(span, 0.0));
         assert_eq!(autocast_particle_position(0.5), Vec2::new(span, span));

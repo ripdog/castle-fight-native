@@ -13,7 +13,7 @@ use crate::terrain::client_asset_root;
 
 const UI_ICON_MANIFEST: &str = "wc3/ui/manifest.json";
 const UI_ICON_ASSET_PREFIX: &str = "wc3/ui";
-const UI_ICON_MANIFEST_SCHEMA_VERSION: u32 = 2;
+const UI_ICON_MANIFEST_SCHEMA_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum UiObjectIconKind {
@@ -63,6 +63,82 @@ pub(crate) enum UiCursorTheme {
     NightElf,
 }
 
+/// The classic Warcraft III races whose console art the extractor ships. Forsaken is excluded
+/// because Reforged's tiles use a different layout.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, serde::Serialize, Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ConsoleTheme {
+    #[default]
+    Human,
+    Orc,
+    NightElf,
+    Undead,
+}
+
+impl ConsoleTheme {
+    pub(crate) const ALL: [Self; 4] = [Self::Human, Self::Orc, Self::NightElf, Self::Undead];
+
+    #[must_use]
+    pub(crate) const fn label(self) -> &'static str {
+        match self {
+            Self::Human => "Human",
+            Self::Orc => "Orc",
+            Self::NightElf => "Night Elf",
+            Self::Undead => "Undead",
+        }
+    }
+
+    #[must_use]
+    pub(crate) fn next(self) -> Self {
+        let index = Self::ALL
+            .iter()
+            .position(|theme| *theme == self)
+            .unwrap_or(0);
+        Self::ALL[(index + 1) % Self::ALL.len()]
+    }
+
+    fn from_manifest(name: &str) -> Option<Self> {
+        match name {
+            "human" => Some(Self::Human),
+            "orc" => Some(Self::Orc),
+            "night_elf" => Some(Self::NightElf),
+            "undead" => Some(Self::Undead),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum ConsolePiece {
+    /// Bottom console tiles 01..=06 (index 0 is tile 01).
+    Tile(u8),
+    /// Top bar tiles 01..=06 share the same textures; the top bar crops the upper rows.
+    Tile05Overlay,
+    Tile06Overlay,
+    InventoryCover,
+    MenuButtons,
+}
+
+impl ConsolePiece {
+    fn from_manifest(role: &str) -> Option<Self> {
+        Some(match role {
+            "tile01" => Self::Tile(1),
+            "tile02" => Self::Tile(2),
+            "tile03" => Self::Tile(3),
+            "tile04" => Self::Tile(4),
+            "tile05" => Self::Tile(5),
+            "tile06" => Self::Tile(6),
+            "tile05_overlay" => Self::Tile05Overlay,
+            "tile06_overlay" => Self::Tile06Overlay,
+            "inventory_cover" => Self::InventoryCover,
+            "menu_buttons" => Self::MenuButtons,
+            _ => return None,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) enum UiStatusIconRole {
     Primary,
@@ -85,6 +161,7 @@ pub(crate) enum UiIconKey {
         ability: u32,
         role: UiStatusIconRole,
     },
+    Console(ConsoleTheme, ConsolePiece),
 }
 
 impl UiIconKey {
@@ -452,6 +529,13 @@ fn parse_icon_key(entry: &UiBindingManifest) -> Result<UiIconKey, String> {
                 role,
             })
         }
+        "console_themes" => {
+            let theme = ConsoleTheme::from_manifest(&entry.owner_rawcode)
+                .ok_or_else(|| format!("unknown console theme {:?}", entry.owner_rawcode))?;
+            let piece = ConsolePiece::from_manifest(&entry.role)
+                .ok_or_else(|| format!("unknown console piece {:?}", entry.role))?;
+            Ok(UiIconKey::Console(theme, piece))
+        }
         other => Err(format!("unknown UI icon owner kind {other:?}")),
     }
 }
@@ -499,7 +583,7 @@ mod tests {
     #[test]
     fn resolves_versioned_object_command_and_resource_icons() {
         let json = r#"{
-            "schema_version": 2,
+            "schema_version": 3,
             "castle_fight_catalog_version": "9.27",
             "assets": [
                 {
@@ -557,6 +641,12 @@ mod tests {
                     "png": "textures/human_cursor.png"
                 },
                 {
+                    "owner_kind": "console_themes",
+                    "owner_rawcode": "night_elf",
+                    "role": "tile05_overlay",
+                    "png": "textures/nightelf_overlay.png"
+                },
+                {
                     "owner_kind": "buffs",
                     "owner_rawcode": "B005",
                     "role": "buff",
@@ -566,6 +656,11 @@ mod tests {
         }"#;
 
         let resolved = resolve_manifest_entries(json, "wc3/ui").expect("manifest resolves");
+        assert_eq!(
+            resolved.paths
+                [&UiIconKey::Console(ConsoleTheme::NightElf, ConsolePiece::Tile05Overlay)],
+            "wc3/ui/textures/nightelf_overlay.png"
+        );
         assert_eq!(resolved.map_version, MapVersion::CASTLE_FIGHT_9_27);
         assert_eq!(
             resolved.paths[&UiIconKey::Command(UiCommandIcon::Move)],
@@ -632,7 +727,7 @@ mod tests {
     #[test]
     fn rejects_unsafe_ui_icon_paths() {
         let json = r#"{
-            "schema_version": 2,
+            "schema_version": 3,
             "castle_fight_catalog_version": "9.27",
             "assets": [{
                 "owner_kind": "commands",

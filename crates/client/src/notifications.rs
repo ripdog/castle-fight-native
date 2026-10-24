@@ -13,8 +13,11 @@ use castle_fight_sim::{
 };
 
 use crate::{
-    AuthoritativeSimulation, AuthorityMode, game_menu::MatchSessionReset, lobby::LobbyState,
-    main_menu::MainMenuState, resource_ui::TOP_BAR_HEIGHT,
+    AuthoritativeSimulation, AuthorityMode,
+    console::{TOP_BAR_UNITS, wc3},
+    game_menu::MatchSessionReset,
+    lobby::LobbyState,
+    main_menu::MainMenuState,
 };
 
 const TOAST_SECONDS: f32 = 5.0;
@@ -98,7 +101,8 @@ fn setup_notifications(mut commands: Commands) {
         ToastRoot,
         Node {
             position_type: PositionType::Absolute,
-            top: px(TOP_BAR_HEIGHT + 48.0),
+            top: wc3(TOP_BAR_UNITS),
+            margin: UiRect::top(px(48.0 - 2.0)),
             left: percent(25.0),
             width: percent(50.0),
             flex_direction: FlexDirection::Column,
@@ -114,7 +118,8 @@ fn setup_notifications(mut commands: Commands) {
             ConnectionBanner,
             Node {
                 position_type: PositionType::Absolute,
-                top: px(TOP_BAR_HEIGHT + 90.0),
+                top: wc3(TOP_BAR_UNITS),
+                margin: UiRect::top(px(90.0 - 2.0)),
                 left: percent(20.0),
                 width: percent(60.0),
                 padding: UiRect::axes(px(14.0), px(10.0)),

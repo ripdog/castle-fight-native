@@ -41,6 +41,7 @@ impl Plugin for GameMenuPlugin {
         app.init_resource::<GameMenuState>()
             .init_resource::<SettingsMenuState>()
             .add_message::<LeaveMatchRequest>()
+            .add_message::<OpenGameMenuRequest>()
             .add_message::<MatchSessionReset>()
             .add_message::<KeyboardInput>()
             .add_message::<MouseWheel>()
@@ -52,10 +53,20 @@ impl Plugin for GameMenuPlugin {
             )
             .add_systems(
                 Update,
-                (handle_menu_keys, handle_menu_buttons, redraw_menu).chain(),
+                (
+                    handle_menu_keys,
+                    handle_open_menu_requests,
+                    handle_menu_buttons,
+                    redraw_menu,
+                )
+                    .chain(),
             );
     }
 }
+
+/// Asks for the game menu, as the top bar's Menu button does (F10 does the same).
+#[derive(Message)]
+pub(crate) struct OpenGameMenuRequest;
 
 /// Asks the main menu to abandon the current match and show itself again.
 #[derive(Message)]
@@ -189,6 +200,25 @@ pub(crate) fn handle_menu_keys(
             },
             _ => {}
         }
+    }
+}
+
+fn handle_open_menu_requests(
+    mut requests: MessageReader<OpenGameMenuRequest>,
+    mut menu: ResMut<GameMenuState>,
+    mut playback: ResMut<SimulationPlayback>,
+    authoritative: Res<AuthoritativeSimulation>,
+    lobby: Option<Res<LobbyState>>,
+    main_menu: Option<Res<MainMenuState>>,
+    settings_menu: Option<Res<SettingsMenuState>>,
+) {
+    let requested = requests.read().count() > 0;
+    if requested
+        && !menu.is_open()
+        && match_screen_active(lobby.as_deref(), main_menu.as_deref())
+        && !settings_menu.is_some_and(|settings| settings.is_open())
+    {
+        menu.open(&mut playback, authoritative.is_networked());
     }
 }
 

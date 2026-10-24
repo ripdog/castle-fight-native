@@ -7,6 +7,7 @@ mod building_models;
 mod chat;
 mod client_settings;
 mod compact_material;
+mod console;
 mod cursor;
 mod debug_menu;
 mod demo;
@@ -91,7 +92,7 @@ use render_audit::{
     RenderAudit, RenderAuditPlugin, RenderExperiment, SceneCensus, format_render_passes,
 };
 use render_tuning::StandardMaterialBindlessSlabPlugin;
-use resource_ui::{ResourceUiPlugin, TOP_BAR_HEIGHT};
+use resource_ui::ResourceUiPlugin;
 use terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureSet, client_asset_root};
 use view_state::{
     ViewState, ViewStatePersistence, persist_view_state, sync_cursor_grab, toggle_fullscreen,
@@ -448,7 +449,10 @@ fn main() {
     raise_open_file_limit();
     configure_asset_io_task_pool();
     let options = ClientOptions::parse();
-    let client_settings = client_settings::ClientSettings::load();
+    let mut client_settings = client_settings::ClientSettings::load();
+    if let Some(theme) = options.profile_theme {
+        client_settings.ui_theme = theme;
+    }
     if options.list_map_versions {
         print_registered_map_versions();
         return;
@@ -705,6 +709,7 @@ fn main() {
         .add_plugins(skin_influences::SkinInfluencePlugin)
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins((
+            console::ConsolePlugin,
             CastlePresentationPlugin::new(options.health_bars),
             DoodadPresentationPlugin,
             BuildUiPlugin,
@@ -806,6 +811,10 @@ fn main() {
             },
             |path| path.display().to_string(),
         );
+        if let Some(selection) = options.profile_select {
+            app.insert_resource(selection)
+                .add_systems(Update, apply_profile_selection);
+        }
         app.insert_resource(AutomatedProfileRun {
             source,
             warmup: options.profile_warmup,
@@ -824,6 +833,57 @@ fn main() {
     }
 
     app.run();
+}
+
+/// Selects something once the match has started, so screenshots show the selection UI.
+#[derive(Resource, Debug, Clone, Copy, PartialEq, Eq)]
+enum ProfileSelection {
+    Builder,
+    Units,
+    Building,
+}
+
+fn apply_profile_selection(
+    request: Res<ProfileSelection>,
+    presentation: Res<PresentationSamples>,
+    selected_match: Res<SelectedMatch>,
+    mut selection: ResMut<inspection::InspectionSelection>,
+    mut done: Local<bool>,
+) {
+    if *done || presentation.current.tick < 1 {
+        return;
+    }
+    let local = selected_match.local_player;
+    let ids: Vec<_> = match *request {
+        ProfileSelection::Builder => presentation
+            .current
+            .builders
+            .values()
+            .filter(|builder| builder.owner == local)
+            .map(|builder| builder.id)
+            .take(1)
+            .collect(),
+        ProfileSelection::Units => presentation
+            .current
+            .units
+            .values()
+            .filter(|unit| unit.owner == local)
+            .map(|unit| unit.id)
+            .take(6)
+            .collect(),
+        ProfileSelection::Building => presentation
+            .current
+            .buildings
+            .values()
+            .filter(|building| building.owner == Some(local))
+            .map(|building| building.id)
+            .take(1)
+            .collect(),
+    };
+    if !ids.is_empty() {
+        selection.replace(ids);
+        *done = true;
+    }
 }
 
 #[derive(Resource)]
@@ -961,6 +1021,10 @@ struct ClientOptions {
     /// Offline all-buildings benchmark: runs the `sim-bench` match under the automated profile.
     benchmark: bool,
     profile_screenshot: Option<PathBuf>,
+    /// Interface theme for this run only; the saved setting is left alone.
+    profile_theme: Option<ui_icons::ConsoleTheme>,
+    /// What to select for a screenshot of the info panel and command card.
+    profile_select: Option<ProfileSelection>,
     render_experiment: RenderExperiment,
     map_version: MapVersion,
     release_revision: String,
@@ -990,6 +1054,8 @@ impl ClientOptions {
             profile: false,
             benchmark: false,
             profile_screenshot: None,
+            profile_theme: None,
+            profile_select: None,
             render_experiment: RenderExperiment::Baseline,
             map_version: MapVersion::CASTLE_FIGHT_9_27,
             release_revision: "r1".to_owned(),
@@ -1040,6 +1106,22 @@ impl ClientOptions {
                         args.next()
                             .expect("--profile-screenshot requires an output path"),
                     ));
+                }
+                "--profile-theme" => {
+                    let value = args.next().expect("--profile-theme requires a theme name");
+                    options.profile_theme = Some(
+                        serde_json::from_value(serde_json::Value::String(value.clone()))
+                            .unwrap_or_else(|_| panic!("unknown --profile-theme {value:?}")),
+                    );
+                }
+                "--profile-select" => {
+                    let value = args.next().expect("--profile-select requires a target");
+                    options.profile_select = Some(match value.as_str() {
+                        "builder" => ProfileSelection::Builder,
+                        "units" => ProfileSelection::Units,
+                        "building" => ProfileSelection::Building,
+                        other => panic!("unknown --profile-select {other:?}"),
+                    });
                 }
                 "--render-experiment" => {
                     let value = args.next().expect("--render-experiment requires a name");
@@ -1161,6 +1243,7 @@ impl ClientOptions {
                 || (!options.profile_paused
                     && options.render_experiment == RenderExperiment::Baseline
                     && options.profile_screenshot.is_none()
+                    && options.profile_select.is_none()
                     && options.stress_visual.is_none()),
             "render experiments, --profile-paused, and --stress-visual require --profile, --profile-quicksave, or --benchmark",
         );
@@ -1285,8 +1368,9 @@ fn setup_simulation_pause_ui(mut commands: Commands) {
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                left: px(580.0),
-                top: px(TOP_BAR_HEIGHT + 10.0),
+                left: percent(50.0),
+                margin: UiRect::new(px(-140.0), px(0.0), px(10.0), px(0.0)),
+                top: console::wc3(console::TOP_BAR_UNITS),
                 width: px(280.0),
                 padding: UiRect::axes(px(14.0), px(8.0)),
                 justify_content: JustifyContent::Center,

@@ -5,47 +5,44 @@ use crate::{
     AuthoritativeSimulation, SelectedMatch,
     bridge::PresentationSamples,
     build_ui::{ActionPanelMode, ActionPanelState},
+    console::{
+        ConsoleMetrics, ConsoleSlots, MENU_BUTTON_HEIGHT, MENU_BUTTON_WIDTH, TOP_BAR_UNITS, wc3,
+        wc3_font,
+    },
     debug_menu::DebugMenuState,
     inspection::InspectionSelection,
     presentation::{
         BuildingGridSnapState, CameraFocusRequest, FpsDisplay, MapGridState, player_color,
     },
-    ui_icons::{UiIconAssets, UiIconKey},
+    ui_icons::{UiIconAssets, UiIconKey, UiResourceIcon},
 };
 
+/// Nominal 1080p height of the console's top bar. Fixed-pixel developer panels hang below it;
+/// the console itself scales with the window (see `console::ConsoleMetrics`).
 pub(crate) const TOP_BAR_HEIGHT: f32 = 58.0;
 
-const BAR_BACKGROUND: Color = Color::srgba(0.055, 0.048, 0.036, 0.98);
-const BAR_BORDER: Color = Color::srgb(0.33, 0.27, 0.16);
-const SLOT_BACKGROUND: Color = Color::srgba(0.025, 0.023, 0.020, 0.95);
-const SLOT_BORDER: Color = Color::srgb(0.24, 0.21, 0.15);
-const LABEL_COLOR: Color = Color::srgb(0.67, 0.63, 0.52);
 const GOLD_COLOR: Color = Color::srgb(0.96, 0.78, 0.16);
 const LUMBER_COLOR: Color = Color::srgb(0.26, 0.78, 0.34);
 const LEGENDARY_COLOR: Color = Color::srgb(0.72, 0.56, 0.96);
 const PROGRESS_TRACK: Color = Color::srgb(0.11, 0.09, 0.055);
 const BUILDER_SHORTCUT_LEFT: f32 = 10.0;
-const BUILDER_SHORTCUT_TOP: f32 = TOP_BAR_HEIGHT + 10.0;
+/// Gap between the bottom edge of the top bar and the builder shortcut column.
+const BUILDER_SHORTCUT_TOP_GAP: f32 = 10.0;
 const BUILDER_SHORTCUT_SIZE: f32 = 54.0;
 const BUILDER_SHORTCUT_GAP: f32 = 6.0;
 const BUILDER_SHORTCUT_BORDER: f32 = 3.0;
 const BUILDER_SHORTCUT_BACKGROUND: Color = Color::srgba(0.025, 0.023, 0.020, 0.96);
 const BUILDER_SHORTCUT_HOVERED: Color = Color::srgba(0.16, 0.14, 0.10, 0.98);
 const BUILDER_SHORTCUT_SELECTED: Color = Color::srgba(0.28, 0.24, 0.12, 0.98);
-const MAP_GRID_BUTTON_WIDTH: f32 = 52.0;
-const MAP_GRID_BUTTON_HEIGHT: f32 = 22.0;
-const MAP_GRID_BUTTON_TOP: f32 = TOP_BAR_HEIGHT + 4.0;
-// The fixed right-side resource slots are GOLD, LUMBER, LEGENDARY. Keep this centred below GOLD.
-const MAP_GRID_BUTTON_RIGHT: f32 = 385.0;
-const MAP_GRID_BUTTON_BACKGROUND: Color = Color::srgba(0.025, 0.023, 0.020, 0.96);
-const MAP_GRID_BUTTON_HOVERED: Color = Color::srgba(0.16, 0.14, 0.10, 0.98);
-const MAP_GRID_BUTTON_ENABLED: Color = Color::srgba(0.18, 0.28, 0.16, 0.98);
-const SCORES_BUTTON_WIDTH: f32 = 64.0;
-const SCORES_BUTTON_RIGHT: f32 =
-    MAP_GRID_BUTTON_RIGHT + MAP_GRID_BUTTON_WIDTH + BUILDER_SHORTCUT_GAP;
-const GRID_SNAP_BUTTON_WIDTH: f32 = 72.0;
-const GRID_SNAP_BUTTON_RIGHT: f32 =
-    MAP_GRID_BUTTON_RIGHT - MAP_GRID_BUTTON_WIDTH - BUILDER_SHORTCUT_GAP;
+const MENU_BUTTON_BACKGROUND: Color = Color::srgba(0.02, 0.02, 0.025, 0.55);
+const MENU_BUTTON_HOVERED: Color = Color::srgba(0.22, 0.18, 0.08, 0.85);
+const MENU_BUTTON_ENABLED: Color = Color::srgba(0.12, 0.30, 0.12, 0.7);
+const MENU_BUTTON_TEXT_COLOR: Color = Color::srgb(0.95, 0.78, 0.30);
+/// Inset of the first resource icon inside the top bar's resource frame, in layout units.
+const RESOURCE_GROUP_INSET: f32 = 0.018;
+const DOCK_TEXT: f32 = 0.0092;
+const DOCK_BUTTON_TEXT: f32 = 0.0078;
+const MENU_BUTTON_TEXT: f32 = 0.0092;
 
 #[derive(Component)]
 struct PerformanceText;
@@ -77,9 +74,6 @@ struct MapGridToggleButton;
 #[derive(Component)]
 struct BuildingGridSnapToggleButton;
 
-#[derive(Component)]
-struct BuildingGridSnapCheckmark;
-
 #[derive(Component, Debug, Clone, Copy, PartialEq, Eq)]
 struct BuilderShortcutButton(SimId);
 
@@ -106,11 +100,13 @@ pub(crate) struct ResourceUiPlugin;
 
 impl Plugin for ResourceUiPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<BuilderShortcutState>()
+        app.init_resource::<ConsoleSlots>()
+            .init_resource::<BuilderShortcutState>()
             .init_resource::<MapGridState>()
             .init_resource::<BuildingGridSnapState>()
             .init_resource::<CameraFocusRequest>()
             .add_message::<crate::game_menu::MatchSessionReset>()
+            .add_message::<crate::game_menu::OpenGameMenuRequest>()
             .add_message::<crate::scoreboard_ui::ToggleScoreboardRequest>()
             .add_systems(Update, reset_resource_ui_for_new_match)
             .add_systems(
@@ -118,9 +114,8 @@ impl Plugin for ResourceUiPlugin {
                 (
                     setup_resource_bar,
                     setup_builder_shortcuts,
-                    setup_map_grid_toggle,
-                    setup_scores_button,
-                    setup_building_grid_snap_toggle,
+                    setup_dock_header,
+                    setup_menu_buttons,
                 ),
             )
             .add_systems(
@@ -131,6 +126,7 @@ impl Plugin for ResourceUiPlugin {
                     handle_builder_shortcut_click,
                     update_builder_shortcut_visuals,
                     handle_scores_button,
+                    handle_menu_button,
                     handle_map_grid_toggle_click,
                     update_map_grid_toggle_visual,
                     handle_building_grid_snap_toggle_click,
@@ -157,7 +153,8 @@ fn setup_builder_shortcuts(mut commands: Commands) {
         Node {
             position_type: PositionType::Absolute,
             left: px(BUILDER_SHORTCUT_LEFT),
-            top: px(BUILDER_SHORTCUT_TOP),
+            top: wc3(TOP_BAR_UNITS),
+            margin: UiRect::top(px(BUILDER_SHORTCUT_TOP_GAP)),
             flex_direction: FlexDirection::Column,
             row_gap: px(BUILDER_SHORTCUT_GAP),
             ..default()
@@ -170,33 +167,60 @@ fn setup_builder_shortcuts(mut commands: Commands) {
 #[derive(Component)]
 struct ScoresButton;
 
-/// Opens the scoreboard for players who do not know F9.
-fn setup_scores_button(mut commands: Commands) {
-    commands
-        .spawn((
-            Button,
-            Node {
-                position_type: PositionType::Absolute,
-                right: px(SCORES_BUTTON_RIGHT),
-                top: px(MAP_GRID_BUTTON_TOP),
-                width: px(SCORES_BUTTON_WIDTH),
-                height: px(MAP_GRID_BUTTON_HEIGHT),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                border: UiRect::all(px(1.0)),
-                ..default()
-            },
-            BackgroundColor(MAP_GRID_BUTTON_BACKGROUND),
-            BorderColor::all(SLOT_BORDER),
-            ZIndex(1001),
-            ScoresButton,
-        ))
-        .with_child((
-            Text::new("SCORES"),
-            TextFont::from_font_size(9.0),
-            TextColor(LABEL_COLOR),
-            Pickable::IGNORE,
-        ));
+fn menu_button(
+    row: &mut ChildSpawnerCommands,
+    label: &'static str,
+    marker: impl Bundle,
+    background: Color,
+) {
+    row.spawn((
+        Button,
+        Node {
+            width: wc3(MENU_BUTTON_WIDTH),
+            height: wc3(MENU_BUTTON_HEIGHT),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            ..default()
+        },
+        BackgroundColor(background),
+        marker,
+    ))
+    .with_child((
+        Text::new(label),
+        TextFont::from_font_size(wc3_font(MENU_BUTTON_TEXT)),
+        TextColor(MENU_BUTTON_TEXT_COLOR),
+        Pickable::IGNORE,
+    ));
+}
+
+/// The four sockets in the top bar's left tile hold Warcraft's menu buttons: the game menu, the
+/// scoreboard, the map grid and building-grid snapping.
+fn setup_menu_buttons(mut commands: Commands, slots: Res<ConsoleSlots>) {
+    commands.entity(slots.menu_bar).with_children(|row| {
+        menu_button(row, "Menu (F10)", MenuButton, MENU_BUTTON_BACKGROUND);
+        menu_button(row, "Scores (F9)", ScoresButton, MENU_BUTTON_BACKGROUND);
+        menu_button(row, "Grid", MapGridToggleButton, MENU_BUTTON_BACKGROUND);
+        menu_button(
+            row,
+            "Snap",
+            BuildingGridSnapToggleButton,
+            MENU_BUTTON_ENABLED,
+        );
+    });
+}
+
+#[derive(Component)]
+struct MenuButton;
+
+fn handle_menu_button(
+    buttons: Query<&Interaction, (Changed<Interaction>, With<MenuButton>)>,
+    mut requests: MessageWriter<crate::game_menu::OpenGameMenuRequest>,
+) {
+    for interaction in &buttons {
+        if *interaction == Interaction::Pressed {
+            requests.write(crate::game_menu::OpenGameMenuRequest);
+        }
+    }
 }
 
 type ScoresButtonQuery<'w, 's> = Query<
@@ -214,263 +238,142 @@ fn handle_scores_button(
         background.0 = match interaction {
             Interaction::Pressed => {
                 requests.write(crate::scoreboard_ui::ToggleScoreboardRequest);
-                MAP_GRID_BUTTON_HOVERED
+                MENU_BUTTON_HOVERED
             }
-            Interaction::Hovered => MAP_GRID_BUTTON_HOVERED,
-            Interaction::None => MAP_GRID_BUTTON_BACKGROUND,
+            Interaction::Hovered => MENU_BUTTON_HOVERED,
+            Interaction::None => MENU_BUTTON_BACKGROUND,
         };
     }
 }
 
-fn setup_map_grid_toggle(mut commands: Commands) {
-    commands
-        .spawn((
-            Button,
-            Node {
-                position_type: PositionType::Absolute,
-                right: px(MAP_GRID_BUTTON_RIGHT),
-                top: px(MAP_GRID_BUTTON_TOP),
-                width: px(MAP_GRID_BUTTON_WIDTH),
-                height: px(MAP_GRID_BUTTON_HEIGHT),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                border: UiRect::all(px(1.0)),
-                ..default()
-            },
-            BackgroundColor(MAP_GRID_BUTTON_BACKGROUND),
-            BorderColor::all(SLOT_BORDER),
-            ZIndex(1001),
-            MapGridToggleButton,
-        ))
-        .with_child((
-            Text::new("GRID"),
-            TextFont::from_font_size(9.0),
-            TextColor(LABEL_COLOR),
-            Pickable::IGNORE,
+/// Dock header: whose resources are shown, plus the developer FPS/tick readout.
+fn setup_dock_header(mut commands: Commands, slots: Res<ConsoleSlots>) {
+    commands.entity(slots.dock_header).with_children(|row| {
+        row.spawn((
+            Text::new("BLUE PLAYER"),
+            TextFont::from_font_size(wc3_font(DOCK_TEXT)),
+            TextColor(Color::srgb(0.35, 0.67, 1.0)),
+            SelectedPlayerText,
         ));
+        row.spawn((
+            Text::new("FPS --\nTICK 0"),
+            TextFont::from_font_size(wc3_font(DOCK_BUTTON_TEXT)),
+            TextColor(Color::srgb(0.72, 0.76, 0.82)),
+            PerformanceText,
+        ));
+    });
 }
 
-fn setup_building_grid_snap_toggle(mut commands: Commands) {
-    commands
-        .spawn((
-            Button,
-            Node {
-                position_type: PositionType::Absolute,
-                right: px(GRID_SNAP_BUTTON_RIGHT),
-                top: px(MAP_GRID_BUTTON_TOP),
-                width: px(GRID_SNAP_BUTTON_WIDTH),
-                height: px(MAP_GRID_BUTTON_HEIGHT),
-                padding: UiRect::horizontal(px(5.0)),
-                align_items: AlignItems::Center,
-                column_gap: px(4.0),
-                border: UiRect::all(px(1.0)),
-                ..default()
-            },
-            BackgroundColor(MAP_GRID_BUTTON_ENABLED),
-            BorderColor::all(SLOT_BORDER),
-            ZIndex(1001),
-            BuildingGridSnapToggleButton,
-        ))
-        .with_children(|button| {
-            button
-                .spawn((
-                    Node {
-                        width: px(12.0),
-                        height: px(12.0),
-                        align_items: AlignItems::Center,
-                        justify_content: JustifyContent::Center,
-                        border: UiRect::all(px(1.0)),
-                        ..default()
-                    },
-                    BorderColor::all(LABEL_COLOR),
-                ))
-                .with_child((
-                    Text::new("X"),
-                    TextFont::from_font_size(9.0),
-                    TextColor(LABEL_COLOR),
-                    Pickable::IGNORE,
-                    BuildingGridSnapCheckmark,
-                ));
-            button.spawn((
-                Text::new("SNAP"),
-                TextFont::from_font_size(9.0),
-                TextColor(LABEL_COLOR),
-                Pickable::IGNORE,
-            ));
-        });
-}
-
-fn setup_resource_bar(mut commands: Commands) {
-    commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                left: px(0.0),
-                right: px(0.0),
-                top: px(0.0),
-                height: px(TOP_BAR_HEIGHT),
-                padding: UiRect::horizontal(px(10.0)),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::FlexStart,
-                column_gap: px(8.0),
-                border: UiRect::bottom(px(2.0)),
-                ..default()
-            },
-            BackgroundColor(BAR_BACKGROUND),
-            BorderColor::all(BAR_BORDER),
-            ZIndex(1000),
-        ))
-        .with_children(|bar| {
-            bar.spawn((
-                Node {
-                    width: px(132.0),
-                    height: px(42.0),
-                    padding: UiRect::horizontal(px(10.0)),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::FlexStart,
-                    border: UiRect::all(px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(SLOT_BACKGROUND),
-                BorderColor::all(SLOT_BORDER),
-            ))
-            .with_child((
-                Text::new("FPS --\nTICK 0"),
-                TextFont::from_font_size(12.0),
-                TextColor(Color::srgb(0.72, 0.76, 0.82)),
-                PerformanceText,
-            ));
-
-            bar.spawn((Node {
-                flex_grow: 1.0,
-                ..default()
-            },));
-
-            bar.spawn((
-                Node {
-                    width: px(124.0),
-                    height: px(42.0),
-                    padding: UiRect::horizontal(px(10.0)),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    border: UiRect::all(px(1.0)),
-                    ..default()
-                },
-                BackgroundColor(SLOT_BACKGROUND),
-                BorderColor::all(SLOT_BORDER),
-            ))
-            .with_child((
-                Text::new("BLUE PLAYER"),
-                TextFont::from_font_size(13.0),
-                TextColor(Color::srgb(0.35, 0.67, 1.0)),
-                SelectedPlayerText,
-            ));
-
-            spawn_resource_slot(bar, "G", "GOLD", GOLD_COLOR, GoldText, true, true);
-            spawn_resource_slot(bar, "W", "LUMBER", LUMBER_COLOR, LumberText, false, false);
-            spawn_resource_slot(
-                bar,
-                "L",
-                "LEGENDARY",
-                LEGENDARY_COLOR,
-                LegendaryText,
-                false,
-                false,
-            );
-        });
-}
-
-fn spawn_resource_slot<M: Component>(
-    parent: &mut ChildSpawnerCommands,
-    icon: &'static str,
-    label: &'static str,
-    accent: Color,
-    value_marker: M,
-    show_income: bool,
-    has_progress: bool,
+/// Gold, lumber and legendary points sit in the top bar's resource frame, one icon and one
+/// number each, at Warcraft's own offsets (legendary points use the supply slot).
+fn setup_resource_bar(
+    mut commands: Commands,
+    slots: Res<ConsoleSlots>,
+    asset_server: Option<Res<AssetServer>>,
+    mut icons: Option<ResMut<UiIconAssets>>,
 ) {
-    parent
-        .spawn((
-            Node {
-                width: px(154.0),
-                height: px(42.0),
-                padding: UiRect::axes(px(6.0), px(4.0)),
+    let mut load = |resource: UiResourceIcon| -> Option<Handle<Image>> {
+        let server = asset_server.as_deref()?;
+        icons
+            .as_deref_mut()?
+            .image(UiIconKey::Resource(resource), server)
+    };
+    let groups = [
+        (RESOURCE_GROUP_INSET, UiResourceIcon::Gold, GOLD_COLOR),
+        (
+            RESOURCE_GROUP_INSET + 0.0859,
+            UiResourceIcon::Lumber,
+            LUMBER_COLOR,
+        ),
+        (
+            RESOURCE_GROUP_INSET + 0.1727,
+            UiResourceIcon::Supply,
+            LEGENDARY_COLOR,
+        ),
+    ];
+    commands.entity(slots.resources).with_children(|bar| {
+        for (index, (offset, resource, accent)) in groups.into_iter().enumerate() {
+            let icon = load(resource);
+            bar.spawn(Node {
+                position_type: PositionType::Absolute,
+                left: wc3(offset),
+                top: px(0.0),
+                height: percent(100.0),
                 align_items: AlignItems::Center,
-                column_gap: px(7.0),
-                border: UiRect::all(px(1.0)),
+                column_gap: wc3(0.004),
                 ..default()
-            },
-            BackgroundColor(SLOT_BACKGROUND),
-            BorderColor::all(SLOT_BORDER),
-        ))
-        .with_children(|slot| {
-            slot.spawn((
-                Node {
-                    width: px(29.0),
-                    height: px(29.0),
-                    align_items: AlignItems::Center,
-                    justify_content: JustifyContent::Center,
-                    border: UiRect::all(px(1.0)),
+            })
+            .with_children(|group| {
+                let icon_node = Node {
+                    width: wc3(0.0164),
+                    height: wc3(0.0164),
                     ..default()
-                },
-                BackgroundColor(accent.with_alpha(0.18)),
-                BorderColor::all(accent.with_alpha(0.72)),
-            ))
-            .with_child((
-                Text::new(icon),
-                TextFont::from_font_size(18.0),
-                TextColor(accent),
-            ));
-
-            slot.spawn((Node {
-                flex_direction: FlexDirection::Column,
-                justify_content: JustifyContent::Center,
-                flex_grow: 1.0,
-                row_gap: px(1.0),
-                ..default()
-            },))
-                .with_children(|column| {
-                    column.spawn((
-                        Text::new(label),
-                        TextFont::from_font_size(9.0),
-                        TextColor(LABEL_COLOR),
-                    ));
-                    column.spawn((
-                        Text::new("0"),
-                        TextFont::from_font_size(17.0),
-                        TextColor(Color::WHITE),
-                        value_marker,
-                    ));
-                    if has_progress {
-                        column
-                            .spawn((
-                                Node {
-                                    width: percent(100.0),
-                                    height: px(4.0),
-                                    ..default()
-                                },
-                                BackgroundColor(PROGRESS_TRACK),
-                            ))
-                            .with_child((
-                                Node {
-                                    width: percent(0.0),
-                                    height: percent(100.0),
-                                    ..default()
-                                },
-                                BackgroundColor(GOLD_COLOR),
-                                GoldIncomeProgress,
-                            ));
+                };
+                match icon {
+                    Some(icon) => {
+                        group.spawn((ImageNode::new(icon), icon_node, Pickable::IGNORE));
                     }
-                    if show_income {
-                        column.spawn((
-                            Text::new("income +0"),
-                            TextFont::from_font_size(8.0),
-                            TextColor(GOLD_COLOR.with_alpha(0.82)),
-                            GoldIncomeText,
+                    None => {
+                        group.spawn((
+                            Text::new(["G", "W", "L"][index]),
+                            TextFont::from_font_size(wc3_font(0.012)),
+                            TextColor(accent),
                         ));
                     }
-                });
+                }
+                let value = group.spawn((
+                    Text::new("0"),
+                    TextFont::from_font_size(wc3_font(0.0105)),
+                    TextColor(accent),
+                    Pickable::IGNORE,
+                ));
+                let mut value = value;
+                match index {
+                    0 => value.insert(GoldText),
+                    1 => value.insert(LumberText),
+                    _ => value.insert(LegendaryText),
+                };
+            });
+        }
+        // The fourth socket (Warcraft's upkeep slot) shows gold income and the time to payout.
+        bar.spawn(Node {
+            position_type: PositionType::Absolute,
+            left: wc3(RESOURCE_GROUP_INSET + 0.2586),
+            top: px(0.0),
+            height: percent(100.0),
+            flex_direction: FlexDirection::Column,
+            justify_content: JustifyContent::Center,
+            row_gap: wc3(0.0015),
+            ..default()
+        })
+        .with_children(|income| {
+            income.spawn((
+                Text::new("income +0"),
+                TextFont::from_font_size(wc3_font(0.0092)),
+                TextColor(GOLD_COLOR.with_alpha(0.9)),
+                Pickable::IGNORE,
+                GoldIncomeText,
+            ));
+            income
+                .spawn((
+                    Node {
+                        width: wc3(0.06),
+                        height: wc3(0.0035),
+                        ..default()
+                    },
+                    BackgroundColor(PROGRESS_TRACK),
+                ))
+                .with_child((
+                    Node {
+                        width: percent(0.0),
+                        height: percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(GOLD_COLOR),
+                    GoldIncomeProgress,
+                ));
         });
+    });
 }
 
 fn controllable_builder_shortcuts(
@@ -648,11 +551,11 @@ fn update_map_grid_toggle_visual(
     let (interaction, background) = &mut *button;
     background.0 = if **interaction == Interaction::Hovered || **interaction == Interaction::Pressed
     {
-        MAP_GRID_BUTTON_HOVERED
+        MENU_BUTTON_HOVERED
     } else if state.enabled {
-        MAP_GRID_BUTTON_ENABLED
+        MENU_BUTTON_ENABLED
     } else {
-        MAP_GRID_BUTTON_BACKGROUND
+        MENU_BUTTON_BACKGROUND
     };
 }
 
@@ -670,42 +573,49 @@ fn handle_building_grid_snap_toggle_click(
 fn update_building_grid_snap_toggle_visual(
     state: Res<BuildingGridSnapState>,
     mut button: Single<(&Interaction, &mut BackgroundColor), With<BuildingGridSnapToggleButton>>,
-    mut checkmark: Single<&mut Text, With<BuildingGridSnapCheckmark>>,
 ) {
     let (interaction, background) = &mut *button;
     background.0 = if **interaction == Interaction::Hovered || **interaction == Interaction::Pressed
     {
-        MAP_GRID_BUTTON_HOVERED
+        MENU_BUTTON_HOVERED
     } else if state.enabled {
-        MAP_GRID_BUTTON_ENABLED
+        MENU_BUTTON_ENABLED
     } else {
-        MAP_GRID_BUTTON_BACKGROUND
+        MENU_BUTTON_BACKGROUND
     };
-    checkmark.0 = if state.enabled { "X" } else { "" }.into();
+}
+
+/// The scoreboard dock, whose buttons and readouts sit over the map's top-right corner.
+#[must_use]
+pub(crate) fn cursor_over_map_controls(
+    cursor: Vec2,
+    window_width: f32,
+    window_height: f32,
+) -> bool {
+    ConsoleMetrics::new(window_width, window_height).over_dock(cursor, window_width)
 }
 
 #[must_use]
-pub(crate) fn cursor_over_map_controls(cursor: Vec2, window_width: f32) -> bool {
-    let left = window_width - SCORES_BUTTON_RIGHT - SCORES_BUTTON_WIDTH;
-    let right = window_width - GRID_SNAP_BUTTON_RIGHT;
-    cursor.x >= left
-        && cursor.x <= right
-        && cursor.y >= MAP_GRID_BUTTON_TOP
-        && cursor.y <= MAP_GRID_BUTTON_TOP + MAP_GRID_BUTTON_HEIGHT
-}
-
-#[must_use]
-pub(crate) fn cursor_over_builder_shortcuts(cursor: Vec2, state: &BuilderShortcutState) -> bool {
+pub(crate) fn cursor_over_builder_shortcuts(
+    cursor: Vec2,
+    state: &BuilderShortcutState,
+    window_height: f32,
+) -> bool {
     let count = state.len();
     if count == 0 {
         return false;
     }
+    let top = builder_shortcut_top(window_height);
     let height = count as f32 * BUILDER_SHORTCUT_SIZE
         + count.saturating_sub(1) as f32 * BUILDER_SHORTCUT_GAP;
     cursor.x >= BUILDER_SHORTCUT_LEFT
         && cursor.x <= BUILDER_SHORTCUT_LEFT + BUILDER_SHORTCUT_SIZE
-        && cursor.y >= BUILDER_SHORTCUT_TOP
-        && cursor.y <= BUILDER_SHORTCUT_TOP + height
+        && cursor.y >= top
+        && cursor.y <= top + height
+}
+
+fn builder_shortcut_top(window_height: f32) -> f32 {
+    ConsoleMetrics::new(0.0, window_height).top_bar_height() + BUILDER_SHORTCUT_TOP_GAP
 }
 
 type ResourceTextQuery<'w, 's> = Query<
@@ -802,8 +712,8 @@ fn update_resource_bar(
         "ENEMY"
     };
     let player_label = match authoritative.player_name(selected_player) {
-        Some(name) => format!("{} · {relation}", name.to_uppercase()),
-        None => format!("PLAYER {} · {relation}", u16::from(selected_player.0) + 1),
+        Some(name) => format!("{} - {relation}", name.to_uppercase()),
+        None => format!("PLAYER {} - {relation}", u16::from(selected_player.0) + 1),
     };
     let player_text_color = player_color(selected_player);
     for (
@@ -1029,32 +939,6 @@ mod tests {
     }
 
     #[test]
-    fn map_control_hit_box_covers_scores_grid_and_snap_buttons() {
-        let window_width = 1_440.0;
-        let left = window_width - SCORES_BUTTON_RIGHT - SCORES_BUTTON_WIDTH;
-        let right = window_width - GRID_SNAP_BUTTON_RIGHT;
-        assert!(cursor_over_map_controls(
-            Vec2::new(left + 2.0, MAP_GRID_BUTTON_TOP + 5.0),
-            window_width,
-        ));
-        assert!(cursor_over_map_controls(
-            Vec2::new(right - 2.0, MAP_GRID_BUTTON_TOP + 5.0),
-            window_width,
-        ));
-        assert!(!cursor_over_map_controls(
-            Vec2::new(left - 1.0, MAP_GRID_BUTTON_TOP + 5.0),
-            window_width,
-        ));
-        assert!(!cursor_over_map_controls(
-            Vec2::new(
-                (left + right) * 0.5,
-                MAP_GRID_BUTTON_TOP + MAP_GRID_BUTTON_HEIGHT + 1.0
-            ),
-            window_width,
-        ));
-    }
-
-    #[test]
     fn building_grid_snapping_is_enabled_by_default() {
         assert!(BuildingGridSnapState::default().enabled);
     }
@@ -1077,23 +961,25 @@ mod tests {
                 },
             ],
         };
+        let height = 1080.0;
+        let top = builder_shortcut_top(height);
         assert!(cursor_over_builder_shortcuts(
-            Vec2::new(BUILDER_SHORTCUT_LEFT + 20.0, BUILDER_SHORTCUT_TOP + 20.0),
-            &state
+            Vec2::new(BUILDER_SHORTCUT_LEFT + 20.0, top + 20.0),
+            &state,
+            height,
         ));
         assert!(cursor_over_builder_shortcuts(
             Vec2::new(
                 BUILDER_SHORTCUT_LEFT + 20.0,
-                BUILDER_SHORTCUT_TOP + BUILDER_SHORTCUT_SIZE + BUILDER_SHORTCUT_GAP + 20.0,
+                top + BUILDER_SHORTCUT_SIZE + BUILDER_SHORTCUT_GAP + 20.0,
             ),
-            &state
+            &state,
+            height,
         ));
         assert!(!cursor_over_builder_shortcuts(
-            Vec2::new(
-                BUILDER_SHORTCUT_LEFT + BUILDER_SHORTCUT_SIZE + 1.0,
-                BUILDER_SHORTCUT_TOP
-            ),
-            &state
+            Vec2::new(BUILDER_SHORTCUT_LEFT + BUILDER_SHORTCUT_SIZE + 1.0, top),
+            &state,
+            height,
         ));
     }
 }

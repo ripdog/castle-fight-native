@@ -4,7 +4,7 @@ use std::{fs, path::PathBuf};
 use bevy::prelude::Resource;
 use serde::{Deserialize, Serialize};
 
-use crate::view_state::config_directory;
+use crate::{ui_icons::ConsoleTheme, view_state::config_directory};
 
 pub(crate) const DEFAULT_JOIN_ADDRESS: &str = "127.0.0.1";
 
@@ -27,6 +27,8 @@ pub(crate) struct ClientSettings {
     pub(crate) zoom_speed: f32,
     /// Use an orange/blue pair that stays distinguishable with red-green colour blindness.
     pub(crate) colour_blind_friendly: bool,
+    /// Warcraft III race whose console art frames the HUD.
+    pub(crate) ui_theme: ConsoleTheme,
 }
 
 pub(crate) const MIN_SPEED_MULTIPLIER: f32 = 0.5;
@@ -43,6 +45,7 @@ impl Default for ClientSettings {
             pan_speed: 1.0,
             zoom_speed: 1.0,
             colour_blind_friendly: false,
+            ui_theme: ConsoleTheme::default(),
         }
     }
 }

@@ -2,14 +2,12 @@
 use crate::{
     AuthoritativeSimulation, SelectedMatch,
     build_ui::{ActionPanelState, TargetingAction, cursor_over_action_panel},
+    console::{ConsoleSlots, wc3_font},
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
     inspection::cursor_over_inspector_panel,
     lobby::LobbyState,
     presentation::{sim_point_to_terrain_world, viewport_ground_point, world_to_sim_point},
-    resource_ui::{
-        BuilderShortcutState, TOP_BAR_HEIGHT, cursor_over_builder_shortcuts,
-        cursor_over_map_controls,
-    },
+    resource_ui::{BuilderShortcutState, cursor_over_builder_shortcuts, cursor_over_map_controls},
     terrain::TerrainSurface,
     wc3_effects::{Wc3RibbonSource, Wc3VisualSet},
 };
@@ -66,7 +64,8 @@ struct RescueImpact {
 
 impl Plugin for MatchUiPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<RescueImpactDisplay>()
+        app.init_resource::<ConsoleSlots>()
+            .init_resource::<RescueImpactDisplay>()
             .init_resource::<RescueArtTracker>()
             .add_message::<crate::game_menu::MatchSessionReset>()
             .add_systems(
@@ -97,35 +96,19 @@ fn reset_rescue_display_for_new_match(
     }
 }
 
-fn spawn_match_hud(mut commands: Commands) {
+/// The round/score/timer readout lives in the scoreboard dock's match row.
+fn spawn_match_hud(mut commands: Commands, slots: Res<ConsoleSlots>) {
     commands
-        .spawn((
-            MatchHud,
-            Node {
-                position_type: PositionType::Absolute,
-                top: px(TOP_BAR_HEIGHT + 5.0),
-                left: Val::Percent(33.0),
-                width: Val::Percent(34.0),
-                justify_content: JustifyContent::Center,
-                column_gap: px(18.0),
-                padding: UiRect::axes(px(12.0), px(5.0)),
-                border: UiRect::all(px(1.0)),
-                ..default()
-            },
-            BackgroundColor(Color::srgba(0.055, 0.048, 0.036, 0.83)),
-            BorderColor::all(Color::srgb(0.33, 0.27, 0.16)),
-            Visibility::Hidden,
-            ZIndex(15),
-            Pickable::IGNORE,
-        ))
+        .entity(slots.dock_match)
+        .insert((MatchHud, Visibility::Hidden))
         .with_children(|parent| {
             for segment in HUD_SEGMENTS {
                 parent.spawn((
                     segment,
                     Text::new(""),
-                    TextFont::from_font_size(14.0),
+                    TextFont::from_font_size(wc3_font(0.0092)),
                     TextColor(Color::srgb(0.96, 0.89, 0.72)),
-                    TextLayout::justify(Justify::Center),
+                    Pickable::IGNORE,
                 ));
             }
         });
@@ -321,8 +304,8 @@ fn draw_rescue_targeting(
         && !cursor_over_action_panel(cursor, window.width(), window.height(), true)
         && !cursor_over_inspector_panel(cursor, window.width(), window.height())
         && !cursor_over_debug_menu(cursor, debug_menu.is_open())
-        && !cursor_over_builder_shortcuts(cursor, &shortcuts)
-        && !cursor_over_map_controls(cursor, window.width())
+        && !cursor_over_builder_shortcuts(cursor, &shortcuts, window.height())
+        && !cursor_over_map_controls(cursor, window.width(), window.height())
         && let Some(world) = viewport_ground_point(camera.0, camera.1, cursor, &terrain)
     {
         let center = world_to_sim_point(world);

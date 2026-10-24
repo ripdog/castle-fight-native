@@ -240,8 +240,8 @@ fn handle_modal_left_click(
     if cursor_over_action_panel(cursor, window.width(), window.height(), true)
         || cursor_over_inspector_panel(cursor, window.width(), window.height())
         || cursor_over_debug_menu(cursor, resources.debug_menu.is_open())
-        || cursor_over_builder_shortcuts(cursor, &resources.builder_shortcuts)
-        || cursor_over_map_controls(cursor, window.width())
+        || cursor_over_builder_shortcuts(cursor, &resources.builder_shortcuts, window.height())
+        || cursor_over_map_controls(cursor, window.width(), window.height())
     {
         return;
     }
@@ -652,8 +652,8 @@ fn handle_smart_right_click(
     if cursor_over_action_panel(cursor, window.width(), window.height(), true)
         || cursor_over_inspector_panel(cursor, window.width(), window.height())
         || cursor_over_debug_menu(cursor, resources.debug_menu.is_open())
-        || cursor_over_builder_shortcuts(cursor, &resources.builder_shortcuts)
-        || cursor_over_map_controls(cursor, window.width())
+        || cursor_over_builder_shortcuts(cursor, &resources.builder_shortcuts, window.height())
+        || cursor_over_map_controls(cursor, window.width(), window.height())
     {
         return;
     }

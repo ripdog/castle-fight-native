@@ -11,6 +11,10 @@ use crate::{
         UnitVisualKind,
     },
     build_ui::{ActionPanelState, cursor_over_action_panel},
+    console::{
+        ConsoleMetrics, ConsoleSlots, DOCK_HEIGHT, INVENTORY_SLOT, TOP_BAR_UNITS, vfont, vpx, wc3,
+        wc3_font,
+    },
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
     presentation::{
         DebugPresentation, WorldMetrics, draw_footprint_outline, sim_point_to_terrain_world,
@@ -22,10 +26,11 @@ use crate::{
     ui_icons::{UiCommandIcon, UiIconAssets, UiIconKey, UiIconRole, UiStatusIconRole},
 };
 
-const CONSOLE_HEIGHT: f32 = 300.0;
-const MAP_SLOT_WIDTH: f32 = 280.0;
-const ACTION_SLOT_WIDTH: f32 = 310.0;
-const TILE_SIZE: f32 = 43.0;
+/// Warcraft's inventory button geometry, in layout units (`ConsoleUI.fdf`).
+const INVENTORY_SLOTS: usize = 6;
+const INVENTORY_BUTTON_SIZE: f32 = 0.031_25;
+const INVENTORY_COLUMN_PITCH: f32 = 0.04;
+const INVENTORY_ROW_PITCH: f32 = 0.038_2;
 const MIN_UNIT_PICK_RADIUS: f32 = 6.0;
 // Human Builder X00C inherits the stock Peasant's 100x100 shadow footprint and selection scale 1.
 // Use that authored footprint for the native click target instead of the old tiny placeholder size.
@@ -242,7 +247,17 @@ struct SelectionTile(usize);
 struct SelectionTileRoot;
 
 #[derive(Component)]
-struct InventoryPlaceholder;
+struct PortraitTile;
+
+#[derive(Component)]
+struct PortraitIcon;
+
+/// Unit details shown while one thing is selected (hidden in favour of the selection grid).
+#[derive(Component)]
+struct InspectionDetails;
+
+#[derive(Component)]
+struct InventoryButton(#[allow(dead_code)] usize);
 
 #[derive(Component)]
 struct SelectionTileIcon(usize);
@@ -291,41 +306,46 @@ type TileRootQuery<'w, 's> = Single<
     &'static mut Node,
     (
         With<SelectionTileRoot>,
+        Without<InspectionDetails>,
         Without<SelectionTile>,
         Without<SelectionTileHealth>,
     ),
 >;
-type InventoryQuery<'w, 's> =
-    Single<'w, 's, &'static mut Visibility, (With<InventoryPlaceholder>, Without<SelectionTile>)>;
+type DetailsQuery<'w, 's> = Single<
+    'w,
+    's,
+    &'static mut Node,
+    (
+        With<InspectionDetails>,
+        Without<SelectionTileRoot>,
+        Without<SelectionTile>,
+        Without<SelectionTileHealth>,
+    ),
+>;
 type SelectionTilesQuery<'w, 's> = Query<
     'w,
     's,
     (
         &'static SelectionTile,
-        &'static mut Node,
         &'static mut Visibility,
         &'static mut BorderColor,
     ),
-    (
-        Without<SelectionTileRoot>,
-        Without<SelectionTileHealth>,
-        Without<InventoryPlaceholder>,
-    ),
+    (Without<SelectionTileRoot>, Without<SelectionTileHealth>),
 >;
 type SelectionBarsQuery<'w, 's> = Query<
     'w,
     's,
     (&'static SelectionTileHealth, &'static mut Node),
-    (Without<SelectionTileRoot>, Without<SelectionTile>),
+    (
+        Without<SelectionTileRoot>,
+        Without<InspectionDetails>,
+        Without<SelectionTile>,
+    ),
 >;
 type PortraitBarsQuery<'w, 's> = Query<
     'w,
     's,
-    (
-        &'static PortraitResource,
-        &'static mut Visibility,
-        &'static mut Node,
-    ),
+    (&'static PortraitResource, &'static mut Visibility),
     (Without<SelectionTileIcon>, Without<PortraitResourceFill>),
 >;
 type PortraitFillsQuery<'w, 's> = Query<
@@ -334,18 +354,12 @@ type PortraitFillsQuery<'w, 's> = Query<
     (&'static PortraitResourceFill, &'static mut Node),
     (Without<SelectionTileIcon>, Without<PortraitResource>),
 >;
-type PortraitIconsQuery<'w, 's> = Query<
-    'w,
-    's,
-    (&'static SelectionTileIcon, &'static mut Node),
-    (Without<PortraitResourceFill>, Without<PortraitResource>),
->;
 
 #[derive(SystemParam)]
 struct SelectionTileUi<'w, 's> {
     icon_assets: ResMut<'w, UiIconAssets>,
     tile_root: TileRootQuery<'w, 's>,
-    inventory: InventoryQuery<'w, 's>,
+    details: DetailsQuery<'w, 's>,
     tiles: SelectionTilesQuery<'w, 's>,
     icons: Query<'w, 's, (&'static SelectionTileIcon, &'static mut ImageNode)>,
     bars: SelectionBarsQuery<'w, 's>,
@@ -424,7 +438,8 @@ type SelectionTileInteractionQuery<'w, 's> = Query<
 
 impl Plugin for InspectionPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<InspectionSelection>()
+        app.init_resource::<ConsoleSlots>()
+            .init_resource::<InspectionSelection>()
             .init_resource::<SelectionDrag>()
             .init_resource::<PortraitCameraHold>()
             .add_message::<crate::game_menu::MatchSessionReset>()
@@ -446,6 +461,7 @@ impl Plugin for InspectionPlugin {
                     update_active_effect_icons,
                     update_debug_inspector_text,
                     update_selection_tiles,
+                    update_portrait_tile,
                     update_portrait_resources,
                     handle_selection_tile_click,
                     update_selection_rectangle,
@@ -471,463 +487,30 @@ fn reset_selection_for_new_match(
     }
 }
 
-fn setup_inspector_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            right: px(0.0),
-            bottom: px(0.0),
-            width: px(ACTION_SLOT_WIDTH),
-            height: px(CONSOLE_HEIGHT),
-            border: UiRect::all(px(3.0)),
-            ..default()
-        },
-        BackgroundColor(PANEL_BACKGROUND),
-        BorderColor::all(Color::srgb(0.32, 0.27, 0.16)),
-        ZIndex(-1),
-        Pickable::IGNORE,
-    ));
-    commands.spawn((
-        crate::minimap::MinimapPanel,
-        Node {
-            position_type: PositionType::Absolute,
-            left: px(0.0),
-            bottom: px(0.0),
-            width: px(MAP_SLOT_WIDTH),
-            height: px(CONSOLE_HEIGHT),
-            border: UiRect::all(px(3.0)),
-            align_items: AlignItems::Center,
-            justify_content: JustifyContent::Center,
-            ..default()
-        },
-        BackgroundColor(PANEL_BACKGROUND),
-        BorderColor::all(Color::srgb(0.32, 0.27, 0.16)),
-    ));
+const INFO_TITLE_FONT: f32 = 0.011;
+const INFO_TEXT_FONT: f32 = 0.0095;
+const INFO_LABEL_FONT: f32 = 0.0085;
+const INFO_SMALL_FONT: f32 = 0.0068;
+/// Share of the portrait slot below the arch that holds the health and mana bars.
+const PORTRAIT_ARCH_FRACTION: f32 = 0.733;
+const PORTRAIT_BAR_HEIGHT: f32 = 0.106;
+const PORTRAIT_MANA_BOTTOM: f32 = 0.0;
+const PORTRAIT_HEALTH_BOTTOM: f32 = 0.129;
+
+fn setup_inspector_ui(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    slots: Res<ConsoleSlots>,
+) {
     commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                left: px(MAP_SLOT_WIDTH),
-                right: px(ACTION_SLOT_WIDTH),
-                bottom: px(0.0),
-                height: px(CONSOLE_HEIGHT),
-                padding: UiRect::all(px(12.0)),
-                border: UiRect::all(px(3.0)),
-                flex_direction: FlexDirection::Row,
-                column_gap: px(12.0),
-                ..default()
-            },
-            BackgroundColor(PANEL_BACKGROUND),
-            BorderColor::all(Color::srgb(0.32, 0.27, 0.16)),
-        ))
-        .with_children(|panel| {
-            panel
-                .spawn((
-                    Node {
-                        width: px(8.0 * (TILE_SIZE + 3.0)),
-                        height: percent(100.0),
-                        flex_wrap: FlexWrap::Wrap,
-                        column_gap: px(3.0),
-                        row_gap: px(3.0),
-                        align_content: AlignContent::FlexStart,
-                        ..default()
-                    },
-                    SelectionTileRoot,
-                ))
-                .with_children(|tiles| {
-                    for index in 0..MAX_SELECTION {
-                        tiles
-                            .spawn((
-                                Button,
-                                Node {
-                                    width: px(TILE_SIZE),
-                                    height: px(TILE_SIZE),
-                                    border: UiRect::all(px(2.0)),
-                                    ..default()
-                                },
-                                BackgroundColor(Color::srgb(0.10, 0.09, 0.06)),
-                                BorderColor::all(Color::srgb(0.26, 0.24, 0.19)),
-                                Visibility::Hidden,
-                                SelectionTile(index),
-                            ))
-                            .with_children(|tile| {
-                                tile.spawn((
-                                    ImageNode::default(),
-                                    Node {
-                                        position_type: PositionType::Absolute,
-                                        left: px(1.0),
-                                        right: px(1.0),
-                                        top: px(1.0),
-                                        bottom: px(5.0),
-                                        ..default()
-                                    },
-                                    Pickable::IGNORE,
-                                    SelectionTileIcon(index),
-                                ));
-                                tile.spawn((
-                                    Node {
-                                        position_type: PositionType::Absolute,
-                                        left: px(1.0),
-                                        bottom: px(1.0),
-                                        width: percent(100.0),
-                                        height: px(4.0),
-                                        ..default()
-                                    },
-                                    BackgroundColor(Color::srgb(0.10, 0.72, 0.16)),
-                                    Pickable::IGNORE,
-                                    SelectionTileHealth(index),
-                                ));
-                                if index == 0 {
-                                    for (resource, bottom, color) in [
-                                        (
-                                            PortraitResource::Health,
-                                            15.0,
-                                            Color::srgb(0.08, 0.68, 0.12),
-                                        ),
-                                        (
-                                            PortraitResource::Mana,
-                                            1.0,
-                                            Color::srgb(0.12, 0.34, 0.88),
-                                        ),
-                                    ] {
-                                        tile.spawn((
-                                            Node {
-                                                position_type: PositionType::Absolute,
-                                                left: px(1.0),
-                                                right: px(1.0),
-                                                bottom: px(bottom),
-                                                height: px(13.0),
-                                                ..default()
-                                            },
-                                            BackgroundColor(Color::srgb(0.06, 0.07, 0.10)),
-                                            Visibility::Hidden,
-                                            Pickable::IGNORE,
-                                            resource,
-                                        ))
-                                        .with_children(
-                                            |bar| {
-                                                bar.spawn((
-                                                    Node {
-                                                        width: percent(100.0),
-                                                        height: percent(100.0),
-                                                        ..default()
-                                                    },
-                                                    BackgroundColor(color),
-                                                    PortraitResourceFill(resource),
-                                                ));
-                                                bar.spawn((
-                                                    Text::new(""),
-                                                    TextFont::from_font_size(11.0),
-                                                    TextColor(Color::WHITE),
-                                                    Node {
-                                                        position_type: PositionType::Absolute,
-                                                        width: percent(100.0),
-                                                        height: percent(100.0),
-                                                        justify_content: JustifyContent::Center,
-                                                        align_items: AlignItems::Center,
-                                                        ..default()
-                                                    },
-                                                    PortraitResourceText(resource),
-                                                ));
-                                            },
-                                        );
-                                    }
-                                }
-                            });
-                    }
-                });
-            panel
-                .spawn((Node {
-                    flex_grow: 1.0,
-                    height: percent(100.0),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(10.0),
-                    ..default()
-                },))
-                .with_children(|details| {
-                    details
-                        .spawn((Node {
-                            align_items: AlignItems::Center,
-                            column_gap: px(8.0),
-                            ..default()
-                        },))
-                        .with_children(|heading| {
-                            heading.spawn((
-                                Text::new("No selection"),
-                                TextFont::from_font_size(19.0),
-                                TextColor(Color::srgb(0.92, 0.73, 0.25)),
-                                InspectionHeading,
-                            ));
-                            heading.spawn((
-                                Button,
-                                Node {
-                                    width: px(24.0),
-                                    height: px(24.0),
-                                    display: Display::None,
-                                    align_items: AlignItems::Center,
-                                    justify_content: JustifyContent::Center,
-                                    border: UiRect::all(px(1.0)),
-                                    ..default()
-                                },
-                                BorderColor::all(Color::srgb(0.72, 0.56, 0.17)),
-                                Text::new("i"),
-                                TextFont::from_font_size(17.0),
-                                TextColor(Color::srgb(0.95, 0.78, 0.30)),
-                                ProductionTooltipButton,
-                            ));
-                        });
-                    details.spawn((
-                        Text::new("No selection."),
-                        TextFont::from_font_size(15.0),
-                        TextColor(Color::srgb(0.82, 0.81, 0.75)),
-                        Node {
-                            width: percent(100.0),
-                            ..default()
-                        },
-                        InspectionText,
-                    ));
-                    details
-                        .spawn((Node {
-                            flex_direction: FlexDirection::Row,
-                            column_gap: px(12.0),
-                            align_items: AlignItems::Center,
-                            ..default()
-                        },))
-                        .with_children(|combat_row| {
-                            for kind in [
-                                CombatTooltipKind::Attack(0),
-                                CombatTooltipKind::Attack(1),
-                                CombatTooltipKind::Armor,
-                            ] {
-                                combat_row
-                                    .spawn((
-                                        Button,
-                                        Node {
-                                            width: px(
-                                                if matches!(kind, CombatTooltipKind::Armor) {
-                                                    124.0
-                                                } else {
-                                                    188.0
-                                                },
-                                            ),
-                                            height: px(64.0),
-                                            display: Display::None,
-                                            align_items: AlignItems::Center,
-                                            column_gap: px(5.0),
-                                            ..default()
-                                        },
-                                        CombatTypeButton(kind),
-                                    ))
-                                    .with_children(|badge| {
-                                        badge.spawn((
-                                            ImageNode::default(),
-                                            Node {
-                                                width: px(48.0),
-                                                height: px(48.0),
-                                                ..default()
-                                            },
-                                            Pickable::IGNORE,
-                                            CombatTypeIcon(kind),
-                                        ));
-                                        badge
-                                            .spawn((Node {
-                                                flex_direction: FlexDirection::Column,
-                                                row_gap: px(2.0),
-                                                ..default()
-                                            },))
-                                            .with_children(|stats| {
-                                                stats.spawn((
-                                                    Text::new(""),
-                                                    TextFont::from_font_size(18.0),
-                                                    TextColor(Color::srgb(0.96, 0.86, 0.56)),
-                                                    Pickable::IGNORE,
-                                                    CombatTypeLabel(kind),
-                                                ));
-                                                match kind {
-                                                    CombatTooltipKind::Attack(slot) => {
-                                                        for (stat, icon_path) in [
-                                                            (AttackStatKind::Range, "ui/range.png"),
-                                                            (
-                                                                AttackStatKind::Cooldown,
-                                                                "ui/cooldown.png",
-                                                            ),
-                                                        ] {
-                                                            stats
-                                                                .spawn((Node {
-                                                                    align_items: AlignItems::Center,
-                                                                    column_gap: px(3.0),
-                                                                    ..default()
-                                                                },))
-                                                                .with_children(|line| {
-                                                                    line.spawn((
-                                                                        ImageNode::new(
-                                                                            asset_server
-                                                                                .load(icon_path),
-                                                                        ),
-                                                                        Node {
-                                                                            width: px(15.0),
-                                                                            height: px(15.0),
-                                                                            ..default()
-                                                                        },
-                                                                        Pickable::IGNORE,
-                                                                    ));
-                                                                    line.spawn((
-                                                                        Text::new(""),
-                                                                        TextFont::from_font_size(
-                                                                            12.0,
-                                                                        ),
-                                                                        TextColor(Color::srgb(
-                                                                            0.82, 0.81, 0.75,
-                                                                        )),
-                                                                        Pickable::IGNORE,
-                                                                        AttackStatLabel(slot, stat),
-                                                                    ));
-                                                                });
-                                                        }
-                                                    }
-                                                    CombatTooltipKind::Armor => {
-                                                        stats.spawn((
-                                                            Text::new(""),
-                                                            TextFont::from_font_size(12.0),
-                                                            TextColor(Color::srgb(
-                                                                0.82, 0.81, 0.75,
-                                                            )),
-                                                            Pickable::IGNORE,
-                                                            ArmorReductionLabel,
-                                                        ));
-                                                    }
-                                                }
-                                            });
-                                    });
-                            }
-                        });
-                    details
-                        .spawn((Node {
-                            position_type: PositionType::Absolute,
-                            left: px(0.0),
-                            bottom: px(0.0),
-                            width: percent(100.0),
-                            column_gap: px(4.0),
-                            ..default()
-                        },))
-                        .with_children(|effects| {
-                            for index in 0..32 {
-                                effects
-                                    .spawn((
-                                        Button,
-                                        Node {
-                                            width: px(30.0),
-                                            height: px(30.0),
-                                            display: Display::None,
-                                            border: UiRect::all(px(1.0)),
-                                            ..default()
-                                        },
-                                        BorderColor::all(Color::srgb(0.56, 0.47, 0.27)),
-                                        ActiveEffectButton(index),
-                                    ))
-                                    .with_child((
-                                        ImageNode::default(),
-                                        Node {
-                                            width: percent(100.0),
-                                            height: percent(100.0),
-                                            ..default()
-                                        },
-                                        Pickable::IGNORE,
-                                        ActiveEffectIcon(index),
-                                    ));
-                            }
-                        });
-                });
-            panel
-                .spawn((
-                    Node {
-                        flex_direction: FlexDirection::Column,
-                        row_gap: px(5.0),
-                        width: px(200.0),
-                        display: Display::None,
-                        ..default()
-                    },
-                    Visibility::Hidden,
-                    ProductionUiRoot,
-                ))
-                .with_children(|training| {
-                    training.spawn((
-                        Text::new("Training"),
-                        TextFont::from_font_size(16.0),
-                        TextColor(Color::srgb(0.96, 0.77, 0.18)),
-                        ProductionProgressText,
-                    ));
-                    training
-                        .spawn((
-                            Node {
-                                width: percent(100.0),
-                                height: px(13.0),
-                                border: UiRect::all(px(2.0)),
-                                ..default()
-                            },
-                            BackgroundColor(Color::srgb(0.06, 0.05, 0.03)),
-                            BorderColor::all(Color::srgb(0.70, 0.55, 0.14)),
-                        ))
-                        .with_child((
-                            Node {
-                                width: percent(0.0),
-                                height: percent(100.0),
-                                ..default()
-                            },
-                            BackgroundColor(Color::srgb(0.92, 0.69, 0.13)),
-                            ProductionProgressFill,
-                        ));
-                    training
-                        .spawn((Node {
-                            column_gap: px(5.0),
-                            ..default()
-                        },))
-                        .with_children(|queue| {
-                            for index in 0..2 {
-                                queue.spawn((
-                                    ImageNode::default(),
-                                    Node {
-                                        width: px(32.0),
-                                        height: px(32.0),
-                                        border: UiRect::all(px(2.0)),
-                                        ..default()
-                                    },
-                                    BorderColor::all(Color::srgb(0.70, 0.55, 0.14)),
-                                    Visibility::Hidden,
-                                    ProductionQueueIcon(index),
-                                ));
-                            }
-                        });
-                });
-            panel
-                .spawn((
-                    Node {
-                        width: px(99.0),
-                        height: percent(100.0),
-                        flex_wrap: FlexWrap::Wrap,
-                        column_gap: px(3.0),
-                        row_gap: px(3.0),
-                        align_content: AlignContent::FlexStart,
-                        ..default()
-                    },
-                    InventoryPlaceholder,
-                ))
-                .with_children(|inventory| {
-                    for _ in 0..6 {
-                        inventory.spawn((
-                            Node {
-                                width: px(46.0),
-                                height: px(46.0),
-                                border: UiRect::all(px(2.0)),
-                                ..default()
-                            },
-                            BackgroundColor(Color::srgb(0.07, 0.065, 0.055)),
-                            BorderColor::all(Color::srgb(0.22, 0.21, 0.18)),
-                            Pickable::IGNORE,
-                        ));
-                    }
-                });
-        });
+        .entity(slots.minimap)
+        .insert(crate::minimap::MinimapPanel);
+    spawn_portrait(&mut commands, slots.portrait);
+    commands.entity(slots.info).with_children(|info| {
+        spawn_selection_grid(info);
+        spawn_details(info, &asset_server);
+    });
+    spawn_inventory_slots(&mut commands, slots.inventory);
     commands.spawn((
         Node {
             position_type: PositionType::Absolute,
@@ -943,87 +526,89 @@ fn setup_inspector_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
         GlobalZIndex(1000),
         SelectionRectangle,
     ));
-    commands.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            right: px(ACTION_SLOT_WIDTH + 12.0),
-            bottom: px(CONSOLE_HEIGHT + 8.0),
-            width: px(300.0),
-            padding: UiRect::all(px(10.0)),
-            border: UiRect::all(px(2.0)),
-            ..default()
-        },
-        BackgroundColor(PANEL_BACKGROUND),
-        BorderColor::all(Color::srgb(0.72, 0.56, 0.17)),
-        Visibility::Hidden,
-        GlobalZIndex(1001),
-        Pickable::IGNORE,
-        CombatTooltip,
-        Text::new(""),
-        TextFont::from_font_size(16.0),
-        TextColor(Color::WHITE),
-    ));
-    commands
-        .spawn((
+    commands.entity(slots.tooltips).with_children(|anchor| {
+        anchor.spawn((
             Node {
                 position_type: PositionType::Absolute,
-                right: px(ACTION_SLOT_WIDTH + 12.0),
-                bottom: px(CONSOLE_HEIGHT + 8.0),
-                width: px(440.0),
-                padding: UiRect::all(px(10.0)),
+                right: px(0.0),
+                bottom: px(0.0),
+                width: vpx(300.0),
+                padding: UiRect::all(vpx(10.0)),
                 border: UiRect::all(px(2.0)),
-                flex_direction: FlexDirection::Column,
-                row_gap: px(5.0),
                 ..default()
             },
             BackgroundColor(PANEL_BACKGROUND),
             BorderColor::all(Color::srgb(0.72, 0.56, 0.17)),
             Visibility::Hidden,
-            GlobalZIndex(1002),
+            GlobalZIndex(1001),
             Pickable::IGNORE,
-            ProductionTooltipPanel,
-        ))
-        .with_children(|tooltip| {
-            tooltip.spawn((
-                Text::new(""),
-                TextFont::from_font_size(17.0),
-                TextColor(Color::srgb(0.96, 0.77, 0.18)),
-                ProductionTooltipTitle,
-            ));
-            tooltip.spawn((
-                Text::new(""),
-                TextFont::from_font_size(14.0),
-                TextColor(Color::WHITE),
-                ProductionTooltipBody,
-            ));
-        });
-    commands.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            right: px(ACTION_SLOT_WIDTH + 12.0),
-            bottom: px(CONSOLE_HEIGHT + 8.0),
-            padding: UiRect::all(px(8.0)),
-            border: UiRect::all(px(2.0)),
-            ..default()
-        },
-        BackgroundColor(PANEL_BACKGROUND),
-        BorderColor::all(Color::srgb(0.72, 0.56, 0.17)),
-        Visibility::Hidden,
-        GlobalZIndex(1003),
-        Pickable::IGNORE,
-        Text::new(""),
-        TextFont::from_font_size(15.0),
-        TextColor(Color::WHITE),
-        ActiveEffectTooltip,
-    ));
+            CombatTooltip,
+            Text::new(""),
+            TextFont::from_font_size(vfont(16.0)),
+            TextColor(Color::WHITE),
+        ));
+        anchor
+            .spawn((
+                Node {
+                    position_type: PositionType::Absolute,
+                    right: px(0.0),
+                    bottom: px(0.0),
+                    width: vpx(440.0),
+                    padding: UiRect::all(vpx(10.0)),
+                    border: UiRect::all(px(2.0)),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: vpx(5.0),
+                    ..default()
+                },
+                BackgroundColor(PANEL_BACKGROUND),
+                BorderColor::all(Color::srgb(0.72, 0.56, 0.17)),
+                Visibility::Hidden,
+                GlobalZIndex(1002),
+                Pickable::IGNORE,
+                ProductionTooltipPanel,
+            ))
+            .with_children(|tooltip| {
+                tooltip.spawn((
+                    Text::new(""),
+                    TextFont::from_font_size(vfont(17.0)),
+                    TextColor(Color::srgb(0.96, 0.77, 0.18)),
+                    ProductionTooltipTitle,
+                ));
+                tooltip.spawn((
+                    Text::new(""),
+                    TextFont::from_font_size(vfont(14.0)),
+                    TextColor(Color::WHITE),
+                    ProductionTooltipBody,
+                ));
+            });
+        anchor.spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                right: px(0.0),
+                bottom: px(0.0),
+                padding: UiRect::all(vpx(8.0)),
+                border: UiRect::all(px(2.0)),
+                ..default()
+            },
+            BackgroundColor(PANEL_BACKGROUND),
+            BorderColor::all(Color::srgb(0.72, 0.56, 0.17)),
+            Visibility::Hidden,
+            GlobalZIndex(1003),
+            Pickable::IGNORE,
+            Text::new(""),
+            TextFont::from_font_size(vfont(15.0)),
+            TextColor(Color::WHITE),
+            ActiveEffectTooltip,
+        ));
+    });
     commands
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                right: px(12.0),
-                top: px(70.0),
-                width: px(350.0),
-                padding: UiRect::all(px(10.0)),
+                right: wc3(0.004),
+                top: wc3(TOP_BAR_UNITS + DOCK_HEIGHT + 0.012),
+                width: vpx(350.0),
+                padding: UiRect::all(vpx(10.0)),
                 ..default()
             },
             BackgroundColor(PANEL_BACKGROUND),
@@ -1033,10 +618,446 @@ fn setup_inspector_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
         ))
         .with_child((
             Text::new(""),
-            TextFont::from_font_size(12.0),
+            TextFont::from_font_size(vfont(12.0)),
             TextColor(Color::WHITE),
             DebugInspectionText,
         ));
+}
+
+/// The focused unit's portrait: the icon in the arch, health and mana bars beneath.
+fn spawn_portrait(commands: &mut Commands, slot: Entity) {
+    commands.entity(slot).with_children(|portrait| {
+        portrait
+            .spawn((
+                Button,
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: px(0.0),
+                    top: px(0.0),
+                    width: percent(100.0),
+                    height: percent(PORTRAIT_ARCH_FRACTION * 100.0),
+                    ..default()
+                },
+                PortraitTile,
+            ))
+            .with_child((
+                ImageNode::default(),
+                Node {
+                    width: percent(100.0),
+                    height: percent(100.0),
+                    ..default()
+                },
+                Pickable::IGNORE,
+                PortraitIcon,
+            ));
+        for (resource, bottom, color) in [
+            (
+                PortraitResource::Health,
+                PORTRAIT_HEALTH_BOTTOM,
+                Color::srgb(0.08, 0.68, 0.12),
+            ),
+            (
+                PortraitResource::Mana,
+                PORTRAIT_MANA_BOTTOM,
+                Color::srgb(0.12, 0.34, 0.88),
+            ),
+        ] {
+            portrait
+                .spawn((
+                    Node {
+                        position_type: PositionType::Absolute,
+                        left: px(0.0),
+                        right: px(0.0),
+                        bottom: percent(bottom * 100.0),
+                        height: percent(PORTRAIT_BAR_HEIGHT * 100.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.06, 0.07, 0.10)),
+                    Visibility::Hidden,
+                    Pickable::IGNORE,
+                    resource,
+                ))
+                .with_children(|bar| {
+                    bar.spawn((
+                        Node {
+                            width: percent(100.0),
+                            height: percent(100.0),
+                            ..default()
+                        },
+                        BackgroundColor(color),
+                        PortraitResourceFill(resource),
+                    ));
+                    bar.spawn((
+                        Text::new(""),
+                        TextFont::from_font_size(wc3_font(0.0058)),
+                        TextColor(Color::WHITE),
+                        TextLayout::justify(Justify::Center),
+                        Node {
+                            position_type: PositionType::Absolute,
+                            width: percent(100.0),
+                            height: percent(100.0),
+                            justify_content: JustifyContent::Center,
+                            align_items: AlignItems::Center,
+                            ..default()
+                        },
+                        PortraitResourceText(resource),
+                    ));
+                });
+        }
+    });
+}
+
+/// Multi-selection grid shown in the info panel instead of the unit details.
+fn spawn_selection_grid(info: &mut ChildSpawnerCommands) {
+    info.spawn((
+        Node {
+            width: percent(100.0),
+            height: percent(100.0),
+            display: Display::None,
+            flex_wrap: FlexWrap::Wrap,
+            column_gap: wc3(0.0015),
+            row_gap: wc3(0.0015),
+            align_content: AlignContent::FlexStart,
+            ..default()
+        },
+        SelectionTileRoot,
+    ))
+    .with_children(|tiles| {
+        for index in 0..MAX_SELECTION {
+            tiles
+                .spawn((
+                    Button,
+                    Node {
+                        width: percent(11.6),
+                        aspect_ratio: Some(1.0),
+                        border: UiRect::all(px(2.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.10, 0.09, 0.06)),
+                    BorderColor::all(Color::srgb(0.26, 0.24, 0.19)),
+                    Visibility::Hidden,
+                    SelectionTile(index),
+                ))
+                .with_children(|tile| {
+                    tile.spawn((
+                        ImageNode::default(),
+                        Node {
+                            position_type: PositionType::Absolute,
+                            left: px(1.0),
+                            right: px(1.0),
+                            top: px(1.0),
+                            bottom: px(5.0),
+                            ..default()
+                        },
+                        Pickable::IGNORE,
+                        SelectionTileIcon(index),
+                    ));
+                    tile.spawn((
+                        Node {
+                            position_type: PositionType::Absolute,
+                            left: px(1.0),
+                            bottom: px(1.0),
+                            width: percent(100.0),
+                            height: px(4.0),
+                            ..default()
+                        },
+                        BackgroundColor(Color::srgb(0.10, 0.72, 0.16)),
+                        Pickable::IGNORE,
+                        SelectionTileHealth(index),
+                    ));
+                });
+        }
+    });
+}
+
+/// Single-selection details: name, owner line, combat badges, production and active effects.
+fn spawn_details(info: &mut ChildSpawnerCommands, asset_server: &AssetServer) {
+    info.spawn((
+        Node {
+            width: percent(100.0),
+            height: percent(100.0),
+            flex_direction: FlexDirection::Column,
+            row_gap: wc3(0.002),
+            padding: UiRect::all(wc3(0.003)),
+            ..default()
+        },
+        InspectionDetails,
+    ))
+    .with_children(|details| {
+        details
+            .spawn(Node {
+                align_items: AlignItems::Center,
+                column_gap: wc3(0.004),
+                ..default()
+            })
+            .with_children(|heading| {
+                heading.spawn((
+                    Text::new("No selection"),
+                    TextFont::from_font_size(wc3_font(INFO_TITLE_FONT)),
+                    TextColor(Color::srgb(0.92, 0.73, 0.25)),
+                    InspectionHeading,
+                ));
+                heading.spawn((
+                    Button,
+                    Node {
+                        width: wc3(0.0125),
+                        height: wc3(0.0125),
+                        display: Display::None,
+                        align_items: AlignItems::Center,
+                        justify_content: JustifyContent::Center,
+                        border: UiRect::all(px(1.0)),
+                        ..default()
+                    },
+                    BorderColor::all(Color::srgb(0.72, 0.56, 0.17)),
+                    Text::new("i"),
+                    TextFont::from_font_size(wc3_font(INFO_TEXT_FONT)),
+                    TextColor(Color::srgb(0.95, 0.78, 0.30)),
+                    ProductionTooltipButton,
+                ));
+            });
+        details.spawn((
+            Text::new("No selection."),
+            TextFont::from_font_size(wc3_font(INFO_TEXT_FONT)),
+            TextColor(Color::srgb(0.82, 0.81, 0.75)),
+            Node {
+                width: percent(100.0),
+                ..default()
+            },
+            InspectionText,
+        ));
+        details
+            .spawn(Node {
+                width: percent(100.0),
+                flex_direction: FlexDirection::Row,
+                column_gap: wc3(0.003),
+                align_items: AlignItems::Center,
+                ..default()
+            })
+            .with_children(|combat_row| {
+                for kind in [
+                    CombatTooltipKind::Attack(0),
+                    CombatTooltipKind::Attack(1),
+                    CombatTooltipKind::Armor,
+                ] {
+                    spawn_combat_badge(combat_row, kind, asset_server);
+                }
+            });
+        spawn_production(details);
+        details
+            .spawn(Node {
+                position_type: PositionType::Absolute,
+                left: wc3(0.003),
+                bottom: wc3(0.003),
+                width: percent(100.0),
+                flex_wrap: FlexWrap::Wrap,
+                column_gap: wc3(0.002),
+                ..default()
+            })
+            .with_children(|effects| {
+                for index in 0..32 {
+                    effects
+                        .spawn((
+                            Button,
+                            Node {
+                                width: wc3(0.0155),
+                                height: wc3(0.0155),
+                                display: Display::None,
+                                border: UiRect::all(px(1.0)),
+                                ..default()
+                            },
+                            BorderColor::all(Color::srgb(0.56, 0.47, 0.27)),
+                            ActiveEffectButton(index),
+                        ))
+                        .with_child((
+                            ImageNode::default(),
+                            Node {
+                                width: percent(100.0),
+                                height: percent(100.0),
+                                ..default()
+                            },
+                            Pickable::IGNORE,
+                            ActiveEffectIcon(index),
+                        ));
+                }
+            });
+    });
+}
+
+fn spawn_combat_badge(
+    row: &mut ChildSpawnerCommands,
+    kind: CombatTooltipKind,
+    asset_server: &AssetServer,
+) {
+    row.spawn((
+        Button,
+        Node {
+            flex_basis: px(0.0),
+            flex_grow: 1.0,
+            display: Display::None,
+            align_items: AlignItems::Center,
+            column_gap: wc3(0.002),
+            ..default()
+        },
+        CombatTypeButton(kind),
+    ))
+    .with_children(|badge| {
+        badge.spawn((
+            ImageNode::default(),
+            Node {
+                width: wc3(0.02),
+                height: wc3(0.02),
+                flex_shrink: 0.0,
+                ..default()
+            },
+            Pickable::IGNORE,
+            CombatTypeIcon(kind),
+        ));
+        badge
+            .spawn(Node {
+                flex_direction: FlexDirection::Column,
+                ..default()
+            })
+            .with_children(|stats| {
+                stats.spawn((
+                    Text::new(""),
+                    TextFont::from_font_size(wc3_font(INFO_LABEL_FONT)),
+                    TextColor(Color::srgb(0.96, 0.86, 0.56)),
+                    Pickable::IGNORE,
+                    CombatTypeLabel(kind),
+                ));
+                match kind {
+                    CombatTooltipKind::Attack(slot) => {
+                        for (stat, icon_path) in [
+                            (AttackStatKind::Range, "ui/range.png"),
+                            (AttackStatKind::Cooldown, "ui/cooldown.png"),
+                        ] {
+                            stats
+                                .spawn(Node {
+                                    align_items: AlignItems::Center,
+                                    column_gap: wc3(0.0012),
+                                    ..default()
+                                })
+                                .with_children(|line| {
+                                    line.spawn((
+                                        ImageNode::new(asset_server.load(icon_path)),
+                                        Node {
+                                            width: wc3(INFO_SMALL_FONT),
+                                            height: wc3(INFO_SMALL_FONT),
+                                            ..default()
+                                        },
+                                        Pickable::IGNORE,
+                                    ));
+                                    line.spawn((
+                                        Text::new(""),
+                                        TextFont::from_font_size(wc3_font(INFO_SMALL_FONT)),
+                                        TextColor(Color::srgb(0.82, 0.81, 0.75)),
+                                        Pickable::IGNORE,
+                                        AttackStatLabel(slot, stat),
+                                    ));
+                                });
+                        }
+                    }
+                    CombatTooltipKind::Armor => {
+                        stats.spawn((
+                            Text::new(""),
+                            TextFont::from_font_size(wc3_font(INFO_SMALL_FONT)),
+                            TextColor(Color::srgb(0.82, 0.81, 0.75)),
+                            Pickable::IGNORE,
+                            ArmorReductionLabel,
+                        ));
+                    }
+                }
+            });
+    });
+}
+
+fn spawn_production(details: &mut ChildSpawnerCommands) {
+    details
+        .spawn((
+            Node {
+                flex_direction: FlexDirection::Column,
+                row_gap: wc3(0.002),
+                width: percent(100.0),
+                display: Display::None,
+                ..default()
+            },
+            Visibility::Hidden,
+            ProductionUiRoot,
+        ))
+        .with_children(|training| {
+            training.spawn((
+                Text::new("Training"),
+                TextFont::from_font_size(wc3_font(INFO_TEXT_FONT)),
+                TextColor(Color::srgb(0.96, 0.77, 0.18)),
+                ProductionProgressText,
+            ));
+            training
+                .spawn((
+                    Node {
+                        width: percent(100.0),
+                        height: wc3(0.0075),
+                        border: UiRect::all(px(2.0)),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.06, 0.05, 0.03)),
+                    BorderColor::all(Color::srgb(0.70, 0.55, 0.14)),
+                ))
+                .with_child((
+                    Node {
+                        width: percent(0.0),
+                        height: percent(100.0),
+                        ..default()
+                    },
+                    BackgroundColor(Color::srgb(0.92, 0.69, 0.13)),
+                    ProductionProgressFill,
+                ));
+            training
+                .spawn(Node {
+                    column_gap: wc3(0.002),
+                    ..default()
+                })
+                .with_children(|queue| {
+                    for index in 0..2 {
+                        queue.spawn((
+                            ImageNode::default(),
+                            Node {
+                                width: wc3(0.0165),
+                                height: wc3(0.0165),
+                                border: UiRect::all(px(1.0)),
+                                ..default()
+                            },
+                            BorderColor::all(Color::srgb(0.70, 0.55, 0.14)),
+                            Visibility::Hidden,
+                            ProductionQueueIcon(index),
+                        ));
+                    }
+                });
+        });
+}
+
+/// Six inventory buttons in Warcraft's two-column layout. Inventory behaviour fills them in.
+fn spawn_inventory_slots(commands: &mut Commands, slot: Entity) {
+    commands.entity(slot).with_children(|inventory| {
+        for index in 0..INVENTORY_SLOTS {
+            let (column, row) = (index % 2, index / 2);
+            inventory.spawn((
+                Button,
+                Node {
+                    position_type: PositionType::Absolute,
+                    left: percent(
+                        column as f32 * INVENTORY_COLUMN_PITCH / INVENTORY_SLOT.width * 100.0,
+                    ),
+                    top: percent(row as f32 * INVENTORY_ROW_PITCH / INVENTORY_SLOT.height * 100.0),
+                    width: percent(INVENTORY_BUTTON_SIZE / INVENTORY_SLOT.width * 100.0),
+                    height: percent(INVENTORY_BUTTON_SIZE / INVENTORY_SLOT.height * 100.0),
+                    ..default()
+                },
+                Visibility::Hidden,
+                ZIndex(1),
+                InventoryButton(index),
+            ));
+        }
+    });
 }
 
 pub(crate) fn handle_world_selection(
@@ -1063,8 +1084,8 @@ pub(crate) fn handle_world_selection(
         action_panel_visible,
     ) || cursor_over_inspector_panel(cursor, window.width(), window.height())
         || cursor_over_debug_menu(cursor, state.debug_menu.is_open())
-        || cursor_over_builder_shortcuts(cursor, &state.builder_shortcuts)
-        || cursor_over_map_controls(cursor, window.width());
+        || cursor_over_builder_shortcuts(cursor, &state.builder_shortcuts, window.height())
+        || cursor_over_map_controls(cursor, window.width(), window.height());
     if input.mouse_buttons.just_pressed(MouseButton::Left) && !over_ui {
         input.drag.start = Some(cursor);
     }
@@ -2554,25 +2575,11 @@ fn update_selection_tiles(
     asset_server: Res<AssetServer>,
     mut ui: SelectionTileUi<'_, '_>,
 ) {
-    let single = selection.members.len() <= 1;
-    ui.tile_root.width = px(if single {
-        134.0
-    } else {
-        8.0 * (TILE_SIZE + 3.0)
-    });
-    **ui.inventory = if single {
-        Visibility::Visible
-    } else {
-        Visibility::Hidden
-    };
-    for (slot, mut node, mut visibility, mut border) in &mut ui.tiles {
-        let size = if single && slot.0 == 0 {
-            132.0
-        } else {
-            TILE_SIZE
-        };
-        node.width = px(size);
-        node.height = px(size);
+    // One selected thing shows its details beside the portrait; several show the icon grid.
+    let grid = selection.members.len() > 1;
+    ui.tile_root.display = if grid { Display::Flex } else { Display::None };
+    ui.details.display = if grid { Display::None } else { Display::Flex };
+    for (slot, mut visibility, mut border) in &mut ui.tiles {
         *visibility = if slot.0 < selection.members.len() {
             Visibility::Visible
         } else {
@@ -2616,10 +2623,6 @@ fn update_selection_tiles(
             .map_or_else(ImageNode::default, ImageNode::new);
     }
     for (slot, mut node) in &mut ui.bars {
-        if single && slot.0 == 0 {
-            node.width = px(0.0);
-            continue;
-        }
         let fraction = selection
             .members
             .get(slot.0)
@@ -2654,55 +2657,34 @@ fn update_portrait_resources(
     mut bars: PortraitBarsQuery<'_, '_>,
     mut fills: PortraitFillsQuery<'_, '_>,
     mut labels: Query<(&PortraitResourceText, &mut Text)>,
-    mut icons: PortraitIconsQuery<'_, '_>,
 ) {
-    let resources = selection
-        .members
-        .first()
-        .filter(|_| selection.members.len() == 1)
-        .and_then(|id| {
-            samples
-                .current
-                .units
-                .get(id)
-                .map(|unit| {
+    let resources = selection.selected.as_ref().and_then(|id| {
+        samples
+            .current
+            .units
+            .get(id)
+            .map(|unit| {
+                (
+                    (unit.health, unit.health_max),
+                    unit.mana_current.zip(unit.mana_maximum),
+                )
+            })
+            .or_else(|| {
+                samples.current.buildings.get(id).map(|building| {
                     (
-                        (unit.health, unit.health_max),
-                        unit.mana_current.zip(unit.mana_maximum),
+                        (building.health, building.health_max),
+                        (building.production_queue.is_none())
+                            .then(|| building.mana_current.zip(building.mana_maximum))
+                            .flatten(),
                     )
                 })
-                .or_else(|| {
-                    samples.current.buildings.get(id).map(|building| {
-                        (
-                            (building.health, building.health_max),
-                            (building.production_queue.is_none())
-                                .then(|| building.mana_current.zip(building.mana_maximum))
-                                .flatten(),
-                        )
-                    })
-                })
-        });
-    for (slot, mut icon) in &mut icons {
-        if slot.0 == 0 {
-            icon.bottom = px(match resources {
-                Some((_, Some(_))) => 29.0,
-                Some(_) => 15.0,
-                None => 5.0,
-            });
-        }
-    }
-    for (resource, mut visibility, mut node) in &mut bars {
+            })
+    });
+    for (resource, mut visibility) in &mut bars {
         let values = resources.and_then(|(health, mana)| match resource {
             PortraitResource::Health => Some(health),
             PortraitResource::Mana => mana,
         });
-        if *resource == PortraitResource::Health {
-            node.bottom = px(if resources.is_some_and(|(_, mana)| mana.is_some()) {
-                15.0
-            } else {
-                1.0
-            });
-        }
         *visibility = if values.is_some() {
             Visibility::Visible
         } else {
@@ -2733,16 +2715,58 @@ fn update_portrait_resources(
     }
 }
 
+fn update_portrait_tile(
+    selection: Res<InspectionSelection>,
+    samples: Res<PresentationSamples>,
+    asset_server: Res<AssetServer>,
+    mut icon_assets: ResMut<UiIconAssets>,
+    mut icon: Single<&mut ImageNode, With<PortraitIcon>>,
+) {
+    let rawcode = selection.selected.and_then(|id| {
+        samples
+            .current
+            .builders
+            .get(&id)
+            .map(|builder| builder.appearance.rawcode)
+            .or_else(|| {
+                samples
+                    .current
+                    .units
+                    .get(&id)
+                    .and_then(|unit| unit.content.map(|content| content.rawcode))
+            })
+            .or_else(|| {
+                samples
+                    .current
+                    .buildings
+                    .get(&id)
+                    .and_then(|building| building.content.map(|content| content.rawcode))
+            })
+    });
+    **icon = rawcode
+        .and_then(|code| icon_assets.image(UiIconKey::unit_game_interface(code), &asset_server))
+        .map_or_else(ImageNode::default, ImageNode::new);
+}
+
 fn handle_selection_tile_click(
     keys: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
     interactions: SelectionTileInteractionQuery<'_, '_>,
+    portrait: Query<&Interaction, (Changed<Interaction>, With<PortraitTile>)>,
     mut selection: ResMut<InspectionSelection>,
     mut camera_focus: ResMut<crate::presentation::CameraFocusRequest>,
     mut portrait_hold: ResMut<PortraitCameraHold>,
 ) {
     if !mouse.pressed(MouseButton::Left) {
         portrait_hold.0 = None;
+    }
+    for interaction in &portrait {
+        if *interaction == Interaction::Pressed
+            && let Some(id) = selection.selected
+        {
+            camera_focus.0 = Some(id);
+            portrait_hold.0 = Some(id);
+        }
     }
     for (slot, interaction) in &interactions {
         if *interaction != Interaction::Pressed {
@@ -2751,10 +2775,6 @@ fn handle_selection_tile_click(
         let Some(&id) = selection.members.get(slot.0) else {
             continue;
         };
-        if selection.members.len() == 1 && slot.0 == 0 {
-            camera_focus.0 = Some(id);
-            portrait_hold.0 = Some(id);
-        }
         if keys.pressed(KeyCode::ShiftLeft) || keys.pressed(KeyCode::ShiftRight) {
             selection.toggle(id);
         } else {
@@ -3401,10 +3421,7 @@ pub(crate) fn cursor_over_inspector_panel(
     window_width: f32,
     window_height: f32,
 ) -> bool {
-    cursor.x >= 0.0
-        && cursor.x <= window_width
-        && cursor.y >= window_height - CONSOLE_HEIGHT
-        && cursor.y <= window_height
+    ConsoleMetrics::new(window_width, window_height).over_bottom_console(cursor, window_height)
 }
 
 #[cfg(test)]
@@ -3954,26 +3971,22 @@ mod tests {
     }
 
     #[test]
-    fn console_capture_covers_minimap_and_selection_space() {
+    fn console_capture_covers_the_bottom_console_only() {
+        let (width, height) = (1440.0, 720.0);
         assert!(!cursor_over_inspector_panel(
-            Vec2::new(100.0, 400.0),
-            1440.0,
-            720.0
+            Vec2::new(300.0, 400.0),
+            width,
+            height
         ));
         assert!(cursor_over_inspector_panel(
-            Vec2::new(100.0, 500.0),
-            1440.0,
-            720.0
+            Vec2::new(300.0, 700.0),
+            width,
+            height
         ));
         assert!(cursor_over_inspector_panel(
-            Vec2::new(1129.0, 700.0),
-            1440.0,
-            720.0
-        ));
-        assert!(!cursor_over_inspector_panel(
-            Vec2::new(1441.0, 700.0),
-            1440.0,
-            720.0
+            Vec2::new(30.0, 700.0),
+            width,
+            height
         ));
     }
 }

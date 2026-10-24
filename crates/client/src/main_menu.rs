@@ -1010,6 +1010,8 @@ mod tests {
             perf_log: false,
             profile_quicksave: None,
             profile_screenshot: None,
+            profile_theme: None,
+            profile_select: None,
             profile_warmup: std::time::Duration::ZERO,
             profile_duration: std::time::Duration::from_secs(1),
             profile_paused: false,

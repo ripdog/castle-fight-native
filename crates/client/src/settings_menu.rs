@@ -91,6 +91,7 @@ enum SettingsAction {
     ToggleFullscreen,
     ToggleEdgeScroll,
     ToggleColourBlind,
+    CycleUiTheme,
     PanDelta(f32),
     ZoomDelta(f32),
     EditName,
@@ -210,6 +211,7 @@ fn handle_settings_buttons(
         SettingsAction::ToggleColourBlind => {
             settings.colour_blind_friendly = !settings.colour_blind_friendly;
         }
+        SettingsAction::CycleUiTheme => settings.ui_theme = settings.ui_theme.next(),
         SettingsAction::PanDelta(delta) => {
             settings.pan_speed = round_to_step(
                 settings.pan_speed + delta,
@@ -342,6 +344,12 @@ fn spawn_settings_rows(
             "Off"
         },
         SettingsAction::ToggleColourBlind,
+    );
+    toggle_row(
+        body,
+        "Interface theme",
+        settings.ui_theme.label(),
+        SettingsAction::CycleUiTheme,
     );
     stepper_row(
         body,
