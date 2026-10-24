@@ -3,7 +3,10 @@ use std::{
     collections::BTreeMap,
     fmt, io,
     net::{Shutdown, SocketAddr, TcpListener, TcpStream, ToSocketAddrs},
-    sync::mpsc::{self, Receiver, SyncSender, TryRecvError, TrySendError},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::{self, Receiver, SyncSender, TryRecvError, TrySendError},
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -266,12 +269,27 @@ impl TcpAuthoritativeServer {
         self.dispatch_all(outbound)
     }
 
-    pub fn run_until_match_end(mut self) -> Result<(), TcpServerError> {
+    pub fn run_until_match_end(self) -> Result<(), TcpServerError> {
+        self.run_until_match_end_or_stopped(&AtomicBool::new(false))
+    }
+
+    /// Runs like [`Self::run_until_match_end`], but also returns once `stop` is set. A stopped
+    /// server closes every client connection and releases its listening port.
+    pub fn run_until_match_end_or_stopped(
+        mut self,
+        stop: &AtomicBool,
+    ) -> Result<(), TcpServerError> {
         let tick_hz = f64::from(CASTLE_FIGHT_SIMULATION_HZ);
         let mut tick_period = Duration::from_secs_f64(1.0 / tick_hz);
         let mut next_tick_deadline = Instant::now() + tick_period;
 
         loop {
+            if stop.load(Ordering::Acquire) {
+                for connection in self.connections.values() {
+                    let _ = connection.shutdown.shutdown(Shutdown::Both);
+                }
+                return Ok(());
+            }
             self.poll_network()?;
             let period = Duration::from_secs_f64(1.0 / (tick_hz * self.debug_speed.multiplier()));
             if tick_period != period {
@@ -1137,6 +1155,39 @@ mod tests {
                 assignment: SessionAssignment { player_id: 6, .. }
             }
         ));
+    }
+
+    #[test]
+    fn stopped_server_closes_client_connections_and_releases_its_port() {
+        use std::sync::{Arc, atomic::AtomicBool};
+        let mut server = lobby_server();
+        let address = server.local_addr().unwrap();
+        let mut client = connect(&server);
+        send_client(&mut client, hello(&server, 1));
+        pump_until(&mut server, |view| view.authenticated == 1);
+        assert!(matches!(
+            receive_server(&mut client),
+            ServerMessage::HelloAccepted { .. }
+        ));
+
+        let stop = Arc::new(AtomicBool::new(false));
+        let runner = {
+            let stop = Arc::clone(&stop);
+            thread::spawn(move || server.run_until_match_end_or_stopped(&stop))
+        };
+        stop.store(true, Ordering::Release);
+        runner.join().unwrap().unwrap();
+
+        // Lobby status frames may still be queued; the stream must end rather than time out.
+        let ended = (0..16).any(|_| {
+            read_frame::<_, ProtocolEnvelope<ServerMessage>>(&mut client)
+                .is_err_and(|error| !matches!(&error, FrameError::Io(io) if io.kind() == io::ErrorKind::WouldBlock || io.kind() == io::ErrorKind::TimedOut))
+        });
+        assert!(
+            ended,
+            "client connection was not closed by the stopped server"
+        );
+        TcpListener::bind(address).expect("stopped server releases its listening port");
     }
 
     #[test]
