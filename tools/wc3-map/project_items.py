@@ -136,6 +136,10 @@ assert [e['item'] for e in shop] == [
     'I009', 'I00A', 'I005', 'I001', 'I003', 'I004', 'I006', 'I00F', 'I008', 'I007']
 
 filler_position = spell_list.index('AIsr')
+# The spellbook ability has an authored column but no authored row: the missing row is the
+# engine default of zero.
+assert ('abilities', 'A0A5', 'abpy', 0) not in fields
+spellbook_position = {'x': integer(field('abilities', 'A0A5', 'abpx')), 'y': 0}
 spellbook_columns = 4
 
 
@@ -331,6 +335,7 @@ artifact = {
         'spellbook_ability': 'A0A5',
         'spellbook_hotkey': field('abilities', 'A0A5', 'ahky'),
         'spellbook_columns': spellbook_columns,
+        'spellbook_position': spellbook_position,
         'filler_position': filler_position,
         'entries': shop,
     },

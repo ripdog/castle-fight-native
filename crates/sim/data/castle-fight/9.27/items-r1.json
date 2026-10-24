@@ -569,7 +569,11 @@
     "filler_position": 8,
     "spellbook_ability": "A0A5",
     "spellbook_columns": 4,
-    "spellbook_hotkey": "R"
+    "spellbook_hotkey": "R",
+    "spellbook_position": {
+      "x": 3,
+      "y": 0
+    }
   },
   "source": {
     "abilities_sha256": "24590f6ce5eb51d50ef7272517ace98a2d0abd8c54b328007fb86f364d5a5059",

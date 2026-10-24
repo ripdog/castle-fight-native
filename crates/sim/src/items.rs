@@ -117,6 +117,14 @@ pub struct ShopEntry {
     pub stock: ShopStock,
 }
 
+/// A command-card cell, column then row from the top left.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ShopButtonPosition {
+    pub x: u8,
+    pub y: u8,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ShopDefinition {
@@ -124,8 +132,23 @@ pub struct ShopDefinition {
     pub spellbook_ability: u32,
     pub spellbook_hotkey: String,
     pub spellbook_columns: u8,
+    pub spellbook_position: ShopButtonPosition,
     pub filler_position: u8,
     pub entries: Vec<ShopEntry>,
+}
+
+impl ShopDefinition {
+    /// The command-card cell of a shop entry: the spellbook lays its abilities out in list order
+    /// across `spellbook_columns`, with the filler button occupying its own list position.
+    #[must_use]
+    pub fn card_cell(&self, entry: usize) -> ShopButtonPosition {
+        let listed = entry + usize::from(entry >= usize::from(self.filler_position));
+        let columns = usize::from(self.spellbook_columns);
+        ShopButtonPosition {
+            x: u8::try_from(listed % columns).expect("spellbook column fits u8"),
+            y: u8::try_from(listed / columns).expect("spellbook row fits u8"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]

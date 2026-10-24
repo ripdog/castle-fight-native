@@ -4,7 +4,7 @@
 use super::*;
 use crate::items::{
     BlastEffect, ItemCatalog, ItemDefinition, ItemEffect, ItemId, OrbChainLightningEffect,
-    PointScrollRestorationEffect, PointScrollSpeedEffect, item_catalog_for_version,
+    PointScrollRestorationEffect, PointScrollSpeedEffect, ShopEntry, item_catalog_for_version,
     seconds_to_ticks, speed_per_tick, world_to_subunits,
 };
 use crate::{
@@ -118,6 +118,16 @@ fn item_native_buff(rawcode: u32) -> Option<crate::NativeBuffIdentity> {
     })
 }
 
+/// A shop purchase that passed every check, ready to be charged and delivered.
+struct Purchase {
+    catalog: &'static ItemCatalog,
+    handle: BuilderHandle,
+    index: usize,
+    team_index: usize,
+    entry: &'static ShopEntry,
+    definition: &'static ItemDefinition,
+}
+
 impl Simulation {
     fn item_catalog(&self) -> Option<&'static ItemCatalog> {
         self.config.item_system.and_then(item_catalog_for_version)
@@ -130,6 +140,13 @@ impl Simulation {
             .shops
             .get(usize::from(team.0))
             .map_or(&[], Vec::as_slice)
+    }
+
+    /// Whole seconds since the current round started, for countdowns on shop buttons.
+    #[must_use]
+    pub fn round_elapsed_seconds(&self) -> u32 {
+        let ticks = self.next_tick.saturating_sub(self.round_start_tick);
+        u32::try_from(ticks / CASTLE_FIGHT_SIMULATION_HZ as u64).unwrap_or(u32::MAX)
     }
 
     #[must_use]
@@ -198,12 +215,25 @@ impl Simulation {
 
     // ---------------------------------------------------------------- commands
 
-    pub(crate) fn buy_item_as(
-        &mut self,
+    /// Whether the shop button at `position` would sell to `builder` right now, with the first
+    /// reason it would not. The purchase command runs the same checks, so presentation can grey
+    /// out buttons without restating the rules.
+    pub fn can_buy_item(
+        &self,
         controller: PlayerId,
         builder: SimId,
         position: u8,
     ) -> Result<(), ItemCommandError> {
+        self.check_purchase(controller, builder, position)
+            .map(|_| ())
+    }
+
+    fn check_purchase(
+        &self,
+        controller: PlayerId,
+        builder: SimId,
+        position: u8,
+    ) -> Result<Purchase, ItemCommandError> {
         let catalog = self
             .item_catalog()
             .ok_or(ItemCommandError::ItemSystemUnavailable)?;
@@ -218,7 +248,6 @@ impl Simulation {
         let definition = catalog
             .item(ItemId(entry.item))
             .ok_or(ItemCommandError::UnknownShopEntry)?;
-        let tick = self.next_tick;
         let team_index = usize::from(handle.team.0);
         let slot = *self.items.shops[team_index]
             .get(index)
@@ -229,7 +258,7 @@ impl Simulation {
         if slot.stock == 0 {
             return Err(ItemCommandError::OutOfStock);
         }
-        if tick < slot.button_ready_tick {
+        if self.next_tick < slot.button_ready_tick {
             return Err(ItemCommandError::ShopButtonCooling);
         }
         let resources = self
@@ -256,6 +285,31 @@ impl Simulation {
         {
             return Err(ItemCommandError::InventoryFull);
         }
+        Ok(Purchase {
+            catalog,
+            handle,
+            index,
+            team_index,
+            entry,
+            definition,
+        })
+    }
+
+    pub(crate) fn buy_item_as(
+        &mut self,
+        controller: PlayerId,
+        builder: SimId,
+        position: u8,
+    ) -> Result<(), ItemCommandError> {
+        let Purchase {
+            catalog,
+            handle,
+            index,
+            team_index,
+            entry,
+            definition,
+        } = self.check_purchase(controller, builder, position)?;
+        let tick = self.next_tick;
 
         let resources = &mut self
             .player_state_mut(handle.owner)
@@ -320,6 +374,24 @@ impl Simulation {
                 _ => {}
             }
         }
+    }
+
+    /// Places an item straight into a builder's inventory, bypassing the shop. For debug tools and
+    /// presentation fixtures only; it is not a player command and is never replicated.
+    pub fn debug_grant_item(&mut self, builder: SimId, item: ItemId, charges: u8) -> bool {
+        let Some(catalog) = self.item_catalog() else {
+            return false;
+        };
+        let Ok(handle) = self.builder_handle_unchecked(builder) else {
+            return false;
+        };
+        self.give_item(catalog, handle.entity, item, charges)
+            .is_ok()
+    }
+
+    /// Lays an item on the ground. Debug tools and fixtures only, like [`Self::debug_grant_item`].
+    pub fn debug_spawn_ground_item(&mut self, item: ItemId, charges: u8, position: SimPoint) {
+        self.spawn_ground_item(item, charges, position);
     }
 
     fn give_item(
