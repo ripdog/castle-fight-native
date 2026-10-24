@@ -524,6 +524,12 @@ impl AuthoritativeMatch {
         }
     }
 
+    /// The team a session plays for, used to route team chat.
+    pub(crate) fn session_team(&self, session_id: SessionId) -> Option<u8> {
+        self.session_assignment(session_id)
+            .map(|assignment| assignment.team)
+    }
+
     pub(crate) fn first_session(&self) -> Option<SessionId> {
         self.sessions.keys().next().copied()
     }
@@ -822,6 +828,7 @@ impl AuthoritativeMatch {
             | ClientMessage::SelectTeamSize { .. }
             | ClientMessage::SelectSlot { .. }
             | ClientMessage::LeaveLobby
+            | ClientMessage::Chat { .. }
             | ClientMessage::StartMatch
             | ClientMessage::Debug { .. } => {
                 vec![OutboundMessage::to_session(

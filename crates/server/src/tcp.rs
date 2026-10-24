@@ -16,7 +16,7 @@ use castle_fight_protocol::{
     LobbySlotRejectReason, LobbyStartRejectReason, LobbyStatus, LobbyTeamSizeRejectReason,
     MAX_SNAPSHOT_BYTES, ProtocolEnvelope, ProtocolErrorCode, ProtocolSchemaError,
     SNAPSHOT_CHUNK_BYTES, ServerMessage, SnapshotChunk, SnapshotTransferBegin,
-    WireCanonicalStreamRecord, read_frame, write_frame,
+    WireCanonicalStreamRecord, read_frame, sanitize_chat_text, write_frame,
 };
 use castle_fight_sim::{
     CASTLE_FIGHT_SIMULATION_HZ, CanonicalStreamRecord, InputStreamPosition, MatchLifecycle,
@@ -29,6 +29,9 @@ use crate::{
 };
 
 const OUTBOUND_QUEUE_CAPACITY: usize = 256;
+/// At most this many chat lines per session within the window.
+const CHAT_RATE_LIMIT: usize = 6;
+const CHAT_RATE_WINDOW: Duration = Duration::from_secs(5);
 const IDLE_POLL_INTERVAL: Duration = Duration::from_millis(1);
 const MAX_SNAPSHOT_TRANSFER_CHUNKS: usize = MAX_SNAPSHOT_BYTES.div_ceil(SNAPSHOT_CHUNK_BYTES);
 const MAX_SNAPSHOT_HISTORY_RECORDS: usize = 8;
@@ -133,6 +136,7 @@ pub struct TcpAuthoritativeServer {
     debug_paused: bool,
     debug_speed: DebugSpeed,
     team_disconnect_since: [Option<Instant>; 2],
+    chat_history: BTreeMap<SessionId, std::collections::VecDeque<Instant>>,
 }
 
 impl TcpAuthoritativeServer {
@@ -173,6 +177,7 @@ impl TcpAuthoritativeServer {
             debug_paused: false,
             debug_speed: DebugSpeed::Normal,
             team_disconnect_since: [None; 2],
+            chat_history: BTreeMap::new(),
         })
     }
 
@@ -397,6 +402,9 @@ impl TcpAuthoritativeServer {
                 return Ok(());
             }
         };
+        if let ClientMessage::Chat { text, team_only } = message {
+            return self.process_chat(session_id, &text, team_only);
+        }
         if let ClientMessage::Debug { request } = message {
             return self.process_debug_request(connection_id, session_id, request);
         }
@@ -646,6 +654,7 @@ impl TcpAuthoritativeServer {
             | ClientMessage::SelectTeamSize { .. }
             | ClientMessage::SelectSlot { .. }
             | ClientMessage::LeaveLobby
+            | ClientMessage::Chat { .. }
             | ClientMessage::SubmitCommand { .. }
             | ClientMessage::CheckpointReport { .. } => self.send_to_connection(
                 connection_id,
@@ -696,6 +705,55 @@ impl TcpAuthoritativeServer {
             }
         }
         Ok(())
+    }
+
+    /// Relays a chat line to everyone, or to the sender's team. Over-eager senders are dropped
+    /// silently rather than answered, so spam costs the server no replies.
+    fn process_chat(
+        &mut self,
+        session_id: SessionId,
+        text: &str,
+        team_only: bool,
+    ) -> Result<(), TcpServerError> {
+        let text = sanitize_chat_text(text);
+        let now = Instant::now();
+        let history = self.chat_history.entry(session_id).or_default();
+        while history
+            .front()
+            .is_some_and(|sent| now.duration_since(*sent) > CHAT_RATE_WINDOW)
+        {
+            history.pop_front();
+        }
+        if text.is_empty() || history.len() >= CHAT_RATE_LIMIT {
+            return Ok(());
+        }
+        history.push_back(now);
+        let (Some(player), Some(team)) = (
+            self.authoritative.session_player(session_id),
+            self.authoritative.session_team(session_id),
+        ) else {
+            return Ok(());
+        };
+        let recipients = self
+            .session_connections
+            .keys()
+            .copied()
+            .filter(|session| !team_only || self.authoritative.session_team(*session) == Some(team))
+            .collect::<Vec<_>>();
+        let messages = recipients
+            .into_iter()
+            .map(|session| {
+                OutboundMessage::to_session(
+                    session,
+                    ServerMessage::Chat {
+                        player_id: player.0,
+                        text: text.clone(),
+                        team_only,
+                    },
+                )
+            })
+            .collect();
+        self.dispatch_all(messages)
     }
 
     fn process_start_match(
@@ -1538,6 +1596,38 @@ mod tests {
                 assignment: SessionAssignment { player_id: 1, .. }
             }
         ));
+    }
+
+    #[test]
+    fn team_chat_reaches_only_the_senders_team() {
+        let mut server = lobby_server();
+        let mut host = connect(&server);
+        let mut guest = connect(&server);
+        server.poll_network().unwrap();
+        send_client(&mut host, hello(&server, 1));
+        pump_until(&mut server, |view| view.authenticated == 1);
+        send_client(&mut guest, hello(&server, 2));
+        pump_until(&mut server, |view| view.authenticated == 2);
+
+        // The guest is on the other team, so their team line must not reach the host.
+        for (text, team_only) in [("team only", true), ("to everyone", false)] {
+            send_client(
+                &mut guest,
+                ClientMessage::Chat {
+                    text: text.to_owned(),
+                    team_only,
+                },
+            );
+            pump_network(&mut server);
+        }
+        let mut received = Vec::new();
+        for _ in 0..16 {
+            if let ServerMessage::Chat { text, .. } = receive_server(&mut host) {
+                received.push(text);
+                break;
+            }
+        }
+        assert_eq!(received, ["to everyone"]);
     }
 
     #[test]

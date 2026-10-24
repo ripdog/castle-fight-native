@@ -3,6 +3,7 @@ mod build_orders;
 mod build_ui;
 mod builder_controls;
 mod building_models;
+mod chat;
 mod client_settings;
 mod compact_material;
 mod cursor;
@@ -141,6 +142,8 @@ pub(crate) struct AuthoritativeSimulation {
     network_lobby_error: Option<String>,
     /// Why the connection to the server is down, shown by the connection banner.
     connection_issue: Option<String>,
+    /// Chat lines received from the server, waiting to be shown.
+    pending_chat: Vec<chat::IncomingChat>,
     commands_enabled: bool,
 }
 
@@ -159,6 +162,7 @@ impl AuthoritativeSimulation {
             network_lobby_status: None,
             network_lobby_error: None,
             connection_issue: None,
+            pending_chat: Vec::new(),
             commands_enabled: true,
         }
     }
@@ -191,6 +195,7 @@ impl AuthoritativeSimulation {
             network_lobby_status: None,
             network_lobby_error: None,
             connection_issue: None,
+            pending_chat: Vec::new(),
             commands_enabled: true,
         }
     }
@@ -279,6 +284,11 @@ impl AuthoritativeSimulation {
     /// reserved for a reconnect.
     pub(crate) fn request_network_leave_lobby(&mut self) -> Result<(), String> {
         self.send_network_lobby_request(ClientMessage::LeaveLobby)
+    }
+
+    /// Sends a chat line; chat exists only in networked games.
+    pub(crate) fn request_chat(&mut self, text: String, team_only: bool) -> Result<(), String> {
+        self.send_network_lobby_request(ClientMessage::Chat { text, team_only })
     }
 
     pub(crate) fn assigned_player(&self) -> Option<PlayerId> {
@@ -738,6 +748,7 @@ fn main() {
             game_menu::GameMenuPlugin,
             settings_menu::SettingsMenuPlugin,
             menu_focus::MenuFocusPlugin,
+            chat::ChatPlugin,
         ));
     }
     if show_main_menu {
@@ -1723,6 +1734,15 @@ fn process_network_events(
                         .to_owned(),
                     );
                 }
+                ServerMessage::Chat {
+                    player_id,
+                    text,
+                    team_only,
+                } => authoritative.pending_chat.push(chat::IncomingChat {
+                    player_id,
+                    text,
+                    team_only,
+                }),
                 ServerMessage::LobbyMatchRulesRejected => {
                     authoritative.network_lobby_error =
                         Some("Only the host may change match settings before start.".to_owned());

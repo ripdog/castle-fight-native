@@ -15,8 +15,9 @@ use castle_fight_sim::{
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-pub const PROTOCOL_SCHEMA_VERSION: u32 = 16;
+pub const PROTOCOL_SCHEMA_VERSION: u32 = 17;
 pub const MAX_PLAYER_NAME_CHARS: usize = 24;
+pub const MAX_CHAT_CHARS: usize = 200;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub const MAX_RELEASE_REVISION_BYTES: usize = 64;
 pub const RECONNECT_TOKEN_BYTES: usize = 32;
@@ -315,6 +316,19 @@ pub struct ClientHello {
     pub player_name: String,
 }
 
+/// Cleans a chat line the same way for sender and receiver: control characters removed, trimmed
+/// and bounded. An empty result is not worth sending.
+#[must_use]
+pub fn sanitize_chat_text(raw: &str) -> String {
+    raw.chars()
+        .filter(|character| !character.is_control())
+        .collect::<String>()
+        .trim()
+        .chars()
+        .take(MAX_CHAT_CHARS)
+        .collect::<String>()
+}
+
 /// Trims control characters and surrounding whitespace, and bounds the length, so a display name
 /// is always safe to show. An empty result means the player did not supply a usable name.
 #[must_use]
@@ -582,6 +596,11 @@ pub enum ClientMessage {
     },
     /// Release this session's slot for good; a plain disconnect keeps it for reconnecting.
     LeaveLobby,
+    /// A chat line for everyone, or for the sender's team only.
+    Chat {
+        text: String,
+        team_only: bool,
+    },
     SubmitCommand {
         request: CommandRequest,
     },
@@ -614,6 +633,12 @@ pub enum ServerMessage {
     },
     LobbySlotRejected {
         reason: LobbySlotRejectReason,
+    },
+    /// A chat line relayed from `player_id`'s slot.
+    Chat {
+        player_id: u8,
+        text: String,
+        team_only: bool,
     },
     /// The lobby moved this session to another slot (a smaller team size removed its slot, or the
     /// player chose a new one). Sent before the `LobbyStatus` that reflects the move.

@@ -73,7 +73,7 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 ## P3 — Lobby and polish
 
 - [x] The race picker has a Random tile (resolved when pressed) and shows each race's number of buildable structures. A fuller preview (building/unit list) would need per-race descriptions that are not extracted.
-- [ ] Lobby chat.
+- [x] Lobby chat: press Enter, type, Enter to send (protocol 17).
 - [ ] Ready state and host kick, if desired once lobby chat/names exist.
 - [x] The debug "Starting buildings" setting is listed in the lobby only when the `CASTLE_FIGHT_DEBUG` environment variable is set.
 - [ ] Simplify the time-limit control (stepper buttons plus click-to-type) and give it keyboard focus handling; avoid depending on a full lobby despawn/respawn for every change (hover/focus state is lost on each redraw).
@@ -82,7 +82,7 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 - [x] The main menu warns, with a pointer to `cf-wc3-assets` and the README, when `assets/wc3/manifest.json` is missing.
 - [x] The main menu footer shows the version and the unofficial-fan-project / Blizzard-assets notice. A dedicated About screen was judged unnecessary.
 - [ ] Colour-blind friendly team indication (team colour is currently the main cue).
-- [ ] In-match text chat and quick pings for team games.
+- [x] In-match text chat: Enter talks to allies, Shift+Enter to everyone, lines fade after about 14 seconds. Quick pings are not implemented (they need the minimap).
 - [ ] Under-attack / castle-damaged alert (sound, HUD flash, and camera-jump target) — needs an authoritative or presentation-side event source.
 - [ ] Replay or spectate entry point in the menu, if the replay machinery in the sim is wired to the client.
 - [ ] Gamepad support (low priority; not required for a Warcraft-style RTS).

@@ -173,6 +173,11 @@ impl LobbyState {
         }
     }
 
+    /// Whether the time-limit box has the keyboard.
+    pub(crate) fn is_typing(&self) -> bool {
+        self.time_input.is_some()
+    }
+
     pub(crate) fn set_invite_address(&mut self, invite: Option<String>) {
         self.invite = invite;
     }

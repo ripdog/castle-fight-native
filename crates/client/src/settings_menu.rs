@@ -441,6 +441,10 @@ const CONTROLS: &[ControlGroup] = &[
     (
         "Game",
         &[
+            (
+                "Enter / Shift+Enter",
+                "Chat to allies / to everyone (online games)",
+            ),
             ("F10", "Game menu: resume, settings, leave, exit"),
             ("F9", "Scoreboard"),
             ("H", "Show or hide health bars"),
