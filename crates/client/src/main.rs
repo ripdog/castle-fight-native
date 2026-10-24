@@ -15,6 +15,7 @@ mod doodads;
 mod fog;
 mod game_menu;
 mod inspection;
+mod item_ui;
 mod lobby;
 mod main_menu;
 mod match_ui;
@@ -81,6 +82,7 @@ use debug_menu::DebugMenuPlugin;
 use demo::{BuildKind, DEVELOPMENT_MATCH_SEED, create_demo_world_for_match_config};
 use doodads::DoodadPresentationPlugin;
 use inspection::InspectionPlugin;
+use item_ui::ItemUiPlugin;
 use lobby::{LobbyPlugin, LobbyState};
 use main_menu::{MainMenuPlugin, MainMenuState};
 use network::{NetworkClient, NetworkClientError, NetworkEvent};
@@ -725,6 +727,7 @@ fn main() {
             alerts::AlertsPlugin,
             minimap::MinimapPlugin,
         ))
+        .add_plugins(ItemUiPlugin)
         .add_message::<QuickSaveRequest>()
         .add_systems(Startup, setup_simulation_pause_ui)
         .add_systems(
@@ -815,6 +818,13 @@ fn main() {
             app.insert_resource(selection)
                 .add_systems(Update, apply_profile_selection);
         }
+        if options.profile_items || options.profile_shop {
+            app.insert_resource(ProfileItemFixture {
+                items: options.profile_items,
+                shop: options.profile_shop,
+            })
+            .add_systems(Update, apply_profile_item_fixture);
+        }
         app.insert_resource(AutomatedProfileRun {
             source,
             warmup: options.profile_warmup,
@@ -883,6 +893,62 @@ fn apply_profile_selection(
     if !ids.is_empty() {
         selection.replace(ids);
         *done = true;
+    }
+}
+
+#[derive(Resource)]
+struct ProfileItemFixture {
+    items: bool,
+    shop: bool,
+}
+
+/// Item UI screenshots: carry a spread of items, grant funds, leave an item on the ground and/or
+/// open the shop spellbook for the builder the selection fixture picked.
+fn apply_profile_item_fixture(
+    fixture: Res<ProfileItemFixture>,
+    mut authoritative: ResMut<AuthoritativeSimulation>,
+    mut panel: ResMut<ActionPanelState>,
+    selected_match: Res<SelectedMatch>,
+    mut done: Local<bool>,
+) {
+    use castle_fight_sim::items::ItemId;
+    let Some(actor) = panel.actor.filter(|_| !*done) else {
+        return;
+    };
+    let Some(builder) = authoritative.simulation.builder(actor) else {
+        return;
+    };
+    *done = true;
+    if fixture.items {
+        let item = |code: &[u8; 4]| ItemId(u32::from_be_bytes(*code));
+        for (code, charges) in [
+            (b"I009", 0),
+            (b"I006", 0),
+            (b"I001", 0),
+            (b"I001", 0),
+            (b"I005", 2),
+            (b"I00F", 1),
+        ] {
+            authoritative
+                .simulation
+                .debug_grant_item(actor, item(code), charges);
+        }
+        authoritative.simulation.debug_spawn_ground_item(
+            item(b"I003"),
+            0,
+            castle_fight_sim::SimPoint::new(
+                builder.position.x + 350 * castle_fight_sim::SUBUNITS_PER_WORLD_UNIT,
+                builder.position.y,
+            ),
+        );
+    }
+    if fixture.shop {
+        authoritative.simulation.debug_grant_player_resources_for(
+            selected_match.local_player,
+            5_000,
+            500,
+        );
+        panel.mode = build_ui::ActionPanelMode::Shop;
     }
 }
 
@@ -1025,6 +1091,10 @@ struct ClientOptions {
     profile_theme: Option<ui_icons::ConsoleTheme>,
     /// What to select for a screenshot of the info panel and command card.
     profile_select: Option<ProfileSelection>,
+    /// Stocks the local builder's inventory and lays an item on the ground for a screenshot.
+    profile_items: bool,
+    /// Opens the castle shop spellbook for a screenshot.
+    profile_shop: bool,
     render_experiment: RenderExperiment,
     map_version: MapVersion,
     release_revision: String,
@@ -1056,6 +1126,8 @@ impl ClientOptions {
             profile_screenshot: None,
             profile_theme: None,
             profile_select: None,
+            profile_items: false,
+            profile_shop: false,
             render_experiment: RenderExperiment::Baseline,
             map_version: MapVersion::CASTLE_FIGHT_9_27,
             release_revision: "r1".to_owned(),
@@ -1114,6 +1186,8 @@ impl ClientOptions {
                             .unwrap_or_else(|_| panic!("unknown --profile-theme {value:?}")),
                     );
                 }
+                "--profile-items" => options.profile_items = true,
+                "--profile-shop" => options.profile_shop = true,
                 "--profile-select" => {
                     let value = args.next().expect("--profile-select requires a target");
                     options.profile_select = Some(match value.as_str() {
@@ -1244,6 +1318,8 @@ impl ClientOptions {
                     && options.render_experiment == RenderExperiment::Baseline
                     && options.profile_screenshot.is_none()
                     && options.profile_select.is_none()
+                    && !options.profile_items
+                    && !options.profile_shop
                     && options.stress_visual.is_none()),
             "render experiments, --profile-paused, and --stress-visual require --profile, --profile-quicksave, or --benchmark",
         );

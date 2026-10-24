@@ -211,6 +211,7 @@ pub struct PresentationSnapshot {
     pub shrine_revivals: Vec<castle_fight_sim::ShrineRevivalEvent>,
     pub chain_lightnings: Vec<ChainLightningEvent>,
     pub snow_tiles: Vec<(SimPoint, Team, i32, u32)>,
+    pub ground_items: Vec<(SimId, castle_fight_sim::GroundItem)>,
     pub building_spell_visuals: Vec<castle_fight_sim::BuildingSpellVisualEvent>,
 }
 
@@ -457,6 +458,7 @@ impl PresentationSnapshot {
             shrine_revivals: simulation.shrine_revivals_last_tick().to_vec(),
             chain_lightnings: simulation.chain_lightnings_last_tick().to_vec(),
             snow_tiles: simulation.snow_tiles(),
+            ground_items: simulation.ground_items(),
             building_spell_visuals: simulation.building_spell_visuals_last_tick().to_vec(),
         }
     }

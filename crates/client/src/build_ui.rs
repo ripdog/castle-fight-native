@@ -20,6 +20,10 @@ use crate::{
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
     demo::{BuildKind, ProductionKind},
     inspection::{InspectionSelection, cursor_over_inspector_panel},
+    item_ui::{
+        InventoryButton, item_catalog, shop_button_cell, shop_button_label, shop_entry_cell,
+        shop_unavailable,
+    },
     presentation::{
         BuildingGridSnapState, WC3_BUILDING_AMBIENT_ANIMATION_SPEED, WC3_MODEL_FACING_OFFSET,
         WorldMetrics, building_terrain_height, draw_footprint_outline, player_color,
@@ -82,6 +86,8 @@ pub(crate) enum TargetingAction {
     RescueStrike,
     Attack,
     Build(BuildKind),
+    /// An inventory slot's item awaiting a point or unit target.
+    UseItem(u8),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -89,6 +95,8 @@ pub(crate) enum ActionPanelMode {
     #[default]
     Actions,
     BuildMenu,
+    /// The castle shop spellbook opened from a builder's command card.
+    Shop,
     Targeting(TargetingAction),
 }
 
@@ -128,14 +136,16 @@ impl ActionPanelState {
     pub(crate) const fn targeting(&self) -> Option<TargetingAction> {
         match self.mode {
             ActionPanelMode::Targeting(action) => Some(action),
-            ActionPanelMode::Actions | ActionPanelMode::BuildMenu => None,
+            ActionPanelMode::Actions | ActionPanelMode::BuildMenu | ActionPanelMode::Shop => None,
         }
     }
 
     pub(crate) fn cancel_modal(&mut self) {
         self.mode = match self.mode {
             ActionPanelMode::Targeting(TargetingAction::Build(_)) => ActionPanelMode::BuildMenu,
-            ActionPanelMode::Targeting(_) | ActionPanelMode::BuildMenu => ActionPanelMode::Actions,
+            ActionPanelMode::Targeting(_) | ActionPanelMode::BuildMenu | ActionPanelMode::Shop => {
+                ActionPanelMode::Actions
+            }
             ActionPanelMode::Actions => ActionPanelMode::Actions,
         };
         self.status = "Command cancelled.".into();
@@ -152,6 +162,10 @@ enum PanelAction {
     Target(TargetingAction),
     Building(BuildingPanelAction),
     OpenBuildMenu,
+    /// Opens the castle shop spellbook.
+    OpenShop,
+    /// Presses a castle shop button, by shop entry index.
+    BuyItem(u8),
     CancelConstruction,
     TrainUnit,
     CancelProduction,
@@ -201,10 +215,28 @@ enum ActionTooltipKind {
     BuildingUpgrade(BuildKind),
     TrainUnit(ProductionKind),
     GjallarhornSpell,
+    /// A castle shop button, with the stock on the shelf so the card refreshes as it changes.
+    ShopItem {
+        entry: u8,
+        stock: u8,
+    },
+    /// An item carried in an inventory slot, by rawcode.
+    InventoryItem(u32),
 }
 
 impl ActionTooltipKind {
     fn cost_label(self, content: &CastleFightContentBundle) -> String {
+        if let Self::ShopItem { entry, stock } = self {
+            let Some(item) = shop_item_definition(content, entry) else {
+                return String::new();
+            };
+            let mut label = format!("{} gold", item.gold_cost);
+            if item.lumber_cost > 0 {
+                write!(label, "  {} lumber", item.lumber_cost).expect("write cost to string");
+            }
+            write!(label, "\nIn stock: {stock}").expect("write stock to string");
+            return label;
+        }
         let (Self::Build(kind) | Self::BuildingUpgrade(kind)) = self else {
             return String::new();
         };
@@ -242,12 +274,28 @@ impl ActionTooltipKind {
                     definition.train_extended_tooltip,
                 )
             }
+            Self::ShopItem { entry, .. } => shop_item_definition(content, entry)
+                .map_or(("", ""), |item| {
+                    (item.tooltip_title.as_str(), item.tooltip.as_str())
+                }),
+            Self::InventoryItem(rawcode) => item_catalog(content)
+                .and_then(|catalog| catalog.item(castle_fight_sim::items::ItemId(rawcode)))
+                .map_or(("", ""), |item| (item.name.as_str(), item.tooltip.as_str())),
             Self::GjallarhornSpell => (
                 "Holy Power",
                 "Holy Fervour: gives nearby allies 40–55% attack speed for 60 seconds. Costs 7 mana. Left-click to cast; right-click to toggle autocast.",
             ),
         }
     }
+}
+
+fn shop_item_definition(
+    content: &CastleFightContentBundle,
+    entry: u8,
+) -> Option<&'static castle_fight_sim::items::ItemDefinition> {
+    let catalog = item_catalog(content)?;
+    let entry = catalog.shop.entries.get(usize::from(entry))?;
+    catalog.item(castle_fight_sim::items::ItemId(entry.item))
 }
 
 #[derive(Resource, Default)]
@@ -390,6 +438,7 @@ impl Plugin for BuildUiPlugin {
                     sync_action_panel_to_selection,
                     handle_escape,
                     handle_production_train_hotkey,
+                    handle_shop_hotkeys,
                     populate_action_panel,
                     handle_action_panel_buttons,
                     handle_action_panel_right_click
@@ -949,9 +998,13 @@ fn populate_action_panel(
             Visibility::Hidden
         };
     }
+    let catalog = item_catalog(selected_match.content);
     for (slot, mut text) in &mut labels {
-        text.0 = layout[slot.0].map_or_else(String::new, |action| {
-            action_label(action, selected_match.content)
+        text.0 = layout[slot.0].map_or_else(String::new, |action| match (action, catalog) {
+            (PanelAction::BuyItem(entry), Some(catalog)) => {
+                shop_button_label(catalog, &authoritative.simulation, state.team, entry)
+            }
+            _ => action_label(action, selected_match.content),
         });
     }
     for (slot, mut text) in &mut hotkeys {
@@ -980,6 +1033,13 @@ fn populate_action_panel(
 fn action_hotkey(action: PanelAction, content: &CastleFightContentBundle) -> Option<char> {
     match action {
         PanelAction::OpenBuildMenu => Some(content.command_card.build_hotkey),
+        // The shop spellbook shares its authored hotkey (R) with Repair's autocast toggle, so the
+        // spellbook is opened by clicking; its entries keep their own hotkeys while it is open.
+        PanelAction::OpenShop => None,
+        PanelAction::BuyItem(entry) => item_catalog(content)
+            .and_then(|catalog| catalog.shop.entries.get(usize::from(entry)))
+            .and_then(|entry| entry.hotkey.chars().next()),
+        PanelAction::Target(TargetingAction::UseItem(_)) => None,
         PanelAction::Target(TargetingAction::ManaTransfusion) => {
             Some(mana_improvement_profile(content).hotkey)
         }
@@ -1118,6 +1178,16 @@ fn action_icon_key(
 ) -> UiIconKey {
     match action {
         PanelAction::OpenBuildMenu => presentation.build_command,
+        PanelAction::OpenShop => item_catalog(content)
+            .map_or(presentation.build_command, |catalog| {
+                UiIconKey::ability(catalog.shop.spellbook_ability, UiIconRole::Normal)
+            }),
+        PanelAction::BuyItem(entry) => item_catalog(content)
+            .and_then(|catalog| catalog.shop.entries.get(usize::from(entry)))
+            .map_or(presentation.build_command, |entry| {
+                UiIconKey::ability(entry.button_ability, UiIconRole::Normal)
+            }),
+        PanelAction::Target(TargetingAction::UseItem(_)) => presentation.cancel_command,
         PanelAction::Building(BuildingPanelAction::Upgrade(target)) => {
             UiIconKey::unit_game_interface(target.rawcode(content))
         }
@@ -1328,6 +1398,14 @@ fn action_layout(
                         Some(PanelAction::Target(TargetingAction::RescueStrike));
                 }
                 slots[command_slot(command_card.build_command)] = Some(PanelAction::OpenBuildMenu);
+                if let Some(catalog) = item_catalog(selected_match.content) {
+                    insert_panel_action(
+                        &mut slots,
+                        command_slot(shop_button_cell(catalog)),
+                        cancel_slot,
+                        PanelAction::OpenShop,
+                    );
+                }
             } else if let Some(building) = authoritative.simulation.building(actor) {
                 if building.construction_complete_tick.is_some() {
                     slots[cancel_slot] = Some(PanelAction::CancelConstruction);
@@ -1434,6 +1512,22 @@ fn action_layout(
                 slots[cancel_slot] = Some(PanelAction::Cancel);
             }
         }
+        ActionPanelMode::Shop => {
+            let Some(catalog) = item_catalog(selected_match.content)
+                .filter(|_| authoritative.simulation.builder(actor).is_some())
+            else {
+                return slots;
+            };
+            for entry in 0..catalog.shop.entries.len() {
+                insert_panel_action(
+                    &mut slots,
+                    command_slot(shop_entry_cell(catalog, entry)),
+                    cancel_slot,
+                    PanelAction::BuyItem(u8::try_from(entry).expect("shop entry fits u8")),
+                );
+            }
+            slots[cancel_slot] = Some(PanelAction::Cancel);
+        }
         ActionPanelMode::Targeting(_) => {
             slots[cancel_slot] = Some(PanelAction::Cancel);
         }
@@ -1465,6 +1559,18 @@ fn handle_action_panel_buttons(
                 state.mode = ActionPanelMode::BuildMenu;
                 state.status = "Choose a building.".into();
             }
+            PanelAction::OpenShop => {
+                state.mode = ActionPanelMode::Shop;
+                state.status = "Castle shop: choose an item to buy.".into();
+            }
+            PanelAction::BuyItem(entry) => submit_shop_purchase(
+                &mut authoritative,
+                &mut state,
+                &selected_match,
+                &debug_menu,
+                entry,
+                crate::build_orders::shift_pressed(&keys),
+            ),
             PanelAction::Building(BuildingPanelAction::Upgrade(target)) => {
                 if building_upgrade_queue_is_clear(&state, &authoritative) {
                     queue_building_upgrade(
@@ -1545,7 +1651,7 @@ fn handle_action_panel_buttons(
                     TargetingAction::Attack => {
                         "Attack: left-click an enemy unit or building; Esc cancels.".into()
                     }
-                    TargetingAction::Build(_) => unreachable!(),
+                    TargetingAction::Build(_) | TargetingAction::UseItem(_) => unreachable!(),
                 };
             }
             PanelAction::CancelConstruction => {
@@ -1575,6 +1681,80 @@ fn handle_action_panel_buttons(
                 }
             }
             PanelAction::Cancel => state.cancel_modal(),
+        }
+    }
+}
+
+/// Presses a castle shop button for the selected builder. The shop stays open while Shift is
+/// held so several items can be bought in a row.
+fn submit_shop_purchase(
+    authoritative: &mut AuthoritativeSimulation,
+    state: &mut ActionPanelState,
+    selected_match: &SelectedMatch,
+    debug_menu: &DebugMenuState,
+    entry: u8,
+    keep_open: bool,
+) {
+    let (Some(actor), Some(catalog)) = (state.actor, item_catalog(selected_match.content)) else {
+        return;
+    };
+    let Some(shop_entry) = catalog.shop.entries.get(usize::from(entry)) else {
+        return;
+    };
+    let name = catalog
+        .item(castle_fight_sim::items::ItemId(shop_entry.item))
+        .map_or("item", |item| item.name.as_str());
+    let controller = debug_menu.controller_for_actor(
+        &authoritative.simulation,
+        selected_match.local_player,
+        actor,
+    );
+    state.status = submission_status(
+        authoritative.submit_local_command(
+            controller,
+            PlayerCommand::BuyItem {
+                builder: actor,
+                shop_position: shop_entry.position,
+            },
+        ),
+        &format!("Purchase of {name} queued."),
+        &format!("Cannot buy {name}"),
+    );
+    if !keep_open {
+        state.mode = ActionPanelMode::Actions;
+    }
+}
+
+/// Shop entry hotkeys while the spellbook is open.
+fn handle_shop_hotkeys(
+    keys: Res<ButtonInput<KeyCode>>,
+    selected_match: Res<SelectedMatch>,
+    debug_menu: Res<DebugMenuState>,
+    mut authoritative: ResMut<AuthoritativeSimulation>,
+    mut state: ResMut<ActionPanelState>,
+) {
+    if state.mode != ActionPanelMode::Shop || state.actor.is_none() {
+        return;
+    }
+    let Some(catalog) = item_catalog(selected_match.content) else {
+        return;
+    };
+    for (index, entry) in catalog.shop.entries.iter().enumerate() {
+        if entry
+            .hotkey
+            .chars()
+            .next()
+            .is_some_and(|hotkey| hotkey_just_pressed(&keys, hotkey))
+        {
+            submit_shop_purchase(
+                &mut authoritative,
+                &mut state,
+                &selected_match,
+                &debug_menu,
+                u8::try_from(index).expect("shop entry fits u8"),
+                crate::build_orders::shift_pressed(&keys),
+            );
+            return;
         }
     }
 }
@@ -1773,6 +1953,16 @@ fn style_action_panel_buttons(
                     )
             }
             PanelAction::TrainUnit => !production_queue_has_room(&state, &authoritative),
+            PanelAction::BuyItem(entry) => state.actor.is_none_or(|actor| {
+                let simulation = &authoritative.simulation;
+                let position = item_catalog(selected_match.content)
+                    .and_then(|catalog| catalog.shop.entries.get(usize::from(entry)))
+                    .map_or(entry, |entry| entry.position);
+                let controller = simulation
+                    .builder(actor)
+                    .map_or(selected_match.local_player, |builder| builder.owner);
+                shop_unavailable(simulation, controller, actor, position).is_some()
+            }),
             PanelAction::Target(TargetingAction::RescueStrike) => state
                 .actor
                 .and_then(|actor| authoritative.simulation.builder(actor))
@@ -1849,36 +2039,59 @@ fn style_action_panel_buttons(
 fn update_build_tooltip(
     mut commands: Commands,
     buttons: Query<(&Interaction, &SlotAction), With<Button>>,
+    inventory_buttons: Query<(&Interaction, &InventoryButton)>,
     selected_match: Res<SelectedMatch>,
     state: Res<ActionPanelState>,
     authoritative: Res<AuthoritativeSimulation>,
     mut tooltip: BuildTooltipUi<'_, '_>,
 ) {
-    let hovered = buttons.iter().find_map(|(interaction, action)| {
-        matches!(interaction, Interaction::Hovered | Interaction::Pressed)
-            .then_some(action.0)
-            .flatten()
-            .and_then(|action| match action {
-                PanelAction::Target(TargetingAction::Build(kind)) => {
-                    Some(ActionTooltipKind::Build(kind))
-                }
-                PanelAction::Building(BuildingPanelAction::Upgrade(target)) => {
-                    Some(ActionTooltipKind::BuildingUpgrade(target))
-                }
-                PanelAction::TrainUnit => state
-                    .actor
-                    .and_then(|actor| authoritative.simulation.building(actor))
-                    .and_then(|building| {
-                        selected_production_kind_from_content(
-                            building.content,
-                            selected_match.content,
-                        )
-                    })
-                    .map(ActionTooltipKind::TrainUnit),
-                PanelAction::GjallarhornSpell => Some(ActionTooltipKind::GjallarhornSpell),
-                _ => None,
-            })
-    });
+    let hovered_item = inventory_buttons
+        .iter()
+        .find_map(|(interaction, button)| {
+            matches!(interaction, Interaction::Hovered | Interaction::Pressed).then_some(button.0)
+        })
+        .and_then(|slot| {
+            let builder = authoritative.simulation.builder(state.actor?)?;
+            Some(ActionTooltipKind::InventoryItem(
+                builder.inventory.slot(slot)?.item.0,
+            ))
+        });
+    let hovered = buttons
+        .iter()
+        .find_map(|(interaction, action)| {
+            matches!(interaction, Interaction::Hovered | Interaction::Pressed)
+                .then_some(action.0)
+                .flatten()
+                .and_then(|action| match action {
+                    PanelAction::BuyItem(entry) => Some(ActionTooltipKind::ShopItem {
+                        entry,
+                        stock: authoritative
+                            .simulation
+                            .item_shop(state.team)
+                            .get(usize::from(entry))
+                            .map_or(0, |slot| slot.stock),
+                    }),
+                    PanelAction::Target(TargetingAction::Build(kind)) => {
+                        Some(ActionTooltipKind::Build(kind))
+                    }
+                    PanelAction::Building(BuildingPanelAction::Upgrade(target)) => {
+                        Some(ActionTooltipKind::BuildingUpgrade(target))
+                    }
+                    PanelAction::TrainUnit => state
+                        .actor
+                        .and_then(|actor| authoritative.simulation.building(actor))
+                        .and_then(|building| {
+                            selected_production_kind_from_content(
+                                building.content,
+                                selected_match.content,
+                            )
+                        })
+                        .map(ActionTooltipKind::TrainUnit),
+                    PanelAction::GjallarhornSpell => Some(ActionTooltipKind::GjallarhornSpell),
+                    _ => None,
+                })
+        })
+        .or(hovered_item);
 
     if tooltip.state.0 == hovered {
         return;
@@ -2537,6 +2750,10 @@ fn insufficient_resources_status(
 fn action_label(action: PanelAction, content: &CastleFightContentBundle) -> String {
     match action {
         PanelAction::OpenBuildMenu => "Build".into(),
+        PanelAction::OpenShop => "Shop".into(),
+        PanelAction::BuyItem(entry) => {
+            shop_item_definition(content, entry).map_or_else(String::new, |item| item.name.clone())
+        }
         PanelAction::Building(BuildingPanelAction::Upgrade(target)) => {
             building_upgrade_button_label(target, content)
         }
@@ -2552,6 +2769,7 @@ fn action_label(action: PanelAction, content: &CastleFightContentBundle) -> Stri
         PanelAction::Target(TargetingAction::RescueStrike) => "Rescue Strike".into(),
         PanelAction::Target(TargetingAction::Attack) => "Attack".into(),
         PanelAction::Target(TargetingAction::Build(kind)) => build_button_label(kind, content),
+        PanelAction::Target(TargetingAction::UseItem(_)) => "Use item".into(),
     }
 }
 

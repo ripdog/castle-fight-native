@@ -12,8 +12,7 @@ use crate::{
     },
     build_ui::{ActionPanelState, cursor_over_action_panel},
     console::{
-        ConsoleMetrics, ConsoleSlots, DOCK_HEIGHT, INVENTORY_SLOT, TOP_BAR_UNITS, vfont, vpx, wc3,
-        wc3_font,
+        ConsoleMetrics, ConsoleSlots, DOCK_HEIGHT, TOP_BAR_UNITS, vfont, vpx, wc3, wc3_font,
     },
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
     presentation::{
@@ -26,11 +25,6 @@ use crate::{
     ui_icons::{UiCommandIcon, UiIconAssets, UiIconKey, UiIconRole, UiStatusIconRole},
 };
 
-/// Warcraft's inventory button geometry, in layout units (`ConsoleUI.fdf`).
-const INVENTORY_SLOTS: usize = 6;
-const INVENTORY_BUTTON_SIZE: f32 = 0.031_25;
-const INVENTORY_COLUMN_PITCH: f32 = 0.04;
-const INVENTORY_ROW_PITCH: f32 = 0.038_2;
 const MIN_UNIT_PICK_RADIUS: f32 = 6.0;
 // Human Builder X00C inherits the stock Peasant's 100x100 shadow footprint and selection scale 1.
 // Use that authored footprint for the native click target instead of the old tiny placeholder size.
@@ -255,9 +249,6 @@ struct PortraitIcon;
 /// Unit details shown while one thing is selected (hidden in favour of the selection grid).
 #[derive(Component)]
 struct InspectionDetails;
-
-#[derive(Component)]
-struct InventoryButton(#[allow(dead_code)] usize);
 
 #[derive(Component)]
 struct SelectionTileIcon(usize);
@@ -510,7 +501,6 @@ fn setup_inspector_ui(
         spawn_selection_grid(info);
         spawn_details(info, &asset_server);
     });
-    spawn_inventory_slots(&mut commands, slots.inventory);
     commands.spawn((
         Node {
             position_type: PositionType::Absolute,
@@ -1033,31 +1023,6 @@ fn spawn_production(details: &mut ChildSpawnerCommands) {
                     }
                 });
         });
-}
-
-/// Six inventory buttons in Warcraft's two-column layout. Inventory behaviour fills them in.
-fn spawn_inventory_slots(commands: &mut Commands, slot: Entity) {
-    commands.entity(slot).with_children(|inventory| {
-        for index in 0..INVENTORY_SLOTS {
-            let (column, row) = (index % 2, index / 2);
-            inventory.spawn((
-                Button,
-                Node {
-                    position_type: PositionType::Absolute,
-                    left: percent(
-                        column as f32 * INVENTORY_COLUMN_PITCH / INVENTORY_SLOT.width * 100.0,
-                    ),
-                    top: percent(row as f32 * INVENTORY_ROW_PITCH / INVENTORY_SLOT.height * 100.0),
-                    width: percent(INVENTORY_BUTTON_SIZE / INVENTORY_SLOT.width * 100.0),
-                    height: percent(INVENTORY_BUTTON_SIZE / INVENTORY_SLOT.height * 100.0),
-                    ..default()
-                },
-                Visibility::Hidden,
-                ZIndex(1),
-                InventoryButton(index),
-            ));
-        }
-    });
 }
 
 pub(crate) fn handle_world_selection(
@@ -2910,7 +2875,6 @@ fn draw_selection_highlight(
     }
 }
 
-#[cfg(test)]
 pub(crate) fn pick_builder_on_ray(
     ray_origin: Vec3,
     ray_direction: Vec3,
@@ -3569,6 +3533,7 @@ mod tests {
             death_heals: Vec::new(),
             shrine_revivals: Vec::new(),
             snow_tiles: Vec::new(),
+            ground_items: Vec::new(),
             building_spell_visuals: Vec::new(),
         };
         PresentationSamples::new(snapshot)

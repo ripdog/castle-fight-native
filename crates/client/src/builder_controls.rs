@@ -1,7 +1,8 @@
 use bevy::{ecs::system::SystemParam, prelude::*, time::Fixed, window::PrimaryWindow};
 
 use castle_fight_sim::{
-    BuildPosition, BuilderConfiguration, CommandSubmission, PlayerCommand, SimId,
+    BuildPosition, BuilderConfiguration, CommandSubmission, ItemUseTarget, PlayerCommand, SimId,
+    items::ItemEffect,
 };
 
 use crate::{
@@ -16,6 +17,7 @@ use crate::{
     debug_menu::{DebugMenuState, cursor_over_debug_menu},
     demo::BuildKind,
     inspection::{cursor_over_inspector_panel, pick_building_at_ground, pick_unit_on_ray},
+    item_ui::{item_catalog, pick_ground_item},
     presentation::{
         BuildingGridSnapState, WorldMetrics, viewport_ground_point, world_to_sim_point,
     },
@@ -536,6 +538,33 @@ fn handle_modal_left_click(
                 Err(status) => resources.action_panel.status = status,
             }
         }
+        TargetingAction::UseItem(slot) => {
+            let Some(target) = item_use_target(resources, actor, slot, ray, world) else {
+                resources.action_panel.status = "That is not a valid target for this item.".into();
+                return;
+            };
+            let controller = resources.debug_menu.controller_for_actor(
+                &resources.authoritative.simulation,
+                resources.selected_match.local_player,
+                actor,
+            );
+            let submission = resources.authoritative.submit_local_command(
+                controller,
+                PlayerCommand::UseItem {
+                    builder: actor,
+                    slot,
+                    target,
+                },
+            );
+            match command_submission_status(
+                submission,
+                "Item use queued.".into(),
+                "Item use rejected",
+            ) {
+                Ok(status) => finish_modal(resources, status),
+                Err(status) => resources.action_panel.status = status,
+            }
+        }
         TargetingAction::Build(kind) => {
             let Some(world) = world else {
                 resources.action_panel.status =
@@ -598,6 +627,43 @@ fn handle_modal_left_click(
                 Err(status) => resources.action_panel.status = status,
             }
         }
+    }
+}
+
+/// What an aimed item is pointed at: a ground point for scrolls, an enemy unit for the orb.
+fn item_use_target(
+    resources: &SelectionCommandResources<'_>,
+    builder: SimId,
+    slot: u8,
+    ray: Ray3d,
+    world: Option<Vec3>,
+) -> Option<ItemUseTarget> {
+    let catalog = item_catalog(resources.selected_match.content)?;
+    let view = resources.authoritative.simulation.builder(builder)?;
+    let stack = view.inventory.slot(usize::from(slot))?;
+    match catalog.item(stack.item)?.use_effect()? {
+        ItemEffect::OrbChainLightning(_) => {
+            let alpha = resources
+                .playback
+                .interpolation_alpha(&resources.fixed_time, &resources.presentation);
+            pick_unit_on_ray(
+                ray.origin,
+                *ray.direction,
+                &resources.presentation,
+                &resources.terrain,
+                alpha,
+            )
+            .filter(|target| {
+                resources
+                    .presentation
+                    .current
+                    .units
+                    .get(target)
+                    .is_some_and(|unit| unit.team != view.team)
+            })
+            .map(ItemUseTarget::Unit)
+        }
+        _ => world.map(|world| ItemUseTarget::Point(world_to_sim_point(world))),
     }
 }
 
@@ -683,6 +749,30 @@ fn handle_smart_right_click(
     });
 
     dismiss_action_mode_for_smart_order(&mut resources.action_panel);
+    if resources.presentation.current.builders.contains_key(&actor)
+        && let Some(item) = pick_ground_item(world, &resources.presentation)
+    {
+        let controller = resources.debug_menu.controller_for_actor(
+            &resources.authoritative.simulation,
+            resources.selected_match.local_player,
+            actor,
+        );
+        let submission = resources.authoritative.submit_local_command(
+            controller,
+            PlayerCommand::PickUpItem {
+                builder: actor,
+                item,
+            },
+        );
+        resources.action_panel.status = match command_submission_status(
+            submission,
+            "Item pickup queued.".to_owned(),
+            "Item pickup rejected",
+        ) {
+            Ok(status) | Err(status) => status,
+        };
+        return;
+    }
     let actor_kind = smart_actor(actor, &resources.presentation.current);
     let target_info =
         target.and_then(|target| smart_target_info(target, &resources.presentation.current));
@@ -838,7 +928,7 @@ fn build_menu_hotkey_target(
     selected
 }
 
-fn command_submission_status(
+pub(crate) fn command_submission_status(
     submission: ClientCommandSubmission,
     accepted: String,
     rejected_prefix: &str,

@@ -1012,6 +1012,8 @@ mod tests {
             profile_screenshot: None,
             profile_theme: None,
             profile_select: None,
+            profile_items: false,
+            profile_shop: false,
             profile_warmup: std::time::Duration::ZERO,
             profile_duration: std::time::Duration::from_secs(1),
             profile_paused: false,
