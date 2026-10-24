@@ -83,7 +83,7 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 - [x] The main menu footer shows the version and the unofficial-fan-project / Blizzard-assets notice. A dedicated About screen was judged unnecessary.
 - [ ] Colour-blind friendly team indication (team colour is currently the main cue).
 - [x] In-match text chat: Enter talks to allies, Shift+Enter to everyone, lines fade after about 14 seconds. Quick pings are not implemented (they need the minimap).
-- [ ] Under-attack / castle-damaged alert (sound, HUD flash, and camera-jump target) — needs an authoritative or presentation-side event source.
+- [x] A "Your castle/base is under attack!" message appears (at most every 10 seconds) when a building of yours loses health, and `.` jumps the camera to the last attacked building. No sound or minimap flash yet (no interface sounds are extracted; no minimap).
 - [ ] Replay or spectate entry point in the menu, if the replay machinery in the sim is wired to the client.
 - [ ] Gamepad support (low priority; not required for a Warcraft-style RTS).
 

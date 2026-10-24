@@ -407,6 +407,7 @@ const CONTROLS: &[ControlGroup] = &[
             ("Q / E", "Rotate"),
             ("Home", "Reset the camera"),
             ("Backspace", "Jump to your castle"),
+            (". (period)", "Jump to the last attacked building"),
         ],
     ),
     (

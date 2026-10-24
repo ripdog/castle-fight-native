@@ -1,3 +1,4 @@
+mod alerts;
 mod bridge;
 mod build_orders;
 mod build_ui;
@@ -707,6 +708,7 @@ fn main() {
             BuilderControlPlugin,
             DebugMenuPlugin,
             notifications::NotificationsPlugin,
+            alerts::AlertsPlugin,
         ))
         .add_message::<QuickSaveRequest>()
         .add_systems(Startup, setup_simulation_pause_ui)

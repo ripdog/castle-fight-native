@@ -37,7 +37,7 @@ On Windows (PowerShell):
 
 Extraction produces an `assets/wc3` directory containing the converted models, textures, audio, and manifests. Keep the `assets` folder beside the executables. Missing or outdated conversions may result in placeholders or missing visuals; rerun the converter when switching to an updated build. The extractor is restricted to **Classic/SD** assets, not Reforged/HD art. See [asset extraction details](crates/wc3-assets/README.md).
 
-From the client's main menu, choose **Single Player**, **Host Game**, or **Join Game**. Hosting uses TCP port **6112** by default. To join over a network, enter the host's IP address or domain (and port if different); the host may need to allow inbound TCP 6112 through their firewall/router. The host starts the match from the lobby.
+From the client's main menu, choose **Single Player**, **Host Game**, or **Join Game**. **F10** opens the in-game menu (resume, settings, controls, return to the main menu, exit), and **Settings** / **Controls** are also on the main menu. Hosting uses TCP port **6112** by default (changeable on the Host screen); the lobby shows the address to share. To join over a network, enter the host's IP address or domain (and port if different); the host may need to allow inbound TCP 6112 through their firewall/router. The host starts the match from the lobby.
 
 ## Build from source
 
