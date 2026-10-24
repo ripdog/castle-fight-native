@@ -324,7 +324,7 @@ impl WorldMetrics {
         })
     }
 
-    fn world_min(&self) -> Vec2 {
+    pub(crate) fn world_min(&self) -> Vec2 {
         self.navigation_min.as_vec2() * self.navigation_cell_world()
     }
 
@@ -332,7 +332,7 @@ impl WorldMetrics {
         (self.navigation_max + IVec2::ONE).as_vec2() * self.navigation_cell_world()
     }
 
-    fn world_size(&self) -> Vec2 {
+    pub(crate) fn world_size(&self) -> Vec2 {
         self.world_max() - self.world_min()
     }
 
@@ -7550,6 +7550,7 @@ struct CameraControlResources<'w> {
     samples: Res<'w, PresentationSamples>,
     camera_focus: ResMut<'w, CameraFocusRequest>,
     portrait_hold: Res<'w, crate::inspection::PortraitCameraHold>,
+    minimap_target: ResMut<'w, crate::minimap::MinimapCameraTarget>,
     settings: Res<'w, crate::client_settings::ClientSettings>,
 }
 
@@ -7582,6 +7583,11 @@ fn update_camera(
             rig.focus = sim_point_to_terrain_world(unit.position, &resources.terrain);
             rig.grab_anchor = None;
         }
+    }
+
+    if let Some(point) = resources.minimap_target.0.take() {
+        rig.focus = Vec3::new(point.x, rig.focus.y, point.y);
+        rig.grab_anchor = None;
     }
 
     let tracking = resources.portrait_hold.0.and_then(|target| {

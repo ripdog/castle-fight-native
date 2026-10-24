@@ -11,8 +11,11 @@ use crate::{
     bridge::PresentationSamples,
     game_menu::MatchSessionReset,
     notifications::{Notifications, Severity},
-    presentation::CameraFocusRequest,
+    presentation::{CameraFocusRequest, WorldMetrics},
 };
+
+/// How long the minimap ping for an attack stays up, in real seconds.
+const PING_SECONDS: f32 = 6.0;
 
 /// Real seconds between alerts, so a long siege does not spam the screen.
 const ALERT_COOLDOWN_SECONDS: f32 = 10.0;
@@ -22,6 +25,7 @@ pub(crate) struct AlertsPlugin;
 impl Plugin for AlertsPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<AlertState>()
+            .init_resource::<AlertPing>()
             .add_message::<MatchSessionReset>()
             .add_systems(
                 Update,
@@ -37,10 +41,38 @@ struct AlertState {
     cooldown: f32,
 }
 
-fn reset_alerts(mut resets: MessageReader<MatchSessionReset>, mut state: ResMut<AlertState>) {
+/// Where on the map the latest attack alert happened, for the minimap to ring.
+#[derive(Resource, Default)]
+pub(crate) struct AlertPing {
+    /// World-plane (x, z) centre of the attacked building and seconds since the alert.
+    at: Option<(Vec2, f32)>,
+}
+
+impl AlertPing {
+    /// The ping position and its age while it is still showing.
+    pub(crate) fn active(&self) -> Option<(Vec2, f32)> {
+        self.at.filter(|(_, age)| *age < PING_SECONDS)
+    }
+}
+
+fn reset_alerts(
+    mut resets: MessageReader<MatchSessionReset>,
+    mut state: ResMut<AlertState>,
+    mut ping: ResMut<AlertPing>,
+) {
     if resets.read().count() > 0 {
         *state = AlertState::default();
+        *ping = AlertPing::default();
     }
+}
+
+/// The alert bookkeeping a detection pass updates.
+#[derive(bevy::ecs::system::SystemParam)]
+struct AlertOutputs<'w> {
+    notifications: ResMut<'w, Notifications>,
+    state: ResMut<'w, AlertState>,
+    ping: ResMut<'w, AlertPing>,
+    metrics: Res<'w, WorldMetrics>,
 }
 
 fn detect_attacks_on_base(
@@ -48,10 +80,18 @@ fn detect_attacks_on_base(
     samples: Res<PresentationSamples>,
     selected: Res<SelectedMatch>,
     authoritative: Res<AuthoritativeSimulation>,
-    mut notifications: ResMut<Notifications>,
-    mut state: ResMut<AlertState>,
+    outputs: AlertOutputs,
 ) {
+    let AlertOutputs {
+        mut notifications,
+        mut state,
+        mut ping,
+        metrics,
+    } = outputs;
     state.cooldown = (state.cooldown - time.delta_secs()).max(0.0);
+    if let Some((_, age)) = ping.at.as_mut() {
+        *age += time.delta_secs();
+    }
     if !samples.is_changed() || !samples.tick_advanced() {
         return;
     }
@@ -80,6 +120,8 @@ fn detect_attacks_on_base(
         return;
     }
     state.cooldown = ALERT_COOLDOWN_SECONDS;
+    let (center, _) = metrics.footprint_center_size(building.footprint);
+    ping.at = Some((Vec2::new(center.x, center.z), 0.0));
     let text = if sim.team_objective(team) == Some(building.id) {
         "Your castle is under attack! (. to look)"
     } else {

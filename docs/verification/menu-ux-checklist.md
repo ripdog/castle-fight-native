@@ -89,7 +89,7 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 
 ## P4 — Large, deferred
 
-- [ ] **Minimap.** `inspection.rs` draws a "MINIMAP" label in an empty box. A real implementation needs terrain, building and unit markers, the camera rectangle, click/drag to move the camera, and a fog-of-war aware view, and it is the natural surface for alerts and pings. This is a substantial, self-contained piece of work; treat it as its own plan rather than as part of the menu pass.
+- [x] **Minimap.** Implemented in `minimap.rs`: shaded terrain, buildings, units, builders, the camera footprint and an attack ping, with click/drag to move the camera (spec §15.3). Not done: right-click orders and pings on the minimap, and unit/building icons.
 
 ## Not applicable / spec corrections
 

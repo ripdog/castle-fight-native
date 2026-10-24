@@ -247,6 +247,10 @@ The menu offers Resume, Settings, Controls, Main Menu (when the client was start
 
 When the match finishes, the final scoreboard opens automatically with a headline for the viewer: Victory, Defeat or Draw relative to the local player's team, or just the winning side when one client controls every player. It offers View Battlefield (hides the panel so the final position can be inspected; `F9` brings it back), Main Menu where the client has one, and Exit. A finished match is final, so a networked client stops trying to reconnect to the server that ended it and does not report that server's closing as a fault.
 
+### 15.3 Minimap
+
+The bottom-left console slot shows a minimap of the whole playable area: hill-shaded terrain, buildings and units in ally or enemy colours (fixed West/East colours when one client controls both teams), the local builder, buildings only remembered from earlier sight dimmed, the camera's ground footprint, and an expanding ring where a building of the viewer's team was last attacked. It is drawn from the presentation snapshot, so it reveals nothing the viewer's vision does not, and it is client-local. Pressing or dragging inside it centres the camera there; the console area already blocks battlefield clicks, so this never issues an order.
+
 ## 16. Latency display and command feedback
 
 Because gameplay commands are discrete and relatively low frequency, clear acknowledgement may be more valuable than aggressive prediction.

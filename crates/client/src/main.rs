@@ -18,6 +18,7 @@ mod lobby;
 mod main_menu;
 mod match_ui;
 mod menu_focus;
+mod minimap;
 mod network;
 mod notifications;
 mod particle_renderer;
@@ -717,6 +718,7 @@ fn main() {
             DebugMenuPlugin,
             notifications::NotificationsPlugin,
             alerts::AlertsPlugin,
+            minimap::MinimapPlugin,
         ))
         .add_message::<QuickSaveRequest>()
         .add_systems(Startup, setup_simulation_pause_ui)

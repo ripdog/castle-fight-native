@@ -487,28 +487,22 @@ fn setup_inspector_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
         ZIndex(-1),
         Pickable::IGNORE,
     ));
-    commands
-        .spawn((
-            Node {
-                position_type: PositionType::Absolute,
-                left: px(0.0),
-                bottom: px(0.0),
-                width: px(MAP_SLOT_WIDTH),
-                height: px(CONSOLE_HEIGHT),
-                border: UiRect::all(px(3.0)),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                ..default()
-            },
-            BackgroundColor(PANEL_BACKGROUND),
-            BorderColor::all(Color::srgb(0.32, 0.27, 0.16)),
-        ))
-        .with_child((
-            Text::new("MINIMAP"),
-            TextFont::from_font_size(17.0),
-            TextColor(Color::srgb(0.45, 0.42, 0.35)),
-            Pickable::IGNORE,
-        ));
+    commands.spawn((
+        crate::minimap::MinimapPanel,
+        Node {
+            position_type: PositionType::Absolute,
+            left: px(0.0),
+            bottom: px(0.0),
+            width: px(MAP_SLOT_WIDTH),
+            height: px(CONSOLE_HEIGHT),
+            border: UiRect::all(px(3.0)),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            ..default()
+        },
+        BackgroundColor(PANEL_BACKGROUND),
+        BorderColor::all(Color::srgb(0.32, 0.27, 0.16)),
+    ));
     commands
         .spawn((
             Node {
