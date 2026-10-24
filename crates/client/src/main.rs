@@ -1521,7 +1521,14 @@ fn process_network_events(
     let events = match &mut authoritative.authority {
         AuthorityMode::Local => return Ok(()),
         AuthorityMode::Network { client, .. } => {
-            client.poll_reconnect();
+            // A finished match is over for good: the server stops and drops its clients, and there
+            // is nothing to rejoin.
+            if !matches!(
+                authoritative.simulation.lifecycle(),
+                castle_fight_sim::MatchLifecycle::Finished { .. }
+            ) {
+                client.poll_reconnect();
+            }
             client.drain_events()
         }
     };
@@ -1542,9 +1549,14 @@ fn process_network_events(
                     *connected = false;
                     *pending_handoff_position = None;
                 }
-                authoritative
-                    .pending_status
-                    .push(format!("Disconnected from server: {reason}"));
+                if !matches!(
+                    authoritative.simulation.lifecycle(),
+                    castle_fight_sim::MatchLifecycle::Finished { .. }
+                ) {
+                    authoritative
+                        .pending_status
+                        .push(format!("Disconnected from server: {reason}"));
+                }
             }
             NetworkEvent::Reconnected(assignment) => {
                 presentation.freeze_network_timeline();
