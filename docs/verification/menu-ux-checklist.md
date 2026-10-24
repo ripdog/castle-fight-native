@@ -26,7 +26,7 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 - [x] Host can choose players per team (1v1 / 2v2 / 3v3) in a hosted lobby. New `SelectTeamSize` request (protocol 16); players whose slot disappears are moved, and the shrink is refused if they would not fit. Joiners rebuild their local world from the server's roster.
 - [x] Non-host controls that are disabled say why ("Only the host can change these settings", "Players per team (set by host)").
 - [x] Joiners can move to any open slot, including on the other team (`SelectSlot`); open slots show a "Move here" button and no race selector. Leaving the lobby (`LeaveLobby`) now frees the slot; before, a departed player kept it reserved and the match looked full.
-- [x] Player names are sent on join, shown in the lobby, the scoreboard and the top bar instead of "Player N". The name defaults to the operating system account name; a field to edit it belongs with the Settings screen (still open under P2).
+- [x] Player names are sent on join, shown in the lobby, the scoreboard and the top bar instead of "Player N". The name defaults to the operating system account name and can be changed in Settings.
 - [x] Waiting-for-players state is a prominent status panel ("WAITING FOR PLAYERS 2 / 4" with the number of open slots, then "ALL PLAYERS CONNECTED"), not just the footer line.
 
 ### Join / host flow (main menu)
@@ -50,16 +50,16 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 
 ### Settings screen
 
-- [ ] Settings reachable from the main menu and the in-game menu.
-- [ ] Audio: master, effects and (if/when added) music volume. Currently audio exists only as spatial combat effects (`wc3_effects.rs`) with no volume control.
-- [ ] Display: fullscreen/windowed toggle in UI (state is persisted in `view_state.rs` but there is no menu control), resolution/vsync as applicable.
-- [ ] UI scale / text scale (menus use fixed pixel sizes).
-- [ ] Input: edge-scroll on/off, camera pan speed, scroll-wheel zoom sensitivity.
-- [ ] Persist settings alongside the existing view state.
+- [x] Settings and Controls are reachable from the main menu and the F10 menu (`settings_menu.rs`).
+- [x] Audio: master volume (applied through Bevy's global volume). All current sound is effects, so a separate effects slider waits for music.
+- [x] Display: fullscreen toggle in Settings (shares the window-mode logic with Alt+Enter). Resolution and vsync controls are not implemented.
+- [ ] UI scale / text scale (menus use fixed pixel sizes). Deferred: Bevy's global `UiScale` would also scale the in-game HUD, whose hit-testing helpers (`cursor_over_*`) assume unscaled pixel layouts, so world clicks could land through the panels. Needs those helpers made scale-aware first.
+- [x] Input: edge scrolling on/off, camera speed and zoom speed multipliers.
+- [x] Settings persist in `settings.json` beside `view-state.json`.
 
 ### Help and discoverability
 
-- [ ] Controls / hotkey reference screen (camera, selection groups, `Tab` type cycling, grave idle-builder cycle, `Shift` queueing, `F1`/`F8`/`F9`, `H`, `Ctrl+S`/`Ctrl+O`).
+- [x] Controls reference overlay (camera, selection, orders, game keys), reachable from the main menu and F10 menu.
 - [ ] Scoreboard can be held with `Tab` (and/or opened by a clickable HUD button) in addition to `F9`.
 - [ ] Round/time/Rescue Strike line in the top HUD split into readable elements instead of one text string with an embedded "F9: Scores" hint.
 - [ ] Debug-only HUD text (FPS / tick) and the `F1`/`F8` developer overlays are hidden from ordinary play, or gated behind a flag. (Not confirmed how `debug_available()` gates them in a normal network match.)
@@ -68,7 +68,7 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 ### Camera
 
 - [ ] "Jump to castle" / "jump to last alert" / "centre on builder" shortcuts.
-- [ ] Option to disable edge scrolling (useful in windowed mode).
+- [x] Edge scrolling can be turned off in Settings.
 
 ## P3 — Lobby and polish
 

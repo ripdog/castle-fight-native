@@ -33,6 +33,7 @@ use crate::{
     game_menu::{LeaveMatchRequest, MatchSessionReset},
     lobby::LobbyState,
     network::NetworkClient,
+    settings_menu::{Panel, SettingsMenuState},
 };
 
 const DEFAULT_MULTIPLAYER_PORT: u16 = DEFAULT_GAME_PORT;
@@ -160,7 +161,6 @@ pub(crate) struct MainMenuState {
     screen: MainMenuScreen,
     join_address: String,
     host_port_text: String,
-    settings: ClientSettings,
     error: Option<String>,
     active: bool,
     /// Action requested from the keyboard, run alongside button presses.
@@ -179,7 +179,6 @@ impl MainMenuState {
             screen: MainMenuScreen::Main,
             join_address: settings.last_join_address.clone(),
             host_port_text: settings.host_port.to_string(),
-            settings,
             error: None,
             active: true,
             requested: None,
@@ -229,6 +228,8 @@ struct MenuTextField;
 #[derive(Component, Clone, Copy)]
 enum MainMenuAction {
     SinglePlayer,
+    Settings,
+    Controls,
     HostScreen,
     Host,
     JoinScreen,
@@ -305,6 +306,8 @@ fn spawn_main_menu(commands: &mut Commands, menu: &MainMenuState) {
                         button(panel, "SINGLE PLAYER", MainMenuAction::SinglePlayer);
                         button(panel, "HOST GAME", MainMenuAction::HostScreen);
                         button(panel, "JOIN GAME", MainMenuAction::JoinScreen);
+                        button(panel, "SETTINGS", MainMenuAction::Settings);
+                        button(panel, "CONTROLS", MainMenuAction::Controls);
                         button(panel, "EXIT", MainMenuAction::Exit);
                     }
                     MainMenuScreen::Host => {
@@ -486,14 +489,27 @@ struct MenuGame<'w> {
     debug_menu: ResMut<'w, DebugMenuState>,
 }
 
+/// Resources a main-menu button can reach beyond the menu itself.
+#[derive(SystemParam)]
+struct MainMenuEffects<'w> {
+    settings_menu: Option<ResMut<'w, SettingsMenuState>>,
+    settings: Res<'w, ClientSettings>,
+    exit: MessageWriter<'w, AppExit>,
+}
+
 fn handle_main_menu_buttons(
     mut commands: Commands,
     mut menu: ResMut<MainMenuState>,
     mut buttons: MenuButtonQuery<'_, '_>,
     roots: Query<Entity, With<MainMenuRoot>>,
     mut game: MenuGame<'_>,
-    mut exit: MessageWriter<AppExit>,
+    mut effects: MainMenuEffects<'_>,
 ) {
+    let MainMenuEffects {
+        settings_menu,
+        settings,
+        exit,
+    } = &mut effects;
     if !menu.active {
         return;
     }
@@ -525,6 +541,15 @@ fn handle_main_menu_buttons(
             menu.active = false;
             commands.entity(root).despawn();
         }
+        MainMenuAction::Settings | MainMenuAction::Controls => {
+            if let Some(settings_menu) = settings_menu.as_deref_mut() {
+                settings_menu.open(if matches!(action, MainMenuAction::Settings) {
+                    Panel::Settings
+                } else {
+                    Panel::Controls
+                });
+            }
+        }
         MainMenuAction::JoinScreen => {
             menu.screen = MainMenuScreen::Join;
             menu.error = None;
@@ -547,11 +572,12 @@ fn handle_main_menu_buttons(
             match menu.host_port_text.parse::<u16>() {
                 Ok(port) if port >= MIN_HOST_PORT => {
                     let options = menu.options.clone();
+                    let name = crate::network::player_name_for(&settings.player_name);
                     begin_session(
                         &mut menu,
                         format!("Starting game on port {port}..."),
                         Remember::HostPort(port),
-                        move || start_hosted_session(&options, port),
+                        move || start_hosted_session(&options, port, &name),
                     );
                 }
                 _ => {
@@ -563,11 +589,12 @@ fn handle_main_menu_buttons(
         MainMenuAction::Connect => {
             let options = menu.options.clone();
             let address = menu.join_address.clone();
+            let name = crate::network::player_name_for(&settings.player_name);
             begin_session(
                 &mut menu,
                 format!("Connecting to {}...", address.trim()),
                 Remember::JoinAddress(address.trim().to_owned()),
-                move || connect_to_session(&options, &address),
+                move || connect_to_session(&options, &address, &name),
             );
             redraw(&mut commands, root, &menu);
         }
@@ -598,6 +625,7 @@ fn begin_session(
 fn finish_pending_session(
     mut commands: Commands,
     mut menu: ResMut<MainMenuState>,
+    mut settings: ResMut<ClientSettings>,
     roots: Query<Entity, With<MainMenuRoot>>,
     mut game: MenuGame<'_>,
 ) {
@@ -616,11 +644,11 @@ fn finish_pending_session(
     }) {
         Ok(()) => {
             match remember {
-                Some(Remember::JoinAddress(address)) => menu.settings.last_join_address = address,
-                Some(Remember::HostPort(port)) => menu.settings.host_port = port,
+                Some(Remember::JoinAddress(address)) => settings.last_join_address = address,
+                Some(Remember::HostPort(port)) => settings.host_port = port,
                 None => {}
             }
-            menu.settings.save();
+            settings.save();
             menu.active = false;
             commands.entity(root).despawn();
         }
@@ -714,7 +742,11 @@ struct NetworkSession {
     hosted: Option<HostedServer>,
 }
 
-fn start_hosted_session(options: &ClientOptions, port: u16) -> Result<NetworkSession, String> {
+fn start_hosted_session(
+    options: &ClientOptions,
+    port: u16,
+    player_name: &str,
+) -> Result<NetworkSession, String> {
     let demo = network_demo(options)?;
     let authoritative = AuthoritativeMatch::new(
         demo.match_config.clone(),
@@ -750,6 +782,7 @@ fn start_hosted_session(options: &ClientOptions, port: u16) -> Result<NetworkSes
     let joined = join_server(
         &demo,
         SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port),
+        player_name,
     )?;
     let mut session = joined.into_session(demo);
     session.hosted = Some(hosted);
@@ -762,12 +795,16 @@ impl Drop for HostedServer {
     }
 }
 
-fn connect_to_session(options: &ClientOptions, input: &str) -> Result<NetworkSession, String> {
+fn connect_to_session(
+    options: &ClientOptions,
+    input: &str,
+    player_name: &str,
+) -> Result<NetworkSession, String> {
     let addresses = resolve_server_addresses(input)?;
     let demo = network_demo(options)?;
     let mut failures = Vec::new();
     for address in addresses {
-        match join_server(&demo, address) {
+        match join_server(&demo, address, player_name) {
             Ok(joined) => return Ok(joined.into_session(demo)),
             Err(error) => failures.push(format!("{address}: {error}")),
         }
@@ -804,13 +841,17 @@ impl JoinedServer {
     }
 }
 
-fn join_server(demo: &crate::demo::DemoWorld, address: SocketAddr) -> Result<JoinedServer, String> {
+fn join_server(
+    demo: &crate::demo::DemoWorld,
+    address: SocketAddr,
+    player_name: &str,
+) -> Result<JoinedServer, String> {
     let compatibility = compatibility_identity_for_demo(demo);
     let (client, assignment) = NetworkClient::connect(
         address,
         compatibility,
         u64::from(std::process::id()),
-        &crate::network::default_player_name(),
+        player_name,
     )
     .map_err(|error| error.to_string())?;
     if assignment.next_stream_position != 0
@@ -971,6 +1012,7 @@ mod tests {
         })
         .insert_resource(SimulationPlayback { paused: true })
         .init_resource::<DebugMenuState>()
+        .init_resource::<ClientSettings>()
         .add_message::<AppExit>()
         .add_message::<KeyboardInput>()
         .add_plugins((MainMenuPlugin, crate::lobby::LobbyPlugin));
@@ -1018,6 +1060,7 @@ mod tests {
         })
         .insert_resource(SimulationPlayback { paused: true })
         .init_resource::<DebugMenuState>()
+        .init_resource::<ClientSettings>()
         .add_message::<AppExit>()
         .add_message::<KeyboardInput>()
         .add_plugins((MainMenuPlugin, crate::lobby::LobbyPlugin));

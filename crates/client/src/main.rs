@@ -24,6 +24,7 @@ mod render_audit;
 mod render_tuning;
 mod resource_ui;
 mod scoreboard_ui;
+mod settings_menu;
 mod skin_influences;
 mod terrain;
 mod ui_icons;
@@ -426,6 +427,7 @@ fn main() {
     raise_open_file_limit();
     configure_asset_io_task_pool();
     let options = ClientOptions::parse();
+    let client_settings = client_settings::ClientSettings::load();
     if options.list_map_versions {
         print_registered_map_versions();
         return;
@@ -516,7 +518,7 @@ fn main() {
             server_address,
             compatibility,
             u64::from(std::process::id()),
-            &network::default_player_name(),
+            &network::player_name_for(&client_settings.player_name),
         )
         .unwrap_or_else(|error| {
             eprintln!("cannot join Castle Fight server {server_address}: {error}");
@@ -617,6 +619,7 @@ fn main() {
     authoritative.commands_enabled = !show_main_menu;
     let mut app = App::new();
     app.insert_resource(ClearColor(Color::srgb(0.025, 0.03, 0.04)))
+        .insert_resource(client_settings)
         .insert_resource(ViewStatePersistence::new(view_state))
         .insert_resource(Time::<Fixed>::from_hz(f64::from(
             CASTLE_FIGHT_SIMULATION_HZ,
@@ -728,7 +731,11 @@ fn main() {
         .add_systems(FixedUpdate, advance_authoritative_simulation);
 
     if interactive_frontend {
-        app.add_plugins((LobbyPlugin, game_menu::GameMenuPlugin));
+        app.add_plugins((
+            LobbyPlugin,
+            game_menu::GameMenuPlugin,
+            settings_menu::SettingsMenuPlugin,
+        ));
     }
     if show_main_menu {
         app.insert_resource(MainMenuState::new(options.clone()))

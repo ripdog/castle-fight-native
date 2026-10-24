@@ -7550,6 +7550,7 @@ struct CameraControlResources<'w> {
     samples: Res<'w, PresentationSamples>,
     camera_focus: ResMut<'w, CameraFocusRequest>,
     portrait_hold: Res<'w, crate::inspection::PortraitCameraHold>,
+    settings: Res<'w, crate::client_settings::ClientSettings>,
 }
 
 fn update_camera(
@@ -7632,7 +7633,8 @@ fn update_camera(
     if camera_key_pressed(KeyCode::KeyA) || resources.keys.pressed(KeyCode::ArrowLeft) {
         movement -= right;
     }
-    if window.focused
+    if resources.settings.edge_scroll
+        && window.focused
         && !resources.mouse_buttons.pressed(MouseButton::Middle)
         && let Some(cursor) = window.cursor_position()
     {
@@ -7644,7 +7646,7 @@ fn update_camera(
         movement += right * edge.x + forward * edge.y;
     }
     if tracking.is_none() {
-        pan_camera_focus(rig, movement, dt);
+        pan_camera_focus(rig, movement, dt * resources.settings.pan_speed);
     }
     if camera_key_pressed(KeyCode::KeyQ) {
         rig.yaw += 0.9 * dt;
@@ -7654,7 +7656,7 @@ fn update_camera(
     }
     let scroll: f32 = mouse_wheel.read().map(|event| event.y).sum();
     if scroll != 0.0 {
-        rig.distance *= (1.0 - scroll * 0.10).clamp(0.55, 1.45);
+        rig.distance *= (1.0 - scroll * 0.10 * resources.settings.zoom_speed).clamp(0.55, 1.45);
     }
     let world_size = resources.metrics.world_size();
     rig.distance = rig.distance.clamp(

@@ -23,6 +23,16 @@ pub(crate) fn default_player_name() -> String {
         .unwrap_or_else(|| "Player".to_owned())
 }
 
+/// The name to announce: the player's chosen name, or the account name when none was chosen.
+pub(crate) fn player_name_for(configured: &str) -> String {
+    let configured = sanitize_player_name(configured);
+    if configured.is_empty() {
+        default_player_name()
+    } else {
+        configured
+    }
+}
+
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 /// Without a bound an unreachable address blocks for the operating system's connect timeout.
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);

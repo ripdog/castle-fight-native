@@ -147,8 +147,13 @@ pub(crate) fn toggle_fullscreen(
     if !alt || !(keys.just_pressed(KeyCode::Enter) || keys.just_pressed(KeyCode::NumpadEnter)) {
         return;
     }
+    toggle_window_mode(&mut window, &mut persistence);
+}
+
+/// Switches between windowed and borderless fullscreen, restoring the saved windowed geometry.
+pub(crate) fn toggle_window_mode(window: &mut Window, persistence: &mut ViewStatePersistence) {
     if window.mode == WindowMode::Windowed {
-        persistence.state.observe_window(&window);
+        persistence.state.observe_window(window);
         window.mode = WindowMode::BorderlessFullscreen(MonitorSelection::Current);
     } else {
         window.mode = WindowMode::Windowed;

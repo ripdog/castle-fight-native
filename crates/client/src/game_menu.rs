@@ -5,6 +5,7 @@
 //! menu (or steps back from a confirmation) while it is already open.
 use bevy::{
     app::AppExit,
+    ecs::system::SystemParam,
     input::{
         ButtonState,
         keyboard::{Key, KeyboardInput},
@@ -19,6 +20,7 @@ use crate::{
     AuthoritativeSimulation, SimulationPlayback,
     lobby::LobbyState,
     main_menu::{HostedServer, MainMenuState},
+    settings_menu::{Panel, SettingsMenuState},
 };
 
 const SCRIM: Color = Color::srgba(0.0, 0.0, 0.0, 0.62);
@@ -36,6 +38,7 @@ pub(crate) struct GameMenuPlugin;
 impl Plugin for GameMenuPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<GameMenuState>()
+            .init_resource::<SettingsMenuState>()
             .add_message::<LeaveMatchRequest>()
             .add_message::<MatchSessionReset>()
             .add_message::<KeyboardInput>()
@@ -114,6 +117,8 @@ struct GameMenuRoot;
 enum GameMenuAction {
     Resume,
     LeaveMatch,
+    Settings,
+    Controls,
     ExitGame,
     ConfirmLeave,
     ConfirmExit,
@@ -141,19 +146,25 @@ fn match_screen_active(lobby: Option<&LobbyState>, main_menu: Option<&MainMenuSt
     !lobby.is_some_and(LobbyState::active) && !main_menu.is_some_and(MainMenuState::active)
 }
 
-fn handle_menu_keys(
+pub(crate) fn handle_menu_keys(
     mut keyboard: MessageReader<KeyboardInput>,
     mut menu: ResMut<GameMenuState>,
     mut playback: ResMut<SimulationPlayback>,
     authoritative: Res<AuthoritativeSimulation>,
     lobby: Option<Res<LobbyState>>,
     main_menu: Option<Res<MainMenuState>>,
+    settings_menu: Option<Res<SettingsMenuState>>,
 ) {
     if !match_screen_active(lobby.as_deref(), main_menu.as_deref()) {
         keyboard.clear();
         if menu.is_open() {
             menu.dismiss();
         }
+        return;
+    }
+    // Settings and the controls reference sit on top and own the keyboard while open.
+    if settings_menu.is_some_and(|settings| settings.is_open()) {
+        keyboard.clear();
         return;
     }
     for event in keyboard.read() {
@@ -189,14 +200,21 @@ type MenuButtonQuery<'w, 's> = Query<
     (Changed<Interaction>, With<Button>),
 >;
 
+/// What a pressed menu button can set in motion beyond the menu itself.
+#[derive(SystemParam)]
+struct MenuEffects<'w> {
+    settings_menu: ResMut<'w, SettingsMenuState>,
+    leave: MessageWriter<'w, LeaveMatchRequest>,
+    exit: MessageWriter<'w, AppExit>,
+}
+
 fn handle_menu_buttons(
     mut buttons: MenuButtonQuery<'_, '_>,
     mut menu: ResMut<GameMenuState>,
     mut playback: ResMut<SimulationPlayback>,
     authoritative: Res<AuthoritativeSimulation>,
     main_menu: Option<Res<MainMenuState>>,
-    mut leave: MessageWriter<LeaveMatchRequest>,
-    mut exit: MessageWriter<AppExit>,
+    mut effects: MenuEffects<'_>,
 ) {
     let match_over = matches!(
         authoritative.simulation.lifecycle(),
@@ -216,6 +234,8 @@ fn handle_menu_buttons(
     match action {
         GameMenuAction::Resume => menu.close(&mut playback),
         GameMenuAction::Back => menu.screen = Some(GameMenuScreen::Main),
+        GameMenuAction::Settings => effects.settings_menu.open(Panel::Settings),
+        GameMenuAction::Controls => effects.settings_menu.open(Panel::Controls),
         // A finished match has nothing left to lose, so skip the confirmation.
         GameMenuAction::LeaveMatch if !match_over => {
             menu.screen = Some(GameMenuScreen::ConfirmLeave);
@@ -223,14 +243,14 @@ fn handle_menu_buttons(
         GameMenuAction::LeaveMatch | GameMenuAction::ConfirmLeave => {
             if main_menu.is_some() {
                 menu.dismiss();
-                leave.write(LeaveMatchRequest);
+                effects.leave.write(LeaveMatchRequest);
             }
         }
         GameMenuAction::ExitGame if !match_over => {
             menu.screen = Some(GameMenuScreen::ConfirmExit);
         }
         GameMenuAction::ExitGame | GameMenuAction::ConfirmExit => {
-            exit.write(AppExit::Success);
+            effects.exit.write(AppExit::Success);
         }
     }
 }
@@ -316,6 +336,8 @@ fn spawn_menu(commands: &mut Commands, screen: GameMenuScreen, context: MenuCont
                             );
                         }
                         button(panel, "RESUME GAME", GameMenuAction::Resume);
+                        button(panel, "SETTINGS", GameMenuAction::Settings);
+                        button(panel, "CONTROLS", GameMenuAction::Controls);
                         if context.can_return_to_main_menu {
                             button(panel, "MAIN MENU", GameMenuAction::LeaveMatch);
                         }
