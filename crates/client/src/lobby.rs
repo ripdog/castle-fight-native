@@ -19,6 +19,7 @@ use crate::{
     client_match_config, create_demo_world_for_match_config,
     debug_menu::DebugMenuState,
     default_worker_count,
+    game_menu::LeaveMatchRequest,
     presentation::CameraFocusRequest,
 };
 
@@ -54,6 +55,7 @@ impl Plugin for LobbyPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<KeyboardInput>()
             .add_message::<MouseWheel>()
+            .add_message::<LeaveMatchRequest>()
             .add_systems(
                 Update,
                 (
@@ -137,6 +139,7 @@ impl LobbyState {
             LobbyAction::Position(player) => player == self.local_player,
             LobbyAction::Race(player, race) => self.race(player) == race,
             LobbyAction::Start => true,
+            LobbyAction::Leave => false,
             LobbyAction::RoundTarget(wins) => self.options.rules.rounds_to_win == wins,
             LobbyAction::RescueStrikes(enabled) => {
                 self.options.rules.rescue_strikes_enabled == enabled
@@ -188,7 +191,7 @@ impl LobbyState {
             LobbyAction::RaceDropdown(player) | LobbyAction::Race(player, _) => {
                 player != self.local_player.0
             }
-            LobbyAction::CloseRaceMenu | LobbyAction::DismissRaceMenu => false,
+            LobbyAction::CloseRaceMenu | LobbyAction::DismissRaceMenu | LobbyAction::Leave => false,
         }
     }
 
@@ -210,7 +213,7 @@ impl LobbyState {
 }
 
 #[derive(Component)]
-struct LobbyRoot;
+pub(crate) struct LobbyRoot;
 
 /// The scrollable region between the fixed header and footer.
 #[derive(Component)]
@@ -233,6 +236,8 @@ enum LobbyAction {
     DebugStartingBuildings(DebugStartingBuildings),
     TimeOutcome(TimeLimitOutcome),
     Start,
+    /// Abandons the lobby and returns to the main menu.
+    Leave,
 }
 
 /// Applies `rules` locally, or requests them from the host when networked.
@@ -334,6 +339,10 @@ fn ensure_lobby_visible(
     roots: Query<Entity, With<LobbyRoot>>,
 ) {
     let Some(lobby) = lobby else {
+        // The lobby was abandoned (leaving to the main menu); take its screen down with it.
+        for root in &roots {
+            commands.entity(root).despawn();
+        }
         return;
     };
     if lobby.active && roots.is_empty() {
@@ -451,6 +460,14 @@ fn spawn_header(panel: &mut ChildSpawnerCommands, lobby: &LobbyState) {
                     ..default()
                 })
                 .with_children(|sizes| {
+                    styled_button(
+                        sizes,
+                        "Leave",
+                        LobbyAction::Leave,
+                        false,
+                        false,
+                        ButtonStyle::fixed(96.0),
+                    );
                     spawn_label_with_margin(sizes, "Players per team", FONT_BODY, MUTED);
                     for size in 1..=3 {
                         styled_button(
@@ -1007,6 +1024,7 @@ struct LobbyGame<'w> {
     playback: ResMut<'w, SimulationPlayback>,
     camera_focus: Option<ResMut<'w, CameraFocusRequest>>,
     debug_menu: ResMut<'w, DebugMenuState>,
+    leave: MessageWriter<'w, LeaveMatchRequest>,
 }
 
 impl LobbyGame<'_> {
@@ -1187,6 +1205,9 @@ fn handle_lobby_buttons(
                             lobby.open_race = None;
                             redraw = true;
                         }
+                    }
+                    LobbyAction::Leave => {
+                        game.leave.write(LeaveMatchRequest);
                     }
                     LobbyAction::Start => {
                         if lobby.networked {

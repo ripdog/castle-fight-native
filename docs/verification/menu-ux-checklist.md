@@ -22,7 +22,7 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 
 ### Lobby
 
-- [ ] Back / Leave button in both the single-player and networked lobby (currently the only exit is closing the game).
+- [x] Leave button in both the single-player and networked lobby; it returns to the main menu, closes the connection and stops a hosted server. (A joiner whose host left can now get out of the frozen lobby too.)
 - [ ] Host can choose players per team (1v1 / 2v2 / 3v3) in a hosted lobby. `TeamSize` is disabled whenever the lobby is networked, including for the host, and the hosted match's size is fixed by the CLI option when the server is created.
 - [ ] Non-host controls that are disabled say why ("Only the host can change this").
 - [ ] Joiners can see (and, where the rules allow, choose) their team/slot; currently `Position` is disabled for everyone when networked.
@@ -33,8 +33,8 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 
 - [ ] Paste support in the server-address field. `Ctrl+V` currently arrives as `Key::Character("v")` and inserts a literal `v`.
 - [ ] Ignore text input while a control modifier is held, and add basic editing (caret movement, clear, select-all).
-- [ ] `Esc` returns from the Join screen to the main menu; `Enter` already connects.
-- [ ] Host and Connect run off the UI thread with a visible "Connecting…" state, a timeout and a Cancel button. Both are currently synchronous, so a slow or unreachable host freezes the window.
+- [x] `Esc` returns from the Join screen to the main menu (and cancels a connection attempt in progress); `Enter` already connects.
+- [x] Host and Connect run off the UI thread with a visible "Connecting..." state and a Cancel button (`Esc` also cancels). The TCP connect is bounded to 5 seconds instead of the operating system's timeout. Failures return to the Join screen with the error.
 - [ ] Remember the last-used server address (and optionally a short recent-servers list) instead of defaulting to `127.0.0.1`.
 - [ ] Host sees their reachable address/port and can copy it (LAN IP, port 6112).
 - [ ] Host port is configurable (it is fixed at `DEFAULT_GAME_PORT` and only displayed).
