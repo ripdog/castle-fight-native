@@ -422,6 +422,9 @@ pub struct AttackEvent {
     pub delivery: AttackDelivery,
     pub missed: bool,
     pub critical: bool,
+    /// Damage the attack was rolled to deal, before target armour and other mitigation and
+    /// including any critical bonus; zero for a miss. Presentation uses it for floating text.
+    pub damage: i32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

@@ -132,8 +132,13 @@ const UNIT_WALK_BOB_HEIGHT: f32 = 0.55;
 const UNIT_WALK_PHASE_PER_TICK: f32 = 0.58;
 const UNIT_FACING_RESPONSE: f32 = 14.0;
 const UNIT_FACING_SNAP_RADIANS: f32 = 0.002;
-const MISS_INDICATOR_SECONDS: f32 = 1.0;
-const MISS_INDICATOR_RISE_PIXELS: f32 = 34.0;
+const COMBAT_TEXT_SECONDS: f32 = 1.6;
+/// World units the text climbs over its lifetime.
+const COMBAT_TEXT_RISE: f32 = 90.0;
+const COMBAT_TEXT_FONT_SIZE: f32 = 26.0;
+const COMBAT_TEXT_COLOR: Color = Color::srgb(1.0, 0.18, 0.12);
+/// Anchor height above the ground for text over a building, which has no unit height to use.
+const BUILDING_COMBAT_TEXT_HEIGHT: f32 = 90.0;
 const FPS_DISPLAY_SAMPLE_SECONDS: f32 = 0.5;
 pub(crate) const WC3_MODEL_FACING_OFFSET: f32 = -std::f32::consts::FRAC_PI_2;
 const WC3_PROJECTILE_FACING_OFFSET: f32 = -std::f32::consts::FRAC_PI_2;
@@ -896,11 +901,10 @@ struct AirWingPresentation {
 }
 
 #[derive(Component)]
-struct MissIndicator {
-    target: SimId,
-    fallback_position: SimPoint,
+struct CombatText {
+    /// World position the text started at; it never follows the unit.
+    origin: Vec3,
     remaining: f32,
-    critical: bool,
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -2841,7 +2845,16 @@ fn trigger_attack_animations(
     }
 }
 
-fn spawn_miss_indicators(mut commands: Commands, samples: Res<PresentationSamples>) {
+/// Floating combat text for critical strikes (the damage with a trailing `!`) and misses
+/// (`Miss!`). The text is placed in the world where the target stood when the attack resolved and
+/// then drifts upward and fades; it does not follow the unit afterwards.
+fn spawn_miss_indicators(
+    mut commands: Commands,
+    samples: Res<PresentationSamples>,
+    render_map: Res<RenderMap>,
+    terrain: Res<TerrainSurface>,
+    transforms: Query<&Transform>,
+) {
     if !samples.is_changed() {
         return;
     }
@@ -2852,15 +2865,38 @@ fn spawn_miss_indicators(mut commands: Commands, samples: Res<PresentationSample
         .iter()
         .filter(|attack| attack.missed || attack.critical)
     {
-        let critical = attack.critical;
+        let origin = render_map
+            .units
+            .get(&attack.target)
+            .and_then(|entry| transforms.get(entry.entity).ok())
+            .map_or_else(
+                || {
+                    let ground =
+                        terrain.clamp_world_position(sim_point_to_world(attack.target_position));
+                    let height = if samples.current.buildings.contains_key(&attack.target) {
+                        BUILDING_COMBAT_TEXT_HEIGHT
+                    } else {
+                        12.0
+                    };
+                    ground + Vec3::Y * height
+                },
+                |transform| {
+                    let extra_height = samples
+                        .current
+                        .units
+                        .get(&attack.target)
+                        .map_or(10.0, |unit| unit_height(unit) * 0.65 + 5.0);
+                    transform.translation + Vec3::Y * extra_height
+                },
+            );
         commands.spawn((
-            Text::new(if critical { "CRIT!" } else { "MISS" }),
-            TextFont::from_font_size(24.0),
-            TextColor(if critical {
-                Color::srgb(1.0, 0.30, 0.10)
+            Text::new(if attack.missed {
+                "Miss!".to_owned()
             } else {
-                Color::srgb(1.0, 0.88, 0.20)
+                format!("{}!", attack.damage)
             }),
+            TextFont::from_font_size(COMBAT_TEXT_FONT_SIZE),
+            TextColor(COMBAT_TEXT_COLOR),
             Node {
                 position_type: PositionType::Absolute,
                 left: px(-10_000.0),
@@ -2868,11 +2904,9 @@ fn spawn_miss_indicators(mut commands: Commands, samples: Res<PresentationSample
                 ..default()
             },
             ZIndex(100),
-            MissIndicator {
-                target: attack.target,
-                fallback_position: attack.target_position,
-                remaining: MISS_INDICATOR_SECONDS,
-                critical,
+            CombatText {
+                origin,
+                remaining: COMBAT_TEXT_SECONDS,
             },
         ));
     }
@@ -2880,52 +2914,40 @@ fn spawn_miss_indicators(mut commands: Commands, samples: Res<PresentationSample
 
 fn update_miss_indicators(
     mut commands: Commands,
-    state: (Res<Time>, Res<PresentationSamples>, Res<TerrainSurface>),
-    render_map: Res<RenderMap>,
-    transforms: Query<&Transform>,
+    time: Res<Time>,
     camera: Single<(&Camera, &GlobalTransform), With<Camera3d>>,
-    mut indicators: Query<(Entity, &mut MissIndicator, &mut Node, &mut TextColor)>,
+    mut texts: Query<(
+        Entity,
+        &mut CombatText,
+        &mut Node,
+        &mut TextColor,
+        &ComputedNode,
+    )>,
 ) {
-    let (time, samples, terrain) = state;
     let (camera, camera_transform) = *camera;
     let delta = time.delta_secs();
 
-    for (entity, mut indicator, mut node, mut color) in &mut indicators {
-        indicator.remaining -= delta;
-        if indicator.remaining <= 0.0 {
+    for (entity, mut text, mut node, mut color, computed) in &mut texts {
+        text.remaining -= delta;
+        if text.remaining <= 0.0 {
             commands.entity(entity).try_despawn();
             continue;
         }
 
-        let fallback =
-            terrain.clamp_world_position(sim_point_to_world(indicator.fallback_position));
-        let mut world = render_map
-            .units
-            .get(&indicator.target)
-            .and_then(|entry| transforms.get(entry.entity).ok())
-            .map_or(fallback + Vec3::Y * 12.0, |transform| {
-                let extra_height = samples
-                    .current
-                    .units
-                    .get(&indicator.target)
-                    .map_or(10.0, |unit| unit_height(unit) * 0.65 + 5.0);
-                transform.translation + Vec3::Y * extra_height
-            });
-        let life = (indicator.remaining / MISS_INDICATOR_SECONDS).clamp(0.0, 1.0);
-        world.y += (1.0 - life) * 5.0;
-
+        let age = 1.0 - (text.remaining / COMBAT_TEXT_SECONDS).clamp(0.0, 1.0);
+        let world = text.origin + Vec3::Y * (age * COMBAT_TEXT_RISE);
         let Ok(viewport) = camera.world_to_viewport(camera_transform, world) else {
             node.left = px(-10_000.0);
             node.top = px(-10_000.0);
             continue;
         };
-        node.left = px(viewport.x - 28.0);
-        node.top = px(viewport.y - 16.0 - (1.0 - life) * MISS_INDICATOR_RISE_PIXELS);
-        color.0 = if indicator.critical {
-            Color::srgba(1.0, 0.30, 0.10, life.min(0.95))
-        } else {
-            Color::srgba(1.0, 0.88, 0.20, life.min(0.95))
-        };
+        // Centre the text on its anchor; the node reports its size once laid out.
+        let size = computed.size() * computed.inverse_scale_factor();
+        node.left = px(viewport.x - size.x / 2.0);
+        node.top = px(viewport.y - size.y / 2.0);
+        // Fully opaque at first, fading over the second half of its life.
+        let alpha = (1.0 - age) * 2.0;
+        color.0 = COMBAT_TEXT_COLOR.with_alpha(alpha.clamp(0.0, 1.0));
     }
 }
 

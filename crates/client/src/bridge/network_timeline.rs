@@ -195,6 +195,7 @@ mod tests {
             delivery: AttackDelivery::Melee,
             missed: false,
             critical: false,
+            damage: 0,
         });
         sample
     }

@@ -408,6 +408,7 @@ impl Simulation {
                 || self.cursed_attack_misses(&intent, units, completed_tick)
                 || self.attack_is_evaded(&intent, units, completed_tick);
             let mut critical = false;
+            let mut rolled_damage = 0;
             if !missed {
                 let (bonus_damage, mut on_hit, critical_strike) =
                     self.resolve_passive_attack_effects(&intent, units, completed_tick);
@@ -448,6 +449,7 @@ impl Simulation {
                     .damage
                     .checked_add(bonus_damage)
                     .expect("attack plus passive bonus damage overflowed");
+                rolled_damage = damage;
                 match intent.attack.delivery {
                     AttackDelivery::Melee | AttackDelivery::RangedInstant
                         if target_is_alive(
@@ -907,6 +909,7 @@ impl Simulation {
                 delivery: intent.attack.delivery,
                 missed,
                 critical,
+                damage: rolled_damage,
             });
             attacks_resolved += 1;
         }

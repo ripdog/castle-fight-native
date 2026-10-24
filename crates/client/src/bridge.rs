@@ -871,6 +871,7 @@ mod tests {
             delivery: AttackDelivery::Melee,
             missed: false,
             critical: false,
+            damage: 0,
         });
         for team in [Team(0), Team(1)] {
             let mut samples =
