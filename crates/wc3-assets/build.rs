@@ -1809,6 +1809,41 @@ fn load_ui_assets(
         ));
     }
 
+    // Warcraft's race console art (`ConsoleTexture01..06` and overlays in `UI\war3skins.txt`).
+    // Tiles 01-06 compose the top and bottom console bars exactly as `UI\FrameDef\UI\ConsoleUI.fdf`
+    // lays them out; the overlays redraw the frame over the minimap and command-card wings. The
+    // Reforged-era Forsaken skin uses a different tile layout and is deliberately not offered.
+    for (theme, race, menu_buttons) in [
+        ("human", "Human", "human-console-buttonstates2"),
+        ("orc", "Orc", "orc-console-buttonstates2"),
+        ("night_elf", "NightElf", "nightelf-console-buttonstates2"),
+        ("undead", "Undead", "undead-console-buttonstates2"),
+    ] {
+        let tile = |name: &str| format!(r"UI\Console\{race}\{race}UITile{name}");
+        for (role, path) in [
+            ("tile01", tile("01")),
+            ("tile02", tile("02")),
+            ("tile03", tile("03")),
+            ("tile04", tile("04")),
+            ("tile05", tile("05")),
+            ("tile06", tile("06")),
+            ("tile05_overlay", tile("05Overlay")),
+            ("tile06_overlay", tile("06Overlay")),
+            ("inventory_cover", tile("-InventoryCover")),
+            (
+                "menu_buttons",
+                format!(r"UI\Widgets\Console\{race}\{menu_buttons}"),
+            ),
+        ] {
+            assets.insert((
+                "console_themes".to_owned(),
+                theme.to_owned(),
+                role.to_owned(),
+                path,
+            ));
+        }
+    }
+
     Ok(UiAssetCatalog {
         assets: assets
             .into_iter()

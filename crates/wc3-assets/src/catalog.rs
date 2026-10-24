@@ -652,6 +652,34 @@ mod tests {
     }
 
     #[test]
+    fn embedded_ui_catalog_offers_every_classic_console_theme_complete() {
+        let catalog = load_embedded_ui().expect("embedded UI catalog parses");
+        for theme in ["human", "orc", "night_elf", "undead"] {
+            for role in [
+                "tile01",
+                "tile02",
+                "tile03",
+                "tile04",
+                "tile05",
+                "tile06",
+                "tile05_overlay",
+                "tile06_overlay",
+                "inventory_cover",
+                "menu_buttons",
+            ] {
+                assert!(
+                    catalog.assets.iter().any(|asset| {
+                        asset.owner_kind == "console_themes"
+                            && asset.owner_rawcode == theme
+                            && asset.role == role
+                    }),
+                    "console theme {theme} is missing {role}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn native_referenced_missiles_and_beam_targets_retain_visible_inventory_ownership() {
         let catalog = load_embedded_visuals().unwrap();
         let native = load_embedded_lightnings().unwrap();
