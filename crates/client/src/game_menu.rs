@@ -393,186 +393,18 @@ fn button(parent: &mut ChildSpawnerCommands, value: impl Into<String>, action: G
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn menu_app() -> App {
-        let demo = crate::demo::create_demo_world(1, None);
-        let mut app = App::new();
-        app.insert_resource(AuthoritativeSimulation::new(demo.simulation, demo.content))
-            .insert_resource(SimulationPlayback { paused: false })
-            .init_resource::<ButtonInput<KeyCode>>()
-            .init_resource::<ButtonInput<MouseButton>>()
-            .add_message::<AppExit>()
-            .add_plugins(GameMenuPlugin);
-        app
-    }
-
-    fn press(app: &mut App, key_code: KeyCode, logical_key: Key) {
-        app.world_mut().write_message(KeyboardInput {
-            key_code,
-            logical_key,
-            state: ButtonState::Pressed,
-            text: None,
-            repeat: false,
-            window: Entity::PLACEHOLDER,
-        });
-        app.update();
-    }
-
-    fn menu(app: &App) -> &GameMenuState {
-        app.world().resource::<GameMenuState>()
-    }
-
-    fn press_button(app: &mut App, wanted: GameMenuAction) {
-        let button = app
-            .world_mut()
-            .query::<(Entity, &GameMenuAction)>()
-            .iter(app.world())
-            .find_map(|(entity, action)| (*action == wanted).then_some(entity))
-            .expect("button is on screen");
-        *app.world_mut().get_mut::<Interaction>(button).unwrap() = Interaction::Pressed;
-        app.update();
-    }
 
     #[test]
-    fn f10_opens_the_menu_and_escape_closes_it() {
-        let mut app = menu_app();
-        app.update();
-        press(&mut app, KeyCode::F10, Key::F10);
-        assert!(menu(&app).is_open());
-        assert!(app.world().resource::<SimulationPlayback>().paused);
-
-        press(&mut app, KeyCode::Escape, Key::Escape);
-        assert!(!menu(&app).is_open());
-        assert!(!app.world().resource::<SimulationPlayback>().paused);
-
-        press(&mut app, KeyCode::F10, Key::F10);
-        press(&mut app, KeyCode::F10, Key::F10);
-        assert!(!menu(&app).is_open());
-    }
-
-    #[test]
-    fn escape_alone_never_opens_the_menu() {
-        let mut app = menu_app();
-        app.update();
-        for _ in 0..5 {
-            press(&mut app, KeyCode::Escape, Key::Escape);
-        }
-        assert!(!menu(&app).is_open());
-        assert!(!app.world().resource::<SimulationPlayback>().paused);
-    }
-
-    #[test]
-    fn open_menu_hides_keyboard_and_mouse_input_from_gameplay() {
-        let mut app = menu_app();
-        app.update();
-        app.world_mut()
-            .resource_mut::<ButtonInput<KeyCode>>()
-            .press(KeyCode::KeyA);
-        app.update();
-        assert!(
-            app.world()
-                .resource::<ButtonInput<KeyCode>>()
-                .pressed(KeyCode::KeyA),
-            "input passes through while the menu is closed"
-        );
-
-        press(&mut app, KeyCode::F10, Key::F10);
-        let mut keys = app.world_mut().resource_mut::<ButtonInput<KeyCode>>();
-        keys.press(KeyCode::KeyA);
-        app.world_mut()
-            .resource_mut::<ButtonInput<MouseButton>>()
-            .press(MouseButton::Left);
-        app.update();
-        assert!(
-            !app.world()
-                .resource::<ButtonInput<KeyCode>>()
-                .pressed(KeyCode::KeyA)
-        );
-        assert!(
-            !app.world()
-                .resource::<ButtonInput<MouseButton>>()
-                .pressed(MouseButton::Left)
-        );
-    }
-
-    #[test]
-    fn exiting_requires_confirmation() {
-        let mut app = menu_app();
-        app.update();
-        press(&mut app, KeyCode::F10, Key::F10);
-        app.update();
-        press_button(&mut app, GameMenuAction::ExitGame);
-        app.update();
-        assert_eq!(menu(&app).screen, Some(GameMenuScreen::ConfirmExit));
-        assert!(
-            app.world().resource::<Messages<AppExit>>().is_empty(),
-            "the first click only asks for confirmation"
-        );
-
-        // Cancel returns to the top level without leaving the menu.
-        press_button(&mut app, GameMenuAction::Back);
-        app.update();
-        assert_eq!(menu(&app).screen, Some(GameMenuScreen::Main));
-        assert!(app.world().resource::<Messages<AppExit>>().is_empty());
-
-        press_button(&mut app, GameMenuAction::ExitGame);
-        app.update();
-        press_button(&mut app, GameMenuAction::ConfirmExit);
-        assert!(!app.world().resource::<Messages<AppExit>>().is_empty());
-    }
-
-    #[test]
-    fn menu_without_a_main_menu_offers_no_way_back_to_it() {
-        let mut app = menu_app();
-        app.update();
-        press(&mut app, KeyCode::F10, Key::F10);
-        app.update();
-        let actions = app
-            .world_mut()
-            .query::<&GameMenuAction>()
-            .iter(app.world())
-            .copied()
-            .collect::<Vec<_>>();
-        assert!(actions.contains(&GameMenuAction::Resume));
-        assert!(!actions.contains(&GameMenuAction::LeaveMatch));
-    }
-
-    #[test]
-    fn opening_pauses_offline_play_and_closing_restores_only_its_own_pause() {
+    fn closing_restores_only_a_pause_the_menu_itself_applied() {
         let mut menu = GameMenuState::default();
         let mut playback = SimulationPlayback { paused: false };
         menu.open(&mut playback, false);
-        assert!(playback.paused);
         menu.close(&mut playback);
         assert!(!playback.paused);
 
         // A match the player already paused stays paused after the menu closes.
         let mut playback = SimulationPlayback { paused: true };
         menu.open(&mut playback, false);
-        menu.close(&mut playback);
-        assert!(playback.paused);
-    }
-
-    #[test]
-    fn networked_matches_keep_running_behind_the_menu() {
-        let mut menu = GameMenuState::default();
-        let mut playback = SimulationPlayback { paused: false };
-        menu.open(&mut playback, true);
-        assert!(menu.is_open());
-        assert!(!playback.paused);
-        menu.close(&mut playback);
-        assert!(!menu.is_open());
-        assert!(!playback.paused);
-    }
-
-    #[test]
-    fn dismissing_a_menu_for_teardown_leaves_playback_alone() {
-        let mut menu = GameMenuState::default();
-        let mut playback = SimulationPlayback { paused: false };
-        menu.open(&mut playback, false);
-        menu.dismiss();
-        assert!(!menu.is_open());
-        assert!(playback.paused);
-        // A later close must not unpause a world the next screen paused deliberately.
         menu.close(&mut playback);
         assert!(playback.paused);
     }

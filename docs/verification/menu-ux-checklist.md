@@ -1,6 +1,6 @@
 # Menu, lobby and HUD UX checklist
 
-Status: **audit of 2026-10-24; nothing below is implemented unless ticked.** Ticked items are covered by focused tests, but the visual flow has not yet been checked by hand.
+Status: **audit of 2026-10-24; nothing below is implemented unless ticked.** Ticked items have not yet been checked by hand in the running client.
 
 This is a progress tracker, not a specification. It was produced by reading the client code (`crates/client/src/{main_menu,lobby,match_ui,resource_ui,scoreboard_ui,inspection,build_ui,main,presentation}.rs`) and was not validated by playing the game. Re-check each item against the code before starting it; line references drift.
 

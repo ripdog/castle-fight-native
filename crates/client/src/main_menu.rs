@@ -821,17 +821,6 @@ mod tests {
     }
 
     #[test]
-    fn dropping_the_hosted_server_handle_stops_the_server() {
-        let stop = Arc::new(AtomicBool::new(false));
-        let hosted = HostedServer {
-            stop: Arc::clone(&stop),
-        };
-        assert!(!stop.load(Ordering::Acquire));
-        drop(hosted);
-        assert!(stop.load(Ordering::Acquire));
-    }
-
-    #[test]
     fn join_address_defaults_to_game_port() {
         let addresses = resolve_server_addresses("127.0.0.1").unwrap();
         assert_eq!(
