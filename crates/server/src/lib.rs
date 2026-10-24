@@ -524,6 +524,11 @@ impl AuthoritativeMatch {
         }
     }
 
+    /// The session holding a player slot, if any.
+    pub(crate) fn session_for_player(&self, player: PlayerId) -> Option<SessionId> {
+        self.player_claims.get(&player).copied()
+    }
+
     /// The team a session plays for, used to route team chat.
     pub(crate) fn session_team(&self, session_id: SessionId) -> Option<u8> {
         self.session_assignment(session_id)
@@ -829,6 +834,7 @@ impl AuthoritativeMatch {
             | ClientMessage::SelectSlot { .. }
             | ClientMessage::LeaveLobby
             | ClientMessage::Chat { .. }
+            | ClientMessage::KickPlayer { .. }
             | ClientMessage::StartMatch
             | ClientMessage::Debug { .. } => {
                 vec![OutboundMessage::to_session(

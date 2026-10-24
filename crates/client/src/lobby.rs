@@ -60,6 +60,7 @@ impl Plugin for LobbyPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<KeyboardInput>()
             .add_message::<MouseWheel>()
+            .init_resource::<crate::main_menu::MenuNotice>()
             .add_message::<LeaveMatchRequest>()
             .add_systems(
                 Update,
@@ -155,7 +156,7 @@ impl LobbyState {
             LobbyAction::Position(player) => player == self.local_player,
             LobbyAction::Race(player, race) => self.race(player) == race,
             LobbyAction::Start => true,
-            LobbyAction::Leave | LobbyAction::CopyInvite => false,
+            LobbyAction::Leave | LobbyAction::CopyInvite | LobbyAction::Kick(_) => false,
             LobbyAction::RoundTarget(wins) => self.options.rules.rounds_to_win == wins,
             LobbyAction::RescueStrikes(enabled) => {
                 self.options.rules.rescue_strikes_enabled == enabled
@@ -236,7 +237,8 @@ impl LobbyState {
             LobbyAction::CloseRaceMenu
             | LobbyAction::DismissRaceMenu
             | LobbyAction::Leave
-            | LobbyAction::CopyInvite => false,
+            | LobbyAction::CopyInvite
+            | LobbyAction::Kick(_) => false,
         }
     }
 
@@ -292,6 +294,8 @@ enum LobbyAction {
     Leave,
     /// Copies the host's join address to the clipboard.
     CopyInvite,
+    /// Host only: remove the player in this slot.
+    Kick(u8),
 }
 
 /// Applies `rules` locally, or requests them from the host when networked.
@@ -886,6 +890,18 @@ fn spawn_position_row(
                     );
                     if lobby.host_player == Some(player) {
                         label(identity, "Host", FONT_BODY, ACCENT);
+                    } else if lobby.is_host()
+                        && player != lobby.local_player
+                        && lobby.is_occupied(player)
+                    {
+                        styled_button(
+                            identity,
+                            "Kick",
+                            LobbyAction::Kick(player.0),
+                            false,
+                            false,
+                            ButtonStyle::fixed(72.0).min_height(32.0),
+                        );
                     }
                 });
                 if !lobby.is_occupied(player) {
@@ -1186,6 +1202,7 @@ struct LobbyGame<'w> {
     debug_menu: ResMut<'w, DebugMenuState>,
     leave: MessageWriter<'w, LeaveMatchRequest>,
     clipboard: Option<ResMut<'w, Clipboard>>,
+    notice: ResMut<'w, crate::main_menu::MenuNotice>,
 }
 
 impl LobbyGame<'_> {
@@ -1249,6 +1266,11 @@ fn handle_lobby_buttons(
     let Ok(root) = roots.single() else {
         return;
     };
+    if std::mem::take(&mut game.authoritative.kicked) {
+        game.notice.0 = Some("The host removed you from the game.".to_owned());
+        game.leave.write(LeaveMatchRequest);
+        return;
+    }
     let mut redraw = std::mem::take(&mut lobby.redraw_requested);
     if lobby.networked {
         if let Some(status) = game.authoritative.network_lobby_status.clone() {
@@ -1430,6 +1452,12 @@ fn handle_lobby_buttons(
                     }
                     LobbyAction::Leave => {
                         game.leave.write(LeaveMatchRequest);
+                    }
+                    LobbyAction::Kick(player) => {
+                        if let Err(error) = game.authoritative.request_network_kick(player) {
+                            lobby.error = Some(error);
+                            redraw = true;
+                        }
                     }
                     LobbyAction::CopyInvite => {
                         if let (Some(invite), Some(clipboard)) =

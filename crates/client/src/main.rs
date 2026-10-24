@@ -145,6 +145,8 @@ pub(crate) struct AuthoritativeSimulation {
     connection_issue: Option<String>,
     /// Chat lines received from the server, waiting to be shown.
     pending_chat: Vec<chat::IncomingChat>,
+    /// The host removed this player from the lobby.
+    kicked: bool,
     commands_enabled: bool,
 }
 
@@ -164,6 +166,7 @@ impl AuthoritativeSimulation {
             network_lobby_error: None,
             connection_issue: None,
             pending_chat: Vec::new(),
+            kicked: false,
             commands_enabled: true,
         }
     }
@@ -197,6 +200,7 @@ impl AuthoritativeSimulation {
             network_lobby_error: None,
             connection_issue: None,
             pending_chat: Vec::new(),
+            kicked: false,
             commands_enabled: true,
         }
     }
@@ -285,6 +289,10 @@ impl AuthoritativeSimulation {
     /// reserved for a reconnect.
     pub(crate) fn request_network_leave_lobby(&mut self) -> Result<(), String> {
         self.send_network_lobby_request(ClientMessage::LeaveLobby)
+    }
+
+    pub(crate) fn request_network_kick(&mut self, player_id: u8) -> Result<(), String> {
+        self.send_network_lobby_request(ClientMessage::KickPlayer { player_id })
     }
 
     /// Sends a chat line; chat exists only in networked games.
@@ -1736,6 +1744,7 @@ fn process_network_events(
                         .to_owned(),
                     );
                 }
+                ServerMessage::Kicked => authoritative.kicked = true,
                 ServerMessage::Chat {
                     player_id,
                     text,

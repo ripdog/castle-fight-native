@@ -74,7 +74,7 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 
 - [x] The race picker has a Random tile (resolved when pressed) and shows each race's number of buildable structures. A fuller preview (building/unit list) would need per-race descriptions that are not extracted.
 - [x] Lobby chat: press Enter, type, Enter to send (protocol 17).
-- [ ] Ready state and host kick, if desired once lobby chat/names exist.
+- [x] Host kick: the host gets a Kick button on other players' lobby rows (protocol 18); the removed player returns to the main menu with a notice. A ready state was not added: the host already waits for every slot to be filled and decides when to start.
 - [x] The debug "Starting buildings" setting is listed in the lobby only when the `CASTLE_FIGHT_DEBUG` environment variable is set.
 - [ ] Simplify the time-limit control (stepper buttons plus click-to-type) and give it keyboard focus handling; avoid depending on a full lobby despawn/respawn for every change (hover/focus state is lost on each redraw).
 - [x] `Tab`/`Shift+Tab`/arrow keys move a focus ring through the topmost menu overlay and `Enter`/`Space` press the focused button (`menu_focus.rs`).

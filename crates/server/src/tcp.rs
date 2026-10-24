@@ -402,6 +402,9 @@ impl TcpAuthoritativeServer {
                 return Ok(());
             }
         };
+        if let ClientMessage::KickPlayer { player_id } = message {
+            return self.process_kick(session_id, PlayerId(player_id));
+        }
         if let ClientMessage::Chat { text, team_only } = message {
             return self.process_chat(session_id, &text, team_only);
         }
@@ -655,6 +658,7 @@ impl TcpAuthoritativeServer {
             | ClientMessage::SelectSlot { .. }
             | ClientMessage::LeaveLobby
             | ClientMessage::Chat { .. }
+            | ClientMessage::KickPlayer { .. }
             | ClientMessage::SubmitCommand { .. }
             | ClientMessage::CheckpointReport { .. } => self.send_to_connection(
                 connection_id,
@@ -705,6 +709,37 @@ impl TcpAuthoritativeServer {
             }
         }
         Ok(())
+    }
+
+    /// Host-only: removes another player from the lobby and closes their connection.
+    fn process_kick(
+        &mut self,
+        host: SessionId,
+        target_player: PlayerId,
+    ) -> Result<(), TcpServerError> {
+        if !self.lobby_mode || self.started || self.host_session != Some(host) {
+            return Ok(());
+        }
+        let Some(target) = self.authoritative.session_for_player(target_player) else {
+            return Ok(());
+        };
+        if target == host {
+            return Ok(());
+        }
+        let connection = self.session_connections.get(&target).copied();
+        if let Some(connection) = connection {
+            self.send_to_connection(connection, ServerMessage::Kicked)?;
+        }
+        self.authoritative.release_lobby_session(target);
+        // The socket stays open so the notice can be delivered; the kicked client closes it, and
+        // until then it is just an unauthenticated connection.
+        if let Some(connection) = connection {
+            if let Some(state) = self.connections.get_mut(&connection) {
+                state.session_id = None;
+            }
+            self.session_connections.remove(&target);
+        }
+        self.broadcast_lobby_status()
     }
 
     /// Relays a chat line to everyone, or to the sender's team. Over-eager senders are dropped
@@ -1628,6 +1663,40 @@ mod tests {
             }
         }
         assert_eq!(received, ["to everyone"]);
+    }
+
+    #[test]
+    fn only_the_host_can_kick_and_a_kicked_slot_opens_up() {
+        let mut server = lobby_server();
+        let mut host = connect(&server);
+        let mut guest = connect(&server);
+        server.poll_network().unwrap();
+        send_client(&mut host, hello(&server, 1));
+        pump_until(&mut server, |view| view.authenticated == 1);
+        send_client(&mut guest, hello(&server, 2));
+        pump_until(&mut server, |view| view.authenticated == 2);
+
+        // A guest cannot remove the host.
+        send_client(&mut guest, ClientMessage::KickPlayer { player_id: 0 });
+        pump_network(&mut server);
+        assert_eq!(server.authenticated_connection_count(), 2);
+
+        send_client(&mut host, ClientMessage::KickPlayer { player_id: 6 });
+        pump_network(&mut server);
+        let kicked = (0..16).any(|_| matches!(receive_server(&mut guest), ServerMessage::Kicked));
+        assert!(kicked, "the removed player is told why");
+        assert_eq!(server.authenticated_connection_count(), 1);
+
+        let mut newcomer = connect(&server);
+        server.poll_network().unwrap();
+        send_client(&mut newcomer, hello(&server, 3));
+        pump_until(&mut server, |view| view.authenticated == 2);
+        assert!(matches!(
+            receive_server(&mut newcomer),
+            ServerMessage::HelloAccepted {
+                assignment: SessionAssignment { player_id: 6, .. }
+            }
+        ));
     }
 
     #[test]

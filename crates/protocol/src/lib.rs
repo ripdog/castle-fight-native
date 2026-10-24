@@ -15,7 +15,7 @@ use castle_fight_sim::{
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-pub const PROTOCOL_SCHEMA_VERSION: u32 = 17;
+pub const PROTOCOL_SCHEMA_VERSION: u32 = 18;
 pub const MAX_PLAYER_NAME_CHARS: usize = 24;
 pub const MAX_CHAT_CHARS: usize = 200;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
@@ -601,6 +601,10 @@ pub enum ClientMessage {
         text: String,
         team_only: bool,
     },
+    /// Host-only, before the match starts: remove the player in `player_id`'s slot.
+    KickPlayer {
+        player_id: u8,
+    },
     SubmitCommand {
         request: CommandRequest,
     },
@@ -634,6 +638,8 @@ pub enum ServerMessage {
     LobbySlotRejected {
         reason: LobbySlotRejectReason,
     },
+    /// Sent to a player the host removed from the lobby, just before their connection closes.
+    Kicked,
     /// A chat line relayed from `player_id`'s slot.
     Chat {
         player_id: u8,

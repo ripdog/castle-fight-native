@@ -52,7 +52,8 @@ pub(crate) struct MainMenuPlugin;
 
 impl Plugin for MainMenuPlugin {
     fn build(&self, app: &mut App) {
-        app.add_message::<LeaveMatchRequest>()
+        app.init_resource::<MenuNotice>()
+            .add_message::<LeaveMatchRequest>()
             .add_message::<MatchSessionReset>()
             .add_systems(Startup, setup_main_menu)
             .add_systems(
@@ -67,6 +68,11 @@ impl Plugin for MainMenuPlugin {
             );
     }
 }
+
+/// A message for the main menu to show after the player was sent back to it (for example because
+/// the host removed them from the lobby).
+#[derive(Resource, Default)]
+pub(crate) struct MenuNotice(pub(crate) Option<String>);
 
 /// Handle to the server thread started by Host Game. Present only while that session is open.
 #[derive(Resource)]
@@ -518,6 +524,7 @@ struct MenuGame<'w> {
     selected_match: ResMut<'w, SelectedMatch>,
     playback: ResMut<'w, SimulationPlayback>,
     debug_menu: ResMut<'w, DebugMenuState>,
+    notice: ResMut<'w, MenuNotice>,
 }
 
 /// Resources a main-menu button can reach beyond the menu itself.
@@ -749,7 +756,7 @@ fn return_to_main_menu(
 
     menu.active = true;
     menu.screen = MainMenuScreen::Main;
-    menu.error = None;
+    menu.error = game.notice.0.take();
     menu.requested = None;
     menu.pending = None;
     for root in &roots {
