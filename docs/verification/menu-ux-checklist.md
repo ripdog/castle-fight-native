@@ -62,7 +62,7 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 - [x] Controls reference overlay (camera, selection, orders, game keys), reachable from the main menu and F10 menu.
 - [x] A clickable SCORES button beside the GRID/SNAP buttons opens and closes the scoreboard. `Tab` is not used: it already cycles the selected unit type.
 - [x] The top match line is split into Round, Score, Timer and Rescue segments plus a status segment (round complete, disconnect pause, match result); the embedded "F9: Scores" hint was dropped now that a SCORES button exists.
-- [ ] Debug-only HUD text (FPS / tick) and the `F1`/`F8` developer overlays are hidden from ordinary play, or gated behind a flag. (Not confirmed how `debug_available()` gates them in a normal network match.)
+- [x] The FPS / TICK readout in the top bar is shown only while the F1 debug overlays are on. The F8 debug menu already refuses to act in a networked match unless you are the connected host (`debug_available()`); offline it acts as the single-player cheat menu.
 - [x] Quicksave and Quickload are buttons in the F10 menu for offline matches (the Ctrl+S / Ctrl+O hotkeys remain).
 
 ### Camera

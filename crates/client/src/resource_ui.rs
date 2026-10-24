@@ -723,12 +723,19 @@ type ResourceTextQuery<'w, 's> = Query<
     ),
 >;
 
+/// Inputs of the developer FPS/tick readout.
+#[derive(bevy::ecs::system::SystemParam)]
+struct PerformanceReadout<'w> {
+    fps: Res<'w, FpsDisplay>,
+    debug: Option<Res<'w, crate::presentation::DebugPresentation>>,
+}
+
 fn update_resource_bar(
     authoritative: Res<AuthoritativeSimulation>,
     selected_match: Res<SelectedMatch>,
     inspection: Res<InspectionSelection>,
     presentation: Res<PresentationSamples>,
-    fps_display: Res<FpsDisplay>,
+    readout: PerformanceReadout,
     mut resource_texts: ResourceTextQuery<'_, '_>,
     mut progress: Single<&mut Node, With<GoldIncomeProgress>>,
 ) {
@@ -811,10 +818,16 @@ fn update_resource_bar(
     ) in &mut resource_texts
     {
         if performance.is_some() {
-            let fps = fps_display
+            let fps = readout
+                .fps
                 .fps()
                 .map_or_else(|| "--".to_owned(), |fps| format!("{fps:.0}"));
-            text.0 = format!("FPS {fps}\nTICK {}", presentation.current.tick);
+            // Developer readout: shown only with the F1 debug overlays on.
+            text.0 = if readout.debug.as_ref().is_none_or(|debug| debug.overlays) {
+                format!("FPS {fps}\nTICK {}", presentation.current.tick)
+            } else {
+                String::new()
+            };
         } else if selected_player.is_some() {
             text.0.clone_from(&player_label);
             if let Some(color) = text_color.as_mut() {
