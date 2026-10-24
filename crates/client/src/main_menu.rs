@@ -45,6 +45,7 @@ const BUTTON_HOVER: Color = Color::srgb(0.22, 0.29, 0.37);
 const TEXT: Color = Color::srgb(0.92, 0.94, 0.97);
 const MUTED: Color = Color::srgb(0.60, 0.68, 0.74);
 const ERROR: Color = Color::srgb(1.0, 0.45, 0.4);
+const WARNING: Color = Color::srgb(1.0, 0.78, 0.35);
 
 pub(crate) struct MainMenuPlugin;
 
@@ -161,6 +162,8 @@ pub(crate) struct MainMenuState {
     screen: MainMenuScreen,
     join_address: String,
     host_port_text: String,
+    /// The converted Warcraft III art (`assets/wc3`) is not installed.
+    wc3_art_missing: bool,
     error: Option<String>,
     active: bool,
     /// Action requested from the keyboard, run alongside button presses.
@@ -179,6 +182,10 @@ impl MainMenuState {
             screen: MainMenuScreen::Main,
             join_address: settings.last_join_address.clone(),
             host_port_text: settings.host_port.to_string(),
+            wc3_art_missing: !crate::terrain::client_asset_root()
+                .join("wc3")
+                .join("manifest.json")
+                .is_file(),
             error: None,
             active: true,
             requested: None,
@@ -340,6 +347,25 @@ fn spawn_main_menu(commands: &mut Commands, menu: &MainMenuState) {
 
                 if let Some(error) = &menu.error {
                     label(panel, error.clone(), 13.0, ERROR);
+                }
+                if menu.screen == MainMenuScreen::Main && menu.pending.is_none() {
+                    if menu.wc3_art_missing {
+                        label(
+                            panel,
+                            "Warcraft III art was not found, so units and buildings will look like placeholders. Run cf-wc3-assets (see the README) and restart.",
+                            12.0,
+                            WARNING,
+                        );
+                    }
+                    label(
+                        panel,
+                        format!(
+                            "Castle Fight Native {}. Unofficial fan project. Warcraft III art and sound belong to Blizzard Entertainment and are not included.",
+                            env!("CARGO_PKG_VERSION")
+                        ),
+                        11.0,
+                        MUTED,
+                    );
                 }
             });
         });

@@ -75,12 +75,12 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 - [ ] Random race option, and some preview of a race (builder description, building/unit overview) in the race picker. It is currently a text-only grid.
 - [ ] Lobby chat.
 - [ ] Ready state and host kick, if desired once lobby chat/names exist.
-- [ ] Move the debug "Starting buildings" setting out of the ordinary match settings (hide it unless debug is enabled) and make it behave like the other options rather than "click again to turn off".
+- [x] The debug "Starting buildings" setting is listed in the lobby only when the `CASTLE_FIGHT_DEBUG` environment variable is set.
 - [ ] Simplify the time-limit control (stepper buttons plus click-to-type) and give it keyboard focus handling; avoid depending on a full lobby despawn/respawn for every change (hover/focus state is lost on each redraw).
 - [ ] Keyboard navigation and focus rings in menus (Tab / Enter / arrows).
 - [ ] Hover/pressed feedback on lobby/menu buttons is colour-only.
-- [ ] First-run / missing-asset notice that points to the `cf-wc3-assets` converter instead of silently showing placeholders.
-- [ ] About / version / licence entry in the menu (bundled Blizzard-derived content notice).
+- [x] The main menu warns, with a pointer to `cf-wc3-assets` and the README, when `assets/wc3/manifest.json` is missing.
+- [x] The main menu footer shows the version and the unofficial-fan-project / Blizzard-assets notice. A dedicated About screen was judged unnecessary.
 - [ ] Colour-blind friendly team indication (team colour is currently the main cue).
 - [ ] In-match text chat and quick pings for team games.
 - [ ] Under-attack / castle-damaged alert (sound, HUD flash, and camera-jump target) — needs an authoritative or presentation-side event source.

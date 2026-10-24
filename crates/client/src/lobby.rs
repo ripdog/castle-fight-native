@@ -85,6 +85,8 @@ pub(crate) struct LobbyState {
     /// `address:port` the host shares so others can join; set only for a hosted game.
     invite: Option<String>,
     invite_copied: bool,
+    /// Developer-only match options are listed only when `CASTLE_FIGHT_DEBUG` is set.
+    debug_options: bool,
     host_player: Option<PlayerId>,
     required_players: usize,
     open_race: Option<u8>,
@@ -106,6 +108,7 @@ impl LobbyState {
             names: BTreeMap::new(),
             invite: None,
             invite_copied: false,
+            debug_options: std::env::var_os("CASTLE_FIGHT_DEBUG").is_some_and(|value| value != "0"),
             host_player: None,
             options,
             networked,
@@ -681,26 +684,28 @@ fn spawn_settings(content: &mut ChildSpawnerCommands, lobby: &LobbyState) {
                     );
                 }
             });
-            setting_block(
-                card,
-                "Starting buildings (debug; click again to turn off)",
-                FlexDirection::Row,
-                |row| {
-                    for (caption, mode) in [
-                        ("Race buildings", DebugStartingBuildings::OwnRace),
-                        ("All buildings", DebugStartingBuildings::All),
-                    ] {
-                        let action = LobbyAction::DebugStartingBuildings(mode);
-                        row_button(
-                            row,
-                            caption,
-                            action,
-                            lobby.selected(action),
-                            lobby.action_disabled(action),
-                        );
-                    }
-                },
-            );
+            if lobby.debug_options {
+                setting_block(
+                    card,
+                    "Starting buildings (debug; click again to turn off)",
+                    FlexDirection::Row,
+                    |row| {
+                        for (caption, mode) in [
+                            ("Race buildings", DebugStartingBuildings::OwnRace),
+                            ("All buildings", DebugStartingBuildings::All),
+                        ] {
+                            let action = LobbyAction::DebugStartingBuildings(mode);
+                            row_button(
+                                row,
+                                caption,
+                                action,
+                                lobby.selected(action),
+                                lobby.action_disabled(action),
+                            );
+                        }
+                    },
+                );
+            }
         });
 }
 
