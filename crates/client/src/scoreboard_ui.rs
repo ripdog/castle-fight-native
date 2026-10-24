@@ -1,20 +1,42 @@
 //! WC3-inspired live match scoreboard and authoritative round-review statistics.
-use bevy::{ecs::system::SystemParam, prelude::*};
+use bevy::{app::AppExit, ecs::system::SystemParam, prelude::*};
 use castle_fight_sim::{MatchLifecycle, MatchOutcome, PlayerId, PlayerRoundScore, Team};
 
-use crate::{AuthoritativeSimulation, lobby::LobbyState};
+use crate::{
+    AuthoritativeSimulation, SelectedMatch, debug_menu::DebugMenuState,
+    game_menu::LeaveMatchRequest, lobby::LobbyState, main_menu::MainMenuState,
+};
 
 const PANEL: Color = Color::srgba(0.038, 0.040, 0.055, 0.97);
 const GOLD: Color = Color::srgb(0.99, 0.84, 0.46);
 const MUTED: Color = Color::srgb(0.65, 0.72, 0.80);
 const WEST: Color = Color::srgb(0.50, 0.74, 1.0);
 const EAST: Color = Color::srgb(1.0, 0.59, 0.53);
+const VICTORY: Color = Color::srgb(0.99, 0.84, 0.46);
+const DEFEAT: Color = Color::srgb(0.95, 0.38, 0.33);
+const BUTTON: Color = Color::srgb(0.13, 0.17, 0.22);
+const BUTTON_HOVER: Color = Color::srgb(0.22, 0.29, 0.37);
+const BUTTON_BORDER: Color = Color::srgb(0.32, 0.43, 0.52);
 
 pub(crate) struct ScoreboardPlugin;
 
 #[derive(Resource, Default)]
 struct ScoreboardState {
     expanded: bool,
+    /// The player chose to look at the battlefield instead of the final result.
+    result_dismissed: bool,
+}
+/// Headline of the finished-match result (Victory / Defeat / Draw).
+#[derive(Component)]
+struct ScoreboardBanner;
+/// Row of actions offered once the match has finished.
+#[derive(Component)]
+struct ScoreboardResultActions;
+#[derive(Component, Clone, Copy)]
+enum ResultAction {
+    ViewBattlefield,
+    MainMenu,
+    ExitGame,
 }
 #[derive(Component)]
 struct ScoreboardRoot;
@@ -48,12 +70,16 @@ impl Plugin for ScoreboardPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<ScoreboardState>()
             .add_message::<crate::game_menu::MatchSessionReset>()
+            .add_message::<LeaveMatchRequest>()
             .add_systems(
                 Update,
                 reset_scoreboard_for_new_match.before(toggle_scoreboard),
             )
             .add_systems(Startup, setup_scoreboard)
-            .add_systems(Update, (toggle_scoreboard, update_scoreboard).chain());
+            .add_systems(
+                Update,
+                (toggle_scoreboard, handle_result_buttons, update_scoreboard).chain(),
+            );
     }
 }
 
@@ -90,7 +116,7 @@ fn spawn_cell(parent: &mut ChildSpawnerCommands, label: &str, width: f32, size: 
         });
 }
 
-fn setup_scoreboard(mut commands: Commands) {
+fn setup_scoreboard(mut commands: Commands, main_menu: Option<Res<MainMenuState>>) {
     commands
         .spawn((
             ScoreboardRoot,
@@ -113,6 +139,16 @@ fn setup_scoreboard(mut commands: Commands) {
             Pickable::IGNORE,
         ))
         .with_children(|parent| {
+            parent.spawn((
+                ScoreboardBanner,
+                Node {
+                    display: Display::None,
+                    ..default()
+                },
+                Text::new(""),
+                TextFont::from_font_size(44.0),
+                TextColor(VICTORY),
+            ));
             parent.spawn((
                 ScoreboardTitle,
                 Text::new("MATCH SCOREBOARD"),
@@ -192,6 +228,23 @@ fn setup_scoreboard(mut commands: Commands) {
                         });
                 }
             }
+            parent
+                .spawn((
+                    ScoreboardResultActions,
+                    Node {
+                        display: Display::None,
+                        flex_direction: FlexDirection::Row,
+                        column_gap: px(10.0),
+                        ..default()
+                    },
+                ))
+                .with_children(|actions| {
+                    result_button(actions, "VIEW BATTLEFIELD", ResultAction::ViewBattlefield);
+                    if main_menu.is_some() {
+                        result_button(actions, "MAIN MENU", ResultAction::MainMenu);
+                    }
+                    result_button(actions, "EXIT GAME", ResultAction::ExitGame);
+                });
             parent.spawn((
                 ScoreboardFooter,
                 Text::new("F9: close scoreboard"),
@@ -201,13 +254,101 @@ fn setup_scoreboard(mut commands: Commands) {
         });
 }
 
+fn result_button(parent: &mut ChildSpawnerCommands, value: &str, action: ResultAction) {
+    parent
+        .spawn((
+            Button,
+            action,
+            Node {
+                flex_grow: 1.0,
+                min_height: px(38.0),
+                padding: UiRect::axes(px(14.0), px(7.0)),
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                border: UiRect::all(px(1.0)),
+                ..default()
+            },
+            BackgroundColor(BUTTON),
+            BorderColor::all(BUTTON_BORDER),
+        ))
+        .with_child((
+            Text::new(value),
+            TextFont::from_font_size(16.0),
+            TextColor(Color::srgb(0.92, 0.94, 0.97)),
+        ));
+}
+
+type ResultButtonQuery<'w, 's> = Query<
+    'w,
+    's,
+    (
+        &'static Interaction,
+        &'static ResultAction,
+        &'static mut BackgroundColor,
+    ),
+    (Changed<Interaction>, With<Button>),
+>;
+
+fn handle_result_buttons(
+    mut buttons: ResultButtonQuery<'_, '_>,
+    mut state: ResMut<ScoreboardState>,
+    mut leave: MessageWriter<LeaveMatchRequest>,
+    mut exit: MessageWriter<AppExit>,
+) {
+    for (interaction, action, mut background) in &mut buttons {
+        match interaction {
+            Interaction::Hovered => background.0 = BUTTON_HOVER,
+            Interaction::None => background.0 = BUTTON,
+            Interaction::Pressed => match action {
+                ResultAction::ViewBattlefield => state.result_dismissed = true,
+                ResultAction::MainMenu => {
+                    leave.write(LeaveMatchRequest);
+                }
+                ResultAction::ExitGame => {
+                    exit.write(AppExit::Success);
+                }
+            },
+        }
+    }
+}
+
+/// What the finished match means to the viewer. A single-player session controls both teams, so
+/// it can only name the winner; otherwise the result is relative to the local player's team.
+fn result_banner(
+    outcome: MatchOutcome,
+    local_team: Option<Team>,
+    controls_all_players: bool,
+) -> (&'static str, Color) {
+    match outcome {
+        MatchOutcome::Draw => ("DRAW", GOLD),
+        MatchOutcome::Victory(winner) if controls_all_players || local_team.is_none() => {
+            match winner {
+                Team(0) => ("WEST WINS", WEST),
+                Team(1) => ("EAST WINS", EAST),
+                Team(_) => ("MATCH WON", VICTORY),
+            }
+        }
+        MatchOutcome::Victory(winner) if Some(winner) == local_team => ("VICTORY", VICTORY),
+        MatchOutcome::Victory(_) => ("DEFEAT", DEFEAT),
+    }
+}
+
 fn toggle_scoreboard(
     keys: Res<ButtonInput<KeyCode>>,
     lobby: Option<Res<LobbyState>>,
+    authoritative: Res<AuthoritativeSimulation>,
     mut state: ResMut<ScoreboardState>,
 ) {
     if keys.just_pressed(KeyCode::F9) && !lobby.as_ref().is_some_and(|lobby| lobby.active()) {
-        state.expanded = !state.expanded;
+        if matches!(
+            authoritative.simulation.lifecycle(),
+            MatchLifecycle::Finished { .. }
+        ) {
+            // The final result stays reachable after choosing to look at the battlefield.
+            state.result_dismissed = !state.result_dismissed;
+        } else {
+            state.expanded = !state.expanded;
+        }
     }
 }
 
@@ -241,24 +382,41 @@ type ScoreboardTextParts = (
     &'static mut Text,
 );
 
+type ScoreboardBannerParts = (&'static mut Text, &'static mut TextColor, &'static mut Node);
+type BannerFilter = (With<ScoreboardBanner>, Without<ScoreboardResultActions>);
+
 #[derive(SystemParam)]
 struct ScoreboardQueries<'w, 's> {
     root: Query<'w, 's, &'static mut Visibility, With<ScoreboardRoot>>,
     rows: Query<'w, 's, (&'static PlayerRow, &'static mut Visibility), Without<ScoreboardRoot>>,
-    text: Query<'w, 's, ScoreboardTextParts>,
+    text: Query<'w, 's, ScoreboardTextParts, Without<ScoreboardBanner>>,
+    banner: Query<'w, 's, ScoreboardBannerParts, BannerFilter>,
+    actions: Query<
+        'w,
+        's,
+        &'static mut Node,
+        (With<ScoreboardResultActions>, Without<ScoreboardBanner>),
+    >,
 }
 
 fn update_scoreboard(
     state: Res<ScoreboardState>,
     lobby: Option<Res<LobbyState>>,
     authoritative: Res<AuthoritativeSimulation>,
+    selected: Res<SelectedMatch>,
+    debug_menu: Res<DebugMenuState>,
     mut ui: ScoreboardQueries<'_, '_>,
 ) {
     let sim = &authoritative.simulation;
     let in_review = sim.review_seconds_remaining().is_some();
     let finished = matches!(sim.lifecycle(), MatchLifecycle::Finished { .. });
     let visible = !lobby.as_ref().is_some_and(|lobby| lobby.active())
-        && (state.expanded || in_review || finished);
+        && (in_review
+            || if finished {
+                !state.result_dismissed
+            } else {
+                state.expanded
+            });
     if let Ok(mut root) = ui.root.single_mut() {
         *root = if visible {
             Visibility::Visible
@@ -268,6 +426,25 @@ fn update_scoreboard(
     }
     if !visible {
         return;
+    }
+    if let Ok((mut text, mut color, mut node)) = ui.banner.single_mut() {
+        if let MatchLifecycle::Finished { outcome, .. } = sim.lifecycle() {
+            let local_team = sim.player(selected.local_player).map(|player| player.team);
+            let (headline, headline_color) =
+                result_banner(outcome, local_team, debug_menu.controls_all_players());
+            text.0 = headline.into();
+            color.0 = headline_color;
+            node.display = Display::Flex;
+        } else {
+            node.display = Display::None;
+        }
+    }
+    if let Ok(mut node) = ui.actions.single_mut() {
+        node.display = if finished {
+            Display::Flex
+        } else {
+            Display::None
+        };
     }
 
     let round = sim.last_round_scoreboard();
@@ -339,7 +516,7 @@ fn update_scoreboard(
             if in_review {
                 "Game paused during the review. Orders resume when the countdown ends.".into()
             } else if finished {
-                "Match completed".into()
+                "F9 shows or hides this result.".into()
             } else {
                 "F9: close scoreboard".into()
             }

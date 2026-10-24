@@ -16,7 +16,7 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 - [x] In-game menu offers Resume, Main Menu and Exit. (Settings is added to it by the Settings screen items below.)
 - [x] Leaving a networked match disconnects cleanly and returns to the main menu with state reset (authoritative sim, presentation samples, selection, action panel, lobby). The client socket is now actually closed on drop, and a hosted server is stopped and its port released. Follow-up: the server treats this as an ordinary disconnect (teammates see the disconnect pause) because there is no explicit "leave" message in the protocol.
 - [x] Leaving an offline match returns to the main menu, with a confirmation.
-- [ ] End-of-match screen (win/loss/draw, final scoreboard) with Return to menu; currently only the `F9` scoreboard shows results and the player must kill the process.
+- [x] End-of-match screen: the final scoreboard opens automatically with a Victory / Defeat / Draw headline (relative to the local player's team; just the winning side's name when one player controls both teams) and View battlefield, Main Menu and Exit buttons. `F9` shows or hides the result afterwards. Also stops a finished networked client from retrying to reconnect to the server that ended the match.
 - [x] Destructive actions (Leave, Exit) ask for confirmation, skipped once the match has finished.
 - [ ] Decide whether Surrender exists in Castle Fight DE; if so it needs a protocol command and a vote/host rule. (Open question — do not add without map evidence.)
 

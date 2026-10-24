@@ -243,6 +243,10 @@ As in Warcraft III, the in-game **Game Menu** opens on `F10`, not `Esc`. `Esc` i
 
 The menu offers Resume, Main Menu (when the client was started with a main menu) and Exit. Leaving the match and exiting ask for confirmation unless the match has already finished. While the menu is open, keyboard and mouse input does not reach gameplay, camera or selection. An offline match is paused while the menu is open, restoring the previous pause state on close; a networked match keeps running, because the menu is client-local. Returning to the main menu abandons the match: the network connection is closed, a server hosted by this client is stopped, and the client-local selection and action-panel state is reset so it cannot alias the next match's reused entity identifiers. This is client UI only and MUST NOT emit gameplay commands.
 
+### 15.2 End of match
+
+When the match finishes, the final scoreboard opens automatically with a headline for the viewer: Victory, Defeat or Draw relative to the local player's team, or just the winning side when one client controls every player. It offers View Battlefield (hides the panel so the final position can be inspected; `F9` brings it back), Main Menu where the client has one, and Exit. A finished match is final, so a networked client stops trying to reconnect to the server that ended it and does not report that server's closing as a fault.
+
 ## 16. Latency display and command feedback
 
 Because gameplay commands are discrete and relatively low frequency, clear acknowledgement may be more valuable than aggressive prediction.
