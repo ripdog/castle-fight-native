@@ -15,6 +15,7 @@ mod inspection;
 mod lobby;
 mod main_menu;
 mod match_ui;
+mod menu_focus;
 mod network;
 mod notifications;
 mod particle_renderer;
@@ -736,6 +737,7 @@ fn main() {
             LobbyPlugin,
             game_menu::GameMenuPlugin,
             settings_menu::SettingsMenuPlugin,
+            menu_focus::MenuFocusPlugin,
         ));
     }
     if show_main_menu {

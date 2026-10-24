@@ -72,13 +72,13 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 
 ## P3 — Lobby and polish
 
-- [ ] Random race option, and some preview of a race (builder description, building/unit overview) in the race picker. It is currently a text-only grid.
+- [x] The race picker has a Random tile (resolved when pressed) and shows each race's number of buildable structures. A fuller preview (building/unit list) would need per-race descriptions that are not extracted.
 - [ ] Lobby chat.
 - [ ] Ready state and host kick, if desired once lobby chat/names exist.
 - [x] The debug "Starting buildings" setting is listed in the lobby only when the `CASTLE_FIGHT_DEBUG` environment variable is set.
 - [ ] Simplify the time-limit control (stepper buttons plus click-to-type) and give it keyboard focus handling; avoid depending on a full lobby despawn/respawn for every change (hover/focus state is lost on each redraw).
-- [ ] Keyboard navigation and focus rings in menus (Tab / Enter / arrows).
-- [ ] Hover/pressed feedback on lobby/menu buttons is colour-only.
+- [x] `Tab`/`Shift+Tab`/arrow keys move a focus ring through the topmost menu overlay and `Enter`/`Space` press the focused button (`menu_focus.rs`).
+- [x] Menu buttons get an accent border on hover/focus and a distinct pressed colour; disabled buttons are excluded.
 - [x] The main menu warns, with a pointer to `cf-wc3-assets` and the README, when `assets/wc3/manifest.json` is missing.
 - [x] The main menu footer shows the version and the unofficial-fan-project / Blizzard-assets notice. A dedicated About screen was judged unnecessary.
 - [ ] Colour-blind friendly team indication (team colour is currently the main cue).

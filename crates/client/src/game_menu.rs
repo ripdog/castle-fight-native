@@ -20,6 +20,7 @@ use crate::{
     AuthoritativeSimulation, SimulationPlayback,
     lobby::LobbyState,
     main_menu::{HostedServer, MainMenuState},
+    menu_focus::MenuOverlay,
     settings_menu::{Panel, SettingsMenuState},
 };
 
@@ -303,6 +304,7 @@ fn spawn_menu(commands: &mut Commands, screen: GameMenuScreen, context: MenuCont
     commands
         .spawn((
             GameMenuRoot,
+            MenuOverlay(3),
             Node {
                 position_type: PositionType::Absolute,
                 left: percent(0.0),

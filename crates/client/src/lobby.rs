@@ -23,6 +23,7 @@ use crate::{
     debug_menu::DebugMenuState,
     default_worker_count,
     game_menu::LeaveMatchRequest,
+    menu_focus::{ButtonDisabled, MenuOverlay},
     presentation::CameraFocusRequest,
 };
 
@@ -166,6 +167,7 @@ impl LobbyState {
             LobbyAction::TimeInput => self.time_input.is_some(),
             LobbyAction::TimeDelta(_)
             | LobbyAction::RaceDropdown(_)
+            | LobbyAction::RandomRace(_)
             | LobbyAction::CloseRaceMenu
             | LobbyAction::DismissRaceMenu => false,
         }
@@ -223,9 +225,9 @@ impl LobbyState {
                 self.host_player != Some(self.local_player)
                     || self.connected_players.len() < self.required_players
             }
-            LobbyAction::RaceDropdown(player) | LobbyAction::Race(player, _) => {
-                player != self.local_player.0
-            }
+            LobbyAction::RaceDropdown(player)
+            | LobbyAction::Race(player, _)
+            | LobbyAction::RandomRace(player) => player != self.local_player.0,
             LobbyAction::CloseRaceMenu
             | LobbyAction::DismissRaceMenu
             | LobbyAction::Leave
@@ -268,6 +270,8 @@ enum LobbyAction {
     Position(PlayerId),
     RaceDropdown(u8),
     Race(u8, CastleFightBuilderRace),
+    /// Picks one of the supported races at random when pressed.
+    RandomRace(u8),
     /// Cancel button of the race picker.
     CloseRaceMenu,
     /// Click on the dimmed area around the race picker; carries no button styling.
@@ -413,6 +417,7 @@ fn spawn_lobby(commands: &mut Commands, lobby: &LobbyState) {
     commands
         .spawn((
             LobbyRoot,
+            MenuOverlay(1),
             Node {
                 position_type: PositionType::Absolute,
                 width: percent(100.0),
@@ -925,6 +930,8 @@ fn spawn_position_row(
 fn spawn_race_picker(root: &mut ChildSpawnerCommands, lobby: &LobbyState, player: u8) {
     root.spawn((
         Button,
+        // A click target only: no focus ring, tab stop or press highlight.
+        ButtonDisabled,
         LobbyAction::DismissRaceMenu,
         Node {
             position_type: PositionType::Absolute,
@@ -978,12 +985,18 @@ fn spawn_race_picker(root: &mut ChildSpawnerCommands, lobby: &LobbyState, player
                         let action = LobbyAction::Race(player, race);
                         button(
                             grid,
-                            builder.name.trim_end_matches(" Builder"),
+                            format!(
+                                "{}\n{} structures",
+                                builder.name.trim_end_matches(" Builder"),
+                                builder.build_catalog.len()
+                            ),
                             action,
                             lobby.race(player) == race,
                             lobby.action_disabled(action),
                         );
                     }
+                    let random = LobbyAction::RandomRace(player);
+                    button(grid, "Random", random, false, lobby.action_disabled(random));
                 });
                 button(menu, "Cancel", LobbyAction::CloseRaceMenu, false, false);
             });
@@ -1111,38 +1124,40 @@ fn styled_button(
         ButtonWidth::Fixed(width) => (px(width), 0.0, Val::Auto),
     };
     let editing_time = matches!(action, LobbyAction::TimeInput) && selected;
-    parent
-        .spawn((
-            Button,
-            action,
-            Node {
-                width,
-                flex_grow,
-                flex_basis,
-                min_width: px(0.0),
-                min_height: px(style.min_height),
-                padding: UiRect::axes(px(12.0), px(8.0)),
-                border_radius: BorderRadius::all(px(4.0)),
-                align_items: AlignItems::Center,
-                justify_content: JustifyContent::Center,
-                border: UiRect::all(px(1.0)),
-                ..default()
-            },
-            BackgroundColor(button_color(action, selected, disabled)),
-            BorderColor::all(if disabled {
-                BUTTON_BORDER_DISABLED
-            } else if editing_time {
-                ACCENT
-            } else {
-                BUTTON_BORDER
-            }),
-        ))
-        .with_child((
-            Text::new(value),
-            TextFont::from_font_size(style.font_size),
-            TextLayout::justify(Justify::Center),
-            TextColor(if disabled { MUTED } else { TEXT }),
-        ));
+    let mut entity = parent.spawn((
+        Button,
+        action,
+        Node {
+            width,
+            flex_grow,
+            flex_basis,
+            min_width: px(0.0),
+            min_height: px(style.min_height),
+            padding: UiRect::axes(px(12.0), px(8.0)),
+            border_radius: BorderRadius::all(px(4.0)),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            border: UiRect::all(px(1.0)),
+            ..default()
+        },
+        BackgroundColor(button_color(action, selected, disabled)),
+        BorderColor::all(if disabled {
+            BUTTON_BORDER_DISABLED
+        } else if editing_time {
+            ACCENT
+        } else {
+            BUTTON_BORDER
+        }),
+    ));
+    if disabled {
+        entity.insert(ButtonDisabled);
+    }
+    entity.with_child((
+        Text::new(value),
+        TextFont::from_font_size(style.font_size),
+        TextLayout::justify(Justify::Center),
+        TextColor(if disabled { MUTED } else { TEXT }),
+    ));
 }
 
 type LobbyButtonQuery<'w, 's> = Query<
@@ -1178,6 +1193,39 @@ impl LobbyGame<'_> {
                 .map(|builder| builder.id);
         }
     }
+}
+
+/// Applies a race choice locally, or requests it from the host's server when networked.
+fn choose_race(
+    lobby: &mut LobbyState,
+    authoritative: &mut AuthoritativeSimulation,
+    player: u8,
+    race: CastleFightBuilderRace,
+) {
+    if !lobby.content().supports_builder_race(race) {
+        return;
+    }
+    let rawcode = lobby
+        .content()
+        .builder(race)
+        .expect("supported builder")
+        .rawcode;
+    if lobby.networked {
+        if let Err(error) = authoritative.request_network_race(rawcode) {
+            lobby.error = Some(error);
+        }
+    } else {
+        lobby.options.builder_rawcodes[usize::from(player)] = Some(rawcode);
+    }
+    lobby.open_race = None;
+}
+
+/// A presentation-only random pick (the wall clock is fine; nothing here is simulated).
+fn random_index(len: usize) -> usize {
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.subsec_nanos());
+    nanos as usize % len.max(1)
 }
 
 fn handle_lobby_buttons(
@@ -1366,23 +1414,14 @@ fn handle_lobby_buttons(
                         redraw = true;
                     }
                     LobbyAction::Race(player, race) => {
-                        if lobby.content().supports_builder_race(race) {
-                            let rawcode = lobby
-                                .content()
-                                .builder(race)
-                                .expect("supported builder")
-                                .rawcode;
-                            if lobby.networked {
-                                if let Err(error) = game.authoritative.request_network_race(rawcode)
-                                {
-                                    lobby.error = Some(error);
-                                }
-                            } else {
-                                lobby.options.builder_rawcodes[usize::from(player)] = Some(rawcode);
-                            }
-                            lobby.open_race = None;
-                            redraw = true;
-                        }
+                        choose_race(&mut lobby, &mut game.authoritative, player, race);
+                        redraw = true;
+                    }
+                    LobbyAction::RandomRace(player) => {
+                        let races = lobby.content().supported_builder_races();
+                        let race = races[random_index(races.len())];
+                        choose_race(&mut lobby, &mut game.authoritative, player, race);
+                        redraw = true;
                     }
                     LobbyAction::Leave => {
                         game.leave.write(LeaveMatchRequest);

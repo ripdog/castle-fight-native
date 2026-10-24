@@ -13,6 +13,7 @@ use castle_fight_protocol::{MAX_PLAYER_NAME_CHARS, sanitize_player_name};
 
 use crate::{
     client_settings::{ClientSettings, MAX_SPEED_MULTIPLIER, MIN_SPEED_MULTIPLIER},
+    menu_focus::MenuOverlay,
     view_state::{ViewStatePersistence, toggle_window_mode},
 };
 
@@ -261,6 +262,7 @@ fn redraw_settings(
     commands
         .spawn((
             SettingsRoot,
+            MenuOverlay(4),
             Node {
                 position_type: PositionType::Absolute,
                 left: percent(0.0),
@@ -449,6 +451,10 @@ const CONTROLS: &[ControlGroup] = &[
             ),
             ("Alt+Enter", "Toggle fullscreen"),
             ("F1 / F8", "Debug overlays / debug menu"),
+            (
+                "Tab, arrows, Enter",
+                "Move between and press buttons in any menu",
+            ),
         ],
     ),
 ];

@@ -32,6 +32,7 @@ use crate::{
     default_worker_count,
     game_menu::{LeaveMatchRequest, MatchSessionReset},
     lobby::LobbyState,
+    menu_focus::{MenuFocus, MenuOverlay},
     network::NetworkClient,
     settings_menu::{Panel, SettingsMenuState},
 };
@@ -256,6 +257,7 @@ fn spawn_main_menu(commands: &mut Commands, menu: &MainMenuState) {
     commands
         .spawn((
             MainMenuRoot,
+            MenuOverlay(2),
             Node {
                 position_type: PositionType::Absolute,
                 left: percent(0.0),
@@ -432,6 +434,7 @@ fn button(parent: &mut ChildSpawnerCommands, value: impl Into<String>, action: M
 fn handle_menu_text_input(
     mut keyboard: MessageReader<KeyboardInput>,
     keys: Option<Res<ButtonInput<KeyCode>>>,
+    focus: Option<Res<MenuFocus>>,
     mut clipboard: Option<ResMut<Clipboard>>,
     mut menu: ResMut<MainMenuState>,
     mut field_text: Query<&mut Text, With<MenuTextField>>,
@@ -468,6 +471,8 @@ fn handle_menu_text_input(
             Key::Backspace => {
                 changed |= menu.field_mut().pop().is_some();
             }
+            // With a button focused, Enter presses that button instead of confirming the box.
+            Key::Enter if focus.as_ref().is_some_and(|focus| focus.has_focus()) => {}
             Key::Enter => menu.requested = Some(confirm),
             Key::Escape => menu.requested = Some(MainMenuAction::Back),
             // Shortcuts never type their letter into the field.
