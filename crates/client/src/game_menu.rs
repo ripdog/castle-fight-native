@@ -119,6 +119,8 @@ enum GameMenuAction {
     LeaveMatch,
     Settings,
     Controls,
+    QuickSave,
+    QuickLoad,
     ExitGame,
     ConfirmLeave,
     ConfirmExit,
@@ -206,6 +208,7 @@ struct MenuEffects<'w> {
     settings_menu: ResMut<'w, SettingsMenuState>,
     leave: MessageWriter<'w, LeaveMatchRequest>,
     exit: MessageWriter<'w, AppExit>,
+    quick_save: MessageWriter<'w, crate::QuickSaveRequest>,
 }
 
 fn handle_menu_buttons(
@@ -236,6 +239,12 @@ fn handle_menu_buttons(
         GameMenuAction::Back => menu.screen = Some(GameMenuScreen::Main),
         GameMenuAction::Settings => effects.settings_menu.open(Panel::Settings),
         GameMenuAction::Controls => effects.settings_menu.open(Panel::Controls),
+        GameMenuAction::QuickSave => {
+            effects.quick_save.write(crate::QuickSaveRequest::Save);
+        }
+        GameMenuAction::QuickLoad => {
+            effects.quick_save.write(crate::QuickSaveRequest::Load);
+        }
         // A finished match has nothing left to lose, so skip the confirmation.
         GameMenuAction::LeaveMatch if !match_over => {
             menu.screen = Some(GameMenuScreen::ConfirmLeave);
@@ -338,6 +347,10 @@ fn spawn_menu(commands: &mut Commands, screen: GameMenuScreen, context: MenuCont
                         button(panel, "RESUME GAME", GameMenuAction::Resume);
                         button(panel, "SETTINGS", GameMenuAction::Settings);
                         button(panel, "CONTROLS", GameMenuAction::Controls);
+                        if !context.networked {
+                            button(panel, "QUICKSAVE", GameMenuAction::QuickSave);
+                            button(panel, "QUICKLOAD", GameMenuAction::QuickLoad);
+                        }
                         if context.can_return_to_main_menu {
                             button(panel, "MAIN MENU", GameMenuAction::LeaveMatch);
                         }

@@ -26,8 +26,23 @@ pub(crate) struct MatchUiPlugin;
 #[derive(Component)]
 struct MatchHud;
 
-#[derive(Component)]
-struct MatchHudText;
+/// One readable piece of the top match line; each is updated independently.
+#[derive(Component, Clone, Copy, PartialEq, Eq)]
+enum MatchHudSegment {
+    Round,
+    Score,
+    Timer,
+    Rescue,
+    Status,
+}
+
+const HUD_SEGMENTS: [MatchHudSegment; 5] = [
+    MatchHudSegment::Round,
+    MatchHudSegment::Score,
+    MatchHudSegment::Timer,
+    MatchHudSegment::Rescue,
+    MatchHudSegment::Status,
+];
 
 #[derive(Resource, Default)]
 struct RescueImpactDisplay {
@@ -92,6 +107,7 @@ fn spawn_match_hud(mut commands: Commands) {
                 left: Val::Percent(33.0),
                 width: Val::Percent(34.0),
                 justify_content: JustifyContent::Center,
+                column_gap: px(18.0),
                 padding: UiRect::axes(px(12.0), px(5.0)),
                 border: UiRect::all(px(1.0)),
                 ..default()
@@ -103,13 +119,15 @@ fn spawn_match_hud(mut commands: Commands) {
             Pickable::IGNORE,
         ))
         .with_children(|parent| {
-            parent.spawn((
-                MatchHudText,
-                Text::new(""),
-                TextFont::from_font_size(14.0),
-                TextColor(Color::srgb(0.96, 0.89, 0.72)),
-                TextLayout::justify(Justify::Center),
-            ));
+            for segment in HUD_SEGMENTS {
+                parent.spawn((
+                    segment,
+                    Text::new(""),
+                    TextFont::from_font_size(14.0),
+                    TextColor(Color::srgb(0.96, 0.89, 0.72)),
+                    TextLayout::justify(Justify::Center),
+                ));
+            }
         });
 }
 
@@ -117,7 +135,7 @@ fn update_match_hud(
     authoritative: Res<AuthoritativeSimulation>,
     lobby: Option<Res<LobbyState>>,
     mut container: Query<&mut Visibility, With<MatchHud>>,
-    mut text: Query<&mut Text, With<MatchHudText>>,
+    mut segments: Query<(&MatchHudSegment, &mut Text, &mut Node)>,
 ) {
     let Ok(mut visibility) = container.single_mut() else {
         return;
@@ -134,47 +152,52 @@ fn update_match_hud(
         sim.rescue_strikes_left(Team(1)),
     ];
     let timer = if let Some(seconds) = sim.review_seconds_remaining() {
-        format!("Next round in {seconds}s")
+        format!("NEXT ROUND IN {seconds}s")
     } else {
         sim.match_rules()
             .duration_ticks()
-            .map_or("No time limit".to_owned(), |limit| {
+            .map_or("NO TIME LIMIT".to_owned(), |limit| {
                 let remaining = limit.saturating_sub(sim.round_elapsed_ticks());
                 let seconds =
                     remaining.div_ceil(castle_fight_sim::CASTLE_FIGHT_SIMULATION_HZ as u64);
-                format!("{:02}:{:02} remaining", seconds / 60, seconds % 60)
+                format!("{:02}:{:02}", seconds / 60, seconds % 60)
             })
     };
-    let result = match sim.lifecycle() {
+    let status = match sim.lifecycle() {
         MatchLifecycle::Finished {
             outcome: MatchOutcome::Victory(Team(0)),
             ..
-        } => " · WEST WINS MATCH",
+        } => "WEST WINS THE MATCH",
         MatchLifecycle::Finished {
             outcome: MatchOutcome::Victory(Team(1)),
             ..
-        } => " · EAST WINS MATCH",
+        } => "EAST WINS THE MATCH",
         MatchLifecycle::Finished {
             outcome: MatchOutcome::Victory(_),
             ..
-        } => " · MATCH FINISHED",
+        } => "MATCH FINISHED",
         MatchLifecycle::Finished {
             outcome: MatchOutcome::Draw,
             ..
-        } => " · DRAW",
-        MatchLifecycle::PausedForDisconnect { .. } => " · PAUSED FOR DISCONNECT",
-        MatchLifecycle::RoundReview { .. } => " · ROUND COMPLETE",
+        } => "DRAW",
+        MatchLifecycle::PausedForDisconnect { .. } => "PAUSED FOR DISCONNECT",
+        MatchLifecycle::RoundReview { .. } => "ROUND COMPLETE",
         MatchLifecycle::Running => "",
     };
-    if let Ok(mut text) = text.single_mut() {
-        text.0 = format!(
-            "Round {} · West {}–{} East · {timer} · Rescue {}/{} · F9: Scores {result}",
-            sim.round_index(),
-            wins[0],
-            wins[1],
-            strikes[0],
-            strikes[1]
-        );
+    for (segment, mut text, mut node) in &mut segments {
+        let value = match segment {
+            MatchHudSegment::Round => format!("ROUND {}", sim.round_index()),
+            MatchHudSegment::Score => format!("WEST {} - {} EAST", wins[0], wins[1]),
+            MatchHudSegment::Timer => timer.clone(),
+            MatchHudSegment::Rescue => format!("RESCUE {} / {}", strikes[0], strikes[1]),
+            MatchHudSegment::Status => status.to_owned(),
+        };
+        node.display = if value.is_empty() {
+            Display::None
+        } else {
+            Display::Flex
+        };
+        text.0 = value;
     }
 }
 

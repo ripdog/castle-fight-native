@@ -697,6 +697,7 @@ fn main() {
             DebugMenuPlugin,
             notifications::NotificationsPlugin,
         ))
+        .add_message::<QuickSaveRequest>()
         .add_systems(Startup, setup_simulation_pause_ui)
         .add_systems(
             Update,
@@ -1317,59 +1318,87 @@ fn restore_simulation_quicksave(
 
 fn handle_quicksave_hotkeys(
     keys: Res<ButtonInput<KeyCode>>,
+    mut requests: MessageReader<QuickSaveRequest>,
     selected_match: Res<SelectedMatch>,
     debug_menu: Res<debug_menu::DebugMenuState>,
     mut authoritative: ResMut<AuthoritativeSimulation>,
     mut presentation: ResMut<PresentationSamples>,
 ) {
-    if !control_modifier_pressed(&keys) {
-        return;
-    }
-
-    if keys.just_pressed(KeyCode::KeyS) {
-        if authoritative.is_networked() {
-            authoritative
-                .pending_status
-                .push("Quicksave is available only for offline matches.".into());
-            return;
+    let mut action = requests.read().last().copied();
+    if control_modifier_pressed(&keys) {
+        if keys.just_pressed(KeyCode::KeyS) {
+            action = Some(QuickSaveRequest::Save);
+        } else if keys.just_pressed(KeyCode::KeyO) {
+            action = Some(QuickSaveRequest::Load);
         }
+    }
+    match action {
+        Some(QuickSaveRequest::Save) => perform_quicksave(&mut authoritative),
+        Some(QuickSaveRequest::Load) => perform_quickload(
+            &mut authoritative,
+            &selected_match,
+            &debug_menu,
+            &mut presentation,
+        ),
+        None => {}
+    }
+}
 
-        let path = quicksave_path();
-        let save_result = (|| -> Result<(usize, Option<u64>), String> {
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent).map_err(|error| {
-                    format!(
-                        "could not create quicksave directory {}: {error}",
-                        parent.display()
-                    )
-                })?;
-            }
-            let snapshot = authoritative.simulation.capture_snapshot();
-            let completed_tick = snapshot.completed_tick();
-            let bytes = snapshot
-                .encode_wire()
-                .map_err(|error| format!("could not encode quicksave: {error}"))?;
-            std::fs::write(&path, &bytes)
-                .map_err(|error| format!("could not write {}: {error}", path.display()))?;
-            Ok((bytes.len(), completed_tick))
-        })();
+/// Quicksave / quickload, from the hotkeys or the F10 menu.
+#[derive(Message, Clone, Copy)]
+pub(crate) enum QuickSaveRequest {
+    Save,
+    Load,
+}
 
-        authoritative.pending_status.push(match save_result {
-            Ok((bytes, completed_tick)) => format!(
-                "Saved tick {} to {} ({bytes} bytes).",
-                completed_tick
-                    .map(|tick| tick.to_string())
-                    .unwrap_or_else(|| "initial".into()),
-                path.display()
-            ),
-            Err(error) => format!("Quicksave failed: {error}"),
-        });
+/// Writes the offline match to the quicksave file. Results are reported as messages.
+fn perform_quicksave(authoritative: &mut AuthoritativeSimulation) {
+    if authoritative.is_networked() {
+        authoritative
+            .pending_status
+            .push("Quicksave is available only for offline matches.".into());
         return;
     }
 
-    if !keys.just_pressed(KeyCode::KeyO) {
-        return;
-    }
+    let path = quicksave_path();
+    let save_result = (|| -> Result<(usize, Option<u64>), String> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|error| {
+                format!(
+                    "could not create quicksave directory {}: {error}",
+                    parent.display()
+                )
+            })?;
+        }
+        let snapshot = authoritative.simulation.capture_snapshot();
+        let completed_tick = snapshot.completed_tick();
+        let bytes = snapshot
+            .encode_wire()
+            .map_err(|error| format!("could not encode quicksave: {error}"))?;
+        std::fs::write(&path, &bytes)
+            .map_err(|error| format!("could not write {}: {error}", path.display()))?;
+        Ok((bytes.len(), completed_tick))
+    })();
+
+    authoritative.pending_status.push(match save_result {
+        Ok((bytes, completed_tick)) => format!(
+            "Saved tick {} to {} ({bytes} bytes).",
+            completed_tick
+                .map(|tick| tick.to_string())
+                .unwrap_or_else(|| "initial".into()),
+            path.display()
+        ),
+        Err(error) => format!("Quicksave failed: {error}"),
+    });
+}
+
+/// Restores the offline match from the quicksave file. Results are reported as messages.
+fn perform_quickload(
+    authoritative: &mut AuthoritativeSimulation,
+    selected_match: &SelectedMatch,
+    debug_menu: &debug_menu::DebugMenuState,
+    presentation: &mut PresentationSamples,
+) {
     if authoritative.is_networked() {
         authoritative
             .pending_status
