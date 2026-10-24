@@ -23,11 +23,11 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 ### Lobby
 
 - [x] Leave button in both the single-player and networked lobby; it returns to the main menu, closes the connection and stops a hosted server. (A joiner whose host left can now get out of the frozen lobby too.)
-- [ ] Host can choose players per team (1v1 / 2v2 / 3v3) in a hosted lobby. `TeamSize` is disabled whenever the lobby is networked, including for the host, and the hosted match's size is fixed by the CLI option when the server is created.
-- [ ] Non-host controls that are disabled say why ("Only the host can change this").
-- [ ] Joiners can see (and, where the rules allow, choose) their team/slot; currently `Position` is disabled for everyone when networked.
-- [ ] Player names (local setting sent on join) shown in the lobby, scoreboard and top bar instead of "Player N".
-- [ ] Waiting-for-players state is prominent, not just the footer line "N / M players connected".
+- [x] Host can choose players per team (1v1 / 2v2 / 3v3) in a hosted lobby. New `SelectTeamSize` request (protocol 16); players whose slot disappears are moved, and the shrink is refused if they would not fit. Joiners rebuild their local world from the server's roster.
+- [x] Non-host controls that are disabled say why ("Only the host can change these settings", "Players per team (set by host)").
+- [x] Joiners can move to any open slot, including on the other team (`SelectSlot`); open slots show a "Move here" button and no race selector. Leaving the lobby (`LeaveLobby`) now frees the slot; before, a departed player kept it reserved and the match looked full.
+- [x] Player names are sent on join, shown in the lobby, the scoreboard and the top bar instead of "Player N". The name defaults to the operating system account name; a field to edit it belongs with the Settings screen (still open under P2).
+- [x] Waiting-for-players state is a prominent status panel ("WAITING FOR PLAYERS 2 / 4" with the number of open slots, then "ALL PLAYERS CONNECTED"), not just the footer line.
 
 ### Join / host flow (main menu)
 
