@@ -1,0 +1,104 @@
+# Menu, lobby and HUD UX checklist
+
+Status: **audit of 2026-10-24; nothing below is implemented unless ticked.**
+
+This is a progress tracker, not a specification. It was produced by reading the client code (`crates/client/src/{main_menu,lobby,match_ui,resource_ui,scoreboard_ui,inspection,build_ui,main,presentation}.rs`) and was not validated by playing the game. Re-check each item against the code before starting it; line references drift.
+
+Normative UI behavior lives in `docs/spec/31-input-building-ui.md` and `docs/spec/30-client-presentation.md`. Change those only for design changes, not to record that an item was done.
+
+Items are grouped by priority. Within a group, order is roughly the suggested implementation order.
+
+## P1 — Core flow gaps
+
+### Esc menu, leaving, and end of match
+
+- [ ] `Esc` with no modal/targeting state active opens an in-game menu (currently `Esc` only cancels build/targeting modes).
+- [ ] In-game menu offers Resume, Settings, Leave match / Return to main menu, and Quit.
+- [ ] Leaving a networked match disconnects cleanly and returns to the main menu with state reset (authoritative sim, presentation samples, selection, action panel, lobby).
+- [ ] Leaving an offline match returns to the main menu, optionally with a confirmation.
+- [ ] End-of-match screen (win/loss/draw, final scoreboard) with Return to menu; currently only the `F9` scoreboard shows results and the player must kill the process.
+- [ ] Destructive actions (Leave, Quit) ask for confirmation.
+- [ ] Decide whether Surrender exists in Castle Fight DE; if so it needs a protocol command and a vote/host rule. (Open question — do not add without map evidence.)
+
+### Lobby
+
+- [ ] Back / Leave button in both the single-player and networked lobby (currently the only exit is closing the game).
+- [ ] Host can choose players per team (1v1 / 2v2 / 3v3) in a hosted lobby. `TeamSize` is disabled whenever the lobby is networked, including for the host, and the hosted match's size is fixed by the CLI option when the server is created.
+- [ ] Non-host controls that are disabled say why ("Only the host can change this").
+- [ ] Joiners can see (and, where the rules allow, choose) their team/slot; currently `Position` is disabled for everyone when networked.
+- [ ] Player names (local setting sent on join) shown in the lobby, scoreboard and top bar instead of "Player N".
+- [ ] Waiting-for-players state is prominent, not just the footer line "N / M players connected".
+
+### Join / host flow (main menu)
+
+- [ ] Paste support in the server-address field. `Ctrl+V` currently arrives as `Key::Character("v")` and inserts a literal `v`.
+- [ ] Ignore text input while a control modifier is held, and add basic editing (caret movement, clear, select-all).
+- [ ] `Esc` returns from the Join screen to the main menu; `Enter` already connects.
+- [ ] Host and Connect run off the UI thread with a visible "Connecting…" state, a timeout and a Cancel button. Both are currently synchronous, so a slow or unreachable host freezes the window.
+- [ ] Remember the last-used server address (and optionally a short recent-servers list) instead of defaulting to `127.0.0.1`.
+- [ ] Host sees their reachable address/port and can copy it (LAN IP, port 6112).
+- [ ] Host port is configurable (it is fixed at `DEFAULT_GAME_PORT` and only displayed).
+- [ ] Version/compatibility mismatch on join is explained in plain language rather than surfaced as a raw error string.
+
+### Connection status and messages
+
+- [ ] Disconnect / reconnecting / reconnect-failed state shown as a persistent banner or modal with the reason, not only as a replaceable line. (`pending_status` is copied into the single `action_panel.status` text, so a later message overwrites an earlier one.)
+- [ ] A transient message/log area for command rejections ("Not enough gold", blocked placement, out of range) so they are noticeable and not overwritten immediately. The spec (§10 of `31-input-building-ui.md`) already asks for structured rejection reasons to reach the user.
+- [ ] Optional audio cue for rejected commands and alerts.
+
+## P2 — Settings and discoverability
+
+### Settings screen
+
+- [ ] Settings reachable from the main menu and the in-game menu.
+- [ ] Audio: master, effects and (if/when added) music volume. Currently audio exists only as spatial combat effects (`wc3_effects.rs`) with no volume control.
+- [ ] Display: fullscreen/windowed toggle in UI (state is persisted in `view_state.rs` but there is no menu control), resolution/vsync as applicable.
+- [ ] UI scale / text scale (menus use fixed pixel sizes).
+- [ ] Input: edge-scroll on/off, camera pan speed, scroll-wheel zoom sensitivity.
+- [ ] Persist settings alongside the existing view state.
+
+### Help and discoverability
+
+- [ ] Controls / hotkey reference screen (camera, selection groups, `Tab` type cycling, grave idle-builder cycle, `Shift` queueing, `F1`/`F8`/`F9`, `H`, `Ctrl+S`/`Ctrl+O`).
+- [ ] Scoreboard can be held with `Tab` (and/or opened by a clickable HUD button) in addition to `F9`.
+- [ ] Round/time/Rescue Strike line in the top HUD split into readable elements instead of one text string with an embedded "F9: Scores" hint.
+- [ ] Debug-only HUD text (FPS / tick) and the `F1`/`F8` developer overlays are hidden from ordinary play, or gated behind a flag. (Not confirmed how `debug_available()` gates them in a normal network match.)
+- [ ] Quicksave / quickload (`Ctrl+S` / `Ctrl+O`) exposed in the Esc menu for offline matches.
+
+### Camera
+
+- [ ] "Jump to castle" / "jump to last alert" / "centre on builder" shortcuts.
+- [ ] Option to disable edge scrolling (useful in windowed mode).
+
+## P3 — Lobby and polish
+
+- [ ] Random race option, and some preview of a race (builder description, building/unit overview) in the race picker. It is currently a text-only grid.
+- [ ] Lobby chat.
+- [ ] Ready state and host kick, if desired once lobby chat/names exist.
+- [ ] Move the debug "Starting buildings" setting out of the ordinary match settings (hide it unless debug is enabled) and make it behave like the other options rather than "click again to turn off".
+- [ ] Simplify the time-limit control (stepper buttons plus click-to-type) and give it keyboard focus handling; avoid depending on a full lobby despawn/respawn for every change (hover/focus state is lost on each redraw).
+- [ ] Keyboard navigation and focus rings in menus (Tab / Enter / arrows).
+- [ ] Hover/pressed feedback on lobby/menu buttons is colour-only.
+- [ ] First-run / missing-asset notice that points to the `cf-wc3-assets` converter instead of silently showing placeholders.
+- [ ] About / version / licence entry in the menu (bundled Blizzard-derived content notice).
+- [ ] Colour-blind friendly team indication (team colour is currently the main cue).
+- [ ] In-match text chat and quick pings for team games.
+- [ ] Under-attack / castle-damaged alert (sound, HUD flash, and camera-jump target) — needs an authoritative or presentation-side event source.
+- [ ] Replay or spectate entry point in the menu, if the replay machinery in the sim is wired to the client.
+- [ ] Gamepad support (low priority; not required for a Warcraft-style RTS).
+
+## P4 — Large, deferred
+
+- [ ] **Minimap.** `inspection.rs` draws a "MINIMAP" label in an empty box. A real implementation needs terrain, building and unit markers, the camera rectangle, click/drag to move the camera, and a fog-of-war aware view, and it is the natural surface for alerts and pings. This is a substantial, self-contained piece of work; treat it as its own plan rather than as part of the menu pass.
+
+## Not applicable / spec corrections
+
+- **Selling buildings does not exist in Castle Fight.** Do not add a Sell command or button. `docs/spec` still mentions sell/sale in several places and should be corrected (a spec change, so keep it a separate commit):
+  - [ ] `31-input-building-ui.md` §3 ("sell/destroy owned building where rules permit")
+  - [ ] `42-builder-items.md` (the `SellBuilding` entry)
+  - [ ] `20-networking.md` ("a sale target still exists and is sellable")
+  - [ ] `13-time-and-scheduling.md` ("place/sell buildings")
+  - [ ] `10-simulation-core.md` ("construct/sell/destroy building")
+  - [ ] `40-content-data.md` ("sell behavior")
+  - [ ] `41-match-gameplay.md` and `50-testing-observability-performance.md` (tests that mention selling/destroying a cage wall; a wall can still be destroyed in combat, so only the selling wording is wrong)
+- **Builder inventory slots.** The six empty slots in the selection console (`InventoryPlaceholder`) are a layout placeholder until builder items and `UseItem` exist. Either hide them until then or leave them, but don't treat them as a UI bug on their own. Tracked by the builder-items work in `docs/spec/42-builder-items.md`.
