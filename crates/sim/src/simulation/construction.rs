@@ -250,6 +250,7 @@ impl Simulation {
         self.validate_building_placement(building.team, building.footprint)?;
         let (id, entity) = self.spawn_building_shell(owner, building, properties);
         self.activate_building_entity(entity, building, properties);
+        self.note_building_completed(building);
         self.topology_dirty = true;
         Ok(id)
     }
@@ -1075,6 +1076,7 @@ impl Simulation {
                 .copied()
                 .filter(|s| s.native_grants.mana_regeneration_per_second_per_10k() > 0);
             self.activate_building_entity(entity, construction.building, construction.properties);
+            self.note_building_completed(construction.building);
             if let Some(source) = construction.upgrade_from
                 && let Some(mana) = source.runtime.mana
             {

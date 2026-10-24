@@ -52,7 +52,13 @@
                   "period_ticks": 9,
                   "life_ticks": 1260,
                   "x_limit": 2097152,
-                  "y_inset": 131072
+                  "y_inset": 131072,
+                  "pool_slots": 20,
+                  "slots_per_group": 5,
+                  "west_slots": 10,
+                  "y_period": 10,
+                  "y_south_below": 5,
+                  "refill_ticks": 120
                 }
               }
             }

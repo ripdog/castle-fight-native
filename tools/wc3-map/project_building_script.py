@@ -171,6 +171,26 @@ def _tornado(params, detail, number, raw):
     return {'Tornado': {'options': options, 'excluded_ability': int(filtered[2]), 'excluded_type': int(filtered[3])}}
 
 
+def _refill_timer(detail, params, raw):
+    """`iD`: the completed source building starts the shared timer whose callback is the pool initializer."""
+    import lua_index
+    data = detail['lua_bytes']
+    functions = detail['functions']
+    decode = lambda key, text: lua_index._decode_w3p_keyed_hex_string(int(key), text, 11351, 1106)
+    registered = {m.group(3).decode(): decode(m.group(1), m.group(2)) for m in re.finditer(rb'_I\[_T\(([0-9]+),"([0-9a-fA-F]+)"\)\]=(\w+)', data)}
+    handlers = [name for name, body in functions.items() if 'TimerStart(YHb,' in body]
+    if len(handlers) != 1 or functions[handlers[0]].count('TimerStart(YHb,') != 1:
+        raise ValueError('the pool refill timer must have one starter')
+    body = functions[handlers[0]]
+    started = re.search(r'if\(\w+>0\)then else (\w+)=__wurst_safe_GetUnitTypeId\(\w+\)if\(\1==(\d+)\)then __wurst_safe_TimerStart\(YHb,([\d.]+),true,'
+        r'\(function\(\.\.\.\)xpcall\(\(function\(\.\.\.\)_I\[\(_d\[(\d+)\]or _y\(\4,_T\(([0-9]+),"([0-9a-fA-F]+)"\)\)\)\]\(\.\.\.\)', body)
+    if (started is None or int(started[2]) != raw(detail['building_spell']['building_rawcode'])
+            or registered.get(params['pool_initializer_function']) != decode(started[5], started[6].encode())
+            or data.count(b'TimerStart(YHb,') != 1):
+        raise ValueError('the source building must start the repeating pool initializer timer')
+    return int((Decimal(started[3]) * 30).to_integral_value(rounding=ROUND_CEILING))
+
+
 def _wisp_release(params, detail, number, raw):
     """Ancient of Wonders: six pooled forest wisps are given to the owner over successive periods."""
     functions = detail['functions']
@@ -183,9 +203,15 @@ def _wisp_release(params, detail, number, raw):
         r'(\w+)=\5 (\w+)=\3 __wurst_safe_SetUnitOwner\(\6,\7,false\)__wurst_safe_UnitAddType\(\5,UNIT_TYPE_SAPPER\)orderCodeAttack\(\5\)'
         r'(\w+)=\5 (\w+)=\8 __wurst_safe_UnitApplyTimedLife\(\9,1112820806,([\d.]+)\)' % removed, periodic)
     iterations = re.search(r'\w+\.iteration=\(\w+\.iteration\+1\)if\(\w+\.iteration>=(\d+)\)then', periodic)
+    west = re.search(r'\(\(Seo<(\d+)\),\(-1\),1\)\*_b\[.*?\]\([\d.]+,wHb\)', pool)
+    slot_loop = re.search(r'Seo=\(\(__wurst_intDiv\(Seo,(\d+)\)\+1\)\*\1\)end Seo=\(Seo\+1\)if\(Seo>=(\d+)\)then break end', pool)
+    south = re.search(r'\(Seo,(\d+)\)<(\d+)\),\(-1\),1\)\*\(uHb-', pool)
+    refill = _refill_timer(detail, params, raw)
     x_limit = re.search(r'CreateUnit\(\w+,%d,\(_b\[.*?\]\(\(Seo<10\),\(-1\),1\)\*_b\[.*?\]\(([\d.]+),wHb\)\)' % wisp, pool)
     y_inset = re.search(r'\(Seo,10\)<5\),\(-1\),1\)\*\(uHb-([\d.]+)\)\),270\.\)', pool)
-    if (cast_shape is None or release is None or iterations is None or x_limit is None or y_inset is None
+    if (cast_shape is None or release is None or iterations is None or x_limit is None or y_inset is None or west is None or slot_loop is None or south is None
+            or int(slot_loop[1]) != params['pool_slots_per_group'] or int(slot_loop[2]) != params['pool_slot_count']
+            or params['pool_slot_count'] != params['pool_slots_per_group'] * params['pool_group_count']
             or Decimal(cast_shape[4]) != Decimal(params['period_seconds']) or int(iterations[1]) != params['iterations']
             or Decimal(release[10]) != Decimal(params['timed_life_seconds']) or not params['sets_owner_to_building_owner']
             or not params['issues_attack_order'] or params['adds_unit_type'] != 'UNIT_TYPE_SAPPER'
@@ -193,7 +219,9 @@ def _wisp_release(params, detail, number, raw):
         raise ValueError('Ancient of Wonders control flow changed: periodic release of pooled wisps for the owner')
     return {'WispRelease': {'map_version': detail['map_version'], 'wisp_rawcode': wisp, 'releases': params['iterations'],
         'period_ticks': number(params['period_seconds'], 30), 'life_ticks': number(params['timed_life_seconds'], 30),
-        'x_limit': number(x_limit[1], 1024), 'y_inset': number(y_inset[1], 1024)}}
+        'x_limit': number(x_limit[1], 1024), 'y_inset': number(y_inset[1], 1024),
+        'pool_slots': params['pool_slot_count'], 'slots_per_group': params['pool_slots_per_group'],
+        'west_slots': int(west[1]), 'y_period': int(south[1]), 'y_south_below': int(south[2]), 'refill_ticks': refill}}
 
 
 def _banish(params, detail, number, raw):

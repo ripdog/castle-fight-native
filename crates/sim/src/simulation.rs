@@ -16,7 +16,7 @@ const RANDOM_PURPOSE_ARTILLERY_POINT: u64 = 0x4152_5450_4f49_0001;
 const RANDOM_PURPOSE_ARTILLERY_DAMAGE: u64 = 0x4152_5444_4d47_0001;
 pub const UPHILL_MISS_CHANCE_SCALE: u16 = 10_000;
 /// Logical checksum encoding revision. Bump when the canonical projection changes incompatibly.
-pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 128;
+pub const CANONICAL_CHECKSUM_SCHEMA_VERSION: u32 = 129;
 
 const VISUAL_ID_BIT: u64 = 1 << 63;
 const ATTACK_PROC_CHANCE_SCALE: u16 = 10_000;
@@ -5512,7 +5512,13 @@ fn validate_spellcasting_profile(spellcasting: SpellcastingProfile) {
                     ..
                 } => assert!(cap > 0 && damage_per_mana >= 0),
                 crate::BuildingChild::WispRelease(profile) => assert!(
-                    profile.releases > 0 && profile.period_ticks > 0 && profile.life_ticks > 0
+                    profile.releases > 0
+                        && profile.period_ticks > 0
+                        && profile.life_ticks > 0
+                        && profile.refill_ticks > 0
+                        && (1..=32).contains(&profile.pool_slots)
+                        && profile.slots_per_group > 0
+                        && profile.y_period > 0
                 ),
                 crate::BuildingChild::Tornado { options, .. } => {
                     for option in options {

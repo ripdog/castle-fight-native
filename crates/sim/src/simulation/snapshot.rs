@@ -7,7 +7,7 @@ use std::fmt;
 
 /// Logical authoritative snapshot schema. This is intentionally independent of Bevy entity handles
 /// and storage order; wire encoding/versioning is layered on top of this logical representation.
-pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 131;
+pub const AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION: u32 = 132;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -272,6 +272,9 @@ impl SimulationSnapshot {
                         validate_content_version(state.profile.map_version, content)?;
                     }
                     if let NativeAction::WispRelease(state) = action {
+                        validate_content_version(state.profile.map_version, content)?;
+                    }
+                    if let NativeAction::WispPool(state) = action {
                         validate_content_version(state.profile.map_version, content)?;
                     }
                     if let NativeAction::DeathBurst(state) = action {

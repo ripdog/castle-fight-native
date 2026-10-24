@@ -32,7 +32,8 @@ pub use curse::CurseProfile;
 mod building_script;
 mod wisp;
 pub use wisp::{
-    DeathBurstRule, DeathBurstState, DeathSlowField, WispReleaseProfile, WispReleaseState,
+    DeathBurstRule, DeathBurstState, DeathSlowField, WispPoolState, WispReleaseProfile,
+    WispReleaseState,
 };
 mod parasite_area_buff;
 mod parasite_script;

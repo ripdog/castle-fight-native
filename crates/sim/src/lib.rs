@@ -72,7 +72,7 @@ pub use components::{
     ThunderCallState, TornadoDamage, TornadoProfile, TornadoSlow, TornadoState,
     TravellingManaClapProfile, TriggeredAttackEffect, TriggeredSpellProcProfile, TrueSightProfile,
     UnitClassifications, UnitGameplayProperties, UnitSpawn, UnitTemplate, WarClubProfile,
-    WarClubState, WhirlwindProfile, WispReleaseProfile, WispReleaseState,
+    WarClubState, WhirlwindProfile, WispPoolState, WispReleaseProfile, WispReleaseState,
 };
 pub use content::{
     CASTLE_FIGHT_CONTENT_BUNDLE_SCHEMA_VERSION, CASTLE_FIGHT_CONTENT_REVISION_927,

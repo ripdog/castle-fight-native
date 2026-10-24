@@ -738,6 +738,14 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                         hash.write_u8(state.iteration);
                         hash.write_u64(state.next_tick);
                     }
+                    NativeAction::WispPool(state) => {
+                        hash.write_u8(50);
+                        for word in state.profile.canonical_words() {
+                            hash.write_u64(word);
+                        }
+                        hash.write_u32(state.occupied);
+                        hash.write_u64(state.next_refill_tick);
+                    }
                     NativeAction::DeathBurst(state) => {
                         hash.write_u8(49);
                         hash.write_u64(state.source.0);

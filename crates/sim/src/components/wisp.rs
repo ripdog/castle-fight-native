@@ -13,10 +13,19 @@ pub struct WispReleaseProfile {
     pub x_limit: i32,
     /// ...and at `±(battlefield half-height - y_inset)`.
     pub y_inset: i32,
+    /// Pool geometry (`WHb`): slots, slots per group, and the corner each slot stands at: the
+    /// first-team side below `west_slots`, the south corner while `slot % y_period < y_south_below`.
+    pub pool_slots: u8,
+    pub slots_per_group: u8,
+    pub west_slots: u8,
+    pub y_period: u8,
+    pub y_south_below: u8,
+    /// A global repeating timer tops the pool up this often once a source building completes.
+    pub refill_ticks: u16,
 }
 
 impl WispReleaseProfile {
-    pub(crate) fn canonical_words(self) -> [u64; 8] {
+    pub(crate) fn canonical_words(self) -> [u64; 14] {
         [
             u64::from(self.map_version.major),
             u64::from(self.map_version.minor),
@@ -26,8 +35,22 @@ impl WispReleaseProfile {
             u64::from(self.life_ticks),
             self.x_limit as u64,
             self.y_inset as u64,
+            u64::from(self.pool_slots),
+            u64::from(self.slots_per_group),
+            u64::from(self.west_slots),
+            u64::from(self.y_period),
+            u64::from(self.y_south_below),
+            u64::from(self.refill_ticks),
         ]
     }
+}
+
+/// The shared wisp pool: occupied slots and the next refill of the global timer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WispPoolState {
+    pub profile: WispReleaseProfile,
+    pub occupied: u32,
+    pub next_refill_tick: u64,
 }
 
 /// An in-progress wisp release.

@@ -1167,7 +1167,7 @@ def build_tuning(release: dict[str, Any], repo_root: Path, recipes: dict[str, An
         if recipe["kind"] in {"building-weather", "native-weather-wave", "building-enchantment", "native-enchantment-grant", "source-damage-dispatcher", "building-script"}:
             detail.update(ethereal=reference["ethereal"], all_fields=abilities, all_bases=ability_bases, all_protected=protected, functions=functions, building_spell=building_spells.get(source), git_tree=tree, map_version=dict(zip(["major","minor"],map(int,release["map_version"].split(".")))))
         if recipe["kind"] == "building-script":
-            detail.update(all_unit_fields=unit_fields)
+            detail.update(all_unit_fields=unit_fields, lua_bytes=lua)
         if recipe["kind"] == "damage-echo-step":
             detail.update(echo=echo_steps[recipe["unit_rawcode"]], functions=functions, all_fields=abilities,
                 all_bases=ability_bases, git_tree=tree)
