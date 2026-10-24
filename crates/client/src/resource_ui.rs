@@ -733,7 +733,10 @@ fn update_resource_bar(
     } else {
         "ENEMY"
     };
-    let player_label = format!("PLAYER {} · {relation}", u16::from(selected_player.0) + 1);
+    let player_label = match authoritative.player_name(selected_player) {
+        Some(name) => format!("{} · {relation}", name.to_uppercase()),
+        None => format!("PLAYER {} · {relation}", u16::from(selected_player.0) + 1),
+    };
     let player_text_color = player_color(selected_player);
     for (
         mut text,

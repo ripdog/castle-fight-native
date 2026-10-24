@@ -55,7 +55,7 @@ use castle_fight_sim::{
     CastleFightMatchConfig, CastleFightMatchSetupError, CastleFightParticipantConfig,
     CommandExecution, CommandExecutionResult, CommandOutcome, CommandSubmission, DriverTickResult,
     InputStreamPosition, MapVersion, MatchDriver, PlayerCommand, PlayerId, Simulation,
-    SimulationSnapshot, Team, castle_fight_registered_releases,
+    SimulationSnapshot, castle_fight_registered_releases,
     debug::{
         BENCHMARK_MATCH_SEED, BenchmarkSetupOptions, apply_benchmark_setup,
         castle_fight_benchmark_match_config,
@@ -257,6 +257,40 @@ impl AuthoritativeSimulation {
 
     pub(crate) fn request_network_race(&mut self, builder_rawcode: u32) -> Result<(), String> {
         self.send_network_lobby_request(ClientMessage::SelectRace { builder_rawcode })
+    }
+
+    pub(crate) fn request_network_team_size(&mut self, team_size: u8) -> Result<(), String> {
+        self.send_network_lobby_request(ClientMessage::SelectTeamSize { team_size })
+    }
+
+    pub(crate) fn request_network_slot(&mut self, player_id: u8) -> Result<(), String> {
+        self.send_network_lobby_request(ClientMessage::SelectSlot { player_id })
+    }
+
+    /// Frees this player's lobby slot for good, as opposed to a dropped connection that keeps it
+    /// reserved for a reconnect.
+    pub(crate) fn request_network_leave_lobby(&mut self) -> Result<(), String> {
+        self.send_network_lobby_request(ClientMessage::LeaveLobby)
+    }
+
+    pub(crate) fn assigned_player(&self) -> Option<PlayerId> {
+        match &self.authority {
+            AuthorityMode::Network {
+                assigned_player, ..
+            } => Some(*assigned_player),
+            AuthorityMode::Local => None,
+        }
+    }
+
+    /// The display name a player gave when joining. Only networked matches know names.
+    pub(crate) fn player_name(&self, player: PlayerId) -> Option<&str> {
+        self.network_lobby_status
+            .as_ref()?
+            .participants
+            .iter()
+            .find(|participant| participant.player_id == player.0)
+            .map(|participant| participant.name.as_str())
+            .filter(|name| !name.is_empty())
     }
 
     fn send_network_lobby_request(&mut self, message: ClientMessage) -> Result<(), String> {
@@ -472,12 +506,16 @@ fn main() {
     }
     let (local_player, network_client) = if let Some(server_address) = options.server {
         let compatibility = compatibility_identity_for_demo(&demo);
-        let (client, assignment) =
-            NetworkClient::connect(server_address, compatibility, u64::from(std::process::id()))
-                .unwrap_or_else(|error| {
-                    eprintln!("cannot join Castle Fight server {server_address}: {error}");
-                    std::process::exit(2);
-                });
+        let (client, assignment) = NetworkClient::connect(
+            server_address,
+            compatibility,
+            u64::from(std::process::id()),
+            &network::default_player_name(),
+        )
+        .unwrap_or_else(|error| {
+            eprintln!("cannot join Castle Fight server {server_address}: {error}");
+            std::process::exit(2);
+        });
         if assignment.next_stream_position != 0
             || assignment.next_client_sequence != 0
             || assignment.completed_tick.is_some()
@@ -1135,25 +1173,15 @@ fn client_match_config(
             BENCHMARK_MATCH_SEED,
         );
     }
-    let western = [0u8, 1, 2];
-    let eastern = [6u8, 7, 8];
-    let participants =
-        western
-            .iter()
-            .take(options.team_size)
-            .map(|slot| CastleFightParticipantConfig {
-                id: PlayerId(*slot),
-                team: Team(0),
-                builder_race: CastleFightBuilderRace::Human,
-            })
-            .chain(eastern.iter().take(options.team_size).map(|slot| {
-                CastleFightParticipantConfig {
-                    id: PlayerId(*slot),
-                    team: Team(1),
-                    builder_race: CastleFightBuilderRace::Human,
-                }
-            }))
-            .collect::<Vec<_>>();
+    let participants = castle_fight_sim::standard_match_slots(options.team_size)
+        .ok_or(CastleFightMatchSetupError::UnsupportedParticipants)?
+        .into_iter()
+        .map(|(id, team)| CastleFightParticipantConfig {
+            id,
+            team,
+            builder_race: CastleFightBuilderRace::Human,
+        })
+        .collect::<Vec<_>>();
     let content = castle_fight_sim::castle_fight_content_bundle(options.map_version)
         .map_err(CastleFightMatchSetupError::UnsupportedContent)?;
     let participants = participants
@@ -1613,6 +1641,40 @@ fn process_network_events(
                     authoritative.network_lobby_error = None;
                     authoritative.network_lobby_status = Some(status);
                 }
+                ServerMessage::SlotAssigned { player_id, team } => {
+                    if let AuthorityMode::Network {
+                        assigned_player, ..
+                    } = &mut authoritative.authority
+                    {
+                        *assigned_player = PlayerId(player_id);
+                    }
+                    selected_match.local_player = PlayerId(player_id);
+                    presentation.set_observer_team(Some(castle_fight_sim::Team(team)));
+                }
+                ServerMessage::LobbyTeamSizeRejected { reason } => {
+                    use castle_fight_protocol::LobbyTeamSizeRejectReason as Reason;
+                    authoritative.network_lobby_error = Some(
+                        match reason {
+                            Reason::NotHost => "Only the host can change the team size.",
+                            Reason::AlreadyStarted => "The match has already started.",
+                            Reason::InvalidSize => "That team size is not supported.",
+                            Reason::TooManyPlayers => {
+                                "More players are connected than the smaller match has slots."
+                            }
+                        }
+                        .to_owned(),
+                    );
+                }
+                ServerMessage::LobbySlotRejected { reason } => {
+                    use castle_fight_protocol::LobbySlotRejectReason as Reason;
+                    authoritative.network_lobby_error = Some(
+                        match reason {
+                            Reason::AlreadyStarted => "The match has already started.",
+                            Reason::SlotUnavailable => "That slot is taken or no longer exists.",
+                        }
+                        .to_owned(),
+                    );
+                }
                 ServerMessage::LobbyMatchRulesRejected => {
                     authoritative.network_lobby_error =
                         Some("Only the host may change match settings before start.".to_owned());
@@ -1868,23 +1930,53 @@ fn apply_network_lobby_roster(
     };
     let mut roster = status.participants.clone();
     roster.sort_unstable_by_key(|participant| participant.player_id);
-    if roster.len() != match_config.participants.len()
-        || usize::from(status.required_players) != roster.len()
-        || roster
+    // The host may change the team size, so the slots are whatever the server says they are, as
+    // long as they are a standard roster that still contains the local player.
+    let slots = castle_fight_sim::standard_match_slots(roster.len() / 2)
+        .filter(|slots| {
+            roster.len().is_multiple_of(2)
+                && usize::from(status.required_players) == roster.len()
+                && slots.len() == roster.len()
+        })
+        .ok_or_else(|| "server lobby sent an unsupported roster".to_owned())?;
+    let mut ordered = roster.iter().collect::<Vec<_>>();
+    ordered.sort_unstable_by_key(|participant| {
+        slots
             .iter()
-            .zip(&match_config.participants)
-            .any(|(wire, participant)| wire.player_id != participant.id.0)
+            .position(|(id, _)| id.0 == participant.player_id)
+            .unwrap_or(usize::MAX)
+    });
+    if ordered
+        .iter()
+        .zip(&slots)
+        .any(|(wire, (id, _))| wire.player_id != id.0)
     {
-        return Err("server lobby changed the authenticated player slots".to_owned());
+        return Err("server lobby sent an unsupported roster".to_owned());
     }
     let mut config = match_config.clone();
     config.rules = status.rules;
-    for (wire, participant) in roster.iter().zip(&mut config.participants) {
-        participant.builder_race = selected_match
-            .content
-            .builder_race_for_rawcode(wire.builder_rawcode)
-            .filter(|race| selected_match.content.supports_builder_race(*race))
-            .ok_or_else(|| "server lobby selected an unavailable builder".to_owned())?;
+    config.participants = ordered
+        .iter()
+        .zip(&slots)
+        .map(|(wire, &(id, team))| {
+            let builder_race = selected_match
+                .content
+                .builder_race_for_rawcode(wire.builder_rawcode)
+                .filter(|race| selected_match.content.supports_builder_race(*race))
+                .ok_or_else(|| "server lobby selected an unavailable builder".to_owned())?;
+            Ok(CastleFightParticipantConfig {
+                id,
+                team,
+                builder_race,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    if !config
+        .participants
+        .iter()
+        .any(|participant| Some(participant.id) == authoritative.assigned_player())
+    {
+        return Err("server lobby removed the local player's slot".to_owned());
     }
     if config == *match_config {
         return Ok(());
@@ -2487,6 +2579,79 @@ mod tests {
     }
 
     #[test]
+    fn network_lobby_team_size_change_rebuilds_the_world_the_server_holds() {
+        use castle_fight_protocol::{LobbyParticipant, LobbyStatus};
+        let small = crate::demo::create_demo_world(1, None);
+        let mut large_config = small.match_config.clone();
+        large_config.participants = castle_fight_sim::standard_match_slots(2)
+            .unwrap()
+            .into_iter()
+            .map(|(id, team)| CastleFightParticipantConfig {
+                id,
+                team,
+                builder_race: CastleFightBuilderRace::Human,
+            })
+            .collect();
+        let server = castle_fight_server::AuthoritativeMatch::new(
+            large_config.clone(),
+            1,
+            Default::default(),
+        )
+        .unwrap();
+        let status = LobbyStatus {
+            rules: large_config.rules,
+            host_player_id: 0,
+            debug_paused: false,
+            debug_speed: castle_fight_protocol::DebugSpeed::Normal,
+            connected_player_ids: vec![0, 6],
+            required_players: 4,
+            started: false,
+            participants: large_config
+                .participants
+                .iter()
+                .map(|participant| LobbyParticipant {
+                    player_id: participant.id.0,
+                    builder_rawcode: small
+                        .content
+                        .builder(participant.builder_race)
+                        .unwrap()
+                        .rawcode,
+                    name: String::new(),
+                })
+                .collect(),
+        };
+
+        let local = PlayerId(6);
+        let client = NetworkClient::connected_test_fixture(compatibility_identity_for_demo(&small));
+        let mut presentation =
+            PresentationSamples::new(PresentationSnapshot::capture(&small.simulation));
+        let mut selected = SelectedMatch {
+            content: small.content,
+            direct_buildings: small.direct_buildings,
+            local_player: local,
+        };
+        let mut authoritative = AuthoritativeSimulation::new_networked(
+            small.simulation,
+            small.content,
+            small.match_config,
+            client,
+            local,
+            0,
+        );
+        apply_network_lobby_roster(
+            &mut authoritative,
+            &mut presentation,
+            &mut selected,
+            &status,
+        )
+        .unwrap();
+        assert_eq!(
+            authoritative.simulation.checksum(),
+            server.simulation().checksum()
+        );
+    }
+
+    #[test]
     fn network_lobby_roster_is_applied_before_first_tick_in_same_event_batch() {
         use castle_fight_protocol::{LobbyParticipant, LobbyStatus};
         let config = crate::demo::create_demo_world(1, None).match_config;
@@ -2515,6 +2680,7 @@ mod tests {
                 .map(|participant| LobbyParticipant {
                     player_id: participant.id.0,
                     builder_rawcode: content.builder(participant.builder_race).unwrap().rawcode,
+                    name: String::new(),
                 })
                 .collect(),
         };

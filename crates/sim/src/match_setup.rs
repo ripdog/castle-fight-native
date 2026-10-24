@@ -499,6 +499,17 @@ fn participant_direct_buildings(
     kinds
 }
 
+/// The player slots of a `team_size`-per-side match in canonical order: the west team's slots
+/// followed by the east team's. `None` when the size is not one of the supported 1, 2 or 3.
+#[must_use]
+pub fn standard_match_slots(team_size: usize) -> Option<Vec<(PlayerId, Team)>> {
+    let size = u8::try_from(team_size)
+        .ok()
+        .filter(|size| (1..=3).contains(size))?;
+    let slots = |first: u8, team: Team| (0..size).map(move |slot| (PlayerId(first + slot), team));
+    Some(slots(0, Team(0)).chain(slots(6, Team(1))).collect())
+}
+
 fn validate_participants(
     participants: &[CastleFightParticipantConfig],
 ) -> Result<(), CastleFightMatchSetupError> {

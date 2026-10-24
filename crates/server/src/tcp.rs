@@ -13,12 +13,14 @@ use std::{
 
 use castle_fight_protocol::{
     CatchUpComplete, ClientMessage, FrameError, HandshakeRejectReason, LobbyRaceRejectReason,
-    LobbyStartRejectReason, LobbyStatus, MAX_SNAPSHOT_BYTES, ProtocolEnvelope, ProtocolErrorCode,
-    ProtocolSchemaError, SNAPSHOT_CHUNK_BYTES, ServerMessage, SnapshotChunk, SnapshotTransferBegin,
+    LobbySlotRejectReason, LobbyStartRejectReason, LobbyStatus, LobbyTeamSizeRejectReason,
+    MAX_SNAPSHOT_BYTES, ProtocolEnvelope, ProtocolErrorCode, ProtocolSchemaError,
+    SNAPSHOT_CHUNK_BYTES, ServerMessage, SnapshotChunk, SnapshotTransferBegin,
     WireCanonicalStreamRecord, read_frame, write_frame,
 };
 use castle_fight_sim::{
     CASTLE_FIGHT_SIMULATION_HZ, CanonicalStreamRecord, InputStreamPosition, MatchLifecycle,
+    PlayerId,
 };
 
 use crate::{
@@ -412,6 +414,54 @@ impl TcpAuthoritativeServer {
             }
             return self.broadcast_lobby_status();
         }
+        if let ClientMessage::SelectTeamSize { team_size } = message {
+            let result = if !self.lobby_mode || self.started {
+                Err(LobbyTeamSizeRejectReason::AlreadyStarted)
+            } else if self.host_session != Some(session_id) {
+                Err(LobbyTeamSizeRejectReason::NotHost)
+            } else {
+                self.authoritative
+                    .select_lobby_team_size(usize::from(team_size))
+            };
+            return match result {
+                Ok(moved) => {
+                    self.announce_slot_moves(moved)?;
+                    self.broadcast_lobby_status()
+                }
+                Err(reason) => self.send_to_connection(
+                    connection_id,
+                    ServerMessage::LobbyTeamSizeRejected { reason },
+                ),
+            };
+        }
+        if let ClientMessage::SelectSlot { player_id } = message {
+            let result = if !self.lobby_mode || self.started {
+                Err(LobbySlotRejectReason::AlreadyStarted)
+            } else {
+                self.authoritative
+                    .select_lobby_slot(session_id, PlayerId(player_id))
+                    .map(|()| vec![(session_id, PlayerId(player_id))])
+            };
+            return match result {
+                Ok(moved) => {
+                    self.announce_slot_moves(moved)?;
+                    self.broadcast_lobby_status()
+                }
+                Err(reason) => self
+                    .send_to_connection(connection_id, ServerMessage::LobbySlotRejected { reason }),
+            };
+        }
+        if matches!(message, ClientMessage::LeaveLobby) {
+            if self.lobby_mode && !self.started {
+                self.authoritative.release_lobby_session(session_id);
+                if self.host_session == Some(session_id) {
+                    self.host_session = self.authoritative.first_session();
+                }
+            }
+            // The connection closes either way; before the match starts the freed slot is
+            // announced to everyone who remains.
+            return self.disconnect_connection(connection_id);
+        }
         if let ClientMessage::SelectRace { builder_rawcode } = message {
             let result = if !self.lobby_mode || self.started {
                 Err(LobbyRaceRejectReason::AlreadyStarted)
@@ -593,6 +643,9 @@ impl TcpAuthoritativeServer {
             | ClientMessage::StartMatch
             | ClientMessage::SelectRace { .. }
             | ClientMessage::SelectMatchRules { .. }
+            | ClientMessage::SelectTeamSize { .. }
+            | ClientMessage::SelectSlot { .. }
+            | ClientMessage::LeaveLobby
             | ClientMessage::SubmitCommand { .. }
             | ClientMessage::CheckpointReport { .. } => self.send_to_connection(
                 connection_id,
@@ -686,6 +739,29 @@ impl TcpAuthoritativeServer {
             participants: self.authoritative.lobby_participants(),
             started: self.started,
         })
+    }
+
+    /// Tells each moved session its new slot. Sent ahead of the lobby status that reflects the
+    /// move, so a client never sees a roster that places it somewhere it has not been told about.
+    fn announce_slot_moves(
+        &mut self,
+        moved: Vec<(SessionId, PlayerId)>,
+    ) -> Result<(), TcpServerError> {
+        let messages = moved
+            .into_iter()
+            .filter_map(|(session, player)| {
+                let assignment = self.authoritative.session_assignment(session)?;
+                debug_assert_eq!(assignment.player_id, player.0);
+                Some(OutboundMessage::to_session(
+                    session,
+                    ServerMessage::SlotAssigned {
+                        player_id: assignment.player_id,
+                        team: assignment.team,
+                    },
+                ))
+            })
+            .collect::<Vec<_>>();
+        self.dispatch_all(messages)
     }
 
     fn broadcast_lobby_status(&mut self) -> Result<(), TcpServerError> {
@@ -1016,6 +1092,7 @@ mod tests {
             hello: ClientHello {
                 compatibility: server.authoritative().compatibility().clone(),
                 client_nonce: nonce,
+                player_name: format!("Player {nonce}"),
             },
         }
     }
@@ -1377,6 +1454,90 @@ mod tests {
         }
         assert_eq!(server.authoritative.simulation().tick(), 1);
         assert!(server.debug_paused);
+    }
+
+    #[test]
+    fn lobby_resizes_moves_players_and_frees_the_slot_of_a_player_who_leaves() {
+        // Reads frames until the predicate matches, skipping the status broadcasts in between.
+        fn receive_until(
+            stream: &mut TcpStream,
+            wanted: impl Fn(&ServerMessage) -> bool,
+        ) -> ServerMessage {
+            for _ in 0..16 {
+                let message = receive_server(stream);
+                if wanted(&message) {
+                    return message;
+                }
+            }
+            panic!("expected message never arrived");
+        }
+
+        let mut server = lobby_server();
+        let mut host = connect(&server);
+        let mut guest = connect(&server);
+        server.poll_network().unwrap();
+        send_client(&mut host, hello(&server, 1));
+        pump_until(&mut server, |view| view.authenticated == 1);
+        send_client(&mut guest, hello(&server, 2));
+        pump_until(&mut server, |view| view.authenticated == 2);
+
+        // Only the host may resize; the guest is refused.
+        send_client(&mut guest, ClientMessage::SelectTeamSize { team_size: 2 });
+        pump_network(&mut server);
+        assert!(matches!(
+            receive_until(&mut guest, |m| matches!(
+                m,
+                ServerMessage::LobbyTeamSizeRejected { .. }
+            )),
+            ServerMessage::LobbyTeamSizeRejected {
+                reason: LobbyTeamSizeRejectReason::NotHost
+            }
+        ));
+        send_client(&mut host, ClientMessage::SelectTeamSize { team_size: 2 });
+        pump_network(&mut server);
+        let ServerMessage::LobbyStatus { status } = receive_until(
+            &mut guest,
+            |m| matches!(m, ServerMessage::LobbyStatus { status } if status.required_players == 4),
+        ) else {
+            unreachable!()
+        };
+        assert_eq!(status.participants.len(), 4);
+        assert_eq!(
+            status
+                .participants
+                .iter()
+                .filter(|participant| !participant.name.is_empty())
+                .count(),
+            2
+        );
+
+        // The guest takes an empty west slot; it is told before the roster changes.
+        send_client(&mut guest, ClientMessage::SelectSlot { player_id: 1 });
+        pump_network(&mut server);
+        assert!(matches!(
+            receive_until(&mut guest, |m| matches!(
+                m,
+                ServerMessage::SlotAssigned { .. }
+            )),
+            ServerMessage::SlotAssigned {
+                player_id: 1,
+                team: 0
+            }
+        ));
+
+        // Leaving frees the slot, so the next joiner takes it instead of finding the match full.
+        send_client(&mut guest, ClientMessage::LeaveLobby);
+        pump_network(&mut server);
+        let mut newcomer = connect(&server);
+        server.poll_network().unwrap();
+        send_client(&mut newcomer, hello(&server, 3));
+        pump_until(&mut server, |view| view.authenticated == 2);
+        assert!(matches!(
+            receive_server(&mut newcomer),
+            ServerMessage::HelloAccepted {
+                assignment: SessionAssignment { player_id: 1, .. }
+            }
+        ));
     }
 
     #[test]

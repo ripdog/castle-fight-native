@@ -494,6 +494,19 @@ impl PresentationSamples {
         team: Option<Team>,
         control_all_players: bool,
     ) -> Self {
+        self.set_player_control(team, control_all_players);
+        self
+    }
+
+    /// Re-targets the viewer after the lobby moved the local player to another team.
+    pub(crate) fn set_observer_team(&mut self, team: Option<Team>) {
+        let control_all_players = self
+            .observer
+            .is_some_and(|observer| observer.control_all_players);
+        self.set_player_control(team, control_all_players);
+    }
+
+    fn set_player_control(&mut self, team: Option<Team>, control_all_players: bool) {
         self.observer = team.map(|team| ObserverVision {
             team,
             control_all_players,
@@ -502,7 +515,6 @@ impl PresentationSamples {
             self.current.restrict_to_observer(observer);
             self.previous = self.current.clone();
         }
-        self
     }
 
     pub fn publish(&mut self, mut next: PresentationSnapshot) {

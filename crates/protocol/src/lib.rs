@@ -15,7 +15,8 @@ use castle_fight_sim::{
 };
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
-pub const PROTOCOL_SCHEMA_VERSION: u32 = 15;
+pub const PROTOCOL_SCHEMA_VERSION: u32 = 16;
+pub const MAX_PLAYER_NAME_CHARS: usize = 24;
 pub const MAX_FRAME_BYTES: usize = 1024 * 1024;
 pub const MAX_RELEASE_REVISION_BYTES: usize = 64;
 pub const RECONNECT_TOKEN_BYTES: usize = 32;
@@ -309,6 +310,24 @@ impl std::error::Error for MessageValidationError {}
 pub struct ClientHello {
     pub compatibility: CompatibilityIdentity,
     pub client_nonce: u64,
+    /// Display name shown to the other players. Presentation only; the server sanitizes it with
+    /// [`sanitize_player_name`].
+    pub player_name: String,
+}
+
+/// Trims control characters and surrounding whitespace, and bounds the length, so a display name
+/// is always safe to show. An empty result means the player did not supply a usable name.
+#[must_use]
+pub fn sanitize_player_name(raw: &str) -> String {
+    raw.chars()
+        .filter(|character| !character.is_control())
+        .collect::<String>()
+        .trim()
+        .chars()
+        .take(MAX_PLAYER_NAME_CHARS)
+        .collect::<String>()
+        .trim_end()
+        .to_owned()
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -492,11 +511,13 @@ pub struct LobbyStatus {
     pub started: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct LobbyParticipant {
     pub player_id: u8,
     pub builder_rawcode: u32,
+    /// Display name of the session holding this slot; empty while the slot is unclaimed.
+    pub name: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -504,6 +525,24 @@ pub struct LobbyParticipant {
 pub enum LobbyRaceRejectReason {
     AlreadyStarted,
     RaceUnavailable,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LobbyTeamSizeRejectReason {
+    NotHost,
+    AlreadyStarted,
+    InvalidSize,
+    /// More players are connected than the smaller match has slots.
+    TooManyPlayers,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LobbySlotRejectReason {
+    AlreadyStarted,
+    /// The slot does not exist in this match or is held by another player.
+    SlotUnavailable,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -517,14 +556,38 @@ pub enum LobbyStartRejectReason {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ClientMessage {
-    Hello { hello: ClientHello },
-    Reconnect { reconnect: ReconnectHello },
+    Hello {
+        hello: ClientHello,
+    },
+    Reconnect {
+        reconnect: ReconnectHello,
+    },
     StartMatch,
-    Debug { request: DebugRequest },
-    SelectRace { builder_rawcode: u32 },
-    SelectMatchRules { rules: MatchRules },
-    SubmitCommand { request: CommandRequest },
-    CheckpointReport { report: CheckpointReport },
+    Debug {
+        request: DebugRequest,
+    },
+    SelectRace {
+        builder_rawcode: u32,
+    },
+    SelectMatchRules {
+        rules: MatchRules,
+    },
+    /// Host-only: change the number of players per team before the match starts.
+    SelectTeamSize {
+        team_size: u8,
+    },
+    /// Move to an empty slot (and so possibly the other team) before the match starts.
+    SelectSlot {
+        player_id: u8,
+    },
+    /// Release this session's slot for good; a plain disconnect keeps it for reconnecting.
+    LeaveLobby,
+    SubmitCommand {
+        request: CommandRequest,
+    },
+    CheckpointReport {
+        report: CheckpointReport,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -546,6 +609,18 @@ pub enum ServerMessage {
         reason: LobbyRaceRejectReason,
     },
     LobbyMatchRulesRejected,
+    LobbyTeamSizeRejected {
+        reason: LobbyTeamSizeRejectReason,
+    },
+    LobbySlotRejected {
+        reason: LobbySlotRejectReason,
+    },
+    /// The lobby moved this session to another slot (a smaller team size removed its slot, or the
+    /// player chose a new one). Sent before the `LobbyStatus` that reflects the move.
+    SlotAssigned {
+        player_id: u8,
+        team: u8,
+    },
     CommandAcknowledged {
         acknowledgement: CommandAcknowledgement,
     },
@@ -1588,6 +1663,7 @@ mod tests {
             hello: ClientHello {
                 compatibility: compatibility(),
                 client_nonce: 7,
+                player_name: "Tester".into(),
             },
         });
         let frame = encode_frame(&value).unwrap();

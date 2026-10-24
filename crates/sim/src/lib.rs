@@ -112,6 +112,7 @@ pub use match_setup::{
     CastleFightMatchMode, CastleFightMatchSetupError, CastleFightParticipantConfig,
     CastleFightReleaseDescriptor, CastleFightResolvedMatch, castle_fight_registered_releases,
     castle_fight_release_descriptor, create_castle_fight_match, resolve_castle_fight_match,
+    standard_match_slots,
 };
 pub use math::{SUBUNITS_PER_WORLD_UNIT, SimPoint};
 pub use native_carriers::{

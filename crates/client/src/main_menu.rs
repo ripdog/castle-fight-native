@@ -517,6 +517,7 @@ fn return_to_main_menu(
     mut commands: Commands,
     mut requests: MessageReader<LeaveMatchRequest>,
     menu: Option<ResMut<MainMenuState>>,
+    lobby: Option<Res<LobbyState>>,
     roots: Query<Entity, With<MainMenuRoot>>,
     mut game: MenuGame<'_>,
     mut reset: MessageWriter<MatchSessionReset>,
@@ -548,6 +549,11 @@ fn return_to_main_menu(
         .map(|player| player.team);
     let snapshot = PresentationSnapshot::capture(&demo.simulation);
 
+    // Leaving a lobby on purpose frees the slot; a plain disconnect would keep it reserved for a
+    // reconnect that is never coming. The message is flushed before the socket closes.
+    if lobby.is_some_and(|lobby| lobby.is_open_network_lobby()) {
+        let _ = game.authoritative.request_network_leave_lobby();
+    }
     // Dropping the old resources closes the network client; removing the handle stops a hosted
     // server and releases its port.
     commands.remove_resource::<HostedServer>();
@@ -677,9 +683,13 @@ impl JoinedServer {
 
 fn join_server(demo: &crate::demo::DemoWorld, address: SocketAddr) -> Result<JoinedServer, String> {
     let compatibility = compatibility_identity_for_demo(demo);
-    let (client, assignment) =
-        NetworkClient::connect(address, compatibility, u64::from(std::process::id()))
-            .map_err(|error| error.to_string())?;
+    let (client, assignment) = NetworkClient::connect(
+        address,
+        compatibility,
+        u64::from(std::process::id()),
+        &crate::network::default_player_name(),
+    )
+    .map_err(|error| error.to_string())?;
     if assignment.next_stream_position != 0
         || assignment.next_client_sequence != 0
         || assignment.completed_tick.is_some()

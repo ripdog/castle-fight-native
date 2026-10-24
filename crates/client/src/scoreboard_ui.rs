@@ -361,9 +361,11 @@ fn summary(outcome: MatchOutcome) -> &'static str {
     }
 }
 
-fn score_cell(score: &PlayerRoundScore, column: ScoreColumn) -> String {
+fn score_cell(score: &PlayerRoundScore, column: ScoreColumn, name: Option<&str>) -> String {
     match column {
-        ScoreColumn::Player => format!("Player {}", score.player.0 + 1),
+        ScoreColumn::Player => {
+            name.map_or_else(|| format!("Player {}", score.player.0 + 1), str::to_owned)
+        }
         ScoreColumn::Gold => score.gold.to_string(),
         ScoreColumn::Lumber => score.lumber.to_string(),
         ScoreColumn::Income => score.income.to_string(),
@@ -536,7 +538,9 @@ fn update_scoreboard(
             scores
                 .iter()
                 .find(|score| score.player == cell.player)
-                .map_or_else(String::new, |score| score_cell(score, cell.column))
+                .map_or_else(String::new, |score| {
+                    score_cell(score, cell.column, authoritative.player_name(cell.player))
+                })
         } else {
             continue;
         };

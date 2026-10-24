@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use bevy::{
     ecs::system::SystemParam,
     input::{
@@ -38,6 +40,7 @@ const TEXT: Color = Color::srgb(0.92, 0.94, 0.97);
 const MUTED: Color = Color::srgb(0.60, 0.68, 0.74);
 const ACCENT: Color = Color::srgb(0.45, 0.79, 0.89);
 const ERROR: Color = Color::srgb(1.0, 0.45, 0.4);
+const READY: Color = Color::srgb(0.55, 0.85, 0.55);
 
 const FONT_TITLE: f32 = 40.0;
 const FONT_HEADING: f32 = 22.0;
@@ -76,6 +79,8 @@ pub(crate) struct LobbyState {
     local_player: PlayerId,
     networked: bool,
     connected_players: Vec<PlayerId>,
+    /// Display names by slot, as announced by the server. Empty for unclaimed slots.
+    names: BTreeMap<u8, String>,
     host_player: Option<PlayerId>,
     required_players: usize,
     open_race: Option<u8>,
@@ -94,6 +99,7 @@ impl LobbyState {
             local_player,
             required_players: options.team_size * 2,
             connected_players: vec![local_player],
+            names: BTreeMap::new(),
             host_player: None,
             options,
             networked,
@@ -156,20 +162,34 @@ impl LobbyState {
         }
     }
 
+    fn is_occupied(&self, player: PlayerId) -> bool {
+        player == self.local_player || self.connected_players.contains(&player)
+    }
+
     fn player_label(&self, player: PlayerId) -> String {
-        if player != self.local_player && !self.connected_players.contains(&player) {
-            return "Empty".to_owned();
+        if !self.is_occupied(player) {
+            return if self.networked { "Open slot" } else { "Empty" }.to_owned();
         }
         let number = if player.0 < 6 {
             usize::from(player.0) + 1
         } else {
             usize::from(player.0 - 6) + self.team_size + 1
         };
+        let name = self
+            .names
+            .get(&player.0)
+            .filter(|name| !name.is_empty())
+            .cloned()
+            .unwrap_or_else(|| format!("Player {number}"));
         if player == self.local_player {
-            format!("Player {number} (You)")
+            format!("{name} (You)")
         } else {
-            format!("Player {number}")
+            name
         }
+    }
+
+    fn is_host(&self) -> bool {
+        self.host_player == Some(self.local_player)
     }
 
     fn action_disabled(&self, action: LobbyAction) -> bool {
@@ -177,7 +197,9 @@ impl LobbyState {
             return false;
         }
         match action {
-            LobbyAction::TeamSize(_) | LobbyAction::Position(_) => true,
+            LobbyAction::TeamSize(_) => !self.is_host(),
+            // A slot can be taken only while nobody holds it.
+            LobbyAction::Position(player) => self.is_occupied(player),
             LobbyAction::TimeDelta(_)
             | LobbyAction::TimeInput
             | LobbyAction::RoundTarget(_)
@@ -197,6 +219,11 @@ impl LobbyState {
 
     pub(crate) fn active(&self) -> bool {
         self.active
+    }
+
+    /// A networked lobby that has not started: leaving it must free the player's slot.
+    pub(crate) fn is_open_network_lobby(&self) -> bool {
+        self.active && self.networked
     }
 
     /// Text shown in the time-limit field: the pending keystrokes with a caret
@@ -468,14 +495,23 @@ fn spawn_header(panel: &mut ChildSpawnerCommands, lobby: &LobbyState) {
                         false,
                         ButtonStyle::fixed(96.0),
                     );
-                    spawn_label_with_margin(sizes, "Players per team", FONT_BODY, MUTED);
+                    spawn_label_with_margin(
+                        sizes,
+                        if lobby.networked && !lobby.is_host() {
+                            "Players per team (set by host)"
+                        } else {
+                            "Players per team"
+                        },
+                        FONT_BODY,
+                        MUTED,
+                    );
                     for size in 1..=3 {
                         styled_button(
                             sizes,
                             format!("{size}v{size}"),
                             LobbyAction::TeamSize(size),
                             size == lobby.team_size,
-                            lobby.networked,
+                            lobby.action_disabled(LobbyAction::TeamSize(size)),
                             ButtonStyle::fixed(96.0),
                         );
                     }
@@ -535,6 +571,14 @@ fn spawn_settings(content: &mut ChildSpawnerCommands, lobby: &LobbyState) {
         ))
         .with_children(|card| {
             label(card, "MATCH SETTINGS", FONT_HEADING, ACCENT);
+            if lobby.networked && !lobby.is_host() {
+                label(
+                    card,
+                    "Only the host can change these settings.",
+                    FONT_BODY,
+                    MUTED,
+                );
+            }
             setting_block(
                 card,
                 "Time limit in minutes (click the box and type; 0 = off)",
@@ -672,16 +716,7 @@ fn spawn_footer(panel: &mut ChildSpawnerCommands, lobby: &LobbyState) {
         })
         .with_children(|footer| {
             if lobby.networked {
-                label(
-                    footer,
-                    format!(
-                        "{} / {} players connected  |  Choose your race",
-                        lobby.connected_players.len(),
-                        lobby.required_players
-                    ),
-                    FONT_BODY,
-                    MUTED,
-                );
+                spawn_roster_status(footer, lobby);
             } else {
                 label(
                     footer,
@@ -710,6 +745,56 @@ fn spawn_footer(panel: &mut ChildSpawnerCommands, lobby: &LobbyState) {
                 start_disabled,
                 ButtonStyle::column().font_size(FONT_LARGE).min_height(64.0),
             );
+        });
+}
+
+/// Prominent summary of how many of the match's slots are filled, so a host staring at a disabled
+/// Start button can see what it is waiting for.
+fn spawn_roster_status(footer: &mut ChildSpawnerCommands, lobby: &LobbyState) {
+    let connected = lobby.connected_players.len();
+    let missing = lobby.required_players.saturating_sub(connected);
+    let (headline, detail, color) = if missing > 0 {
+        (
+            format!(
+                "WAITING FOR PLAYERS  {connected} / {}",
+                lobby.required_players
+            ),
+            format!(
+                "{missing} open slot{} left. The match starts once every slot is filled.",
+                if missing == 1 { "" } else { "s" }
+            ),
+            ACCENT,
+        )
+    } else if lobby.is_host() {
+        (
+            "ALL PLAYERS CONNECTED".to_owned(),
+            "Everyone is here. Start the match when you are ready.".to_owned(),
+            READY,
+        )
+    } else {
+        (
+            "ALL PLAYERS CONNECTED".to_owned(),
+            "Waiting for the host to start the match.".to_owned(),
+            READY,
+        )
+    };
+    footer
+        .spawn((
+            Node {
+                width: percent(100.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(4.0),
+                padding: UiRect::all(px(14.0)),
+                border: UiRect::all(px(1.0)),
+                border_radius: BorderRadius::all(px(6.0)),
+                ..default()
+            },
+            BackgroundColor(CARD),
+            BorderColor::all(color),
+        ))
+        .with_children(|status| {
+            label(status, headline, FONT_LARGE, color);
+            label(status, detail, FONT_BODY, MUTED);
         });
 }
 
@@ -750,6 +835,18 @@ fn spawn_position_row(
                         label(identity, "Host", FONT_BODY, ACCENT);
                     }
                 });
+                if !lobby.is_occupied(player) {
+                    let action = LobbyAction::Position(player);
+                    button(
+                        row,
+                        "Move here",
+                        action,
+                        false,
+                        lobby.action_disabled(action),
+                    );
+                    // The race belongs to whoever takes the slot, so an open slot offers none.
+                    return;
+                }
             } else {
                 button(
                     row,
@@ -1070,6 +1167,27 @@ fn handle_lobby_buttons(
                 lobby.options.rules = status.rules;
                 redraw = true;
             }
+            let names = status
+                .participants
+                .iter()
+                .map(|participant| (participant.player_id, participant.name.clone()))
+                .collect::<BTreeMap<_, _>>();
+            if lobby.names != names {
+                lobby.names = names;
+                redraw = true;
+            }
+            // The host can resize the match, and the server can move us to another slot.
+            let team_size = usize::from(status.required_players) / 2;
+            if team_size > 0 && lobby.team_size != team_size {
+                lobby.team_size = team_size;
+                redraw = true;
+            }
+            if let Some(assigned) = game.authoritative.assigned_player()
+                && lobby.local_player != assigned
+            {
+                lobby.local_player = assigned;
+                redraw = true;
+            }
             let connected_players = status
                 .connected_player_ids
                 .into_iter()
@@ -1131,9 +1249,25 @@ fn handle_lobby_buttons(
                         lobby.set_team_size(size);
                         redraw = true;
                     }
+                    LobbyAction::TeamSize(size) => {
+                        // The lobby redraws when the server confirms the new roster.
+                        if let Err(error) = game
+                            .authoritative
+                            .request_network_team_size(u8::try_from(size).unwrap_or(u8::MAX))
+                        {
+                            lobby.error = Some(error);
+                            redraw = true;
+                        }
+                    }
                     LobbyAction::Position(player) if !lobby.networked => {
                         lobby.local_player = player;
                         redraw = true;
+                    }
+                    LobbyAction::Position(player) => {
+                        if let Err(error) = game.authoritative.request_network_slot(player.0) {
+                            lobby.error = Some(error);
+                            redraw = true;
+                        }
                     }
                     LobbyAction::TimeInput => {
                         if lobby.time_input.is_none() {

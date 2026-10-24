@@ -5,15 +5,17 @@ pub mod tcp;
 use castle_fight_protocol::{
     Checkpoint, CheckpointReport, ClientHello, ClientMessage, CommandAcknowledgement,
     CompatibilityIdentity, HandshakeRejectReason, LobbyParticipant, LobbyRaceRejectReason,
-    ProtocolErrorCode, ReconnectHello, ReconnectToken, ServerMessage, SessionAssignment,
-    WireCanonicalStreamRecord, WireCommandExecution, WireExecutionBatch,
+    LobbySlotRejectReason, LobbyTeamSizeRejectReason, ProtocolErrorCode, ReconnectHello,
+    ReconnectToken, ServerMessage, SessionAssignment, WireCanonicalStreamRecord,
+    WireCommandExecution, WireExecutionBatch, sanitize_player_name,
 };
 use castle_fight_sim::{
     AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION, CANONICAL_CHECKSUM_SCHEMA_VERSION, CanonicalStreamError,
-    CanonicalStreamRecord, CastleFightMatch, CastleFightMatchConfig, CastleFightMatchSetupError,
-    ClientCommandSequence, MatchControlEvent, MatchDriver, MatchLifecycle, MatchOutcome,
-    PlayerConnectionStatus, PlayerId, SYNC_CHECKPOINT_INTERVAL_TICKS, Simulation, Team,
-    create_castle_fight_match, is_checkpoint_tick,
+    CanonicalStreamRecord, CastleFightBuilderRace, CastleFightMatch, CastleFightMatchConfig,
+    CastleFightMatchSetupError, CastleFightParticipantConfig, ClientCommandSequence,
+    MatchControlEvent, MatchDriver, MatchLifecycle, MatchOutcome, PlayerConnectionStatus, PlayerId,
+    SYNC_CHECKPOINT_INTERVAL_TICKS, Simulation, Team, create_castle_fight_match,
+    is_checkpoint_tick, standard_match_slots,
 };
 use constant_time_eq::constant_time_eq_32;
 
@@ -169,6 +171,9 @@ pub struct AuthoritativeMatch {
     options: ServerMatchOptions,
     sessions: BTreeMap<SessionId, SessionState>,
     player_claims: BTreeMap<PlayerId, SessionId>,
+    /// Sanitized display names. Presentation only, so they stay outside the session state that the
+    /// canonical match logic copies around.
+    session_names: BTreeMap<SessionId, String>,
     next_session_id: u64,
     last_checkpoint: Option<Checkpoint>,
 }
@@ -201,6 +206,7 @@ impl AuthoritativeMatch {
             options,
             sessions: BTreeMap::new(),
             player_claims: BTreeMap::new(),
+            session_names: BTreeMap::new(),
             next_session_id: 1,
             last_checkpoint: None,
         })
@@ -279,6 +285,12 @@ impl AuthoritativeMatch {
                     .builder(participant.builder_race)
                     .expect("configured participant has a supported builder")
                     .rawcode,
+                name: self
+                    .player_claims
+                    .get(&participant.id)
+                    .and_then(|session| self.session_names.get(session))
+                    .cloned()
+                    .unwrap_or_default(),
             })
             .collect()
     }
@@ -349,6 +361,173 @@ impl AuthoritativeMatch {
         true
     }
 
+    fn lobby_is_open(&self) -> bool {
+        self.game.simulation.tick() == 0 && self.driver.next_stream_position().0 == 0
+    }
+
+    /// Replaces the tick-zero match with one built from `config`, keeping authenticated sessions.
+    fn replace_lobby_config(&mut self, config: CastleFightMatchConfig) -> bool {
+        let Ok(game) = create_castle_fight_match(config, self.game.simulation.worker_count())
+        else {
+            return false;
+        };
+        self.driver = MatchDriver::new(&game.simulation, game.content);
+        self.game = game;
+        true
+    }
+
+    /// Host-only team size selection is guarded by the TCP lobby. Slots that survive keep their
+    /// races and players. Players whose slot disappears move to a free slot, preferring their own
+    /// team, and are returned so each can be told its new assignment.
+    pub(crate) fn select_lobby_team_size(
+        &mut self,
+        team_size: usize,
+    ) -> Result<Vec<(SessionId, PlayerId)>, LobbyTeamSizeRejectReason> {
+        if !self.lobby_is_open() {
+            return Err(LobbyTeamSizeRejectReason::AlreadyStarted);
+        }
+        let slots =
+            standard_match_slots(team_size).ok_or(LobbyTeamSizeRejectReason::InvalidSize)?;
+        if slots.len() == self.game.match_config.participants.len() {
+            return Ok(Vec::new());
+        }
+        let new_ids = slots.iter().map(|(id, _)| *id).collect::<Vec<_>>();
+        let team_of = |id: PlayerId| slots.iter().find(|(slot, _)| *slot == id).map(|(_, t)| *t);
+
+        let mut claims = BTreeMap::new();
+        let mut movers = Vec::new();
+        for (&player, &session) in &self.player_claims {
+            if new_ids.contains(&player) {
+                claims.insert(player, session);
+            } else {
+                movers.push((player, session));
+            }
+        }
+        // Players are moved in slot order so the result does not depend on how they connected.
+        let mut moved = Vec::new();
+        for (old_player, session) in movers {
+            let old_team = if old_player.0 < 6 { Team(0) } else { Team(1) };
+            let target = new_ids
+                .iter()
+                .copied()
+                .filter(|id| !claims.contains_key(id))
+                .min_by_key(|id| team_of(*id) != Some(old_team))
+                .ok_or(LobbyTeamSizeRejectReason::TooManyPlayers)?;
+            claims.insert(target, session);
+            moved.push((session, old_player, target));
+        }
+
+        let old_races = self
+            .game
+            .match_config
+            .participants
+            .iter()
+            .map(|participant| (participant.id, participant.builder_race))
+            .collect::<BTreeMap<_, _>>();
+        let mut config = self.game.match_config.clone();
+        config.participants = slots
+            .iter()
+            .map(|&(id, team)| {
+                let carried = moved
+                    .iter()
+                    .find(|(_, _, target)| *target == id)
+                    .and_then(|(_, old, _)| old_races.get(old));
+                CastleFightParticipantConfig {
+                    id,
+                    team,
+                    builder_race: carried
+                        .or_else(|| old_races.get(&id))
+                        .copied()
+                        .unwrap_or(CastleFightBuilderRace::Human),
+                }
+            })
+            .collect();
+        if !self.replace_lobby_config(config) {
+            return Err(LobbyTeamSizeRejectReason::InvalidSize);
+        }
+        self.player_claims = claims;
+        for (session, _, target) in &moved {
+            if let Some(state) = self.sessions.get_mut(session) {
+                state.player = *target;
+            }
+        }
+        Ok(moved
+            .into_iter()
+            .map(|(session, _, target)| (session, target))
+            .collect())
+    }
+
+    /// Moves a session to an empty slot, carrying its race with it.
+    pub(crate) fn select_lobby_slot(
+        &mut self,
+        session_id: SessionId,
+        target: PlayerId,
+    ) -> Result<(), LobbySlotRejectReason> {
+        if !self.lobby_is_open() {
+            return Err(LobbySlotRejectReason::AlreadyStarted);
+        }
+        let current = self
+            .session_player(session_id)
+            .ok_or(LobbySlotRejectReason::SlotUnavailable)?;
+        if current == target {
+            return Ok(());
+        }
+        let mut config = self.game.match_config.clone();
+        if self.player_claims.contains_key(&target)
+            || !config
+                .participants
+                .iter()
+                .any(|participant| participant.id == target)
+        {
+            return Err(LobbySlotRejectReason::SlotUnavailable);
+        }
+        let race = config
+            .participants
+            .iter()
+            .find(|participant| participant.id == current)
+            .map(|participant| participant.builder_race)
+            .ok_or(LobbySlotRejectReason::SlotUnavailable)?;
+        for participant in &mut config.participants {
+            if participant.id == target {
+                participant.builder_race = race;
+            } else if participant.id == current {
+                participant.builder_race = CastleFightBuilderRace::Human;
+            }
+        }
+        if !self.replace_lobby_config(config) {
+            return Err(LobbySlotRejectReason::SlotUnavailable);
+        }
+        self.player_claims.remove(&current);
+        self.player_claims.insert(target, session_id);
+        if let Some(state) = self.sessions.get_mut(&session_id) {
+            state.player = target;
+        }
+        Ok(())
+    }
+
+    /// Frees a session's slot for good (a deliberate leave rather than a dropped connection).
+    pub(crate) fn release_lobby_session(&mut self, session_id: SessionId) {
+        let Some(state) = self.sessions.remove(&session_id) else {
+            return;
+        };
+        self.player_claims.remove(&state.player);
+        self.session_names.remove(&session_id);
+        let mut config = self.game.match_config.clone();
+        if let Some(participant) = config
+            .participants
+            .iter_mut()
+            .find(|participant| participant.id == state.player)
+            .filter(|participant| participant.builder_race != CastleFightBuilderRace::Human)
+        {
+            participant.builder_race = CastleFightBuilderRace::Human;
+            self.replace_lobby_config(config);
+        }
+    }
+
+    pub(crate) fn first_session(&self) -> Option<SessionId> {
+        self.sessions.keys().next().copied()
+    }
+
     pub(crate) fn lobby_match_rules(&self) -> castle_fight_sim::MatchRules {
         self.game.match_config.rules
     }
@@ -416,6 +595,8 @@ impl AuthoritativeMatch {
             },
         );
         self.player_claims.insert(participant.id, session_id);
+        self.session_names
+            .insert(session_id, sanitize_player_name(&hello.player_name));
         let assignment = self
             .session_assignment(session_id)
             .expect("newly inserted session must have an assignment");
@@ -638,6 +819,9 @@ impl AuthoritativeMatch {
             | ClientMessage::Reconnect { .. }
             | ClientMessage::SelectRace { .. }
             | ClientMessage::SelectMatchRules { .. }
+            | ClientMessage::SelectTeamSize { .. }
+            | ClientMessage::SelectSlot { .. }
+            | ClientMessage::LeaveLobby
             | ClientMessage::StartMatch
             | ClientMessage::Debug { .. } => {
                 vec![OutboundMessage::to_session(
@@ -784,6 +968,7 @@ mod tests {
         ClientHello {
             compatibility: server.compatibility().clone(),
             client_nonce: nonce,
+            player_name: format!("Player {nonce}"),
         }
     }
 
@@ -822,6 +1007,52 @@ mod tests {
                 _ => None,
             })
             .collect()
+    }
+
+    #[test]
+    fn shrinking_relocates_displaced_players_with_their_race_and_refuses_when_full() {
+        let mut server =
+            AuthoritativeMatch::new(config_2v2(5), 1, ServerMatchOptions::default()).unwrap();
+        let first = accepted_session(server.accept_hello(hello(&server, 1)));
+        let second = accepted_session(server.accept_hello(hello(&server, 2)));
+        assert_eq!(server.session_player(second), Some(PlayerId(1)));
+        let elf = server
+            .game
+            .content
+            .builder(CastleFightBuilderRace::Elf)
+            .unwrap()
+            .rawcode;
+        server.select_lobby_race(second, elf).unwrap();
+
+        // Slot 1 disappears; its player moves to the other team's free slot, keeping their race.
+        let moved = server.select_lobby_team_size(1).unwrap();
+        assert_eq!(moved, vec![(second, PlayerId(6))]);
+        assert_eq!(server.session_player(first), Some(PlayerId(0)));
+        assert_eq!(server.session_player(second), Some(PlayerId(6)));
+        let races = server
+            .game
+            .match_config
+            .participants
+            .iter()
+            .map(|participant| (participant.id.0, participant.builder_race))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            races,
+            vec![
+                (0, CastleFightBuilderRace::Human),
+                (6, CastleFightBuilderRace::Elf)
+            ]
+        );
+
+        // A third player cannot fit once the match is back to two slots.
+        server.select_lobby_team_size(2).unwrap();
+        let third = accepted_session(server.accept_hello(hello(&server, 3)));
+        assert!(server.sessions.contains_key(&third));
+        assert_eq!(
+            server.select_lobby_team_size(1),
+            Err(LobbyTeamSizeRejectReason::TooManyPlayers)
+        );
+        assert_eq!(server.required_player_count(), 4);
     }
 
     #[test]

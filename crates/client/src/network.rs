@@ -9,8 +9,19 @@ use std::{
 use castle_fight_protocol::{
     ClientHello, ClientMessage, CompatibilityIdentity, FrameError, HandshakeRejectReason,
     ProtocolEnvelope, ReconnectHello, ReconnectToken, ServerMessage, SessionAssignment, read_frame,
-    write_frame,
+    sanitize_player_name, write_frame,
 };
+
+/// The name shown to other players: the operating system account name until the player can pick
+/// one, so a lobby never lists everyone as an anonymous "Player".
+pub(crate) fn default_player_name() -> String {
+    ["USER", "USERNAME"]
+        .into_iter()
+        .filter_map(|variable| std::env::var(variable).ok())
+        .map(|name| sanitize_player_name(&name))
+        .find(|name| !name.is_empty())
+        .unwrap_or_else(|| "Player".to_owned())
+}
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 /// Without a bound an unreachable address blocks for the operating system's connect timeout.
@@ -116,8 +127,10 @@ impl NetworkClient {
         address: SocketAddr,
         compatibility: CompatibilityIdentity,
         client_nonce: u64,
+        player_name: &str,
     ) -> Result<(Self, SessionAssignment), NetworkClientError> {
-        let (stream, assignment) = connect_initial(address, compatibility.clone(), client_nonce)?;
+        let (stream, assignment) =
+            connect_initial(address, compatibility.clone(), client_nonce, player_name)?;
         let (events_tx, events_rx) = mpsc::channel();
         let outbound = spawn_transport(stream, 0, events_tx.clone())?;
         Ok((
@@ -293,6 +306,7 @@ fn connect_initial(
     address: SocketAddr,
     compatibility: CompatibilityIdentity,
     client_nonce: u64,
+    player_name: &str,
 ) -> Result<(TcpStream, SessionAssignment), NetworkClientError> {
     connect_with_message(
         address,
@@ -300,6 +314,7 @@ fn connect_initial(
             hello: ClientHello {
                 compatibility,
                 client_nonce,
+                player_name: sanitize_player_name(player_name),
             },
         },
     )
@@ -520,7 +535,7 @@ mod tests {
             closed.is_err()
         });
 
-        let (client, _) = NetworkClient::connect(address, compatibility(), 5).unwrap();
+        let (client, _) = NetworkClient::connect(address, compatibility(), 5, "Tester").unwrap();
         drop(client);
         assert!(server.join().unwrap());
     }
@@ -597,7 +612,7 @@ mod tests {
         });
 
         let (mut client, assignment) =
-            NetworkClient::connect(address, compatibility(), 123).unwrap();
+            NetworkClient::connect(address, compatibility(), 123, "Tester").unwrap();
         assert_eq!(assignment, initial_assignment);
 
         let mut saw_disconnect = false;
