@@ -1474,9 +1474,18 @@ fn handle_selection_hotkeys(
     time: Res<Time>,
     samples: Res<PresentationSamples>,
     selected_match: Res<SelectedMatch>,
+    authoritative: Res<crate::AuthoritativeSimulation>,
     mut selection: ResMut<InspectionSelection>,
     mut camera_focus: ResMut<crate::presentation::CameraFocusRequest>,
 ) {
+    if keys.just_pressed(KeyCode::Backspace)
+        && let Some(team) = authoritative
+            .simulation
+            .player(selected_match.local_player)
+            .map(|player| player.team)
+    {
+        camera_focus.0 = authoritative.simulation.team_objective(team);
+    }
     if keys.just_pressed(KeyCode::Tab) && selection.members.len() > 1 {
         let mut types = Vec::new();
         for &id in &selection.members {

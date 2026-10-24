@@ -404,6 +404,7 @@ const CONTROLS: &[ControlGroup] = &[
             ("Mouse wheel", "Zoom"),
             ("Q / E", "Rotate"),
             ("Home", "Reset the camera"),
+            ("Backspace", "Jump to your castle"),
         ],
     ),
     (

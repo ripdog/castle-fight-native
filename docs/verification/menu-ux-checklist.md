@@ -67,7 +67,7 @@ Items are grouped by priority. Within a group, order is roughly the suggested im
 
 ### Camera
 
-- [ ] "Jump to castle" / "jump to last alert" / "centre on builder" shortcuts.
+- [x] `Backspace` jumps the camera to your castle. Centring on a builder already exists (grave key, builder shortcut buttons). "Jump to last alert" waits for the alert system (P3).
 - [x] Edge scrolling can be turned off in Settings.
 
 ## P3 — Lobby and polish
