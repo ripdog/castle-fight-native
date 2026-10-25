@@ -2405,6 +2405,45 @@ cooldown_ticks: 0,
     }
 
     #[test]
+    fn missile_weapons_without_authored_speed_still_deal_damage() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_max: NavCell::new(200, 64),
+            team_objective: [SimPoint::new(200 * world, 0), SimPoint::new(0, 0)],
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new_with_combat_rules(
+            config,
+            1,
+            CombatRules {
+                damage_rules: castle_fight_damage_rules(),
+                ..CombatRules::default()
+            },
+        );
+        let mut spawn = |team, kind: CastleFightUnitKind, x| {
+            let definition = kind.definition();
+            sim.spawn_unit_with_properties(
+                UnitSpawn::from_template(
+                    Team(team),
+                    SimPoint::new(x * world, 0),
+                    definition.template(),
+                ),
+                definition.gameplay_properties(),
+            )
+        };
+        // The Sandkin's splash weapon authors no projectile speed or art; the Succubus is out of
+        // reach of everything but the Sandkin's own attack.
+        let sandkin = spawn(0, CastleFightUnitKind::Sandkin, 40);
+        let succubus = spawn(1, CastleFightUnitKind::Succubus, 60);
+        let full = sim.unit(succubus).unwrap().health;
+        for _ in 0..30 {
+            sim.step();
+        }
+        assert!(sim.unit(succubus).unwrap().health < full);
+        assert!(sim.unit(sandkin).is_some());
+    }
+
+    #[test]
     fn imported_typed_battle_is_worker_count_independent() {
         fn run(workers: usize) -> u64 {
             let world = SUBUNITS_PER_WORLD_UNIT;

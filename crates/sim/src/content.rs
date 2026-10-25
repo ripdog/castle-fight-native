@@ -5598,7 +5598,10 @@ impl ExtractedContent927 {
                 .map_err(|_| format!("unit {rawcode:#010x} has invalid collision radius"))?;
             let acquisition_range = parse_optional_i32_927(columns[22])?.map(world);
             let projectile_speed_per_tick = parse_optional_i32_927(columns[45])?
-                .or_else(|| matches!(columns[28], "mbounce" | "msplash").then_some(0))
+                .or_else(|| {
+                    matches!(columns[28], "mbounce" | "msplash")
+                        .then_some(ARTLESS_PROJECTILE_WORLD_SPEED)
+                })
                 .map(projectile_speed);
             let outer_splash_radius = parse_optional_i32_927(columns[41])?.map(world);
             let splash_falloff = match (
@@ -7255,6 +7258,14 @@ fn extracted_unit_definition_927(
                     .expect("native homing splash speed"),
             }
         }
+        // A splash weapon with no authored area is a plain single-target missile.
+        ExtractedWeaponKind927::Splash if unit.outer_splash_radius.is_none() => {
+            AttackDelivery::RangedGuaranteedHit {
+                speed_per_tick: unit
+                    .projectile_speed_per_tick
+                    .unwrap_or_else(|| panic!("splash unit {rawcode:#010x} is missing speed")),
+            }
+        }
         ExtractedWeaponKind927::Artillery | ExtractedWeaponKind927::Splash => {
             AttackDelivery::RangedBallistic {
                 speed_per_tick: unit.projectile_speed_per_tick.unwrap_or_else(|| {
@@ -7508,6 +7519,12 @@ const fn movement(world_units_per_second: i32) -> MovementProfile {
             / CASTLE_FIGHT_SIMULATION_HZ,
     }
 }
+
+/// Speed given to a missile-class weapon whose row authors neither a projectile speed nor missile
+/// art. Such a weapon has no projectile to fly: Warcraft III lands its damage at the attack's
+/// release rather than dropping it, so the missile resolves on the next tick, the shortest travel
+/// the projectile machinery can express, at any in-range distance.
+const ARTLESS_PROJECTILE_WORLD_SPEED: i32 = 100_000;
 
 const fn projectile_speed(world_units_per_second: i32) -> i32 {
     world_units_per_second * SUBUNITS_PER_WORLD_UNIT / CASTLE_FIGHT_SIMULATION_HZ
@@ -7875,6 +7892,15 @@ mod tests {
                     AttackDelivery::RangedGuaranteedHit { .. }
                 ));
                 homing += 1;
+            } else if content.units[&definition.rawcode]
+                .outer_splash_radius
+                .is_none()
+            {
+                // No authored area: a plain single-target missile.
+                assert!(matches!(
+                    definition.attack.delivery,
+                    AttackDelivery::RangedGuaranteedHit { .. }
+                ));
             } else {
                 assert!(matches!(
                     definition.attack.delivery,
