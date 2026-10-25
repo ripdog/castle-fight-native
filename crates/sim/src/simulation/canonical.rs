@@ -1499,6 +1499,7 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                 hash.write_u64(projectile.projectile.source.0);
                 hash.write_u8(projectile.projectile.source_team.0);
                 hash.write_u8(projectile.projectile.target_mask.bits());
+                hash.write_u64(projectile.projectile.original_target.map_or(0, |id| id.0));
                 hash.write_i32(projectile.projectile.damage);
                 hash_frost_profile_option(&mut hash, projectile.projectile.frost.as_ref());
                 match projectile.projectile.charm {

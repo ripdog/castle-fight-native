@@ -714,8 +714,13 @@ impl Simulation {
                     |unit_index| {
                         candidate_checks += 1;
                         if unit_health[unit_index] > 0
-                            && splash_targets
+                            && (splash_targets
                                 .can_target_unit(units[unit_index].target_movement_class())
+                                || (snapshot.projectile.original_target
+                                    == Some(units[unit_index].id)
+                                    && snapshot.projectile.target_mask.can_target_unit(
+                                        units[unit_index].target_movement_class(),
+                                    )))
                             && snapshot
                                 .projectile
                                 .destination
@@ -981,6 +986,7 @@ impl Simulation {
                     source: launch.source,
                     source_team: launch.source_team,
                     target_mask: launch.target_mask,
+                    original_target: launch.original_target,
                     damage: launch.damage,
                     burning_oil: launch.burning_oil,
                     splash_falloff: launch.splash_falloff,

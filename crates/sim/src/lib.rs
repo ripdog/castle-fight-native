@@ -2443,6 +2443,68 @@ cooldown_ticks: 0,
         assert!(sim.unit(sandkin).is_some());
     }
 
+    /// Every weapon must be able to damage each class of target its attack mask allows. A delivery
+    /// path that filters the primary target by an unrelated mask or drops a speedless missile shows
+    /// up here as an attacker that swings or fires for a long fight and never hurts anything.
+    #[test]
+    fn every_imported_weapon_damages_each_target_class_it_may_attack() {
+        let world = SUBUNITS_PER_WORLD_UNIT;
+        let mut harmless = Vec::new();
+        for kind in CastleFightUnitKind::ALL {
+            let definition = kind.definition();
+            let properties = definition.gameplay_properties();
+            let template = definition.template();
+            let attacker_spawn =
+                UnitSpawn::from_template(Team(0), SimPoint::new(40 * world, 0), template);
+            if attacker_spawn.attack.damage <= 0 {
+                continue;
+            }
+            let mut gap = (attacker_spawn.attack.range * 3 / 4).clamp(8 * world, 40 * world);
+            if let AttackDelivery::Line { minimum_range, .. } = attacker_spawn.attack.delivery {
+                gap = gap.max((minimum_range + attacker_spawn.attack.range) / 2);
+            }
+            for class in [MovementClass::Ground, MovementClass::Air] {
+                if !properties.attack_targets.can_target_unit(class) {
+                    continue;
+                }
+                let config = SimulationConfig {
+                    navigation_max: NavCell::new(1_000, 64),
+                    team_objective: [SimPoint::new(1_000 * world, 0), SimPoint::new(0, 0)],
+                    ..SimulationConfig::default()
+                };
+                let mut sim = Simulation::new_with_combat_rules(
+                    config,
+                    1,
+                    CombatRules {
+                        damage_rules: castle_fight_damage_rules(),
+                        ..CombatRules::default()
+                    },
+                );
+                sim.spawn_unit_with_properties(
+                    UnitSpawn::from_template(Team(0), SimPoint::new(40 * world, 0), template),
+                    definition.gameplay_properties(),
+                );
+                let mut dummy = passive_unit(1, 40 * world + gap);
+                dummy.health = 1_000_000;
+                let target = sim.spawn_unit_with_properties(
+                    dummy,
+                    unit_properties(class, AttackTargetMask::ALL),
+                );
+                let full = sim.unit(target).unwrap().health;
+                for _ in 0..1_800 {
+                    sim.step();
+                }
+                if sim.unit(target).unwrap().health >= full {
+                    harmless.push(format!("{kind:?} vs {class:?}"));
+                }
+            }
+        }
+        assert!(
+            harmless.is_empty(),
+            "weapons that never damaged a legal target: {harmless:?}"
+        );
+    }
+
     #[test]
     fn imported_typed_battle_is_worker_count_independent() {
         fn run(workers: usize) -> u64 {
@@ -2810,6 +2872,58 @@ cooldown_ticks: 0,
         sim.step();
         assert_eq!(sim.unit(ground).unwrap().health, 9_990);
         assert_eq!(sim.unit(air).unwrap().health, 100);
+    }
+
+    #[test]
+    fn ballistic_attack_hits_its_air_target_when_the_splash_targets_exclude_air() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        let config = SimulationConfig {
+            navigation_min: NavCell::new(0, 0),
+            navigation_max: NavCell::new(30, 10),
+            ..SimulationConfig::default()
+        };
+        let mut sim = Simulation::new(config, 2);
+        sim.spawn_unit_with_properties(
+            UnitSpawn {
+                team: Team(0),
+                position: SimPoint::new(5 * cell, 5 * cell),
+                health: 100,
+                attack: AttackProfile {
+                    delivery: AttackDelivery::RangedBallistic {
+                        speed_per_tick: 100 * cell,
+                        impact_radius: 3 * cell,
+                    },
+                    damage: 10,
+                    range: 12 * cell,
+                    acquisition_range: 12 * cell,
+                    cooldown_ticks: 100,
+                },
+                movement: MovementProfile { speed_per_tick: 0 },
+            },
+            UnitGameplayProperties {
+                passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::SplashFalloff(
+                    SplashFalloffProfile {
+                        full_radius: 3 * cell,
+                        medium_radius: 3 * cell,
+                        outer_radius: 3 * cell,
+                        medium_damage_per_10k: 10_000,
+                        outer_damage_per_10k: 10_000,
+                        targets: AttackTargetMask::GROUND_UNITS,
+                    },
+                )),
+                attack_targets: AttackTargetMask::ALL,
+                ..UnitGameplayProperties::default()
+            },
+        );
+        let air = sim.spawn_unit_with_properties(
+            air_unit(1, SimPoint::new(11 * cell, 5 * cell), 0),
+            unit_properties(MovementClass::Air, AttackTargetMask::ALL),
+        );
+
+        sim.step();
+        sim.step();
+        sim.step();
+        assert!(sim.unit(air).unwrap().health < 100);
     }
 
     #[test]

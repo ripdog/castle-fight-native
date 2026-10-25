@@ -1441,6 +1441,7 @@ impl Simulation {
                                 source: source.id,
                                 source_team: source.team,
                                 target_mask: AttackTargetMask::ALL,
+                                original_target: None,
                                 damage,
                                 burning_oil: Some(burning_oil),
                                 splash_falloff: Some(splash),

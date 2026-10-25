@@ -104,12 +104,7 @@ impl Simulation {
                 {
                     continue;
                 }
-                let percent = source.status.armor_modifiers
-                    [..usize::from(source.status.armor_modifier_count)]
-                    .iter()
-                    .filter(|modifier| completed_tick < modifier.expires_tick)
-                    .map(|modifier| i32::from(modifier.damage_bonus_per_10k))
-                    .sum::<i32>();
+                let percent = source.status.attack_damage_percent_per_10k(completed_tick);
                 let base = intent
                     .attack
                     .damage
@@ -740,6 +735,8 @@ impl Simulation {
                             source: intent.source_id,
                             source_team: intent.source_team,
                             target_mask: intent.attack_targets,
+                            original_target: matches!(intent.target, TargetIndex::Unit(_))
+                                .then_some(intent.target_id),
                             damage,
                             burning_oil: on_hit.burning_oil,
                             splash_falloff: on_hit.splash_falloff,

@@ -333,6 +333,9 @@ pub(crate) struct BallisticProjectile {
     pub source: SimId,
     pub source_team: Team,
     pub target_mask: AttackTargetMask,
+    /// The unit the attack was aimed at. It takes the impact whenever it is inside the zone, even if
+    /// the weapon's splash targets would exclude it (a ground-only splash still hits an air target).
+    pub original_target: Option<SimId>,
     pub damage: i32,
     pub burning_oil: Option<BurningOilEffectProfile>,
     pub splash_falloff: Option<SplashFalloffProfile>,
@@ -2787,6 +2790,17 @@ pub struct StatusState {
 }
 
 impl StatusState {
+    /// Total attack-damage percentage, in hundredths of a percent, that the modifiers in force at
+    /// `completed_tick` add to a weapon's damage.
+    #[must_use]
+    pub fn attack_damage_percent_per_10k(&self, completed_tick: u64) -> i32 {
+        self.armor_modifiers[..usize::from(self.armor_modifier_count)]
+            .iter()
+            .filter(|modifier| completed_tick < modifier.expires_tick)
+            .map(|modifier| i32::from(modifier.damage_bonus_per_10k))
+            .sum()
+    }
+
     pub fn wind_walk_active(&self, tick: u64) -> bool {
         self.wind_walk.is_some_and(|w| tick < w.expires_tick)
     }

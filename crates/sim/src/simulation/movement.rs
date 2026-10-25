@@ -1907,7 +1907,7 @@ mod tests {
             units[source_index].target = Some(target);
             units[1].movement.speed_per_tick = 0;
             for speed in [3, 16, 24] {
-                for range in [32, 64, 90] {
+                for range in [48, 64, 90] {
                     units[source_index].movement.speed_per_tick = speed;
                     units[source_index].attack.range = range;
                     for x in [400, 408] {

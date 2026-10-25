@@ -4574,11 +4574,13 @@ struct UnitSnapshot {
     ability_state: Option<AutomaticAbilityState>,
 }
 
-// A zero-range melee weapon still reaches physical contact. Use the same
-// derived envelope for pursuit, reachability and release; never rewrite content.
-// Two coordinate quanta cover truncation of both axes at a circular contact goal.
+// A melee weapon always reaches physical contact, so a range shorter than the two bodies (the
+// zero-range weapons, and Elementals of Earth with their 10-unit range against 16-unit bodies)
+// cannot leave the attacker circling a target it can never touch. Use the same derived envelope for
+// pursuit, reachability and release; never rewrite content. Two coordinate quanta cover truncation
+// of both axes at a circular contact goal.
 fn melee_contact_attack(mut attack: AttackProfile, contact_radius: i32) -> AttackProfile {
-    if attack.range == 0 && attack.delivery == AttackDelivery::Melee {
+    if attack.delivery == AttackDelivery::Melee && attack.range < contact_radius {
         attack.range = contact_radius.saturating_add(2);
     }
     attack
@@ -4981,6 +4983,7 @@ struct BallisticProjectileLaunch {
     source: SimId,
     source_team: Team,
     target_mask: AttackTargetMask,
+    original_target: Option<SimId>,
     damage: i32,
     burning_oil: Option<crate::components::BurningOilEffectProfile>,
     splash_falloff: Option<crate::components::SplashFalloffProfile>,

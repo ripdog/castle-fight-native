@@ -131,6 +131,18 @@ fn zero_range_melee_contact_boundary_includes_both_bodies_or_the_structure_edge(
             23
         )
         .range,
-        17
+        25
+    );
+    assert_eq!(
+        melee_contact_attack(
+            AttackProfile {
+                delivery: AttackDelivery::Melee,
+                range: 100,
+                ..attack
+            },
+            23
+        )
+        .range,
+        100
     );
 }
