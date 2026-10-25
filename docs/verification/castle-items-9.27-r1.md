@@ -28,7 +28,7 @@ with mechanic tests in `items/tests.rs`.
 | Movement speed cap for Speed scroll | Not modelled beyond the authored speed bonus. |
 | I000 gold pickup | Not implemented. |
 | Hero / divine damage tooltip modifiers | Not modelled (tooltip-only evidence). |
-| Cheese modes (HGb/GGb) | Both effects are always active. |
+| Cheese game modes | Cheese adds one legendary slot. The script instead refunds the 1750 gold when legendary mode (flag GGb) is off or no-cheese mode (flag HGb) is on; the engine has no such lobby modes, so the slot path always applies. |
 | Scroll cooldowns | No cooldown is authored, so none is applied. |
 | Blast Staff missile | Damage lands after the authored flight time at the target. Presentation shows the ability's extracted missile art flying to the target; the missile does not retarget if the target dies. |
 | Time conversion | `seconds_to_ticks` goes through f64; values are authored in whole or tenth seconds. |
