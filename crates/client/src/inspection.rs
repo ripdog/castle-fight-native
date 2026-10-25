@@ -176,6 +176,10 @@ struct CombatTypeButton(CombatTooltipKind);
 #[derive(Component)]
 struct CombatTypeLabel(CombatTooltipKind);
 
+/// The green "+N" that follows an attack's damage when auras or timed effects add to it.
+#[derive(Component)]
+struct CombatEffectDamageSpan(CombatTooltipKind);
+
 #[derive(Clone, Copy)]
 enum AttackStatKind {
     Range,
@@ -908,13 +912,21 @@ fn spawn_combat_badge(
                 ..default()
             })
             .with_children(|stats| {
-                stats.spawn((
+                let mut label = stats.spawn((
                     Text::new(""),
                     TextFont::from_font_size(wc3_font(INFO_LABEL_FONT)),
                     TextColor(Color::srgb(0.96, 0.86, 0.56)),
                     Pickable::IGNORE,
                     CombatTypeLabel(kind),
                 ));
+                if matches!(kind, CombatTooltipKind::Attack(_)) {
+                    label.with_child((
+                        TextSpan::new(""),
+                        TextFont::from_font_size(wc3_font(INFO_LABEL_FONT)),
+                        TextColor(Color::srgb(0.35, 0.9, 0.35)),
+                        CombatEffectDamageSpan(kind),
+                    ));
+                }
                 match kind {
                     CombatTooltipKind::Attack(slot) => {
                         for (stat, icon_path) in [
@@ -1795,6 +1807,7 @@ fn update_combat_tooltip(
     mut badge_icons: CombatBadgeIcons<'_, '_>,
     mut buttons: Query<(&CombatTypeButton, &Interaction, &mut Node), Without<CombatTooltip>>,
     mut labels: CombatLabelsQuery<'_, '_>,
+    mut effect_spans: Query<(&CombatEffectDamageSpan, &mut TextSpan)>,
     mut tooltip: CombatTooltipQuery<'_, '_>,
 ) {
     let selected = (selection.members.len() == 1)
@@ -1816,6 +1829,14 @@ fn update_combat_tooltip(
         if visible && matches!(interaction, Interaction::Hovered | Interaction::Pressed) {
             hovered = Some(button.0);
         }
+    }
+    for (span, mut text) in &mut effect_spans {
+        text.0 = match span.0 {
+            CombatTooltipKind::Attack(slot) => attacks[slot]
+                .filter(|attack| attack.effect_damage != 0)
+                .map_or_else(String::new, |attack| format!(" {:+}", attack.effect_damage)),
+            CombatTooltipKind::Armor => String::new(),
+        };
     }
     for (mut text, kind, stat, armor_reduction) in &mut labels {
         text.0 = if let Some(label) = kind {
@@ -1882,7 +1903,7 @@ fn update_combat_tooltip(
         Some(CombatTooltipKind::Attack(slot)) => attacks[slot].map_or_else(String::new, |attack| {
             format!(
                 "{} damage, {:.0} range, {:.2}s cooldown\n{}",
-                attack.profile.damage,
+                attack.damage_text(),
                 attack.profile.range as f32 / SUBUNITS_PER_WORLD_UNIT as f32,
                 f32::from(attack.profile.cooldown_ticks) / CASTLE_FIGHT_SIMULATION_HZ as f32,
                 attack_matchup_tooltip(attack.damage_type, &samples)
@@ -1909,6 +1930,28 @@ fn update_combat_tooltip(
 struct AttackBadgeData {
     profile: AttackProfile,
     damage_type: DamageType,
+    /// Damage added by timed effects and auras (Bass Drums and the like), shown apart in green.
+    effect_damage: i32,
+}
+
+impl AttackBadgeData {
+    fn new(profile: AttackProfile, damage_type: DamageType, effect_percent_per_10k: i32) -> Self {
+        let effect_damage =
+            i32::try_from(i64::from(profile.damage) * i64::from(effect_percent_per_10k) / 10_000)
+                .unwrap_or(0);
+        Self {
+            profile,
+            damage_type,
+            effect_damage,
+        }
+    }
+
+    fn damage_text(self) -> String {
+        match self.effect_damage {
+            0 => self.profile.damage.to_string(),
+            bonus => format!("{} {bonus:+}", self.profile.damage),
+        }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -1922,15 +1965,19 @@ fn selected_combat_badges(
     samples: &PresentationSamples,
 ) -> ([Option<AttackBadgeData>; 2], Option<ArmorBadgeData>) {
     if let Some(unit) = samples.current.units.get(&id) {
+        // Auras are refreshed at the start of a step, so judge them at the last completed tick.
+        let effect_percent = unit
+            .status
+            .attack_damage_percent_per_10k(samples.current.tick.saturating_sub(1));
         return (
             [
-                Some(AttackBadgeData {
-                    profile: unit.attack,
-                    damage_type: unit.damage_type,
-                }),
-                unit.secondary_attack.map(|attack| AttackBadgeData {
-                    profile: attack.attack,
-                    damage_type: attack.damage_type,
+                Some(AttackBadgeData::new(
+                    unit.attack,
+                    unit.damage_type,
+                    effect_percent,
+                )),
+                unit.secondary_attack.map(|attack| {
+                    AttackBadgeData::new(attack.attack, attack.damage_type, effect_percent)
                 }),
             ],
             Some(ArmorBadgeData {
@@ -1945,14 +1992,10 @@ fn selected_combat_badges(
                 building
                     .attack
                     .zip(building.damage_type)
-                    .map(|(profile, damage_type)| AttackBadgeData {
-                        profile,
-                        damage_type,
-                    }),
-                building.secondary_attack.map(|attack| AttackBadgeData {
-                    profile: attack.attack,
-                    damage_type: attack.damage_type,
-                }),
+                    .map(|(profile, damage_type)| AttackBadgeData::new(profile, damage_type, 0)),
+                building
+                    .secondary_attack
+                    .map(|attack| AttackBadgeData::new(attack.attack, attack.damage_type, 0)),
             ],
             Some(ArmorBadgeData {
                 armor_type: building.armor.armor_type,
@@ -2131,6 +2174,30 @@ struct ActiveEffectBadgeData {
     beneficial: bool,
 }
 
+/// Whether a timed modifier still applies in the displayed tick. Carried item auras are refreshed
+/// each simulation step with an expiry of the step after, so the tick a snapshot reports equals their
+/// expiry while they are still in force.
+fn status_modifier_active(
+    status: &castle_fight_sim::StatusState,
+    id: castle_fight_sim::ModifierId,
+    expires_tick: u64,
+    tick: u64,
+) -> bool {
+    tick < expires_tick || (tick == expires_tick && is_aura_member(status, id, expires_tick))
+}
+
+fn is_aura_member(
+    status: &castle_fight_sim::StatusState,
+    id: castle_fight_sim::ModifierId,
+    expires_tick: u64,
+) -> bool {
+    status.armor_modifiers[..usize::from(status.armor_modifier_count)]
+        .iter()
+        .any(|anchor| {
+            anchor.id == id && anchor.aura_membership && anchor.expires_tick == expires_tick
+        })
+}
+
 fn active_effect_badges(
     id: SimId,
     samples: &PresentationSamples,
@@ -2304,15 +2371,24 @@ fn active_effect_badges(
             beneficial: true,
         });
     }
+    let timer = |id: castle_fight_sim::ModifierId, expires_tick: u64| {
+        if is_aura_member(&unit.status, id, expires_tick) {
+            String::new()
+        } else {
+            format!(" ({}s)", remaining(expires_tick))
+        }
+    };
     for modifier in unit.status.movement_modifiers
         [..usize::from(unit.status.movement_modifier_count)]
         .iter()
-        .filter(|modifier| modifier.expires_tick > tick)
+        .filter(|modifier| {
+            status_modifier_active(&unit.status, modifier.id, modifier.expires_tick, tick)
+        })
     {
         let label = format!(
-            "Move {:+}% ({}s)",
+            "Move {:+}%{}",
             modifier.percent_delta,
-            remaining(modifier.expires_tick)
+            timer(modifier.id, modifier.expires_tick)
         );
         effects.push(ActiveEffectBadgeData {
             icon: UiIconKey::StatusEffect {
@@ -2326,12 +2402,14 @@ fn active_effect_badges(
     for modifier in unit.status.attack_speed_modifiers
         [..usize::from(unit.status.attack_speed_modifier_count)]
         .iter()
-        .filter(|modifier| modifier.expires_tick > tick)
+        .filter(|modifier| {
+            status_modifier_active(&unit.status, modifier.id, modifier.expires_tick, tick)
+        })
     {
         let label = format!(
-            "Attack speed {:+}% ({}s)",
+            "Attack speed {:+}%{}",
             modifier.percent_delta,
-            remaining(modifier.expires_tick)
+            timer(modifier.id, modifier.expires_tick)
         );
         effects.push(ActiveEffectBadgeData {
             icon: UiIconKey::StatusEffect {
@@ -2344,7 +2422,9 @@ fn active_effect_badges(
     }
     for modifier in unit.status.armor_modifiers[..usize::from(unit.status.armor_modifier_count)]
         .iter()
-        .filter(|modifier| modifier.expires_tick > tick)
+        .filter(|modifier| {
+            status_modifier_active(&unit.status, modifier.id, modifier.expires_tick, tick)
+        })
     {
         let mut changes = Vec::new();
         if modifier.armor_bonus_per_100 != 0 {
@@ -2403,11 +2483,27 @@ fn active_effect_badges(
         if changes.is_empty()
             && (unit.status.movement_modifiers[..usize::from(unit.status.movement_modifier_count)]
                 .iter()
-                .any(|active| active.id == modifier.id && active.expires_tick > tick)
+                .any(|active| {
+                    active.id == modifier.id
+                        && status_modifier_active(
+                            &unit.status,
+                            active.id,
+                            active.expires_tick,
+                            tick,
+                        )
+                })
                 || unit.status.attack_speed_modifiers
                     [..usize::from(unit.status.attack_speed_modifier_count)]
                     .iter()
-                    .any(|active| active.id == modifier.id && active.expires_tick > tick))
+                    .any(|active| {
+                        active.id == modifier.id
+                            && status_modifier_active(
+                                &unit.status,
+                                active.id,
+                                active.expires_tick,
+                                tick,
+                            )
+                    }))
         {
             continue;
         }
@@ -2422,9 +2518,9 @@ fn active_effect_badges(
             );
         }
         let label = format!(
-            "{} ({}s)",
+            "{}{}",
             changes.join(", "),
-            remaining(modifier.expires_tick)
+            timer(modifier.id, modifier.expires_tick)
         );
         effects.push(ActiveEffectBadgeData {
             icon: UiIconKey::StatusEffect {
@@ -3410,6 +3506,7 @@ mod tests {
         let _combat = SystemState::<(
             Query<(&CombatTypeButton, &Interaction, &mut Visibility), Without<CombatTooltip>>,
             Query<(&CombatTypeLabel, &mut Text), Without<CombatTooltip>>,
+            Query<(&CombatEffectDamageSpan, &mut TextSpan)>,
             CombatTooltipQuery<'_, '_>,
         )>::new(&mut world);
     }
@@ -3850,6 +3947,77 @@ mod tests {
         assert_eq!(attacks[0].unwrap().profile, test_attack());
         assert_eq!(attacks[1].unwrap().profile, secondary.attack);
         assert_eq!(attacks[1].unwrap().damage_type, secondary.damage_type);
+    }
+
+    #[test]
+    fn carried_item_auras_are_listed_and_raise_the_displayed_damage() {
+        let mut samples = empty_samples();
+        let tick = samples.current.tick;
+        let mut unit = UnitSample {
+            invisible: false,
+            id: SimId(12),
+            content: None,
+            owner: PlayerId(0),
+            team: Team(0),
+            position: SimPoint::new(0, 0),
+            collision_radius: 4 * SUBUNITS_PER_WORLD_UNIT,
+            movement_class: MovementClass::Ground,
+            mechanical: false,
+            health: 100,
+            health_max: 100,
+            attack: test_attack(),
+            secondary_attack: None,
+            damage_type: DamageType::Normal,
+            armor: castle_fight_sim::ArmorProfile::new(ArmorType::Small, 0),
+            target: None,
+            direct_retaliation_lock: false,
+            ally_defense_lock: false,
+            cooldown_remaining: 0,
+            stunned_until_tick: 0,
+            status: castle_fight_sim::StatusState::default(),
+            mana_current: None,
+            mana_maximum: None,
+            visual_kind: UnitVisualKind::Melee,
+            active_defend_ability: None,
+            hex: None,
+            negative_building_shield_level: 0,
+        };
+        // The item aura refresh at the start of the last step leaves an expiry of exactly this tick.
+        let drums = castle_fight_sim::ModifierId(u32::from_be_bytes(*b"A02F"));
+        let anchor = &mut unit.status.armor_modifiers[0];
+        anchor.aura_membership = true;
+        anchor.id = drums;
+        anchor.damage_bonus_per_10k = 1_000;
+        anchor.expires_tick = tick;
+        let bass = castle_fight_sim::ModifierId(u32::from_be_bytes(*b"A03T"));
+        let anchor = &mut unit.status.armor_modifiers[1];
+        anchor.aura_membership = true;
+        anchor.id = bass;
+        anchor.expires_tick = tick;
+        unit.status.armor_modifier_count = 2;
+        unit.status.movement_modifiers[0].id = bass;
+        unit.status.movement_modifiers[0].percent_delta = 15;
+        unit.status.movement_modifiers[0].expires_tick = tick;
+        unit.status.movement_modifier_count = 1;
+        samples.current.units.insert(SimId(12), unit);
+
+        let effects = active_effect_badges(
+            SimId(12),
+            &samples,
+            crate::ui_icons::CastleFightPresentationCatalog::for_version(
+                castle_fight_sim::MapVersion::CASTLE_FIGHT_9_27,
+            )
+            .unwrap(),
+        );
+        let descriptions: Vec<_> = effects
+            .iter()
+            .map(|effect| effect.description.as_str())
+            .collect();
+        assert_eq!(descriptions, ["Move +15%", "Damage +10%"]);
+
+        let (attacks, _) = selected_combat_badges(SimId(12), &samples);
+        assert_eq!(attacks[0].unwrap().effect_damage, 2);
+        assert_eq!(attacks[0].unwrap().damage_text(), "25 +2");
     }
 
     #[test]
