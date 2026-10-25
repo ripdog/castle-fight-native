@@ -29,6 +29,8 @@ pub struct TeamItemBuff {
 /// A Blast Staff projectile committed at launch; damage lands once its flight completes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PendingItemImpact {
+    /// Identity of the missile in flight, so presentation can follow it between snapshots.
+    pub id: SimId,
     pub source: SimId,
     pub source_team: Team,
     pub target: SimId,

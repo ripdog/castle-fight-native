@@ -133,6 +133,36 @@ impl Simulation {
         self.config.item_system.and_then(item_catalog_for_version)
     }
 
+    /// Blast Staff missiles still in flight, as guaranteed-hit projectiles carrying the item
+    /// ability's missile art. Damage is already committed; this is presentation only.
+    pub(super) fn append_item_missile_views(&self, projectiles: &mut Vec<ProjectileView>) {
+        let Some(catalog) = self.item_catalog() else {
+            return;
+        };
+        projectiles.extend(self.items.impacts.iter().filter_map(|impact| {
+            let blast =
+                catalog
+                    .item(impact.item)?
+                    .effects
+                    .iter()
+                    .find_map(|effect| match effect {
+                        ItemEffect::Blast(blast) => Some(blast),
+                        _ => None,
+                    })?;
+            Some(ProjectileView {
+                ability: Some(AbilityId(blast.ability)),
+                id: impact.id,
+                source: impact.source,
+                launch_position: impact.launch_position,
+                launch_tick: impact.launch_tick,
+                impact_tick: impact.impact_tick,
+                kind: ProjectileViewKind::GuaranteedHit {
+                    target: impact.target,
+                },
+            })
+        }));
+    }
+
     /// Per-team castle shop contents in shop-position order, for presentation.
     #[must_use]
     pub fn item_shop(&self, team: Team) -> &[crate::ShopSlotState] {
@@ -387,6 +417,17 @@ impl Simulation {
         };
         self.give_item(catalog, handle.entity, item, charges)
             .is_ok()
+    }
+
+    /// Moves a builder without pathing. Presentation fixtures only; never replicated.
+    pub fn debug_place_builder(&mut self, builder: SimId, position: SimPoint) -> bool {
+        let Ok(handle) = self.builder_handle_unchecked(builder) else {
+            return false;
+        };
+        self.world
+            .entity_mut(handle.entity)
+            .insert(Position(position));
+        true
     }
 
     /// Lays an item on the ground. Debug tools and fixtures only, like [`Self::debug_grant_item`].
@@ -1252,7 +1293,9 @@ impl Simulation {
                         position.distance_sq(positions[target]),
                         speed_per_tick(blast.missile_speed).max(1),
                     );
+                    let missile = self.allocate_id();
                     self.items.impacts.push(PendingItemImpact {
+                        id: missile,
                         source: id,
                         source_team: team,
                         target: units[target].id,

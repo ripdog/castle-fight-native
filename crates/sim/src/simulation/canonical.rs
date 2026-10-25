@@ -2178,6 +2178,7 @@ fn hash_item_system(hash: &mut Fnv64, items: &crate::ItemSystemState) {
     }
     hash.write_u64(items.impacts.len() as u64);
     for impact in &items.impacts {
+        hash.write_u64(impact.id.0);
         hash.write_u64(impact.source.0);
         hash.write_u8(impact.source_team.0);
         hash.write_u64(impact.target.0);

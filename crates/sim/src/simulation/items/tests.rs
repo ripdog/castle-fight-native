@@ -362,7 +362,23 @@ fn blast_staves_fire_on_their_cooldown_and_a_full_set_fires_four_missiles() {
     }
     // Four independent missiles launch together and land one flight later.
     assert_eq!(sim.items.impacts.len(), 4);
+    // Each missile in flight is presented as its own guaranteed-hit projectile carrying the
+    // item ability, and disappears once it has landed.
+    let missiles: Vec<_> = sim
+        .projectiles()
+        .into_iter()
+        .filter(|projectile| projectile.ability == Some(crate::AbilityId(0x4130_3244)))
+        .collect();
+    assert_eq!(missiles.len(), 4);
+    assert!(
+        missiles
+            .iter()
+            .all(|missile| missile.kind == ProjectileViewKind::GuaranteedHit { target })
+    );
+    let distinct: std::collections::BTreeSet<_> = missiles.iter().map(|m| m.id).collect();
+    assert_eq!(distinct.len(), 4);
     steps(sim, 2 * SECOND);
+    assert!(sim.items.impacts.iter().all(|i| !distinct.contains(&i.id)));
     let health = sim.unit(target).unwrap().health;
     assert!(health < 100_000);
     steps(sim, SECOND);
