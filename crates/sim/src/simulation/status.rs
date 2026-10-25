@@ -715,6 +715,8 @@ pub(super) fn apply_timed_movement_modifier(
             modifier.percent_delta = percent_delta;
             modifier.expires_tick = modifier.expires_tick.max(expires_tick);
         }
+        // A zero-percent modifier changes nothing but would still be listed as "+0%".
+        Err(_) if percent_delta == 0 => {}
         Err(index) => {
             assert!(
                 count < MAX_TIMED_MOVEMENT_MODIFIERS,
@@ -752,6 +754,8 @@ pub(super) fn apply_timed_attack_speed_modifier(
             modifier.percent_delta = percent_delta;
             modifier.expires_tick = modifier.expires_tick.max(expires_tick);
         }
+        // A zero-percent modifier changes nothing but would still be listed as "+0%".
+        Err(_) if percent_delta == 0 => {}
         Err(index) => {
             assert!(
                 count < MAX_TIMED_ATTACK_SPEED_MODIFIERS,
@@ -1150,5 +1154,26 @@ pub(super) fn mark_modifier_undispellable(status: &mut StatusState, id: Modifier
         if modifier.id == id {
             modifier.undispellable = true;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zero_percent_speed_modifiers_are_not_installed_but_still_refresh_an_existing_one() {
+        let mut status = StatusState::default();
+        let id = ModifierId(7);
+        apply_timed_movement_modifier(&mut status, id, 0, 10);
+        apply_timed_attack_speed_modifier(&mut status, id, 0, 10);
+        assert_eq!(status.movement_modifier_count, 0);
+        assert_eq!(status.attack_speed_modifier_count, 0);
+
+        apply_timed_attack_speed_modifier(&mut status, id, -35, 10);
+        apply_timed_attack_speed_modifier(&mut status, id, 0, 20);
+        assert_eq!(status.attack_speed_modifier_count, 1);
+        assert_eq!(status.attack_speed_modifiers[0].percent_delta, 0);
+        assert_eq!(status.attack_speed_modifiers[0].expires_tick, 20);
     }
 }
