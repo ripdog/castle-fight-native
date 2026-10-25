@@ -30,6 +30,6 @@ with mechanic tests in `items/tests.rs`.
 | Hero / divine damage tooltip modifiers | Not modelled (tooltip-only evidence). |
 | Cheese modes (HGb/GGb) | Both effects are always active. |
 | Scroll cooldowns | No cooldown is authored, so none is applied. |
-| Blast Staff missile | Impacts occur after the authored delay at the target point; the missile does not home and has no presentation. |
+| Blast Staff missile | Damage lands after the authored flight time at the target. Presentation shows the ability's extracted missile art flying to the target; the missile does not retarget if the target dies. |
 | Time conversion | `seconds_to_ticks` goes through f64; values are authored in whole or tenth seconds. |
 | Hotkeys | Inventory uses WC3 default numpad 7/8/4/5/1/2 (not extracted). Shop opens by click only: R conflicts with Repair autocast. |

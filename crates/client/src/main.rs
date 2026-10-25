@@ -920,10 +920,19 @@ fn apply_profile_item_fixture(
     };
     *done = true;
     if fixture.items {
+        // The profile camera is fixed over the stress crowd, so bring the builder into it.
+        let stage = castle_fight_sim::SimPoint::new(
+            -1_000 * castle_fight_sim::SUBUNITS_PER_WORLD_UNIT,
+            -200 * castle_fight_sim::SUBUNITS_PER_WORLD_UNIT,
+        );
+        authoritative.simulation.debug_place_builder(actor, stage);
+        let builder = authoritative.simulation.builder(actor).unwrap_or(builder);
         let item = |code: &[u8; 4]| ItemId(u32::from_be_bytes(*code));
         for (code, charges) in [
             (b"I009", 0),
             (b"I006", 0),
+            (b"I001", 0),
+            (b"I001", 0),
             (b"I001", 0),
             (b"I001", 0),
             (b"I005", 2),
@@ -932,6 +941,31 @@ fn apply_profile_item_fixture(
             authoritative
                 .simulation
                 .debug_grant_item(actor, item(code), charges);
+        }
+        // Enemies inside Blast Staff range, so the missiles are visible in flight.
+        for (index, kind) in castle_fight_sim::CastleFightUnitKind::ALL
+            .iter()
+            .take(6)
+            .enumerate()
+        {
+            let definition = selected_match
+                .content
+                .unit(*kind)
+                .expect("fixture roster must belong to selected content bundle");
+            authoritative.simulation.spawn_resolved_unit(
+                castle_fight_sim::Team(1 - builder.team.0),
+                castle_fight_sim::SimPoint::new(
+                    builder.position.x
+                        + (300 + 60 * index as i32) * castle_fight_sim::SUBUNITS_PER_WORLD_UNIT,
+                    builder.position.y
+                        + (index as i32 - 3) * 80 * castle_fight_sim::SUBUNITS_PER_WORLD_UNIT,
+                ),
+                definition.resolved(),
+            );
+        }
+        // Let the staff cooldowns elapse so missiles are in flight when the capture lands.
+        for _ in 0..40 {
+            authoritative.simulation.step();
         }
         authoritative.simulation.debug_spawn_ground_item(
             item(b"I003"),
