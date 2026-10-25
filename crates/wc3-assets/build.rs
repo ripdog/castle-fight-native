@@ -1144,6 +1144,8 @@ fn load_visual_assets(
             "Ainf" | "AIrr" | "AHad" | "ACav" | "AIdb" | "AIar" | "ACff" | "Afae" | "AEah"
             | "ANpi" | "ACpi" | "ACro" | "Acrs" | "ACvp" | "Acri" | "ACcr" | "Aslo" | "AHbn"
             | "ANic" => &["armor"],
+            // Carried item auras and team buffs keep their buff model on every recipient.
+            "AIcd" | "Aakb" => &["armor"],
             // Persistent native fire/carrier buffs use their authoritative DOT entry.
             "Apxf" => &["damage_over_time"],
             // Native poison can author separate poison/slow buffs or one combined override.
