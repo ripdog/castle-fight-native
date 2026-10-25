@@ -5600,7 +5600,7 @@ impl ExtractedContent927 {
             let projectile_speed_per_tick = parse_optional_i32_927(columns[45])?
                 .or_else(|| {
                     matches!(columns[28], "mbounce" | "msplash")
-                        .then_some(ARTLESS_PROJECTILE_WORLD_SPEED)
+                        .then_some(DEFAULT_MISSILE_WORLD_SPEED)
                 })
                 .map(projectile_speed);
             let outer_splash_radius = parse_optional_i32_927(columns[41])?.map(world);
@@ -7520,11 +7520,12 @@ const fn movement(world_units_per_second: i32) -> MovementProfile {
     }
 }
 
-/// Speed given to a missile-class weapon whose row authors neither a projectile speed nor missile
-/// art. Such a weapon has no projectile to fly: Warcraft III lands its damage at the attack's
-/// release rather than dropping it, so the missile resolves on the next tick, the shortest travel
-/// the projectile machinery can express, at any in-range distance.
-const ARTLESS_PROJECTILE_WORLD_SPEED: i32 = 100_000;
+/// Speed given to a missile-class weapon whose row authors no projectile speed. The extracted rows
+/// carry none for these weapons (the Sandkins, Red Dragon, Twin Smiley and the Farseer/Warden
+/// bodies) although the original game flies a visible missile for them, so the true value is not
+/// in the retained data. This is the Object Editor's stock projectile speed, chosen so the missile
+/// has real travel time and the weapon deals its damage instead of dropping it.
+const DEFAULT_MISSILE_WORLD_SPEED: i32 = 900;
 
 const fn projectile_speed(world_units_per_second: i32) -> i32 {
     world_units_per_second * SUBUNITS_PER_WORLD_UNIT / CASTLE_FIGHT_SIMULATION_HZ
