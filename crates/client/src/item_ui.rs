@@ -26,10 +26,14 @@ use crate::{
     ui_icons::{UiIconAssets, UiIconKey, UiIconRole, UiObjectIconKind},
 };
 
-/// Warcraft's inventory button geometry, in layout units (`ConsoleUI.fdf`).
-const INVENTORY_BUTTON_SIZE: f32 = 0.031_25;
+/// Inventory button geometry, in layout units: each button covers the gold frame that the
+/// console art draws for its slot. `OFFSET` is the first frame's top-left corner relative to the
+/// top-left of `INVENTORY_SLOT`.
+const INVENTORY_BUTTON_WIDTH: f32 = 0.036_6;
+const INVENTORY_BUTTON_HEIGHT: f32 = 0.036_2;
+const INVENTORY_BUTTON_OFFSET: (f32, f32) = (0.000_9, -0.001);
 const INVENTORY_COLUMN_PITCH: f32 = 0.04;
-const INVENTORY_ROW_PITCH: f32 = 0.038_2;
+const INVENTORY_ROW_PITCH: f32 = 0.038_5;
 const DRAG_THRESHOLD: f32 = 6.0;
 /// How close, in world units, a right-click must land to an item on the ground to pick it up.
 const GROUND_ITEM_PICK_RADIUS: f32 = 70.0;
@@ -244,13 +248,17 @@ fn spawn_inventory_buttons(mut commands: Commands, slots: Res<ConsoleSlots>) {
                     Node {
                         position_type: PositionType::Absolute,
                         left: percent(
-                            column as f32 * INVENTORY_COLUMN_PITCH / INVENTORY_SLOT.width * 100.0,
+                            (INVENTORY_BUTTON_OFFSET.0 + column as f32 * INVENTORY_COLUMN_PITCH)
+                                / INVENTORY_SLOT.width
+                                * 100.0,
                         ),
                         top: percent(
-                            row as f32 * INVENTORY_ROW_PITCH / INVENTORY_SLOT.height * 100.0,
+                            (INVENTORY_BUTTON_OFFSET.1 + row as f32 * INVENTORY_ROW_PITCH)
+                                / INVENTORY_SLOT.height
+                                * 100.0,
                         ),
-                        width: percent(INVENTORY_BUTTON_SIZE / INVENTORY_SLOT.width * 100.0),
-                        height: percent(INVENTORY_BUTTON_SIZE / INVENTORY_SLOT.height * 100.0),
+                        width: percent(INVENTORY_BUTTON_WIDTH / INVENTORY_SLOT.width * 100.0),
+                        height: percent(INVENTORY_BUTTON_HEIGHT / INVENTORY_SLOT.height * 100.0),
                         ..default()
                     },
                     BackgroundColor(Color::NONE),
@@ -305,8 +313,8 @@ fn spawn_inventory_buttons(mut commands: Commands, slots: Res<ConsoleSlots>) {
         ImageNode::default(),
         Node {
             position_type: PositionType::Absolute,
-            width: wc3(INVENTORY_BUTTON_SIZE),
-            height: wc3(INVENTORY_BUTTON_SIZE),
+            width: wc3(INVENTORY_BUTTON_WIDTH),
+            height: wc3(INVENTORY_BUTTON_HEIGHT),
             ..default()
         },
         GlobalZIndex(30),

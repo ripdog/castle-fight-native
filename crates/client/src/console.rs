@@ -145,18 +145,26 @@ const TOP_TILES: [(u8, f32, f32, f32); 7] = [
     (6, 0.8, 0.0, 512.0),
 ];
 
-/// Resource frame at the right of the top bar: left edge and width in layout units.
-pub(crate) const RESOURCE_FRAME: SlotRect = SlotRect::new(0.461_72, 0.0, 0.338_28, TOP_BAR_UNITS);
+/// Vertical extent of the sockets cut into the top bar art (texel rows 2..38 of the tiles).
+pub(crate) const TOP_SOCKET_TOP: f32 = 2.0 * UNITS_PER_TEXEL;
+pub(crate) const TOP_SOCKET_HEIGHT: f32 = 36.0 * UNITS_PER_TEXEL;
+
+/// Resource frame at the right of the top bar: its left edge is the first resource socket's.
+/// The four sockets repeat every `RESOURCE_SOCKET_PITCH` and are `RESOURCE_SOCKET_WIDTH` wide.
+pub(crate) const RESOURCE_FRAME_LEFT: f32 = 0.46;
+pub(crate) const RESOURCE_FRAME_WIDTH: f32 = 0.34;
+pub(crate) const RESOURCE_SOCKET_PITCH: f32 = 0.087;
+pub(crate) const RESOURCE_SOCKET_WIDTH: f32 = 0.077_5;
 
 /// Dark panel behind slots whose art is open to the map (portrait, info panel, command card).
 const SLOT_BACKDROP: Color = Color::srgba(0.025, 0.025, 0.03, 0.95);
 
 /// The four menu sockets in the top bar's left tile.
-pub(crate) const MENU_BAR_LEFT: f32 = 0.002;
-pub(crate) const MENU_BAR_TOP: f32 = 0.0055;
-pub(crate) const MENU_BUTTON_WIDTH: f32 = 0.085;
-pub(crate) const MENU_BUTTON_HEIGHT: f32 = 0.0205;
-pub(crate) const MENU_BUTTON_PITCH: f32 = 0.0855;
+pub(crate) const MENU_BAR_LEFT: f32 = 0.003;
+pub(crate) const MENU_BAR_TOP: f32 = TOP_SOCKET_TOP;
+pub(crate) const MENU_BUTTON_WIDTH: f32 = 0.081_5;
+pub(crate) const MENU_BUTTON_HEIGHT: f32 = TOP_SOCKET_HEIGHT;
+pub(crate) const MENU_BUTTON_PITCH: f32 = 0.085;
 
 /// The inventory cover texture is right-aligned at x=0.6; its first opaque row is 195 of 512.
 const INVENTORY_COVER_LEFT: f32 = 0.6 - 256.0 * UNITS_PER_TEXEL;
@@ -278,10 +286,10 @@ fn spawn_console(mut commands: Commands, slots: Res<ConsoleSlots>) {
         slots.resources,
         Node {
             position_type: PositionType::Absolute,
-            left: wc3(RESOURCE_FRAME.left),
-            top: px(0.0),
-            width: wc3(RESOURCE_FRAME.width),
-            height: wc3(RESOURCE_FRAME.height),
+            left: wc3(RESOURCE_FRAME_LEFT),
+            top: wc3(TOP_SOCKET_TOP),
+            width: wc3(RESOURCE_FRAME_WIDTH),
+            height: wc3(TOP_SOCKET_HEIGHT),
             ..default()
         },
     );

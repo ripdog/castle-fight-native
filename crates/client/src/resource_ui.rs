@@ -6,8 +6,8 @@ use crate::{
     bridge::PresentationSamples,
     build_ui::{ActionPanelMode, ActionPanelState},
     console::{
-        ConsoleMetrics, ConsoleSlots, MENU_BUTTON_HEIGHT, MENU_BUTTON_WIDTH, TOP_BAR_UNITS, wc3,
-        wc3_font,
+        ConsoleMetrics, ConsoleSlots, MENU_BUTTON_HEIGHT, MENU_BUTTON_WIDTH, RESOURCE_SOCKET_PITCH,
+        RESOURCE_SOCKET_WIDTH, TOP_BAR_UNITS, wc3, wc3_font,
     },
     debug_menu::DebugMenuState,
     inspection::InspectionSelection,
@@ -39,7 +39,9 @@ const MENU_BUTTON_HOVERED: Color = Color::srgba(0.22, 0.18, 0.08, 0.85);
 const MENU_BUTTON_ENABLED: Color = Color::srgba(0.12, 0.30, 0.12, 0.7);
 const MENU_BUTTON_TEXT_COLOR: Color = Color::srgb(0.95, 0.78, 0.30);
 /// Inset of the first resource icon inside the top bar's resource frame, in layout units.
-const RESOURCE_GROUP_INSET: f32 = 0.018;
+const RESOURCE_GROUP_INSET: f32 = 0.0165;
+/// Width of the income readout's progress bar, centred in the fourth socket.
+const INCOME_WIDTH: f32 = 0.06;
 const DOCK_TEXT: f32 = 0.0092;
 const DOCK_BUTTON_TEXT: f32 = 0.0078;
 const MENU_BUTTON_TEXT: f32 = 0.0092;
@@ -281,12 +283,12 @@ fn setup_resource_bar(
     let groups = [
         (RESOURCE_GROUP_INSET, UiResourceIcon::Gold, GOLD_COLOR),
         (
-            RESOURCE_GROUP_INSET + 0.0859,
+            RESOURCE_GROUP_INSET + RESOURCE_SOCKET_PITCH,
             UiResourceIcon::Lumber,
             LUMBER_COLOR,
         ),
         (
-            RESOURCE_GROUP_INSET + 0.1727,
+            RESOURCE_GROUP_INSET + 2.0 * RESOURCE_SOCKET_PITCH,
             UiResourceIcon::Supply,
             LEGENDARY_COLOR,
         ),
@@ -338,7 +340,7 @@ fn setup_resource_bar(
         // The fourth socket (Warcraft's upkeep slot) shows gold income and the time to payout.
         bar.spawn(Node {
             position_type: PositionType::Absolute,
-            left: wc3(RESOURCE_GROUP_INSET + 0.2586),
+            left: wc3(3.0 * RESOURCE_SOCKET_PITCH + (RESOURCE_SOCKET_WIDTH - INCOME_WIDTH) / 2.0),
             top: px(0.0),
             height: percent(100.0),
             flex_direction: FlexDirection::Column,
@@ -357,7 +359,7 @@ fn setup_resource_bar(
             income
                 .spawn((
                     Node {
-                        width: wc3(0.06),
+                        width: wc3(INCOME_WIDTH),
                         height: wc3(0.0035),
                         ..default()
                     },
