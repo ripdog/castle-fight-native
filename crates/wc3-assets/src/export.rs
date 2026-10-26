@@ -5290,6 +5290,35 @@ fn layer_uses_replaceable(model: &Model, layer: &Layer, replaceable_id: u32) -> 
     })
 }
 
+/// The static geoset-animation color shared by every geoset that draws with `material_index`.
+///
+/// Warcraft multiplies a geoset's vertex color by its geoset animation color, which is how glow
+/// quads such as the aura ring get their hue. glTF materials are per-geoset-group here, so the
+/// color is only exported when it is unambiguous: every geoset on the material carries the same
+/// untracked, non-white color.
+fn static_geoset_color(model: &Model, material_index: usize) -> Option<[f32; 3]> {
+    let mut shared: Option<[f32; 3]> = None;
+    for (geoset_index, geoset) in model.geosets_iter().enumerate() {
+        if geoset.material_id() as usize != material_index {
+            continue;
+        }
+        let animation = model
+            .geoset_animations_iter()
+            .find(|animation| animation.geoset_id() as usize == geoset_index)?;
+        let tracks = animation.color_tracks();
+        if tracks.is_used() && tracks.key_count() != 0 {
+            return None;
+        }
+        let color = animation.color();
+        let color = [color.x, color.y, color.z];
+        if shared.is_some_and(|previous| previous != color) {
+            return None;
+        }
+        shared = Some(color);
+    }
+    shared.filter(|color| *color != [1.0; 3])
+}
+
 fn build_materials(
     model: &Model,
     texture_indices: &[Option<usize>],
@@ -5332,6 +5361,9 @@ fn build_materials(
         let mut extensions = serde_json::Map::new();
         let mut extras = serde_json::Map::new();
         extras.insert("wc3PriorityPlane".into(), json!(material.priority_plane()));
+        if let Some(color) = static_geoset_color(model, material_index) {
+            extras.insert("wc3GeosetColor".into(), json!(color));
+        }
 
         let has_team_color_underlay = material
             .layers_iter()
@@ -7602,6 +7634,41 @@ mod tests {
         assert_eq!(
             animation.color_track.as_ref().expect("color").values,
             [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]
+        );
+    }
+
+    #[test]
+    fn static_geoset_color_is_exported_only_when_unambiguous_for_the_material() {
+        let tint = whiteout::math::Vector3f {
+            x: 0.0,
+            y: 0.5,
+            z: 1.0,
+        };
+        let mut model = Model::new();
+        model.resize_geosets(2);
+        for index in 0..2 {
+            model.geosets_mut(index).expect("geoset").set_material_id(0);
+        }
+        model.resize_geoset_animations(2);
+        for (index, color) in [(0, tint), (1, tint)] {
+            let mut animation = model.geoset_animations_mut(index).expect("animation");
+            animation.set_geoset_id(index as u32);
+            animation.set_color(color);
+        }
+        assert_eq!(static_geoset_color(&model, 0), Some([0.0, 0.5, 1.0]));
+
+        model
+            .geoset_animations_mut(1)
+            .expect("animation")
+            .set_color(whiteout::math::Vector3f {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+            });
+        assert_eq!(
+            static_geoset_color(&model, 0),
+            None,
+            "geosets sharing a material must agree on the color"
         );
     }
 
