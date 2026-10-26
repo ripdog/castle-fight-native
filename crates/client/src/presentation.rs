@@ -60,7 +60,7 @@ use crate::{
     unit_models::{UnitAnimationClip, UnitAnimationSet, UnitModelAsset, UnitModelSet},
     wc3_effects::{
         Wc3AbilityVisualAnchor, Wc3AnimatedAlphaMaterial, Wc3AttachToNode, Wc3AttachmentOwner,
-        Wc3ComposedMetadataCache, Wc3ConvertedModelRegistry, Wc3EffectReusePending,
+        Wc3ComposedMetadataCache, Wc3ConvertedModelRegistry, Wc3EffectReusePending, Wc3EffectSize,
         Wc3EffectWarmup, Wc3EmitterSource, Wc3LightningVisual, Wc3MaterialProcessed,
         Wc3ModelSequenceSelection, Wc3ParticleAssets, Wc3RibbonSource, Wc3SplatMaterial,
         Wc3StatusVisualKind, Wc3TeamColorMaterial, Wc3TeamTint, Wc3VertexOpacity, Wc3VertexTint,
@@ -673,6 +673,7 @@ struct TimedWc3Effects(Vec<TimedWc3Effect>);
 enum Wc3EffectPlayback {
     OneShot,
     Looping,
+    LoopingSized(Wc3EffectSize),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -693,6 +694,7 @@ impl Wc3EffectPlayback {
         match self {
             Self::OneShot => model.emitter_source(),
             Self::Looping => model.looping_emitter_source(),
+            Self::LoopingSized(size) => model.looping_emitter_source_sized(size),
         }
     }
 
@@ -700,6 +702,7 @@ impl Wc3EffectPlayback {
         match self {
             Self::OneShot => model.animation_source(),
             Self::Looping => model.looping_animation_source(),
+            Self::LoopingSized(size) => model.looping_animation_source_sized(size),
         }
     }
 }
@@ -5025,6 +5028,7 @@ fn sync_render_entities(
                     &mut render_map,
                     (&wc3_visuals, &mut effect_pool, !legacy_effect_pooling),
                     (recipient, position, root),
+                    status_effect_size(&samples.current, recipient),
                     zone.ability.0,
                     Wc3StatusVisualKind::DamageOverTime,
                 );
@@ -5310,6 +5314,7 @@ fn sync_render_entities(
         .values()
         .filter(|unit| unit.health > 0)
     {
+        let size = status_effect_size(&samples.current, unit.id);
         let target = (
             unit.id,
             unit_ground_position(unit.position, unit.movement_class, &terrain),
@@ -5324,6 +5329,7 @@ fn sync_render_entities(
                 &mut render_map,
                 (&wc3_visuals, &mut effect_pool, !legacy_effect_pooling),
                 target,
+                size,
                 u32::from_be_bytes(*b"A09L"),
                 Wc3StatusVisualKind::Armor,
             );
@@ -5337,6 +5343,7 @@ fn sync_render_entities(
                 &mut render_map,
                 (&wc3_visuals, &mut effect_pool, !legacy_effect_pooling),
                 target,
+                size,
                 ability,
                 kind,
             );
@@ -5363,6 +5370,7 @@ fn sync_render_entities(
                 &mut render_map,
                 (&wc3_visuals, &mut effect_pool, !legacy_effect_pooling),
                 (building.id, position, model_root),
+                status_effect_size(&samples.current, building.id),
                 ability,
                 kind,
             );
@@ -5398,6 +5406,7 @@ fn sync_render_entities(
                 &mut render_map,
                 (&wc3_visuals, &mut effect_pool, !legacy_effect_pooling),
                 target,
+                status_effect_size(&samples.current, id),
                 buff,
                 Wc3StatusVisualKind::Movement,
             );
@@ -6318,11 +6327,34 @@ fn release_status_visual(
     }
 }
 
+/// Collision radius (world units) from which a unit counts as Medium / Large for sized effect art.
+const MEDIUM_EFFECT_COLLISION_RADIUS_WORLD: f32 = 1.5 * UNIT_BASE_COLLISION_RADIUS_WORLD;
+const LARGE_EFFECT_COLLISION_RADIUS_WORLD: f32 = 2.5 * UNIT_BASE_COLLISION_RADIUS_WORLD;
+
+/// Which `Stand` / `Stand Medium` / `Stand Large` variant of ground art fits the target.
+fn status_effect_size(snapshot: &crate::bridge::PresentationSnapshot, id: SimId) -> Wc3EffectSize {
+    if snapshot.buildings.contains_key(&id) {
+        return Wc3EffectSize::Large;
+    }
+    let Some(unit) = snapshot.units.get(&id) else {
+        return Wc3EffectSize::Small;
+    };
+    let radius = unit.collision_radius as f32 / SUBUNITS_PER_WORLD_UNIT as f32;
+    if radius >= LARGE_EFFECT_COLLISION_RADIUS_WORLD {
+        Wc3EffectSize::Large
+    } else if radius >= MEDIUM_EFFECT_COLLISION_RADIUS_WORLD {
+        Wc3EffectSize::Medium
+    } else {
+        Wc3EffectSize::Small
+    }
+}
+
 fn spawn_status_visuals(
     commands: &mut Commands,
     render_map: &mut RenderMap,
     visuals: (&Wc3VisualSet, &mut TimedWc3EffectPool, bool),
     target: (SimId, Vec3, Option<Entity>),
+    size: Wc3EffectSize,
     ability_rawcode: u32,
     kind: Wc3StatusVisualKind,
 ) {
@@ -6353,7 +6385,10 @@ fn spawn_status_visuals(
                     |_| Transform::IDENTITY,
                 ),
                 pooling_enabled,
-                Wc3EffectPlayback::Looping,
+                match size {
+                    Wc3EffectSize::Small => Wc3EffectPlayback::Looping,
+                    size => Wc3EffectPlayback::LoopingSized(size),
+                },
             );
             if let Some(root) = model_root {
                 commands.entity(root).add_child(entity);
@@ -8730,6 +8765,7 @@ mod tests {
                 &mut map,
                 (&visuals, &mut pool, true),
                 (SimId(1), Vec3::splat(100.0), Some(first_root)),
+                Wc3EffectSize::Small,
                 ability,
                 Wc3StatusVisualKind::Armor,
             );
@@ -8772,6 +8808,7 @@ mod tests {
             &mut map,
             (&visuals, &mut pool, true),
             (SimId(2), Vec3::splat(200.0), Some(new_root)),
+            Wc3EffectSize::Small,
             ability,
             Wc3StatusVisualKind::Armor,
         );

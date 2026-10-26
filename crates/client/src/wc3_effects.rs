@@ -86,6 +86,14 @@ pub struct Wc3VisualSet {
     system_models: BTreeMap<String, Wc3VisualModel>,
 }
 
+/// Size class of the unit a persistent effect is attached to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Wc3EffectSize {
+    Small,
+    Medium,
+    Large,
+}
+
 #[derive(Clone)]
 pub struct Wc3VisualModel {
     pub scene: Handle<WorldAsset>,
@@ -93,6 +101,9 @@ pub struct Wc3VisualModel {
     animation_name: Option<String>,
     animation_duration_seconds: Option<f32>,
     stand_animation_name: Option<String>,
+    /// `Stand Medium` / `Stand Large` sequences, which Warcraft plays instead of `Stand` when the
+    /// target is a larger unit so ground rings and similar art grow with it.
+    stand_size_variants: [Option<String>; 2],
     poolable_instance: bool,
     pub emitters: Vec<Wc3ParticleEmitter>,
     pub ribbons: Vec<Wc3RibbonEmitter>,
@@ -115,6 +126,37 @@ impl Wc3VisualModel {
                 .clone(),
             looping: true,
         })
+    }
+
+    /// Looping `Stand` playback sized for the target: models without size variants fall back to
+    /// plain `Stand`.
+    #[must_use]
+    pub fn looping_animation_source_sized(
+        &self,
+        size: Wc3EffectSize,
+    ) -> Option<Wc3VisualAnimationSource> {
+        let mut source = self.looping_animation_source()?;
+        if let Some(name) = self.sized_stand_name(size) {
+            source.animation_name = name.to_owned();
+        }
+        Some(source)
+    }
+
+    #[must_use]
+    pub fn looping_emitter_source_sized(&self, size: Wc3EffectSize) -> Wc3EmitterSource {
+        self.emitter_source_for(
+            self.sized_stand_name(size)
+                .or(self.stand_animation_name.as_deref())
+                .or(self.animation_name.as_deref()),
+        )
+    }
+
+    fn sized_stand_name(&self, size: Wc3EffectSize) -> Option<&str> {
+        match size {
+            Wc3EffectSize::Small => None,
+            Wc3EffectSize::Medium => self.stand_size_variants[0].as_deref(),
+            Wc3EffectSize::Large => self.stand_size_variants[1].as_deref(),
+        }
     }
 
     #[must_use]
@@ -2991,6 +3033,7 @@ impl Wc3VisualSet {
                         animation_name: None,
                         animation_duration_seconds: None,
                         stand_animation_name: None,
+                        stand_size_variants: [None, None],
                         poolable_instance: true,
                         emitters: Vec::new(),
                         ribbons: Vec::new(),
@@ -3341,6 +3384,8 @@ struct Wc3MaterialExtras {
     global_sequence_durations_ms: Vec<u32>,
     #[serde(rename = "wc3PriorityPlane", default)]
     priority_plane: i32,
+    #[serde(rename = "wc3GeosetColor", default)]
+    geoset_color: Option<[f32; 3]>,
     #[serde(rename = "wc3TeamColorUnderlay", default)]
     team_color_underlay: bool,
     #[serde(rename = "wc3TeamGlowLayer", default)]
@@ -3990,6 +4035,7 @@ pub fn fix_wc3_scene_materials(
             && extras.texture_id_track.is_none()
             && !extras.team_color_underlay
             && !extras.team_glow_layer
+            && extras.geoset_color.is_none()
             && tint.is_none()
             && opacity == 1.0
         {
@@ -4155,7 +4201,11 @@ pub fn fix_wc3_scene_materials(
             }
         }
 
-        if let Some(tint) = tint {
+        let geoset_tint = extras
+            .geoset_color
+            .filter(|_| !extras.team_color_underlay && !extras.team_glow_layer)
+            .map(|color| color.map(|channel| (channel.clamp(0.0, 1.0) * 255.0).round() as u8));
+        for tint in tint.into_iter().chain(geoset_tint) {
             let key = (material_handle.0.id(), tint);
             let tinted = if let Some(handle) = tinted_materials.get(&key) {
                 handle.clone()
@@ -6298,6 +6348,13 @@ fn resolve_visual_model(
             .iter()
             .find(|animation| animation.name.eq_ignore_ascii_case("Stand"))
             .map(|animation| animation.name.clone()),
+        stand_size_variants: ["Stand Medium", "Stand Large"].map(|name| {
+            model
+                .animations
+                .iter()
+                .find(|animation| animation.name.eq_ignore_ascii_case(name))
+                .map(|animation| animation.name.clone())
+        }),
         poolable_instance: model.ribbon_emitters.is_empty() && model.attachments.is_empty(),
         emitters: model.particle_emitters.clone(),
         ribbons: model.ribbon_emitters.clone(),
@@ -6399,6 +6456,7 @@ mod tests {
             animation_name: Some("Birth".to_owned()),
             animation_duration_seconds: Some(3.5), // Synthetic model metadata, not gameplay delay.
             stand_animation_name: None,
+            stand_size_variants: [None, None],
             poolable_instance: true,
             emitters: Vec::new(),
             ribbons: Vec::new(),
@@ -6523,6 +6581,7 @@ mod tests {
             animation_name: Some("Birth".to_owned()),
             animation_duration_seconds: Some(4.567),
             stand_animation_name: Some("Stand".to_owned()),
+            stand_size_variants: [None, None],
             poolable_instance: true,
             emitters: vec![stand, birth],
             ribbons: Vec::new(),
@@ -6900,6 +6959,7 @@ mod tests {
             animation_name: Some("Birth".to_owned()),
             animation_duration_seconds: None,
             stand_animation_name: Some("Stand".to_owned()),
+            stand_size_variants: [None, None],
             poolable_instance: true,
             emitters: vec![emitter("Stand", 16.0), emitter("Death", 160.0)],
             ribbons: Vec::new(),
@@ -7099,6 +7159,7 @@ mod tests {
             animation_name: None,
             animation_duration_seconds: None,
             stand_animation_name: None,
+            stand_size_variants: [None, None],
             poolable_instance: false,
             emitters: Vec::new(),
             ribbons: Vec::new(),
