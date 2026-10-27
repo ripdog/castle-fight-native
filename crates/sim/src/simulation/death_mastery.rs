@@ -90,7 +90,9 @@ impl Simulation {
     }
 
     /// Every hostile body inside the area loses its share of maximum life once per second, each
-    /// on its own phase; spell-immune and invulnerable bodies are never buffed.
+    /// on its own phase. The spell is an ultimate (required level above 1), which the map's
+    /// `MagicImmunesResistUltimates=0` lets through spell immunity; invulnerable bodies are never
+    /// buffed.
     pub(super) fn advance_death_and_decay(
         &mut self,
         entity: Entity,
@@ -107,7 +109,6 @@ impl Simulation {
                     || target.team == state.team
                     || target.classifications.locust
                     || target.classifications.invulnerable
-                    || target.classifications.spell_immune
                     || !state
                         .profile
                         .targets

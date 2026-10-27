@@ -237,8 +237,19 @@ fn devour_chain_heals_per_nested_cast_and_kills_through_armor() {
 fn death_and_decay_pulses_each_body_once_a_second_on_its_own_phase_for_its_duration() {
     let profile: DeathAndDecayProfile = mastery().decay;
     let mut sim = simulation(1);
-    let victims =
-        [60, 62, 64, 66, 68, 70].map(|x| sim.spawn_unit(unit(1, x, 0, AttackDelivery::Melee)));
+    // The second victim is spell-immune: the spell is an ultimate and passes immunity.
+    let victims = [60, 62, 64, 66, 68, 70].map(|x| {
+        sim.spawn_unit_with_properties(
+            unit(1, x, 0, AttackDelivery::Melee),
+            UnitGameplayProperties {
+                classifications: UnitClassifications {
+                    spell_immune: x == 62,
+                    ..UnitClassifications::default()
+                },
+                ..UnitGameplayProperties::default()
+            },
+        )
+    });
     let ally = sim.spawn_unit(unit(0, 60, 0, AttackDelivery::Melee));
     let cast_tick = sim.next_tick;
     sim.launch_death_and_decay(crate::components::DeathAndDecayState {
