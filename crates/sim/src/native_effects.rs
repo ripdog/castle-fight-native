@@ -2935,6 +2935,18 @@ pub fn building_improvement_for_version(
         })
 }
 
+/// Whether `ability` is a native Pulverize passive. Its stock object data carries no effect art:
+/// the slam is the owner's own animation, so presentation must not invent an area burst for it.
+#[must_use]
+pub fn is_pulverize_ability(version: MapVersion, ability: crate::AbilityId) -> bool {
+    catalog().tuning(version).is_some_and(|tuning| {
+        tuning.effects.iter().any(|effect| {
+            matches!(effect, TuningEffect::Pulverize { source_key, .. }
+                if rawcode(source_key).ok() == Some(ability.0))
+        })
+    })
+}
+
 pub(crate) fn aftershock_for_version(
     version: MapVersion,
     body: u32,

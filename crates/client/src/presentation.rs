@@ -4664,7 +4664,9 @@ fn sync_render_entities(
         // Area-stun proxies rely on their extracted WC3 visual bindings. Some, including the
         // Magnataur's A05D War Stomp proxy, deliberately clear stock caster art; inventing the
         // generic area burst here makes those casts look like unrelated spell explosions.
+        // Native Pulverize has no stock effect art either: its slam is the owner's animation.
         if let Some(radius) = generic_ability_area_impact_radius(cast.effect)
+            && !castle_fight_sim::is_pulverize_ability(selected.content.map_version, cast.ability)
             && let Some(target_position) = cast.target_position
         {
             ability_impacts.0.push(AbilityAreaImpact {
