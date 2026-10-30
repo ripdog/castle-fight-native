@@ -8,6 +8,10 @@ This document defines the client-side presentation layer: rendering, interpolati
 
 The central rule is strict separation from authoritative gameplay. Presentation may lag, interpolate, predict, embellish, or drop cosmetic work as needed, but it MUST NOT alter simulation outcomes.
 
+### 1.1 Warcraft III presentation parity
+
+For content derived from Warcraft III, the client MUST target full presentation parity: the models, materials, animations, particle/event output, effects, and sounds that WC3 produces for an object or ability are reproduced. Where extracted object data carries no effect art, the client MUST reproduce what WC3 does instead (for example, an ability's animation tag selecting the owner's clip, which in turn drives the model's own particle emitters and events) rather than inventing a generic effect. Generic placeholder visuals are permitted only for abilities with no WC3 counterpart, and any remaining gap MUST be recorded as an explicit fidelity finding.
+
 ## 2. Full Bevy client
 
 The client SHOULD use the full Bevy engine for:
