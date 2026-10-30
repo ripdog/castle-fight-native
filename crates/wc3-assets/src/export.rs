@@ -5319,6 +5319,31 @@ fn static_geoset_color(model: &Model, material_index: usize) -> Option<[f32; 3]>
     shared.filter(|color| *color != [1.0; 3])
 }
 
+/// Textures blended over a team-colour layer: their alpha channel marks where the team colour
+/// shows through, so no other layer using them may treat it as a cutout.
+fn team_color_mask_textures(model: &Model) -> BTreeSet<u32> {
+    model
+        .materials_iter()
+        .filter(|material| {
+            material
+                .layers_iter()
+                .filter(|layer| is_classic_material_layer(layer))
+                .any(|layer| layer_static_uses_replaceable(model, &layer, 1))
+        })
+        .flat_map(|material| {
+            material
+                .layers_iter()
+                .filter(|layer| {
+                    is_classic_material_layer(layer)
+                        && !layer_static_uses_replaceable(model, layer, 1)
+                        && layer.filter_mode() != LayerFilterMode::None
+                })
+                .map(|layer| layer_diffuse_texture_id(&layer))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
 fn build_materials(
     model: &Model,
     texture_indices: &[Option<usize>],
@@ -5327,6 +5352,7 @@ fn build_materials(
     let mut result = Vec::with_capacity(model.materials_len());
     let mut warnings = Vec::new();
     let mut uses_unlit = false;
+    let team_mask_textures = team_color_mask_textures(model);
 
     for (material_index, material) in model.materials_iter().enumerate() {
         let classic_layer_count = material
@@ -5449,7 +5475,8 @@ fn build_materials(
 
             let texture_has_transparency = texture_manifests
                 .get(texture_id)
-                .is_some_and(|texture| texture.has_transparency);
+                .is_some_and(|texture| texture.has_transparency)
+                && !team_mask_textures.contains(&(texture_id as u32));
             alpha_mode =
                 gltf_alpha_mode(layer.filter_mode(), layer.alpha(), texture_has_transparency);
             double_sided = layer.shading_flags().contains(LayerShadingFlag::TWO_SIDED);
@@ -7385,6 +7412,69 @@ mod tests {
             gltf_alpha_mode(LayerFilterMode::Transparent, 1.0, false),
             "MASK"
         );
+    }
+
+    #[test]
+    fn team_color_mask_alpha_is_not_a_cutout_on_none_filter_layers() {
+        let mut model = Model::new();
+        model.resize_textures(2);
+        model
+            .textures_mut(0)
+            .expect("team color texture")
+            .set_replaceable_id(1);
+        // Material 0 draws texture 1 directly; material 1 blends it over the team colour.
+        model.resize_materials(2);
+        {
+            let mut material = model.materials_mut(0).expect("material");
+            material.resize_layers(1);
+            let mut layer = material.layers_mut(0).expect("layer");
+            layer.set_filter_mode(LayerFilterMode::None);
+            layer.set_texture_id(1);
+        }
+        {
+            let mut material = model.materials_mut(1).expect("material");
+            material.resize_layers(2);
+            let mut underlay = material.layers_mut(0).expect("underlay");
+            underlay.set_filter_mode(LayerFilterMode::None);
+            underlay.set_texture_id(0);
+            let mut overlay = material.layers_mut(1).expect("overlay");
+            overlay.set_filter_mode(LayerFilterMode::Blend);
+            overlay.set_texture_id(1);
+        }
+        let texture_manifests = vec![
+            TextureManifest {
+                source_texture: String::new(),
+                source_casc_path: None,
+                png: None,
+                replaceable_id: 1,
+                has_transparency: false,
+            },
+            TextureManifest {
+                source_texture: "Units\\Creeps\\RockGolem\\rocktile.blp".to_owned(),
+                source_casc_path: None,
+                png: Some("textures/rocktile.png".to_owned()),
+                replaceable_id: 0,
+                has_transparency: true,
+            },
+        ];
+        let (materials, _, _) = build_materials(&model, &[None, Some(0)], &texture_manifests)
+            .expect("materials should build");
+        assert_eq!(materials[0]["alphaMode"], json!("OPAQUE"));
+
+        // Without a team-colour material the same transparent texture stays a cutout.
+        let mut cutout = Model::new();
+        cutout.resize_textures(2);
+        cutout.resize_materials(1);
+        {
+            let mut material = cutout.materials_mut(0).expect("material");
+            material.resize_layers(1);
+            let mut layer = material.layers_mut(0).expect("layer");
+            layer.set_filter_mode(LayerFilterMode::None);
+            layer.set_texture_id(1);
+        }
+        let (materials, _, _) = build_materials(&cutout, &[None, Some(0)], &texture_manifests)
+            .expect("materials should build");
+        assert_eq!(materials[0]["alphaMode"], json!("MASK"));
     }
 
     #[test]
