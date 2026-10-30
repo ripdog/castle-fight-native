@@ -2502,6 +2502,10 @@ fn update_live_imported_unit_animation(
                 ImportedUnitAnimationState::CastSlam,
                 controller.cast_slam.or(controller.cast),
             ),
+            ActionAnimationKind::AttackSlam => (
+                ImportedUnitAnimationState::CastSlam,
+                controller.cast_slam.or(controller.attack),
+            ),
             ActionAnimationKind::CastThrow => (
                 ImportedUnitAnimationState::CastThrow,
                 controller.cast_throw.or(controller.cast),
@@ -2815,8 +2819,7 @@ fn trigger_attack_animations(
     }
     for unit in samples.current.units.values() {
         if unit.status.action_animation.is_some_and(|action| {
-            action.kind == ActionAnimationKind::Attack
-                && action.started_tick == samples.current.tick.saturating_sub(1)
+            action.kind.is_attack() && action.started_tick == samples.current.tick.saturating_sub(1)
         }) && let Some(entity) = render_map
             .units
             .get(&unit.id)

@@ -2590,6 +2590,7 @@ fn hash_status_state(hash: &mut Fnv64, status: &StatusState) {
     if let Some(pending) = status.pending_attack {
         hash.write_u64(pending.target.0);
         hash.write_u64(pending.release_tick);
+        hash.write_u8(pending.pulverize_procs);
     }
     hash.write_u8(u8::from(status.pending_cast.is_some()));
     if let Some(pending) = status.pending_cast {

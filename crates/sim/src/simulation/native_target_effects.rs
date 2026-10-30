@@ -1258,6 +1258,57 @@ fn pulverize_uses_caster_radii_independent_physical_proc_and_restored_rng() {
 }
 
 #[test]
+fn pulverize_roll_is_made_at_swing_start_and_survives_restore_to_the_release() {
+    for chance in [0, 10_000] {
+        let mut sim = simulation(1);
+        let caster = sim.spawn_unit_with_properties(
+            unit(0, 20, 10, AttackDelivery::Melee),
+            UnitGameplayProperties {
+                action_timing: ActionTimingProfile {
+                    primary_attack_ticks: 6,
+                    primary_attack_point_ticks: 3,
+                    ..ActionTimingProfile::default()
+                },
+                passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Pulverize(
+                    crate::PulverizeEffectProfile {
+                        ability: AbilityId(41),
+                        chance_per_10k: chance,
+                        damage: 20,
+                        full_radius: 40 * SUBUNITS_PER_WORLD_UNIT,
+                        half_radius: 40 * SUBUNITS_PER_WORLD_UNIT,
+                        targets: AttackTargetMask::GROUND_UNITS,
+                    },
+                )),
+                ..UnitGameplayProperties::default()
+            },
+        );
+        let primary = sim.spawn_unit(unit(1, 60, 0, AttackDelivery::Melee));
+        sim.step();
+        sim.step();
+        let action = sim.unit(caster).unwrap().status.action_animation.unwrap();
+        assert_eq!(
+            action.kind,
+            if chance > 0 {
+                ActionAnimationKind::AttackSlam
+            } else {
+                ActionAnimationKind::Attack
+            }
+        );
+        let mut restored = wire_restored(&sim, 4);
+        for _ in 0..4 {
+            sim.step();
+            restored.step();
+            assert_eq!(sim.checksum(), restored.checksum());
+        }
+        // Only the primary target is in range of the swing, so any extra loss is the area hit.
+        assert_eq!(
+            sim.unit(primary).unwrap().health,
+            1000 - 10 - if chance > 0 { 20 } else { 0 }
+        );
+    }
+}
+
+#[test]
 fn lethal_release_proc_still_completes_the_attack_cycle() {
     let mut sim = simulation(1);
     let caster = sim.spawn_unit_with_properties(

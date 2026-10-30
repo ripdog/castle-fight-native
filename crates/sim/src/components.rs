@@ -194,8 +194,15 @@ pub enum ActionAnimationKind {
     CastSlam,
     CastThrow,
     CastDeath,
+    /// An attack whose clip is the owner's Spell Slam, as played when native Pulverize procs.
+    AttackSlam,
 }
 impl ActionAnimationKind {
+    #[must_use]
+    pub const fn is_attack(self) -> bool {
+        matches!(self, Self::Attack | Self::AttackSlam)
+    }
+
     pub(crate) const fn canonical_tag(self) -> u8 {
         match self {
             Self::Attack => 0,
@@ -203,6 +210,7 @@ impl ActionAnimationKind {
             Self::CastSlam => 2,
             Self::CastThrow => 3,
             Self::CastDeath => 4,
+            Self::AttackSlam => 5,
         }
     }
 }
@@ -2690,6 +2698,9 @@ pub(crate) struct ChainLightningState {
 pub struct PendingAttackState {
     pub target: SimId,
     pub release_tick: u64,
+    /// Native Pulverize chances rolled when the swing began, one bit per passive effect slot.
+    #[serde(default)]
+    pub pulverize_procs: u8,
 }
 
 /// Stable target identity retained while an ordered spell plays through its cast point.

@@ -213,9 +213,17 @@ impl Simulation {
             {
                 order.backstab_pending = status.wind_walk.take().map_or(0, |w| w.backstab_damage);
             }
+            let pulverize_procs;
             if intent.completing_windup {
-                status.pending_attack = None;
+                pulverize_procs = status
+                    .pending_attack
+                    .take()
+                    .map_or(0, |pending| pending.pulverize_procs);
             } else {
+                // The Spell Slam clip replaces the attack clip, so the proc is decided as the
+                // swing starts and carried to the release.
+                pulverize_procs =
+                    pulverize_procs_for_attack(self.config.match_seed, completed_tick, &intent);
                 let (animation_ticks, point_ticks) = if primary {
                     (
                         timing.primary_attack_ticks,
@@ -242,7 +250,11 @@ impl Simulation {
                 }
                 .max(if windup > 0 { windup + 1 } else { 0 });
                 status.begin_action_animation(
-                    ActionAnimationKind::Attack,
+                    if pulverize_procs == 0 {
+                        ActionAnimationKind::Attack
+                    } else {
+                        ActionAnimationKind::AttackSlam
+                    },
                     completed_tick,
                     duration,
                 );
@@ -256,6 +268,7 @@ impl Simulation {
                         release_tick: completed_tick
                             .checked_add(u64::from(windup))
                             .expect("attack release tick overflow"),
+                        pulverize_procs,
                     });
                     continue;
                 }
@@ -308,21 +321,14 @@ impl Simulation {
                 }
             }
 
-            for effect in intent.passive_effects.iter() {
+            for (slot, effect) in intent.passive_effects.iter().enumerate() {
                 let PassiveUnitEffect::Pulverize(profile) = effect else {
                     continue;
                 };
                 if !matches!(
                     intent.attack.delivery,
                     AttackDelivery::Melee | AttackDelivery::RangedInstant
-                ) || deterministic_random(
-                    self.config.match_seed,
-                    completed_tick,
-                    intent.source_id,
-                    RANDOM_PURPOSE_ATTACK_PROC ^ u64::from(profile.ability.0),
-                    intent.attack_sequence,
-                ) % 10_000
-                    >= u64::from(profile.chance_per_10k)
+                ) || pulverize_procs & (1 << slot) == 0
                 {
                     continue;
                 }
@@ -1599,4 +1605,32 @@ impl Simulation {
         unit_intents.append(&mut building_intents);
         unit_intents
     }
+}
+
+/// Rolls each native Pulverize chance for an attack, one bit per passive effect slot.
+fn pulverize_procs_for_attack(match_seed: u64, tick: u64, intent: &AttackIntent) -> u8 {
+    if !matches!(
+        intent.attack.delivery,
+        AttackDelivery::Melee | AttackDelivery::RangedInstant
+    ) {
+        return 0;
+    }
+    let mut procs = 0;
+    for (slot, effect) in intent.passive_effects.iter().enumerate() {
+        let PassiveUnitEffect::Pulverize(profile) = effect else {
+            continue;
+        };
+        if deterministic_random(
+            match_seed,
+            tick,
+            intent.source_id,
+            RANDOM_PURPOSE_ATTACK_PROC ^ u64::from(profile.ability.0),
+            intent.attack_sequence,
+        ) % 10_000
+            < u64::from(profile.chance_per_10k)
+        {
+            procs |= 1 << slot;
+        }
+    }
+    procs
 }
