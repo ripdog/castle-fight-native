@@ -2374,56 +2374,38 @@ fn placed_build_sites(
 fn setup_build_preview_ghost_animation_players(
     mut commands: Commands,
     building_models: Res<BuildingModelSet>,
-    parents: Query<&ChildOf>,
-    ghosts: Query<&BuildPlacementGhost>,
-    mut players: Query<
-        (Entity, &mut AnimationPlayer),
-        Without<BuildPlacementGhostAnimationController>,
-    >,
+    ghosts: Query<(Entity, &BuildPlacementGhost)>,
+    children: Query<&Children>,
+    mut players: Query<&mut AnimationPlayer, Without<BuildPlacementGhostAnimationController>>,
 ) {
-    for (entity, mut player) in &mut players {
-        let Some(rawcode) = build_preview_ghost_rawcode(entity, &parents, &ghosts) else {
-            continue;
-        };
+    // Walk down from the few ghosts rather than up from every animation player in the world.
+    for (ghost, &BuildPlacementGhost { rawcode }) in &ghosts {
         let Some(animations) = building_models.animations(rawcode) else {
             continue;
         };
-        let Some(stand) = animations.stand.clone() else {
-            commands
-                .entity(entity)
-                .insert(BuildPlacementGhostAnimationController);
-            continue;
-        };
+        for entity in std::iter::once(ghost).chain(children.iter_descendants(ghost)) {
+            let Ok(mut player) = players.get_mut(entity) else {
+                continue;
+            };
+            let Some(stand) = animations.stand.clone() else {
+                commands
+                    .entity(entity)
+                    .insert(BuildPlacementGhostAnimationController);
+                continue;
+            };
 
-        let mut transitions = AnimationTransitions::new();
-        transitions
-            .play(&mut player, stand.node, Duration::ZERO)
-            .repeat()
-            .set_speed(WC3_BUILDING_AMBIENT_ANIMATION_SPEED);
-        commands.entity(entity).insert((
-            AnimationGraphHandle(animations.graph.clone()),
-            transitions,
-            BuildPlacementGhostAnimationController,
-        ));
-    }
-}
-
-fn build_preview_ghost_rawcode(
-    entity: Entity,
-    parents: &Query<&ChildOf>,
-    ghosts: &Query<&BuildPlacementGhost>,
-) -> Option<u32> {
-    let mut current = entity;
-    for _ in 0..128 {
-        if let Ok(ghost) = ghosts.get(current) {
-            return Some(ghost.rawcode);
+            let mut transitions = AnimationTransitions::new();
+            transitions
+                .play(&mut player, stand.node, Duration::ZERO)
+                .repeat()
+                .set_speed(WC3_BUILDING_AMBIENT_ANIMATION_SPEED);
+            commands.entity(entity).insert((
+                AnimationGraphHandle(animations.graph.clone()),
+                transitions,
+                BuildPlacementGhostAnimationController,
+            ));
         }
-        let Ok(parent) = parents.get(current) else {
-            return None;
-        };
-        current = parent.parent();
     }
-    None
 }
 
 fn sync_build_preview_ghost_materials(
