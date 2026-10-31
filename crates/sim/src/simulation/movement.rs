@@ -507,7 +507,13 @@ impl Simulation {
     fn center_mask(&self, collision_radius: Option<i32>) -> Option<&[bool]> {
         collision_radius
             .and_then(|radius| self.radius_center_masks.get(&radius))
-            .map(Vec::as_slice)
+            .map(|mask| mask.cells.as_slice())
+    }
+
+    fn center_regions(&self, collision_radius: Option<i32>) -> Option<&[u32]> {
+        collision_radius
+            .and_then(|radius| self.radius_center_masks.get(&radius))
+            .map(|mask| mask.regions.as_slice())
     }
 
     fn route_to_cell(
@@ -532,6 +538,7 @@ impl Simulation {
                         radius,
                         bias: route_bias,
                         center_mask: self.center_mask(collision_radius),
+                        center_regions: self.center_regions(collision_radius),
                     },
                     cached_fallback,
                     known_greedy,

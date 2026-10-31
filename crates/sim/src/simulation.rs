@@ -751,7 +751,7 @@ pub struct Simulation {
     radius_objective_fields: BTreeMap<(u8, i32), Vec<u32>>,
     /// Derived from the topology per collision radius (see `TopologyGrid::center_traversable_mask`).
     /// Never hashed or serialized; cleared wherever `radius_objective_fields` is cleared.
-    radius_center_masks: BTreeMap<i32, Vec<bool>>,
+    radius_center_masks: BTreeMap<i32, crate::topology::CenterMask>,
     /// Memoized greedy first steps keyed by `(from, target, radius, route_bias)` on the current
     /// topology. Derived and non-authoritative: never hashed or serialized; cleared wherever the
     /// topology-derived caches are cleared.

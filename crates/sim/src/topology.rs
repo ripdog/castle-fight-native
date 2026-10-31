@@ -32,6 +32,19 @@ pub(crate) struct RadiusPursuit<'a> {
     pub radius: i32,
     pub bias: i32,
     pub center_mask: Option<&'a [bool]>,
+    /// Connected regions of `center_mask` (see `CenterMask::regions`), letting A* reject an
+    /// unreachable goal without flooding the start's whole region.
+    pub center_regions: Option<&'a [u32]>,
+}
+
+/// Cells whose center can host a circle of a fixed radius, and their connected regions.
+#[derive(Debug, Clone)]
+pub(crate) struct CenterMask {
+    pub cells: Vec<bool>,
+    /// 4-connected region of each masked cell, `UNREACHABLE` elsewhere. A radius A* step moves only
+    /// onto masked cells, so a goal is reachable exactly when it shares a region with a masked
+    /// neighbor of the start.
+    pub regions: Vec<u32>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -324,7 +337,7 @@ impl TopologyGrid {
     /// Per-cell mask of cells whose center can host a circle of `radius` inside the cell's own
     /// component. Callers that route with a fixed radius use it through `center_circle_ok`, which
     /// answers the same question as `circle_is_traversable_in_component(center_of_cell(cell))`.
-    pub(crate) fn center_traversable_mask(&self, radius: i32) -> Vec<bool> {
+    pub(crate) fn center_traversable_mask(&self, radius: i32) -> CenterMask {
         debug_assert!(radius >= 0);
         let mut mask = vec![false; self.blocked.len()];
         for (index, is_valid) in mask.iter_mut().enumerate() {
@@ -338,7 +351,38 @@ impl TopologyGrid {
                 component,
             );
         }
-        mask
+        let regions = self.mask_regions(&mask);
+        CenterMask {
+            cells: mask,
+            regions,
+        }
+    }
+
+    /// Labels the 4-connected regions of masked cells.
+    fn mask_regions(&self, mask: &[bool]) -> Vec<u32> {
+        let mut regions = vec![UNREACHABLE; mask.len()];
+        let mut next_region = 0u32;
+        let mut queue = VecDeque::new();
+        for start in 0..mask.len() {
+            if !mask[start] || regions[start] != UNREACHABLE {
+                continue;
+            }
+            regions[start] = next_region;
+            queue.push_back(start);
+            while let Some(current) = queue.pop_front() {
+                for neighbor in self.neighbors(self.cell_from_index(current)) {
+                    let Some(index) = neighbor.and_then(|cell| self.index(cell)) else {
+                        continue;
+                    };
+                    if mask[index] && regions[index] == UNREACHABLE {
+                        regions[index] = next_region;
+                        queue.push_back(index);
+                    }
+                }
+            }
+            next_region = next_region.checked_add(1).expect("too many radius regions");
+        }
+        regions
     }
 
     pub(crate) fn objective_distance_field_with_radius(&self, team: u8, radius: i32) -> Vec<u32> {
@@ -347,39 +391,20 @@ impl TopologyGrid {
             return vec![UNREACHABLE; self.blocked.len()];
         };
 
-        let valid = self.center_traversable_mask(radius);
-
-        let mut radius_component = vec![UNREACHABLE; self.blocked.len()];
+        let radius_component = self.center_traversable_mask(radius).regions;
         let mut component_best = Vec::new();
-        let mut queue = VecDeque::new();
-        let mut next_component = 0u32;
-        for start in 0..self.blocked.len() {
-            if !valid[start] || radius_component[start] != UNREACHABLE {
+        for (&region, &distance) in radius_component.iter().zip(base_field) {
+            if region == UNREACHABLE {
                 continue;
             }
-            let mut best = UNREACHABLE;
-            radius_component[start] = next_component;
-            queue.push_back(start);
-            while let Some(current) = queue.pop_front() {
-                best = best.min(base_field[current]);
-                let cell = self.cell_from_index(current);
-                for neighbor in self.neighbors(cell).into_iter().flatten() {
-                    let Some(next) = self.index(neighbor) else {
-                        continue;
-                    };
-                    if !valid[next] || radius_component[next] != UNREACHABLE {
-                        continue;
-                    }
-                    radius_component[next] = next_component;
-                    queue.push_back(next);
-                }
+            let region = usize::try_from(region).expect("radius-aware component index overflow");
+            if region == component_best.len() {
+                component_best.push(UNREACHABLE);
             }
-            component_best.push(best);
-            next_component = next_component
-                .checked_add(1)
-                .expect("too many radius-aware navigation components");
+            component_best[region] = component_best[region].min(distance);
         }
 
+        let mut queue = VecDeque::new();
         let mut result = vec![UNREACHABLE; self.blocked.len()];
         for index in 0..self.blocked.len() {
             let component = radius_component[index];
@@ -566,6 +591,7 @@ impl TopologyGrid {
                 radius,
                 bias,
                 center_mask,
+                center_regions: None,
             },
             cached_fallback,
             None,
@@ -590,6 +616,7 @@ impl TopologyGrid {
             radius,
             bias,
             center_mask,
+            center_regions,
         } = query;
         debug_assert!(bias == -1 || bias == 1);
         if !self.same_component(from, target) {
@@ -653,6 +680,17 @@ impl TopologyGrid {
             return (step, computed);
         }
 
+        if let Some(regions) = center_regions
+            && !self.radius_goal_reachable(from, target, regions)
+        {
+            let step = PursuitStep {
+                next_cell: None,
+                used_a_star: true,
+                a_star_cache_hit: false,
+                a_star_expanded_nodes: 0,
+            };
+            return (step, computed);
+        }
         let (next_cell, a_star_expanded_nodes) =
             self.a_star_first_step_with_radius(from, target, radius, bias, center_mask);
         let step = PursuitStep {
@@ -800,6 +838,21 @@ impl TopologyGrid {
 
             (None, expanded_nodes)
         })
+    }
+
+    /// Whether radius A* from `from` can reach `target`, given the regions of the same radius mask.
+    fn radius_goal_reachable(&self, from: NavCell, target: NavCell, regions: &[u32]) -> bool {
+        let Some(goal) = self.index(target) else {
+            return false;
+        };
+        let goal_region = regions[goal];
+        goal_region != UNREACHABLE
+            && self
+                .neighbors(from)
+                .into_iter()
+                .flatten()
+                .filter_map(|cell| self.index(cell))
+                .any(|index| regions[index] == goal_region)
     }
 
     fn a_star_first_step_with_radius(
@@ -1426,6 +1479,58 @@ mod tests {
             cell / 2,
             component
         ));
+    }
+
+    #[test]
+    fn radius_regions_reject_exactly_the_goals_radius_a_star_cannot_reach() {
+        let cell = SUBUNITS_PER_WORLD_UNIT;
+        // A wall with a one-cell gap: open to small bodies, closed to the radius under test.
+        let grid = TopologyGrid::build(
+            cell,
+            NavCell::new(0, 0),
+            NavCell::new(12, 8),
+            [
+                BuildingFootprint::new(6, 0, 1, 3),
+                BuildingFootprint::new(6, 4, 1, 4),
+            ],
+            [
+                SimPoint::new(12 * cell, 4 * cell),
+                SimPoint::new(0, 4 * cell),
+            ],
+        );
+        for radius in [cell / 4, cell * 3 / 4] {
+            let mask = grid.center_traversable_mask(radius);
+            let mut rejected = 0;
+            for from in (0..grid.blocked.len()).map(|index| grid.cell_from_index(index)) {
+                for target in (0..grid.blocked.len()).map(|index| grid.cell_from_index(index)) {
+                    if from == target || !grid.same_component(from, target) {
+                        continue;
+                    }
+                    let query = RadiusPursuit {
+                        from,
+                        target,
+                        radius,
+                        bias: 1,
+                        center_mask: Some(&mask.cells),
+                        center_regions: None,
+                    };
+                    let flooded = grid.pursuit_step_with_radius_memoized(query, None, None).0;
+                    let gated = grid
+                        .pursuit_step_with_radius_memoized(
+                            RadiusPursuit {
+                                center_regions: Some(&mask.regions),
+                                ..query
+                            },
+                            None,
+                            None,
+                        )
+                        .0;
+                    assert_eq!(gated.next_cell, flooded.next_cell, "{from:?} -> {target:?}");
+                    rejected += usize::from(flooded.next_cell.is_none());
+                }
+            }
+            assert_eq!(rejected > 0, radius > cell / 2, "radius {radius}");
+        }
     }
 
     #[test]
