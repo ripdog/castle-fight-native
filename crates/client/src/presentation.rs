@@ -63,15 +63,15 @@ use crate::{
         Wc3AnimatedAlphaMaterial, Wc3AttachToNode, Wc3AttachmentOwner, Wc3ComposedMetadataCache,
         Wc3ConvertedModelRegistry, Wc3EffectReusePending, Wc3EffectSize, Wc3EffectWarmup,
         Wc3EmitterSource, Wc3LightningVisual, Wc3MaterialProcessed, Wc3ModelSequenceSelection,
-        Wc3ParticleAssets, Wc3RibbonSource, Wc3SplatMaterial, Wc3StatusVisualKind,
-        Wc3TeamColorMaterial, Wc3TeamTint, Wc3VertexOpacity, Wc3VertexTint,
+        Wc3ParticleAssets, Wc3RibbonBuffers, Wc3RibbonMaterial, Wc3RibbonSource, Wc3SplatMaterial,
+        Wc3StatusVisualKind, Wc3TeamColorMaterial, Wc3TeamTint, Wc3VertexOpacity, Wc3VertexTint,
         Wc3VisualAnimationGraphs, Wc3VisualAnimationSource, Wc3VisualModel, Wc3VisualSet,
         advance_wc3_model_sequence_clocks, apply_wc3_non_inheritance, emit_wc3_model_particles,
         emit_wc3_particles, emit_wc3_sound_events, emit_wc3_spawn_events, emit_wc3_splat_events,
         fix_wc3_scene_materials, flush_wc3_particle_buffers, index_wc3_model_attachments,
-        mark_wc3_effect_warmup_hierarchy, reset_reused_wc3_effect_instances,
-        resolve_wc3_emitter_nodes, resolve_wc3_visual_attachments,
-        setup_wc3_model_composed_features, setup_wc3_model_lights,
+        mark_wc3_effect_warmup_hierarchy, release_wc3_ribbon_slot,
+        reset_reused_wc3_effect_instances, resolve_wc3_emitter_nodes,
+        resolve_wc3_visual_attachments, setup_wc3_model_composed_features, setup_wc3_model_lights,
         setup_wc3_visual_animation_players, spawn_wc3_ribbon_trails, update_wc3_material_alpha,
         update_wc3_material_texture, update_wc3_model_attachments, update_wc3_model_lights,
         update_wc3_model_particles, update_wc3_particles, update_wc3_ribbon_trails,
@@ -1095,6 +1095,7 @@ impl Plugin for CastlePresentationPlugin {
             .add_plugins(MaterialPlugin::<Wc3AnimatedAlphaMaterial>::default())
             .add_plugins(Wc3ParticleRenderPlugin)
             .add_plugins(MaterialPlugin::<Wc3SplatMaterial>::default())
+            .add_plugins(MaterialPlugin::<Wc3RibbonMaterial>::default())
             .add_plugins(MaterialPlugin::<Wc3TeamColorMaterial>::default())
             .init_resource::<RenderMap>()
             .init_resource::<UnitModelSet>()
@@ -1114,10 +1115,12 @@ impl Plugin for CastlePresentationPlugin {
             .init_resource::<TimedWc3Effects>()
             .init_resource::<TimedWc3EffectPool>()
             .init_resource::<Wc3EffectPrewarmPlan>()
+            .init_resource::<Wc3RibbonBuffers>()
             .init_gizmo_group::<ProjectileEffectGizmos>()
             .init_gizmo_group::<MapGridGizmos>()
             .add_observer(index_wc3_model_attachments)
             .add_observer(mark_wc3_effect_warmup_hierarchy)
+            .add_observer(release_wc3_ribbon_slot)
             .insert_resource(DebugPresentation {
                 health_bars: self.health_bars,
                 ..default()

@@ -10,7 +10,10 @@ use std::{
 use bevy::{
     asset::{AssetId, RenderAssetUsages},
     audio::{AudioPlayer, AudioSource, PlaybackSettings, SpatialListener, SpatialScale, Volume},
-    camera::visibility::DynamicSkinnedMeshBounds,
+    camera::{
+        primitives::Aabb,
+        visibility::{DynamicSkinnedMeshBounds, NoAutoAabb},
+    },
     ecs::{
         entity_disabling::Disabled,
         system::{EntityCommands, SystemParam},
@@ -45,6 +48,7 @@ const EFFECT_MANIFEST: &str = "wc3/effects/manifest.json";
 const EFFECT_ASSET_PREFIX: &str = "wc3/effects";
 const WC3_ANIMATED_ALPHA_SHADER_PATH: &str = "shaders/wc3_animated_alpha.wgsl";
 const WC3_SPLAT_SHADER_PATH: &str = "shaders/wc3_splat.wgsl";
+const WC3_RIBBON_SHADER_PATH: &str = "shaders/wc3_ribbon.wgsl";
 const WC3_TEAM_COLOR_SHADER_PATH: &str = "shaders/wc3_team_color.wgsl";
 const ANIMATED_ALPHA_BUFFER_MIN_SLOTS: usize = 256;
 const SPLAT_BUFFER_MIN_SLOTS: usize = 64;
@@ -3067,6 +3071,254 @@ impl Material for Wc3SplatMaterial {
     }
 }
 
+/// Points a ribbon trail's vertices from the shared ribbon storage page its material binds.
+#[derive(Asset, AsBindGroup, Reflect, Debug, Clone)]
+pub(crate) struct Wc3RibbonExtension {
+    #[storage(100, read_only)]
+    ribbon_data: Handle<ShaderBuffer>,
+}
+
+impl MaterialExtension for Wc3RibbonExtension {
+    fn vertex_shader() -> ShaderRef {
+        WC3_RIBBON_SHADER_PATH.into()
+    }
+
+    fn enable_prepass() -> bool {
+        false
+    }
+
+    fn enable_shadows() -> bool {
+        false
+    }
+}
+
+pub(crate) type Wc3RibbonMaterial = ExtendedMaterial<StandardMaterial, Wc3RibbonExtension>;
+
+/// Vec4 slots before a ribbon's points: point count and u range, then tint and v range.
+const RIBBON_HEADER_SLOTS: usize = 2;
+/// Vec4 slots per ribbon storage page; one page holds several hundred typical trails.
+const RIBBON_PAGE_SLOTS: usize = 1 << 15;
+const MIN_RIBBON_CAPACITY: usize = 8;
+
+const fn ribbon_slot_len(capacity: usize) -> usize {
+    RIBBON_HEADER_SLOTS + capacity * 2
+}
+
+/// A trail's range in a ribbon storage page. Capacities are powers of two, so a freed range is
+/// reused by the next trail of the same capacity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RibbonSlot {
+    page: usize,
+    offset: usize,
+    capacity: usize,
+}
+
+impl RibbonSlot {
+    fn tag(self) -> MeshTag {
+        MeshTag(u32::try_from(self.offset).expect("ribbon pages are smaller than u32::MAX"))
+    }
+}
+
+struct RibbonPage {
+    buffer: Handle<ShaderBuffer>,
+    data: Vec<[f32; 4]>,
+    used: usize,
+    dirty: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct RibbonMaterialKey {
+    texture: Option<AssetId<Image>>,
+    filter_mode: String,
+    page: usize,
+}
+
+/// GPU-side ribbon trail storage. Trails are rebuilt every frame while they move, so instead of
+/// one mesh asset per trail (reallocated and re-uploaded by the render world each frame), every
+/// trail writes its points into a slot of a shared storage page. Its mesh is a static strip of
+/// its slot's capacity whose vertex shader reads the slot.
+#[derive(Resource, Default)]
+pub(crate) struct Wc3RibbonBuffers {
+    pages: Vec<RibbonPage>,
+    /// Freed slots by `capacity.trailing_zeros()`.
+    free: Vec<Vec<RibbonSlot>>,
+    strips: HashMap<usize, Handle<Mesh>>,
+    materials: HashMap<RibbonMaterialKey, Handle<Wc3RibbonMaterial>>,
+}
+
+/// Where a trail draws from; inserted onto the trail entity whenever its slot changes.
+struct RibbonAllocation {
+    slot: RibbonSlot,
+    mesh: Handle<Mesh>,
+    material: Handle<Wc3RibbonMaterial>,
+}
+
+#[derive(SystemParam)]
+pub(crate) struct Wc3RibbonAssets<'w> {
+    buffers: ResMut<'w, Wc3RibbonBuffers>,
+    shader_buffers: ResMut<'w, Assets<ShaderBuffer>>,
+    materials: ResMut<'w, Assets<Wc3RibbonMaterial>>,
+    meshes: ResMut<'w, Assets<Mesh>>,
+}
+
+impl Wc3RibbonAssets<'_> {
+    fn allocate(
+        &mut self,
+        capacity: usize,
+        texture: Option<&Handle<Image>>,
+        filter_mode: &str,
+    ) -> RibbonAllocation {
+        let capacity = capacity
+            .clamp(MIN_RIBBON_CAPACITY, MAX_RIBBON_POINTS)
+            .next_power_of_two();
+        let slot = self
+            .buffers
+            .allocate_slot(capacity, &mut self.shader_buffers);
+        let mesh = self
+            .buffers
+            .strips
+            .entry(capacity)
+            .or_insert_with(|| self.meshes.add(build_wc3_ribbon_strip(capacity)))
+            .clone();
+        let key = RibbonMaterialKey {
+            texture: texture.map(Handle::id),
+            filter_mode: filter_mode.to_owned(),
+            page: slot.page,
+        };
+        let buffer = self.buffers.pages[slot.page].buffer.clone();
+        let material = self
+            .buffers
+            .materials
+            .entry(key)
+            .or_insert_with(|| {
+                self.materials.add(ExtendedMaterial {
+                    base: StandardMaterial {
+                        base_color: Color::WHITE,
+                        base_color_texture: texture.cloned(),
+                        alpha_mode: wc3_material_alpha_mode(filter_mode, AlphaMode::Blend),
+                        unlit: true,
+                        double_sided: true,
+                        ..default()
+                    },
+                    extension: Wc3RibbonExtension {
+                        ribbon_data: buffer,
+                    },
+                })
+            })
+            .clone();
+        RibbonAllocation {
+            slot,
+            mesh,
+            material,
+        }
+    }
+
+    /// Uploads the pages trails wrote this frame.
+    fn flush(&mut self) {
+        for page in &mut self.buffers.pages {
+            if !std::mem::take(&mut page.dirty) {
+                continue;
+            }
+            if let Some(mut buffer) = self.shader_buffers.get_mut(&page.buffer)
+                && let Some(bytes) = buffer.data.as_mut()
+            {
+                bytes.copy_from_slice(bytemuck::cast_slice(&page.data));
+            }
+        }
+    }
+}
+
+impl Wc3RibbonBuffers {
+    fn allocate_slot(
+        &mut self,
+        capacity: usize,
+        shader_buffers: &mut Assets<ShaderBuffer>,
+    ) -> RibbonSlot {
+        let bucket = capacity.trailing_zeros() as usize;
+        if let Some(slot) = self.free.get_mut(bucket).and_then(Vec::pop) {
+            return slot;
+        }
+        let len = ribbon_slot_len(capacity);
+        let page = match self
+            .pages
+            .iter()
+            .position(|page| page.used + len <= page.data.len())
+        {
+            Some(page) => page,
+            None => {
+                let data = vec![[0.0; 4]; RIBBON_PAGE_SLOTS];
+                let buffer = shader_buffers.add(ShaderBuffer::new(
+                    bytemuck::cast_slice(&data),
+                    RenderAssetUsages::default(),
+                ));
+                self.pages.push(RibbonPage {
+                    buffer,
+                    data,
+                    used: 0,
+                    dirty: false,
+                });
+                self.pages.len() - 1
+            }
+        };
+        let page_state = &mut self.pages[page];
+        let offset = page_state.used;
+        page_state.used += len;
+        RibbonSlot {
+            page,
+            offset,
+            capacity,
+        }
+    }
+
+    fn release(&mut self, slot: RibbonSlot) {
+        let bucket = slot.capacity.trailing_zeros() as usize;
+        if self.free.len() <= bucket {
+            self.free.resize_with(bucket + 1, Vec::new);
+        }
+        self.free[bucket].push(slot);
+    }
+
+    fn slot_data(&mut self, slot: RibbonSlot) -> &mut [[f32; 4]] {
+        let page = &mut self.pages[slot.page];
+        page.dirty = true;
+        &mut page.data[slot.offset..slot.offset + ribbon_slot_len(slot.capacity)]
+    }
+}
+
+/// A static strip of `capacity` points. Each vertex UV holds (point index, side), side 0 being
+/// the top edge; `wc3_ribbon.wgsl` places it from the trail's storage slot. Positions stay at
+/// the origin so the mesh's bounds centre is the entity's translation, which is where Bevy
+/// depth-sorts transparent meshes.
+fn build_wc3_ribbon_strip(capacity: usize) -> Mesh {
+    let vertex_count = capacity * 2;
+    let slot_uvs = (0..vertex_count)
+        .map(|vertex| [(vertex / 2) as f32, (vertex % 2) as f32])
+        .collect::<Vec<_>>();
+    let mut indices = Vec::with_capacity(capacity.saturating_sub(1) * 6);
+    for segment in 0..capacity.saturating_sub(1) {
+        let top = u32::try_from(segment * 2).expect("ribbon vertex count is bounded");
+        indices.extend_from_slice(&[top, top + 1, top + 2, top + 2, top + 1, top + 3]);
+    }
+    // Positions, normals and colours come from the slot; those attributes only select the
+    // StandardMaterial shader paths that consume them.
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vec![[0.0; 3]; vertex_count])
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0, 0.0, 1.0]; vertex_count])
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, slot_uvs)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, vec![[0.0; 4]; vertex_count])
+    .with_inserted_indices(Indices::U32(indices))
+}
+
+/// Points a trail can hold: those emitted within one lifespan, plus the frame that may still
+/// be ageing out and the initial point.
+fn initial_ribbon_capacity(spec: &Wc3RibbonEmitter) -> usize {
+    let per_second = spec.emission_rate.min(240) as f32;
+    (per_second * (spec.lifespan + 0.1)).ceil() as usize + 2
+}
+
 #[derive(Debug, Clone, Copy)]
 struct RibbonPoint {
     center: Vec3,
@@ -3084,8 +3336,8 @@ pub(crate) struct Wc3RibbonTrail {
     emission_accumulator: f32,
     previous_origin: Option<Vec3>,
     previous_up: Option<Vec3>,
-    mesh: Handle<Mesh>,
-    has_rendered_strip: bool,
+    texture: Option<Handle<Image>>,
+    slot: RibbonSlot,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -3844,34 +4096,6 @@ impl Wc3ParticleAssets {
             buffer.set_data(self.splat_gpu_data.clone());
         }
         self.splat_dirty = false;
-    }
-
-    fn ribbon_material(
-        &mut self,
-        ribbon: &Wc3RibbonEmitter,
-        asset_prefix: &str,
-        asset_server: &AssetServer,
-        materials: &mut Assets<StandardMaterial>,
-    ) -> Handle<StandardMaterial> {
-        let texture_key = ribbon.texture.as_deref().unwrap_or("<none>");
-        let key = format!("ribbon|{asset_prefix}|{texture_key}|{}", ribbon.filter_mode);
-        if let Some(handle) = self.materials.get(&key) {
-            return handle.clone();
-        }
-        let base_color_texture = ribbon
-            .texture
-            .as_ref()
-            .map(|texture| asset_server.load(format!("{asset_prefix}/{texture}")));
-        let handle = materials.add(StandardMaterial {
-            base_color: Color::WHITE,
-            base_color_texture,
-            alpha_mode: wc3_material_alpha_mode(&ribbon.filter_mode, AlphaMode::Blend),
-            unlit: true,
-            double_sided: true,
-            ..default()
-        });
-        self.materials.insert(key, handle.clone());
-        handle
     }
 }
 
@@ -5243,37 +5467,33 @@ fn wc3_vertex_opacity(
 pub fn spawn_wc3_ribbon_trails(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut ribbon_assets: ResMut<Wc3ParticleAssets>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut ribbon_assets: Wc3RibbonAssets,
     sources: Query<(Entity, &Wc3RibbonSource), Added<Wc3RibbonSource>>,
 ) {
     for (source, source_ribbons) in &sources {
-        let sequence_time_ms = source_ribbons
-            .sequence_clock
-            .as_ref()
-            .map(Wc3EmitterSequenceClock::current_time_ms)
-            .unwrap_or(source_ribbons.global_elapsed_ms);
         for (ribbon_index, ribbon) in source_ribbons.ribbons.iter().enumerate() {
             let spec = &ribbon.spec;
-            let sample =
-                sample_ribbon_parameters(spec, sequence_time_ms, source_ribbons.global_elapsed_ms);
             if spec.emission_rate == 0
                 || spec.lifespan <= 0.0
                 || (spec.height_above <= 0.0 && spec.height_below <= 0.0)
             {
                 continue;
             }
-            let mesh = meshes.add(build_wc3_ribbon_mesh(spec, sample, &VecDeque::new(), 1.0));
-            let material = ribbon_assets.ribbon_material(
-                spec,
-                source_ribbons.asset_prefix,
-                &asset_server,
-                &mut materials,
+            let texture = spec.texture.as_ref().map(|texture| {
+                asset_server.load(format!("{}/{texture}", source_ribbons.asset_prefix))
+            });
+            let allocation = ribbon_assets.allocate(
+                initial_ribbon_capacity(spec),
+                texture.as_ref(),
+                &spec.filter_mode,
             );
             commands.spawn((
-                Mesh3d(mesh.clone()),
-                MeshMaterial3d(material),
+                Mesh3d(allocation.mesh),
+                MeshMaterial3d(allocation.material),
+                allocation.slot.tag(),
+                // The strip's vertices are placeholders; the trail sets its bounds each frame.
+                Aabb::default(),
+                NoAutoAabb,
                 Transform::IDENTITY,
                 // Shown once the trail has a strip; see `update_wc3_ribbon_trails`.
                 Visibility::Hidden,
@@ -5286,21 +5506,43 @@ pub fn spawn_wc3_ribbon_trails(
                     emission_accumulator: 0.0,
                     previous_origin: None,
                     previous_up: None,
-                    mesh,
-                    has_rendered_strip: false,
+                    texture,
+                    slot: allocation.slot,
                 },
             ));
         }
     }
 }
 
+/// Returns a removed trail's storage slot to the free list.
+pub(crate) fn release_wc3_ribbon_slot(
+    removed: On<Remove, Wc3RibbonTrail>,
+    trails: Query<&Wc3RibbonTrail>,
+    mut buffers: ResMut<Wc3RibbonBuffers>,
+) {
+    if let Ok(trail) = trails.get(removed.entity) {
+        buffers.release(trail.slot);
+    }
+}
+
+type RibbonTrailItem<'a> = (
+    Entity,
+    &'a mut Wc3RibbonTrail,
+    &'a mut Visibility,
+    &'a mut Aabb,
+    &'a mut Transform,
+    &'a mut Mesh3d,
+    &'a mut MeshMaterial3d<Wc3RibbonMaterial>,
+    &'a mut MeshTag,
+);
+
 pub fn update_wc3_ribbon_trails(
     mut commands: Commands,
     time: Res<Time>,
     mut sources: Query<(Entity, &GlobalTransform, &mut Wc3RibbonSource)>,
     transforms: Query<&GlobalTransform>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut trails: Query<(Entity, &mut Wc3RibbonTrail, &mut Visibility)>,
+    mut ribbon_assets: Wc3RibbonAssets,
+    mut trails: Query<RibbonTrailItem>,
 ) {
     let dt = time.delta_secs().min(0.1);
     let mut source_times = HashMap::new();
@@ -5316,7 +5558,17 @@ pub fn update_wc3_ribbon_trails(
         }
         source.global_elapsed_ms += dt * 1000.0;
     }
-    for (entity, mut trail, mut visibility) in &mut trails {
+    for (
+        entity,
+        mut trail,
+        mut visibility,
+        mut aabb,
+        mut transform,
+        mut mesh,
+        mut material,
+        mut tag,
+    ) in &mut trails
+    {
         for point in &mut trail.points {
             point.age += dt;
         }
@@ -5387,7 +5639,6 @@ pub fn update_wc3_ribbon_trails(
             trail.points.pop_front();
         }
         if source_missing && trail.points.is_empty() {
-            meshes.remove(trail.mesh.id());
             commands.entity(entity).try_despawn();
             continue;
         }
@@ -5401,42 +5652,54 @@ pub fn update_wc3_ribbon_trails(
         } else {
             Visibility::Hidden
         });
-        if has_strip || trail.has_rendered_strip {
-            if let Some(mut mesh) = meshes.get_mut(&trail.mesh) {
-                *mesh =
-                    build_wc3_ribbon_mesh(&trail.spec, sample, &trail.points, trail.source_scale);
-            }
-            trail.has_rendered_strip = has_strip;
+        if !has_strip {
+            continue;
         }
+        if trail.points.len() > trail.slot.capacity {
+            let allocation = ribbon_assets.allocate(
+                trail.points.len(),
+                trail.texture.as_ref(),
+                &trail.spec.filter_mode,
+            );
+            ribbon_assets.buffers.release(trail.slot);
+            trail.slot = allocation.slot;
+            mesh.0 = allocation.mesh;
+            material.0 = allocation.material;
+            *tag = allocation.slot.tag();
+        }
+        let bounds = write_wc3_ribbon_slot(
+            ribbon_assets.buffers.slot_data(trail.slot),
+            &trail.spec,
+            sample,
+            &trail.points,
+            trail.source_scale,
+        );
+        // Bevy depth-sorts transparent meshes at their bounds centre in world space; the strip
+        // mesh sits at the origin, so the entity carries the trail's centre and local bounds.
+        // The transparent phase keeps that centre from when the mesh was queued and requeues
+        // only on a mesh or material change, so flag the material to re-sort the moved trail.
+        let center = Vec3::from(bounds.center);
+        if transform.translation != center {
+            transform.translation = center;
+            material.set_changed();
+        }
+        aabb.set_if_neq(Aabb {
+            center: Vec3A::ZERO,
+            half_extents: bounds.half_extents,
+        });
     }
+    ribbon_assets.flush();
 }
 
-fn build_wc3_ribbon_mesh(
+/// Writes a trail's strip into its storage slot (layout in `wc3_ribbon.wgsl`) and returns its
+/// world-space bounds. `points` must hold at least two points and fit the slot.
+fn write_wc3_ribbon_slot(
+    slot: &mut [[f32; 4]],
     spec: &Wc3RibbonEmitter,
     sample: Wc3RibbonSample,
     points: &VecDeque<RibbonPoint>,
     source_scale: f32,
-) -> Mesh {
-    if points.len() < 2 {
-        // Bevy's mesh allocator skips zero-byte vertex/index buffers but still tries to
-        // upload them. Keep an invisible, allocatable triangle until a strip exists.
-        return Mesh::new(
-            PrimitiveTopology::TriangleList,
-            RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
-        )
-        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, vec![[0.0; 3]; 3])
-        .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0.0, 0.0, 1.0]; 3])
-        .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0.0; 2]; 3])
-        .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, vec![[0.0; 4]; 3])
-        .with_inserted_indices(Indices::U32(vec![0, 1, 2]));
-    }
-
-    let mut positions = Vec::with_capacity(points.len() * 2);
-    let mut normals = Vec::with_capacity(points.len() * 2);
-    let mut uvs = Vec::with_capacity(points.len() * 2);
-    let mut colors = Vec::with_capacity(points.len() * 2);
-    let mut indices = Vec::with_capacity(points.len().saturating_sub(1) * 6);
-    let last = points.len().saturating_sub(1).max(1) as f32;
+) -> Aabb {
     let columns = spec.columns.max(1);
     let rows = spec.rows.max(1);
     let frame_count = columns.saturating_mul(rows).max(1);
@@ -5445,47 +5708,32 @@ fn build_wc3_ribbon_mesh(
     let row = texture_slot / columns;
     let atlas_u = 1.0 / columns as f32;
     let atlas_v = 1.0 / rows as f32;
-    let u0 = column as f32 * atlas_u;
-    let u1 = (column + 1) as f32 * atlas_u;
-    let v0 = row as f32 * atlas_v;
-    let v1 = (row + 1) as f32 * atlas_v;
+    let [r, g, b] = sample.color;
+    slot[0] = [
+        points.len() as f32,
+        column as f32 * atlas_u,
+        (column + 1) as f32 * atlas_u,
+        row as f32 * atlas_v,
+    ];
+    slot[1] = [r, g, b, (row + 1) as f32 * atlas_v];
 
-    for (index, point) in points.iter().enumerate() {
+    let mut min = Vec3::INFINITY;
+    let mut max = Vec3::NEG_INFINITY;
+    let (point_slots, _) = slot[RIBBON_HEADER_SLOTS..].as_chunks_mut::<2>();
+    for (point, pair) in points.iter().zip(point_slots) {
         let gravity_offset =
             Vec3::NEG_Y * (0.5 * spec.gravity * source_scale * point.age * point.age);
         let center = point.center + gravity_offset;
         let up = point.up.normalize_or(Vec3::Y);
         let top = center + up * sample.height_above.max(0.0) * source_scale;
         let bottom = center - up * sample.height_below.max(0.0) * source_scale;
-        positions.push(top.to_array());
-        positions.push(bottom.to_array());
-        normals.push(Vec3::Z.to_array());
-        normals.push(Vec3::Z.to_array());
-        let v = v0 + index as f32 / last * (v1 - v0);
-        uvs.push([u0, v]);
-        uvs.push([u1, v]);
         let fade = (1.0 - point.age / spec.lifespan.max(0.01)).clamp(0.0, 1.0);
-        let alpha = sample.alpha * fade;
-        colors.push([sample.color[0], sample.color[1], sample.color[2], alpha]);
-        colors.push([sample.color[0], sample.color[1], sample.color[2], alpha]);
+        pair[0] = top.extend(sample.alpha * fade).to_array();
+        pair[1] = bottom.extend(0.0).to_array();
+        min = min.min(top).min(bottom);
+        max = max.max(top).max(bottom);
     }
-    for segment in 0..points.len().saturating_sub(1) {
-        let top = u32::try_from(segment * 2).expect("ribbon vertex count is bounded");
-        let bottom = top + 1;
-        let next_top = top + 2;
-        let next_bottom = top + 3;
-        indices.extend_from_slice(&[top, bottom, next_top, next_top, bottom, next_bottom]);
-    }
-
-    Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
-    )
-    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, positions)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, normals)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, uvs)
-    .with_inserted_attribute(Mesh::ATTRIBUTE_COLOR, colors)
-    .with_inserted_indices(Indices::U32(indices))
+    Aabb::from_min_max(min, max)
 }
 
 #[derive(SystemParam)]
@@ -8428,7 +8676,7 @@ mod tests {
     }
 
     #[test]
-    fn ribbon_mesh_builds_a_fading_two_vertex_strip() {
+    fn ribbon_slot_holds_a_fading_two_point_strip() {
         let spec = Wc3RibbonEmitter {
             object_id: None,
             position: [0.0; 3],
@@ -8466,56 +8714,19 @@ mod tests {
             },
         ]);
         let sample = sample_ribbon_parameters(&spec, 0.0, 0.0);
-        let mesh = build_wc3_ribbon_mesh(&spec, sample, &points, 1.0);
-        let positions = mesh
-            .attribute(Mesh::ATTRIBUTE_POSITION)
-            .expect("ribbon positions")
-            .as_float3()
-            .expect("float positions");
-        assert_eq!(positions.len(), 4);
-        assert_eq!(positions[0], [0.0, 2.0, 0.0]);
-        assert_eq!(positions[1], [0.0, -3.0, 0.0]);
-        let bevy::mesh::VertexAttributeValues::Float32x2(uvs) =
-            mesh.attribute(Mesh::ATTRIBUTE_UV_0).expect("ribbon uvs")
-        else {
-            panic!("ribbon uvs must be float2");
-        };
-        assert_eq!(uvs, &[[0.5, 0.5], [1.0, 0.5], [0.5, 1.0], [1.0, 1.0]]);
-        let bevy::mesh::VertexAttributeValues::Float32x4(colors) = mesh
-            .attribute(Mesh::ATTRIBUTE_COLOR)
-            .expect("ribbon colors")
-        else {
-            panic!("ribbon colors must be float4");
-        };
-        assert_eq!(colors[0], [0.4, 0.5, 0.6, 0.1]);
-        assert_eq!(colors[2], [0.4, 0.5, 0.6, 0.4]);
-    }
-
-    #[test]
-    fn ribbon_without_a_strip_has_allocatable_invisible_geometry() {
-        let spec = test_ribbon_emitter(23);
-        let sample = sample_ribbon_parameters(&spec, 0.0, 0.0);
-        let mut points = VecDeque::new();
-        for _ in 0..2 {
-            let mesh = build_wc3_ribbon_mesh(&spec, sample, &points, 1.0);
-            assert!(mesh.get_vertex_buffer_size() > 0);
-            assert!(
-                mesh.get_index_buffer_bytes()
-                    .is_some_and(|bytes| !bytes.is_empty())
-            );
-            let colors = mesh
-                .attribute(Mesh::ATTRIBUTE_COLOR)
-                .expect("placeholder colors");
-            let bevy::mesh::VertexAttributeValues::Float32x4(colors) = colors else {
-                panic!("placeholder colors must be float4");
-            };
-            assert!(colors.iter().all(|color| color[3] == 0.0));
-            points.push_back(RibbonPoint {
-                center: Vec3::ZERO,
-                up: Vec3::Y,
-                age: 0.0,
-            });
-        }
+        let mut slot = vec![[0.0; 4]; ribbon_slot_len(points.len())];
+        let bounds = write_wc3_ribbon_slot(&mut slot, &spec, sample, &points, 1.0);
+        // Count, then the atlas cell of texture slot 3 in a 2x2 sheet.
+        assert_eq!(slot[0], [2.0, 0.5, 1.0, 0.5]);
+        assert_eq!(slot[1], [0.4, 0.5, 0.6, 1.0]);
+        // Top carries the point's faded alpha.
+        assert_eq!(slot[2], [0.0, 2.0, 0.0, 0.1]);
+        assert_eq!(slot[3], [0.0, -3.0, 0.0, 0.0]);
+        assert_eq!(slot[4], [10.0, 2.0, 0.0, 0.4]);
+        assert_eq!(
+            bounds,
+            Aabb::from_min_max(Vec3::new(0.0, -3.0, 0.0), Vec3::new(10.0, 2.0, 0.0))
+        );
     }
 
     #[test]
