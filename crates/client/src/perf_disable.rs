@@ -16,11 +16,13 @@ pub(crate) struct PerfDisable {
     pub(crate) particle_cull: bool,
     /// Use one depth-sorted phase item per particle instead of per-emitter batches.
     pub(crate) emitter_batching: bool,
+    /// Keep evaluating animation targets that no clip of their graph animates.
+    pub(crate) unanimated_targets: bool,
 }
 
 impl PerfDisable {
     pub(crate) const NAMES: &'static str =
-        "offscreen-animation|frozen-bounds|particle-cull|emitter-batching|all";
+        "offscreen-animation|frozen-bounds|particle-cull|emitter-batching|unanimated-targets|all";
 
     pub(crate) fn parse(list: &str) -> Result<Self, String> {
         let mut disable = Self::default();
@@ -30,12 +32,14 @@ impl PerfDisable {
                 "frozen-bounds" => disable.frozen_bounds = true,
                 "particle-cull" => disable.particle_cull = true,
                 "emitter-batching" => disable.emitter_batching = true,
+                "unanimated-targets" => disable.unanimated_targets = true,
                 "all" => {
                     disable = Self {
                         offscreen_animation: true,
                         frozen_bounds: true,
                         particle_cull: true,
                         emitter_batching: true,
+                        unanimated_targets: true,
                     }
                 }
                 other => {

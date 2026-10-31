@@ -42,6 +42,7 @@ mod skin_influences;
 mod skinned_bounds;
 mod terrain;
 mod ui_icons;
+mod unanimated_targets;
 mod unit_models;
 mod view_state;
 mod wc3_effects;
@@ -734,6 +735,7 @@ fn main() {
         .add_plugins((
             skinned_bounds::SkinnedMeshBoundsPlugin,
             offscreen_animation::OffscreenAnimationPlugin,
+            unanimated_targets::UnanimatedTargetsPlugin,
             scene_budget::SceneBudgetPlugin,
         ))
         .add_plugins((
