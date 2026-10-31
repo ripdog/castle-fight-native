@@ -24,19 +24,36 @@ impl Simulation {
             .collect();
         radius_objective_keys.sort_unstable();
         radius_objective_keys.dedup();
-        for (team, radius) in radius_objective_keys {
-            if !self.radius_center_masks.contains_key(&radius) {
-                let mask = self.topology.center_traversable_mask(radius);
-                self.radius_center_masks.insert(radius, mask);
-            }
-            if self.radius_objective_fields.contains_key(&(team, radius)) {
-                continue;
-            }
-            let field = self
-                .topology
-                .objective_distance_field_with_radius(team, radius);
-            self.radius_objective_fields.insert((team, radius), field);
-        }
+        // Masks and fields are pure functions of the topology, built in parallel because a
+        // topology rebuild invalidates all of them in one tick.
+        let mut missing_masks: Vec<_> = radius_objective_keys
+            .iter()
+            .map(|&(_, radius)| radius)
+            .filter(|radius| !self.radius_center_masks.contains_key(radius))
+            .collect();
+        missing_masks.sort_unstable();
+        missing_masks.dedup();
+        let topology = &self.topology;
+        let masks: Vec<_> = self.pool.install(|| {
+            missing_masks
+                .par_iter()
+                .map(|&radius| (radius, topology.center_traversable_mask(radius)))
+                .collect()
+        });
+        self.radius_center_masks.extend(masks);
+        let center_masks = &self.radius_center_masks;
+        let fields: Vec<_> = self.pool.install(|| {
+            radius_objective_keys
+                .par_iter()
+                .filter(|key| !self.radius_objective_fields.contains_key(key))
+                .map(|&(team, radius)| {
+                    let field =
+                        topology.objective_distance_field_with_radius(team, &center_masks[&radius]);
+                    ((team, radius), field)
+                })
+                .collect()
+        });
+        self.radius_objective_fields.extend(fields);
 
         let decisions: Vec<_> = self.pool.install(|| {
             units

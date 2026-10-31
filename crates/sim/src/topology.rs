@@ -337,25 +337,90 @@ impl TopologyGrid {
     /// Per-cell mask of cells whose center can host a circle of `radius` inside the cell's own
     /// component. Callers that route with a fixed radius use it through `center_circle_ok`, which
     /// answers the same question as `circle_is_traversable_in_component(center_of_cell(cell))`.
+    ///
+    /// Every cell center sits at the same offset inside its cell, so the cells a centered circle
+    /// overlaps form one footprint shared by all cells: a run of rows, each an interval containing
+    /// the center column. That footprint is 4-connected and contains the center, so it fits in the
+    /// center's component exactly when all of its cells are in-grid, unblocked and reachable, which
+    /// per-row runs of such cells answer in one comparison per footprint row.
     pub(crate) fn center_traversable_mask(&self, radius: i32) -> CenterMask {
         debug_assert!(radius >= 0);
+        let footprint = self.center_circle_rows(radius);
+        let (run_left, run_right) = self.open_row_runs();
         let mut mask = vec![false; self.blocked.len()];
         for (index, is_valid) in mask.iter_mut().enumerate() {
-            let cell = self.cell_from_index(index);
-            let Some(component) = self.component_id(cell) else {
+            if self.blocked[index] || self.component[index] == UNREACHABLE {
                 continue;
-            };
-            *is_valid = self.circle_is_traversable_in_component(
-                self.center_of_cell(cell),
-                radius,
-                component,
-            );
+            }
+            let cell = self.cell_from_index(index);
+            if !self.circle_is_inside_bounds(self.center_of_cell(cell), radius) {
+                continue;
+            }
+            let (x, y) = (index % self.width, index / self.width);
+            *is_valid = footprint.iter().all(|&(dy, left, right)| {
+                y.checked_add_signed(dy)
+                    .filter(|&row| row < self.height)
+                    .is_some_and(|row| {
+                        let at = row * self.width + x;
+                        run_left[at] > left && run_right[at] > right
+                    })
+            });
         }
         let regions = self.mask_regions(&mask);
         CenterMask {
             cells: mask,
             regions,
         }
+    }
+
+    /// Rows `(dy, left, right)` of the cells a circle of `radius` centered in a cell overlaps
+    /// (closer than `radius`, so tangency is free): offsets `-left..=right` from the center column.
+    fn center_circle_rows(&self, radius: i32) -> Vec<(isize, usize, usize)> {
+        let origin = NavCell::new(0, 0);
+        let center = self.center_of_cell(origin);
+        let radius_sq = (i64::from(radius) * i64::from(radius)) as u64;
+        let overlaps = |dx: i32, dy: i32| {
+            cell_rect_min_distance_sq(center, NavCell::new(dx, dy), self.cell_size) < radius_sq
+        };
+        let reach = radius / self.cell_size + 1;
+        (-reach..=reach)
+            .filter(|&dy| overlaps(0, dy))
+            .map(|dy| {
+                let left = (1..).take_while(|&dx| overlaps(-dx, dy)).count();
+                let right = (1..).take_while(|&dx| overlaps(dx, dy)).count();
+                (dy as isize, left, right)
+            })
+            .collect()
+    }
+
+    /// Per cell, the length of the run of in-grid, unblocked, reachable cells in its row that ends
+    /// at it from the left and from the right, counting the cell itself (zero for a bad cell).
+    fn open_row_runs(&self) -> (Vec<usize>, Vec<usize>) {
+        let open: Vec<bool> = self
+            .blocked
+            .iter()
+            .zip(&self.component)
+            .map(|(&blocked, &component)| !blocked && component != UNREACHABLE)
+            .collect();
+        let mut left = vec![0; open.len()];
+        let mut right = vec![0; open.len()];
+        for ((open, left), right) in open
+            .chunks_exact(self.width)
+            .zip(left.chunks_exact_mut(self.width))
+            .zip(right.chunks_exact_mut(self.width))
+        {
+            let mut run = 0;
+            for (&open, left) in open.iter().zip(left.iter_mut()) {
+                run = if open { run + 1 } else { 0 };
+                *left = run;
+            }
+            run = 0;
+            for (&open, right) in open.iter().zip(right.iter_mut()).rev() {
+                run = if open { run + 1 } else { 0 };
+                *right = run;
+            }
+        }
+        (left, right)
     }
 
     /// Labels the 4-connected regions of masked cells.
@@ -385,13 +450,18 @@ impl TopologyGrid {
         regions
     }
 
-    pub(crate) fn objective_distance_field_with_radius(&self, team: u8, radius: i32) -> Vec<u32> {
-        debug_assert!(radius >= 0);
+    /// Objective distance field for units whose centers must stay inside `mask`, the
+    /// `center_traversable_mask` of their collision radius on this topology.
+    pub(crate) fn objective_distance_field_with_radius(
+        &self,
+        team: u8,
+        mask: &CenterMask,
+    ) -> Vec<u32> {
         let Some(base_field) = self.objective_distance.get(usize::from(team)) else {
             return vec![UNREACHABLE; self.blocked.len()];
         };
 
-        let radius_component = self.center_traversable_mask(radius).regions;
+        let radius_component = &mask.regions;
         let mut component_best = Vec::new();
         for (&region, &distance) in radius_component.iter().zip(base_field) {
             if region == UNREACHABLE {
@@ -1482,6 +1552,40 @@ mod tests {
     }
 
     #[test]
+    fn center_mask_matches_the_exact_circle_check() {
+        for cell in [SUBUNITS_PER_WORLD_UNIT, 7] {
+            // Two components, a one-cell gap, a peninsula and blockers touching the border.
+            let grid = TopologyGrid::build(
+                cell,
+                NavCell::new(-3, -2),
+                NavCell::new(14, 11),
+                [
+                    BuildingFootprint::new(5, -2, 1, 14),
+                    BuildingFootprint::new(-1, 3, 3, 1),
+                    BuildingFootprint::new(9, 0, 2, 5),
+                    BuildingFootprint::new(9, 6, 2, 6),
+                    BuildingFootprint::new(14, 4, 1, 1),
+                ],
+                [SimPoint::new(14 * cell, 0), SimPoint::new(-3 * cell, 0)],
+            );
+            for radius in (0..=3 * cell).step_by(usize::try_from(cell / 7).unwrap_or(1).max(1)) {
+                let mask = grid.center_traversable_mask(radius);
+                for (index, &masked) in mask.cells.iter().enumerate() {
+                    let at = grid.cell_from_index(index);
+                    let exact = grid.component_id(at).is_some_and(|component| {
+                        grid.circle_is_traversable_in_component(
+                            grid.center_of_cell(at),
+                            radius,
+                            component,
+                        )
+                    });
+                    assert_eq!(masked, exact, "cell size {cell}, radius {radius}, {at:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn radius_regions_reject_exactly_the_goals_radius_a_star_cannot_reach() {
         let cell = SUBUNITS_PER_WORLD_UNIT;
         // A wall with a one-cell gap: open to small bodies, closed to the radius under test.
@@ -1576,7 +1680,8 @@ mod tests {
         let from = NavCell::new(2, 3);
         let radius = cell / 2 + 1;
 
-        let field = grid.objective_distance_field_with_radius(0, radius);
+        let field =
+            grid.objective_distance_field_with_radius(0, &grid.center_traversable_mask(radius));
         let first = grid
             .step_from_distance_field_with_radius_bias(from, &field, radius, -1, None)
             .expect("radius-aware objective field should provide a detour");
