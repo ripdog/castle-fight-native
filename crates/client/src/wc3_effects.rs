@@ -1689,30 +1689,42 @@ fn apply_wc3_non_inheritance_subtree(
     }
 }
 
+/// Each entity's parent with whether it is a corrected node or a scene root, fetched together so
+/// the walk to a corrected node's root does one lookup per ancestor.
+type NonInheritanceTree<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Option<&'static ChildOf>,
+        Has<Wc3NonInheritance>,
+        Has<WorldAssetRoot>,
+    ),
+>;
+
 pub fn apply_wc3_non_inheritance(
-    parents: Query<&ChildOf>,
+    tree: NonInheritanceTree,
     roots: Query<(), With<WorldAssetRoot>>,
-    flagged: Query<Entity, With<Wc3NonInheritance>>,
+    flagged: Query<(Entity, &ChildOf), With<Wc3NonInheritance>>,
     nodes: Query<(&Transform, Option<&Children>, Option<&Wc3NonInheritance>)>,
     mut globals: ParamSet<(Query<&GlobalTransform>, Query<&mut GlobalTransform>)>,
 ) {
-    for entity in &flagged {
-        let Ok(parent) = parents.get(entity) else {
-            continue;
-        };
+    for (entity, parent) in &flagged {
         let parent = parent.parent();
 
         let mut current = parent;
         let root = loop {
+            let Ok((next, corrected, scene_root)) = tree.get(current) else {
+                break None;
+            };
             // Another corrected node higher in the same hierarchy will recurse through us, so do
             // not process the subtree twice.
-            if flagged.get(current).is_ok() {
+            if corrected {
                 break None;
             }
-            if roots.get(current).is_ok() {
+            if scene_root {
                 break Some(current);
             }
-            let Ok(next) = parents.get(current) else {
+            let Some(next) = next else {
                 break None;
             };
             current = next.parent();
