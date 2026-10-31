@@ -2754,6 +2754,8 @@ struct EmitterRuntime {
     accumulator: f32,
     burst_pending: bool,
     sequence: u32,
+    /// Billboard texture, loaded on first emission rather than looked up per frame.
+    compact_texture: Option<Handle<Image>>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -2880,17 +2882,24 @@ impl Wc3BillboardParticles {
             particle.position += particle.velocity * dt;
             let t = (particle.age / particle.lifespan).clamp(0.0, 1.0);
             particle.scale = three_stage_lerp(particle.scales, t, particle.middle_time).max(0.01);
-            particle.atlas_frame = particle_atlas_frame(particle.atlas, t);
-            particle.material_step = particle_material_step(t);
-            let quantized_t =
-                f32::from(particle.material_step) / f32::from(PARTICLE_MATERIAL_STEPS);
-            let (color, alpha) = particle_lifecycle_color_alpha(&particle.visual, quantized_t);
-            particle.color = [color[0], color[1], color[2], alpha];
-            particle.uv_rect = particle_atlas_uv_rect(
-                particle.atlas.rows,
-                particle.atlas.columns,
-                particle.atlas_frame,
-            );
+            // Color and UVs are functions of the quantized step and atlas frame, which change a
+            // few times per lifetime; `push` sets both for the initial step and frame.
+            let atlas_frame = particle_atlas_frame(particle.atlas, t);
+            if atlas_frame != particle.atlas_frame {
+                particle.atlas_frame = atlas_frame;
+                particle.uv_rect = particle_atlas_uv_rect(
+                    particle.atlas.rows,
+                    particle.atlas.columns,
+                    atlas_frame,
+                );
+            }
+            let material_step = particle_material_step(t);
+            if material_step != particle.material_step {
+                particle.material_step = material_step;
+                let quantized_t = f32::from(material_step) / f32::from(PARTICLE_MATERIAL_STEPS);
+                let (color, alpha) = particle_lifecycle_color_alpha(&particle.visual, quantized_t);
+                particle.color = [color[0], color[1], color[2], alpha];
+            }
             true
         });
     }
@@ -3284,6 +3293,7 @@ impl Wc3EmitterSource {
                     source_node: None,
                     accumulator: 0.0,
                     sequence: 0,
+                    compact_texture: None,
                 }
             })
             .collect::<Vec<_>>();
@@ -5377,13 +5387,17 @@ pub fn emit_wc3_particles(
         let sequence_clock = source.sequence_clock;
         let global_elapsed_ms = source.global_elapsed_ms;
         for (emitter_index, emitter) in source.emitters.iter_mut().enumerate() {
+            if !visible {
+                emitter.accumulator = 0.0;
+                continue;
+            }
             let sample = sample_emitter_parameters(
                 &emitter.spec,
                 sequence_time_ms,
                 global_elapsed_ms,
                 sequence_clock.as_ref(),
             );
-            if sample.visibility <= 0.001 || !visible {
+            if sample.visibility <= 0.001 {
                 emitter.accumulator = 0.0;
                 continue;
             }
@@ -5434,13 +5448,17 @@ pub fn emit_wc3_particles(
                     &mut assets.materials,
                 )
             });
-            let compact_texture = compact_blend_mode.and_then(|_| {
-                emitter.visual.texture.as_deref().map(|texture| {
+            if compact_blend_mode.is_some()
+                && emitter.compact_texture.is_none()
+                && let Some(texture) = emitter.visual.texture.as_deref()
+            {
+                emitter.compact_texture = Some(
                     assets
                         .asset_server
-                        .load(format!("{}/{texture}", emitter.visual.asset_prefix))
-                })
-            });
+                        .load(format!("{}/{texture}", emitter.visual.asset_prefix)),
+                );
+            }
+            let compact_texture = compact_blend_mode.and(emitter.compact_texture.as_ref());
             let bound_transform = emitter
                 .source_node
                 .and_then(|node| transforms.get(node).ok());
@@ -5488,7 +5506,7 @@ pub fn emit_wc3_particles(
                         atlas_frame: initial_frame,
                         visual: emitter.visual.clone(),
                         material_step,
-                        texture: compact_texture.clone(),
+                        texture: compact_texture.cloned(),
                         blend_mode,
                         color: [color[0], color[1], color[2], alpha],
                         uv_rect: particle_atlas_uv_rect(
