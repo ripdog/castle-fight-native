@@ -1237,8 +1237,6 @@ pub(crate) struct Wc3GeosetVisibility {
 
 #[derive(Debug, Deserialize)]
 struct Wc3NodeExtras {
-    #[serde(rename = "wc3ObjectId")]
-    wc3_object_id: Option<u32>,
     #[serde(rename = "wc3Geoset", default)]
     wc3_geoset: Option<u32>,
     #[serde(rename = "wc3NodeFlags", default)]
@@ -1251,6 +1249,14 @@ struct Wc3NodeExtras {
     wc3_model_particle_emitter: Option<Wc3LegacyModelEmitterSpec>,
     #[serde(rename = "wc3EventObject", default)]
     wc3_event_object: Option<Wc3EventObjectSpec>,
+}
+
+/// The object id alone from a node's extras, for binding emitters to nodes without building the
+/// node's other specs.
+#[derive(Debug, Deserialize)]
+struct Wc3NodeObjectId {
+    #[serde(rename = "wc3ObjectId")]
+    wc3_object_id: Option<u32>,
 }
 
 struct Wc3ComposedNodeMetadata {
@@ -2654,7 +2660,7 @@ fn resolve_wc3_object_nodes<'a>(
 ) -> BTreeMap<u32, Entity> {
     let mut resolved = BTreeMap::new();
     for (entity, raw_extras) in nodes {
-        let Ok(node_extras) = serde_json::from_str::<Wc3NodeExtras>(&raw_extras.value) else {
+        let Ok(node_extras) = serde_json::from_str::<Wc3NodeObjectId>(&raw_extras.value) else {
             continue;
         };
         let Some(object_id) = node_extras.wc3_object_id else {
@@ -7452,7 +7458,6 @@ mod tests {
             }"#,
         )
         .expect("WC3 light node extras should deserialize");
-        assert_eq!(extras.wc3_object_id, Some(7));
         let light = extras.wc3_light.expect("light extras");
         assert_eq!(light.light_type, "omni");
         assert_eq!(light.attenuation_end, 200.0);
