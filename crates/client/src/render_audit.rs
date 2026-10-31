@@ -2,12 +2,13 @@
 //! for attribution; all remain separate from ordinary gameplay configuration.
 
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::BTreeMap,
     fmt::Write as _,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
+use bevy::platform::collections::{HashMap, HashSet};
 use bevy::{
     app::{SceneSpawnerSystems, SpawnScene},
     camera::{primitives::Aabb, visibility::DynamicSkinnedMeshBounds},

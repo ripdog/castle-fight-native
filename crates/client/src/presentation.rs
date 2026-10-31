@@ -1,7 +1,5 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    time::Duration,
-};
+use bevy::platform::collections::HashMap;
+use std::{collections::BTreeMap, time::Duration};
 
 use bevy::{
     asset::{AssetEvent, AssetId, RenderAssetUsages},

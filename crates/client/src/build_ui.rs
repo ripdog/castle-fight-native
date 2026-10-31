@@ -1,8 +1,5 @@
-use std::{
-    collections::{HashMap, HashSet},
-    fmt::Write,
-    time::Duration,
-};
+use bevy::platform::collections::{HashMap, HashSet};
+use std::{fmt::Write, time::Duration};
 
 use bevy::{ecs::system::SystemParam, prelude::*, window::PrimaryWindow};
 use castle_fight_sim::{

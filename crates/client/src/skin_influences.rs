@@ -6,9 +6,9 @@
 //! vertex shader and weight input width. The distinct input layouts also prevent
 //! Bevy's second-level vertex-layout cache from aliasing different skin variants.
 
+use bevy::platform::collections::{HashMap, HashSet};
 use std::{
     any::{Any, TypeId},
-    collections::{HashMap, HashSet},
     hash::Hash,
     sync::Arc,
     time::{Duration, Instant},

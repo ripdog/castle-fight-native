@@ -1,5 +1,6 @@
+use bevy::platform::collections::HashMap;
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, VecDeque},
+    collections::{BTreeMap, BTreeSet, VecDeque},
     fs,
     path::{Component, Path},
     sync::Arc,

@@ -12,8 +12,7 @@
 //! Non-exact (roots appear a few frames late under bursts), so it is only active under
 //! `--render-experiment budgeted-scene-spawn`.
 
-use std::collections::HashMap;
-
+use bevy::platform::collections::HashMap;
 use bevy::{
     app::{SceneSpawnerSystems, SpawnScene},
     ecs::resource::IS_RESOURCE,

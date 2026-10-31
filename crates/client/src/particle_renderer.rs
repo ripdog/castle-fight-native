@@ -14,7 +14,8 @@
 //! up to 64 particle textures, so texture changes within the run do not split
 //! draws.
 
-use std::{collections::HashMap, mem::size_of, num::NonZeroU32, ops::Range};
+use bevy::platform::collections::HashMap;
+use std::{mem::size_of, num::NonZeroU32, ops::Range};
 
 use bevy::{
     asset::AssetId,
