@@ -3333,9 +3333,13 @@ fn build_gltf(
 ) -> Result<GltfBuildOutput, Box<dyn Error>> {
     let mut binary = BinaryBuilder::default();
     let mut warnings = Vec::new();
-    let skeleton = build_skeleton(model, &mut binary, &mut warnings)?;
+    let skeleton = build_skeleton(model, &mut warnings)?;
 
     let mut meshes = Vec::new();
+    // One skin per geoset, holding only the joints that geoset weights: Bevy uploads a joint
+    // palette per skinned mesh instance, so a model-wide skin multiplies every palette by the
+    // geoset count.
+    let mut skins = Vec::new();
     let mut geoset_nodes = Vec::new();
     let mut geoset_node_by_index = BTreeMap::new();
     for (geoset_index, geoset) in model.geosets_iter().enumerate() {
@@ -3397,11 +3401,27 @@ fn build_gltf(
                 "geoset {geoset_index} uses up to {max_influences} classic skin influences per vertex; truncating to four and renormalizing for Bevy glTF compatibility"
             ));
         }
-        if let Some(skin) = build_geoset_skin(&geoset, &skeleton)? {
+        let mut geoset_skin = None;
+        if let Some(mut skin) = build_geoset_skin(&geoset, &skeleton)? {
+            let joints = localize_geoset_joints(&mut skin);
             let joints_accessor = binary.push_vec4_u16(&skin.joints_0, Some(GL_ARRAY_BUFFER));
             let weights_accessor = binary.push_vec4_f32(&skin.weights_0, Some(GL_ARRAY_BUFFER));
             attributes.insert("JOINTS_0".into(), json!(joints_accessor));
             attributes.insert("WEIGHTS_0".into(), json!(weights_accessor));
+            let inverse_bind: Vec<_> = joints
+                .iter()
+                .map(|&joint| skeleton.inverse_bind[usize::from(joint)])
+                .collect();
+            let inverse_bind_accessor = binary.push_mat4_f32(&inverse_bind);
+            geoset_skin = Some(skins.len());
+            skins.push(json!({
+                "name": format!("{asset_name}_geoset_{geoset_index}_skin"),
+                "inverseBindMatrices": inverse_bind_accessor,
+                "joints": joints
+                    .iter()
+                    .map(|&joint| skeleton.joint_nodes[usize::from(joint)])
+                    .collect::<Vec<_>>(),
+            }));
         }
 
         let primitive = json!({
@@ -3430,11 +3450,11 @@ fn build_gltf(
                 "wc3Lod": geoset.lod(),
             }
         });
-        if skeleton.skin.is_some() {
+        if let Some(skin) = geoset_skin {
             geoset_node
                 .as_object_mut()
                 .expect("geoset node object")
-                .insert("skin".into(), json!(0));
+                .insert("skin".into(), json!(skin));
         }
         geoset_node_by_index.insert(geoset_index, node_index);
         geoset_nodes.push(geoset_node);
@@ -3508,10 +3528,10 @@ fn build_gltf(
             "wc3SmoothInterpolation": "source keys plus interval midpoints, linearized for glTF",
         }
     });
-    if let Some(skin) = skeleton.skin {
+    if !skins.is_empty() {
         root.as_object_mut()
             .expect("gltf root object")
-            .insert("skins".into(), json!([skin]));
+            .insert("skins".into(), json!(skins));
     }
     if uses_unlit {
         root.as_object_mut()
@@ -3526,7 +3546,8 @@ fn build_gltf(
 struct SkeletonBuild {
     nodes: Vec<Value>,
     scene_roots: Vec<usize>,
-    skin: Option<Value>,
+    /// Inverse bind matrix of each model joint, in joint-slot order.
+    inverse_bind: Vec<[f32; 16]>,
     node_by_object: BTreeMap<u32, usize>,
     joint_by_object: BTreeMap<u32, u16>,
     rest_translation_by_object: BTreeMap<u32, [f32; 3]>,
@@ -3544,7 +3565,6 @@ struct SkeletonNodeInfo {
 
 fn build_skeleton(
     model: &Model,
-    binary: &mut BinaryBuilder,
     warnings: &mut Vec<String>,
 ) -> Result<SkeletonBuild, Box<dyn Error>> {
     let mut infos = BTreeMap::<u32, SkeletonNodeInfo>::new();
@@ -3692,7 +3712,7 @@ fn build_skeleton(
         result.nodes.push(value);
     }
 
-    let mut inverse_bind = Vec::with_capacity(model.bones_len());
+    result.inverse_bind.reserve(model.bones_len());
     for (joint_index, bone) in model.bones_iter().enumerate() {
         let node = bone.node();
         let object_id = node.object_id();
@@ -3706,15 +3726,7 @@ fn build_skeleton(
         result.joint_by_object.insert(object_id, joint_slot);
         result.joint_nodes.push(gltf_node);
         let pivot = infos.get(&object_id).expect("bone descriptor exists").pivot;
-        inverse_bind.push(inverse_translation_matrix(pivot));
-    }
-    if !inverse_bind.is_empty() {
-        let inverse_bind_accessor = binary.push_mat4_f32(&inverse_bind);
-        result.skin = Some(json!({
-            "name": "wc3_skin",
-            "inverseBindMatrices": inverse_bind_accessor,
-            "joints": result.joint_nodes,
-        }));
+        result.inverse_bind.push(inverse_translation_matrix(pivot));
     }
     Ok(result)
 }
@@ -3755,6 +3767,41 @@ fn insert_skeleton_node(
 struct GeosetSkin {
     joints_0: Vec<[u16; 4]>,
     weights_0: Vec<[f32; 4]>,
+}
+
+/// Rewrites `skin` to index a palette of only the model joints it weights, returned in ascending
+/// slot order. Zero-weight slots point at the first palette entry; they contribute nothing.
+fn localize_geoset_joints(skin: &mut GeosetSkin) -> Vec<u16> {
+    let mut used: Vec<u16> = skin
+        .joints_0
+        .iter()
+        .zip(&skin.weights_0)
+        .flat_map(|(joints, weights)| {
+            joints
+                .iter()
+                .zip(weights)
+                .filter(|&(_, &weight)| weight > 0.0)
+                .map(|(&joint, _)| joint)
+        })
+        .collect();
+    used.sort_unstable();
+    used.dedup();
+    if used.is_empty() {
+        used.push(0);
+    }
+    for (joints, weights) in skin.joints_0.iter_mut().zip(&skin.weights_0) {
+        for (joint, &weight) in joints.iter_mut().zip(weights) {
+            *joint = if weight > 0.0 {
+                let local = used
+                    .binary_search(joint)
+                    .expect("weighted joint is in the palette");
+                u16::try_from(local).expect("palette is no larger than the model's joints")
+            } else {
+                0
+            };
+        }
+    }
+    used
 }
 
 fn build_geoset_skin(
@@ -7642,6 +7689,39 @@ mod tests {
     }
 
     #[test]
+    fn geoset_palette_keeps_each_weighted_vertex_on_its_original_joints() {
+        let original = GeosetSkin {
+            joints_0: vec![[7, 2, 9, 40], [40, 7, 0, 0], [3, 3, 3, 3]],
+            weights_0: vec![
+                [0.5, 0.25, 0.25, 0.0],
+                [0.75, 0.25, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0],
+            ],
+        };
+        let mut skin = GeosetSkin {
+            joints_0: original.joints_0.clone(),
+            weights_0: original.weights_0.clone(),
+        };
+        let palette = localize_geoset_joints(&mut skin);
+        assert_eq!(palette, [2, 7, 9, 40]);
+        assert_eq!(skin.weights_0, original.weights_0);
+        for ((local, model), weights) in skin
+            .joints_0
+            .iter()
+            .zip(&original.joints_0)
+            .zip(&skin.weights_0)
+        {
+            for slot in 0..4 {
+                if weights[slot] > 0.0 {
+                    assert_eq!(palette[usize::from(local[slot])], model[slot]);
+                } else {
+                    assert!(usize::from(local[slot]) < palette.len());
+                }
+            }
+        }
+    }
+
+    #[test]
     fn classic_skin_truncates_to_four_equal_influences_for_bevy() {
         let mut geoset = whiteout::mdx::Geoset::new();
         geoset.set_vertex_positions(&[whiteout::math::Vector3f::default()]);
@@ -7841,9 +7921,7 @@ mod tests {
         assert_eq!(track.timestamps, [100, 400]);
         assert_eq!(track.values, [2.0, 9.0]);
 
-        let mut binary = BinaryBuilder::default();
-        let skeleton =
-            build_skeleton(&model, &mut binary, &mut Vec::new()).expect("skeleton should build");
+        let skeleton = build_skeleton(&model, &mut Vec::new()).expect("skeleton should build");
         assert_eq!(
             skeleton.nodes[0]["extras"]["wc3ModelParticleEmitter"]["gltf"],
             json!("models/sharedmodels__smoke1_green.gltf")
@@ -8042,9 +8120,7 @@ mod tests {
         assert_eq!(visibility.timestamps, [0, 500]);
         assert_eq!(visibility.values, [0.0, 1.0]);
 
-        let mut binary = BinaryBuilder::default();
-        let skeleton =
-            build_skeleton(&model, &mut binary, &mut Vec::new()).expect("skeleton should build");
+        let skeleton = build_skeleton(&model, &mut Vec::new()).expect("skeleton should build");
         assert_eq!(
             skeleton.nodes[0]["extras"]["wc3Attachment"]["gltf"],
             json!("models/sharedmodels__nebirth.gltf")
