@@ -67,6 +67,7 @@ use bevy::{
 use bytemuck::{Pod, Zeroable};
 
 use crate::{
+    perf_disable::PerfDisable,
     render_audit::RenderExperiment,
     wc3_effects::{
         Wc3AnimatedAlphaMaterial, Wc3BillboardParticleRenderData, Wc3BillboardParticles,
@@ -145,24 +146,48 @@ struct ExtractedWc3Particle {
     blend_mode: Wc3ParticleBlendMode,
 }
 
-#[derive(Resource, Default)]
+#[derive(Resource)]
 struct ExtractedWc3Particles {
     particles: Vec<ExtractedWc3Particle>,
     slab_entities: Vec<Entity>,
     slab_textures: Vec<Vec<Option<AssetId<Image>>>>,
     experiment: RenderExperiment,
+    batching: ParticleBatching,
+    /// Drop zero-alpha and off-frustum particles at queue time.
+    cull: bool,
+}
+
+impl Default for ExtractedWc3Particles {
+    fn default() -> Self {
+        Self {
+            particles: Vec::new(),
+            slab_entities: Vec::new(),
+            slab_textures: Vec::new(),
+            experiment: RenderExperiment::default(),
+            batching: ParticleBatching::Emitter,
+            cull: true,
+        }
+    }
 }
 
 fn extract_wc3_particles(
     mut commands: Commands,
     particles: Extract<Res<Wc3BillboardParticles>>,
     experiment: Extract<Res<RenderExperiment>>,
+    disable: Extract<Option<Res<PerfDisable>>>,
     pipeline: Res<Wc3ParticlePipeline>,
     mut extracted: ResMut<ExtractedWc3Particles>,
 ) {
     extracted.particles.clear();
     extracted.slab_textures.clear();
     extracted.experiment = **experiment;
+    let disable = disable.as_deref().copied().unwrap_or_default();
+    extracted.batching = if disable.emitter_batching {
+        ParticleBatching::Individual
+    } else {
+        ParticleBatching::of(**experiment)
+    };
+    extracted.cull = !disable.particle_cull;
 
     let hide_particles = matches!(
         **experiment,
@@ -723,7 +748,7 @@ fn queue_wc3_particles(
     batches.order.clear();
     batches.ranges.clear();
     batches.runs.clear();
-    let batching_mode = ParticleBatching::of(extracted.experiment);
+    let batching_mode = extracted.batching;
     // GPU images have been prepared before Queue. Resolve readiness once per slot,
     // and reject only that slot's particles, never a slab containing ready effects.
     pending_slots.clear();
@@ -800,19 +825,21 @@ fn queue_wc3_particles(
             // A camera-facing square fits inside this sphere at any camera angle.
             // All three transparent blend modes leave the destination unchanged
             // at exactly zero alpha. Keep their simulation/lifetime work intact.
-            if particle.instance.color[3] == 0.0 {
+            if extracted.cull && particle.instance.color[3] == 0.0 {
                 stats.zero_alpha += 1;
                 continue;
             }
-            if frustum.is_some_and(|frustum| {
-                !frustum.intersects_sphere(
-                    &Sphere {
-                        center: Vec3::new(x, y, z).into(),
-                        radius: scale.abs() * std::f32::consts::FRAC_1_SQRT_2,
-                    },
-                    false,
-                )
-            }) {
+            if extracted.cull
+                && frustum.is_some_and(|frustum| {
+                    !frustum.intersects_sphere(
+                        &Sphere {
+                            center: Vec3::new(x, y, z).into(),
+                            radius: scale.abs() * std::f32::consts::FRAC_1_SQRT_2,
+                        },
+                        false,
+                    )
+                })
+            {
                 stats.outside += 1;
                 continue;
             }
@@ -1077,7 +1104,7 @@ fn batch_and_upload_wc3_particles(
     let draw_function = draw_functions.read().id::<DrawWc3BillboardParticles>();
     let (extracted, coverage, views) = sources;
     let batches = &mut *batches;
-    let batched = ParticleBatching::of(extracted.experiment) != ParticleBatching::Individual;
+    let batched = extracted.batching != ParticleBatching::Individual;
     gpu.instances.clear();
 
     for view in &views {

@@ -14,6 +14,7 @@ mod demo;
 mod doodads;
 mod fixed_catch_up;
 mod fog;
+mod frame_capture;
 mod game_menu;
 mod inspection;
 mod item_ui;
@@ -26,6 +27,7 @@ mod network;
 mod notifications;
 mod offscreen_animation;
 mod particle_renderer;
+mod perf_disable;
 mod performance_ui;
 mod presentation;
 mod render_audit;
@@ -679,6 +681,7 @@ fn main() {
         .insert_resource(terrain_texture_layout)
         .insert_resource(terrain_textures)
         .insert_resource(options.render_experiment)
+        .insert_resource(options.perf_disable)
         .add_plugins(
             DefaultPlugins
                 .set(bevy::render::RenderPlugin {
@@ -800,6 +803,9 @@ fn main() {
     }
     if let Some(stress_visual) = options.stress_visual {
         app.insert_resource(stress_visual);
+    }
+    if let Some(capture) = options.capture_frames.clone() {
+        app.add_plugins(frame_capture::FrameCapturePlugin(capture));
     }
 
     if options.perf_log {
@@ -1183,6 +1189,10 @@ struct ClientOptions {
     /// Opens the castle shop spellbook for a screenshot.
     profile_shop: bool,
     render_experiment: RenderExperiment,
+    /// Default-on performance optimisations switched off for visual bisection.
+    perf_disable: perf_disable::PerfDisable,
+    /// Saves consecutive rendered frames as PNGs and exits.
+    capture_frames: Option<frame_capture::FrameCaptureOptions>,
     map_version: MapVersion,
     release_revision: String,
     match_seed: u64,
@@ -1219,6 +1229,8 @@ impl ClientOptions {
             profile_items: false,
             profile_shop: false,
             render_experiment: RenderExperiment::Baseline,
+            perf_disable: perf_disable::PerfDisable::default(),
+            capture_frames: None,
             map_version: MapVersion::CASTLE_FIGHT_9_27,
             release_revision: "r1".to_owned(),
             match_seed: DEVELOPMENT_MATCH_SEED,
@@ -1292,6 +1304,29 @@ impl ClientOptions {
                     let value = args.next().expect("--render-experiment requires a name");
                     options.render_experiment =
                         RenderExperiment::parse(&value).unwrap_or_else(|error| panic!("{error}"));
+                }
+                "--perf-disable" => {
+                    let value = args.next().expect("--perf-disable requires a comma list");
+                    options.perf_disable = perf_disable::PerfDisable::parse(&value)
+                        .unwrap_or_else(|error| panic!("{error}"));
+                }
+                "--capture-frames" => {
+                    const USAGE: &str = "--capture-frames requires FIRST_TICK COUNT DIR";
+                    let first_tick = args
+                        .next()
+                        .and_then(|value| value.parse().ok())
+                        .expect(USAGE);
+                    let count = args
+                        .next()
+                        .and_then(|value| value.parse().ok())
+                        .filter(|count| *count >= 1)
+                        .expect(USAGE);
+                    let directory = PathBuf::from(args.next().expect(USAGE));
+                    options.capture_frames = Some(frame_capture::FrameCaptureOptions {
+                        first_tick,
+                        count,
+                        directory,
+                    });
                 }
                 "--profile-quicksave" => options.profile_quicksave = Some(quicksave_path()),
                 "--profile-quicksave-path" => {
@@ -1395,7 +1430,7 @@ impl ClientOptions {
                 "--list-map-versions" => options.list_map_versions = true,
                 "-h" | "--help" => {
                     println!(
-                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--builder SLOT:RAWCODE] [--list-map-versions] [--stress-units N] [--stress-visual RAWCODE N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS] [--profile-until-tick TICK] [--sim-workers N] [--profile-paused] [--profile] [--profile-screenshot PATH] [--benchmark] [--render-experiment baseline|freeze-bounds|hide-skinned|hide-particles|hide-transparent|legacy-team-color|legacy-geoset-visibility|legacy-attachment-search|legacy-attachment-index|legacy-effect-pooling|legacy-splat-updates|legacy-splat-material-state|legacy-animated-alpha-state|legacy-animated-texture-state|freeze-materials|freeze-poses|bindless-auto|bindless-64|bindless-128|bindless-256|no-bindless]"
+                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--builder SLOT:RAWCODE] [--list-map-versions] [--stress-units N] [--stress-visual RAWCODE N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS] [--profile-until-tick TICK] [--sim-workers N] [--profile-paused] [--profile] [--profile-screenshot PATH] [--benchmark] [--perf-disable LIST] [--capture-frames FIRST_TICK COUNT DIR] [--render-experiment baseline|freeze-bounds|hide-skinned|hide-particles|hide-transparent|legacy-team-color|legacy-geoset-visibility|legacy-attachment-search|legacy-attachment-index|legacy-effect-pooling|legacy-splat-updates|legacy-splat-material-state|legacy-animated-alpha-state|legacy-animated-texture-state|freeze-materials|freeze-poses|bindless-auto|bindless-64|bindless-128|bindless-256|no-bindless]"
                     );
                     std::process::exit(0);
                 }
@@ -1422,6 +1457,10 @@ impl ClientOptions {
                 || options.stress_visual.is_some()
                 || options.profile_quicksave.is_some(),
             "--profile requires --stress-units, --stress-visual, --profile-quicksave, or --benchmark",
+        );
+        assert!(
+            options.capture_frames.is_none() || options.is_profiling(),
+            "--capture-frames requires --profile, --profile-quicksave, or --benchmark",
         );
         assert!(
             options.is_profiling()

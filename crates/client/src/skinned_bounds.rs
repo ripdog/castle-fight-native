@@ -15,6 +15,8 @@ use bevy::{
     prelude::*,
 };
 
+use crate::perf_disable::PerfDisable;
+
 /// Frames a skinned mesh must keep a computed `Aabb` before its bounds are frozen.
 const SETTLE_FRAMES: u8 = 8;
 /// Fractional growth applied to every `Aabb` half-extent when bounds are frozen.
@@ -24,11 +26,12 @@ pub(crate) struct SkinnedMeshBoundsPlugin;
 
 impl Plugin for SkinnedMeshBoundsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
+        app.init_resource::<PerfDisable>().add_systems(
             PostUpdate,
             freeze_settled_skinned_mesh_bounds
                 .after(VisibilitySystems::CalculateBounds)
-                .before(VisibilitySystems::VisibilityPropagate),
+                .before(VisibilitySystems::VisibilityPropagate)
+                .run_if(|disable: Res<PerfDisable>| !disable.frozen_bounds),
         );
     }
 }

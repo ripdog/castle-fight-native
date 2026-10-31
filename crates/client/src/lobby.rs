@@ -1548,6 +1548,8 @@ mod tests {
             profile: false,
             benchmark: false,
             render_experiment: crate::render_audit::RenderExperiment::Baseline,
+            perf_disable: crate::perf_disable::PerfDisable::default(),
+            capture_frames: None,
             map_version: MapVersion::CASTLE_FIGHT_9_27,
             release_revision: "r1".to_owned(),
             match_seed: 1,

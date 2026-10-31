@@ -8,7 +8,9 @@
 //! them automatically once the player is onscreen again.
 //!
 //! Only players with at least one mesh descendant are candidates. Players without meshes can
-//! drive attachments and particles, so they always keep evaluating.
+//! drive attachments and particles, so they always keep evaluating. Meshes hidden below the
+//! player (geosets whose animated visibility is off) are ignored: the player's own animation
+//! is what unhides them, so counting them as offscreen would freeze the model hidden.
 //!
 //! Visibility is recorded after `CheckVisibility` and applied to the next frame's animation
 //! evaluation, so a player that enters view shows its last written pose for one frame.
@@ -21,7 +23,10 @@ use bevy::{
     prelude::*,
 };
 
-use crate::{render_audit::RenderExperiment, wc3_effects::Wc3VisualAnimationController};
+use crate::{
+    perf_disable::PerfDisable, render_audit::RenderExperiment,
+    wc3_effects::Wc3VisualAnimationController,
+};
 
 const HAS_MESH: u8 = 1;
 const VISIBLE_MESH: u8 = 2;
@@ -30,7 +35,8 @@ pub(crate) struct OffscreenAnimationPlugin;
 
 impl Plugin for OffscreenAnimationPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<AnimationPlayerMeshStates>()
+        app.init_resource::<PerfDisable>()
+            .init_resource::<AnimationPlayerMeshStates>()
             .add_systems(
                 PostUpdate,
                 record_animation_player_mesh_states.after(VisibilitySystems::CheckVisibility),
@@ -39,7 +45,8 @@ impl Plugin for OffscreenAnimationPlugin {
                 PostUpdate,
                 pause_offscreen_animation_weights
                     .after(advance_animations)
-                    .before(animate_targets),
+                    .before(animate_targets)
+                    .run_if(|disable: Res<PerfDisable>| !disable.offscreen_animation),
             );
     }
 }
@@ -56,6 +63,7 @@ fn record_animation_player_mesh_states(
     meshes: Query<(Entity, &ViewVisibility), With<Mesh3d>>,
     parents: Query<&ChildOf>,
     players: Query<(), With<AnimationPlayer>>,
+    visibility: Query<&Visibility>,
 ) {
     let recorded = &mut *recorded;
     recorded.states.fill(0);
@@ -73,6 +81,9 @@ fn record_animation_player_mesh_states(
                     recorded.states.resize(index + 1, 0);
                 }
                 recorded.states[index] |= flags;
+                break;
+            }
+            if visibility.get(current) == Ok(&Visibility::Hidden) {
                 break;
             }
             let Ok(parent) = parents.get(current) else {
@@ -182,6 +193,20 @@ mod tests {
     fn players_with_a_visible_mesh_keep_their_weights() {
         let mut app = pause_app();
         let player = spawn_player_with_mesh(&mut app, Some(ViewVisibility::VISIBLE));
+        app.update();
+        assert_eq!(weight(&app, player), 1.0);
+    }
+
+    #[test]
+    fn players_whose_meshes_are_all_geoset_hidden_keep_evaluating() {
+        let mut app = pause_app();
+        let player = spawn_player_with_mesh(&mut app, None);
+        let geoset = app
+            .world_mut()
+            .spawn((Visibility::Hidden, ChildOf(player)))
+            .id();
+        app.world_mut()
+            .spawn((Mesh3d::default(), ViewVisibility::HIDDEN, ChildOf(geoset)));
         app.update();
         assert_eq!(weight(&app, player), 1.0);
     }
