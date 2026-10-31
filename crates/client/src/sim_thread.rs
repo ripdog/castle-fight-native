@@ -7,10 +7,11 @@
 //!
 //! 1. `FixedUpdate` does not step the simulation. It only counts the ticks the fixed clock says are
 //!    due (`count_due_sim_ticks`), capped like the offline catch-up limit.
-//! 2. `PostUpdate` starts with `launch_sim_ticks`, which moves the simulation and driver into a job
-//!    for the worker thread. Every `Update` system has already run, so all commands submitted this
-//!    frame are in the driver before the job starts. The job overlaps the rest of `PostUpdate`,
-//!    `Last`, render extraction and the next frame's `First`/`PreUpdate`.
+//! 2. The `SimLaunch` schedule, right after `Update`, runs `launch_sim_ticks`, which moves the
+//!    simulation and driver into a job for the worker thread. Every `Update` system has already
+//!    run, so all commands submitted this frame are in the driver before the job starts. The job
+//!    overlaps `SpawnScene` (scene instantiation, the heaviest main-thread work in large fights),
+//!    `PostUpdate`, `Last`, render extraction and the next frame's `First`/`PreUpdate`.
 //! 3. `join_sim_ticks` runs at the end of `RunFixedMainLoop`, before any `Update` system. It
 //!    blocks until the job is finished, returns the simulation and driver to the resource and
 //!    applies the captured per-tick outputs (presentation samples, command feedback, performance
@@ -22,8 +23,8 @@
 //! the ticks one frame after the fixed clock counted them; `PresentationSamples` records the fixed
 //! overstep fraction from the launching frame so interpolation stays continuous.
 //!
-//! Networked play uses the same worker. `ingest_network_events` (end of `Update`'s successor,
-//! `PostUpdate`, before the launch) drains the network client on the main thread and queues the
+//! Networked play uses the same worker. `ingest_network_events` (in `SimLaunch`, before the
+//! launch) drains the network client on the main thread and queues the
 //! finalized stream records, execution batches and checkpoints it received, in server order; the
 //! launch hands that queue to the worker, which applies it to the simulation (`network_sim`).
 //! Events that replace or inspect the whole simulation (snapshot transfer, reconnects, roster
@@ -42,7 +43,8 @@ use std::{
 };
 
 use bevy::{
-    ecs::schedule::SystemSet,
+    app::MainScheduleOrder,
+    ecs::schedule::{ScheduleLabel, SystemSet},
     prelude::*,
     time::{Fixed, Time},
 };
@@ -61,6 +63,11 @@ use crate::{
 /// resource and before any `Update` system.
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct SimJoin;
+
+/// Runs between `Update` and `SpawnScene` and hands the due ticks to the simulation thread.
+/// Systems after it must not touch the simulation until the next frame's `SimJoin`.
+#[derive(ScheduleLabel, Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct SimLaunch;
 
 const SIM_THREAD_STACK_BYTES: usize = 32 * 1024 * 1024;
 
@@ -301,12 +308,13 @@ pub(crate) struct SimThreadPlugin;
 
 impl Plugin for SimThreadPlugin {
     fn build(&self, app: &mut App) {
+        app.init_schedule(SimLaunch);
+        app.world_mut()
+            .resource_mut::<MainScheduleOrder>()
+            .insert_after(Update, SimLaunch);
         app.init_resource::<SimWorker>()
             .add_systems(FixedUpdate, count_due_sim_ticks)
-            .add_systems(
-                PostUpdate,
-                (ingest_network_events, launch_sim_ticks).chain(),
-            )
+            .add_systems(SimLaunch, (ingest_network_events, launch_sim_ticks).chain())
             .add_systems(
                 RunFixedMainLoop,
                 join_sim_ticks
@@ -317,7 +325,7 @@ impl Plugin for SimThreadPlugin {
 }
 
 /// Reads this frame's server events on the main thread and queues the simulation work for the
-/// next job. Runs in `PostUpdate` while the simulation is resident, before `launch_sim_ticks`.
+/// next job. Runs in `SimLaunch` while the simulation is resident, before `launch_sim_ticks`.
 /// Barrier events (snapshot transfer, reconnects, roster changes) are applied here, synchronously.
 /// A queue that needs no simulation is applied immediately.
 pub(crate) fn ingest_network_events(
@@ -371,7 +379,7 @@ pub(crate) fn count_due_sim_ticks(
     authoritative.due_ticks = (authoritative.due_ticks + 1).min(OFFLINE_MAX_FIXED_STEPS_PER_FRAME);
 }
 
-/// Starts the due ticks on the simulation thread. Runs in `PostUpdate`, after every `Update`
+/// Starts the due ticks on the simulation thread. Runs in `SimLaunch`, after every `Update`
 /// system has finished with the simulation.
 pub(crate) fn launch_sim_ticks(
     mut authoritative: ResMut<AuthoritativeSimulation>,
