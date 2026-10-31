@@ -435,18 +435,14 @@ pub(crate) fn building_terrain_height(
     terrain: &TerrainSurface,
     footprint: BuildingFootprint,
 ) -> f32 {
-    let cell = metrics.navigation_cell_world();
-    let max_x = footprint.max_x().saturating_add(1);
-    let max_y = footprint.max_y().saturating_add(1);
-    let mut maximum = f32::NEG_INFINITY;
-    for cell_y in footprint.min_y..=max_y {
-        for cell_x in footprint.min_x..=max_x {
-            maximum = maximum.max(
-                terrain.height_at_world(Vec2::new(cell_x as f32 * cell, cell_y as f32 * cell)),
-            );
-        }
-    }
-    maximum
+    terrain.corner_grid_max_height(
+        IVec2::new(footprint.min_x, footprint.min_y),
+        IVec2::new(
+            footprint.max_x().saturating_add(1),
+            footprint.max_y().saturating_add(1),
+        ),
+        metrics.navigation_cell_world(),
+    )
 }
 
 #[derive(Resource)]

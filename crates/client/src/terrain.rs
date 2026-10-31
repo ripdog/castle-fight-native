@@ -2,12 +2,13 @@ use std::{
     collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{Arc, PoisonError, RwLock},
 };
 
 use bevy::{
     asset::RenderAssetUsages,
     mesh::{Indices, PrimitiveTopology},
+    platform::collections::HashMap,
     prelude::*,
 };
 use castle_fight_sim::{SUBUNITS_PER_WORLD_UNIT, TerrainElevationMap, TerrainElevationSample};
@@ -35,7 +36,17 @@ pub struct TerrainSurface {
     max_world: Vec2,
     /// Per-cell bicubic patches in row-major cell order, `width_tiles * height_tiles` entries.
     height_cells: Arc<[TerrainHeightCell]>,
+    /// Memoized [`TerrainSurface::corner_grid_max_height`] results. The geometry never changes,
+    /// so clones share them.
+    corner_grid_maxima: Arc<RwLock<HashMap<CornerGridKey, f32>>>,
 }
+
+/// Inclusive corner range and spacing (as bits) of a corner-grid height query.
+type CornerGridKey = (IVec2, IVec2, u32);
+
+/// Corner-grid maxima kept before the memo is cleared; placement previews query a new
+/// footprint whenever the cursor moves.
+const CORNER_GRID_MAXIMA_CAPACITY: usize = 4096;
 
 /// Precomputed Catmull-Rom patch for one terrain cell.
 ///
@@ -154,7 +165,40 @@ impl TerrainSurface {
             max_world: Vec2::new(maximum.x as f32 / subunits, maximum.y as f32 / subunits),
             elevation: Arc::new(elevation),
             height_cells: height_cells.into(),
+            corner_grid_maxima: Arc::default(),
         }
+    }
+
+    /// Highest terrain height over the grid of points `corner * spacing` for every corner in
+    /// `min..=max`. Buildings rest on this over their footprint's cell corners and query it
+    /// every frame, so results are memoized.
+    #[must_use]
+    pub fn corner_grid_max_height(&self, min: IVec2, max: IVec2, spacing: f32) -> f32 {
+        let key = (min, max, spacing.to_bits());
+        if let Some(&height) = self
+            .corner_grid_maxima
+            .read()
+            .unwrap_or_else(PoisonError::into_inner)
+            .get(&key)
+        {
+            return height;
+        }
+        let mut maximum = f32::NEG_INFINITY;
+        for y in min.y..=max.y {
+            for x in min.x..=max.x {
+                maximum =
+                    maximum.max(self.height_at_world(Vec2::new(x as f32, y as f32) * spacing));
+            }
+        }
+        let mut maxima = self
+            .corner_grid_maxima
+            .write()
+            .unwrap_or_else(PoisonError::into_inner);
+        if maxima.len() >= CORNER_GRID_MAXIMA_CAPACITY {
+            maxima.clear();
+        }
+        maxima.insert(key, maximum);
+        maximum
     }
 
     #[cfg(test)]
