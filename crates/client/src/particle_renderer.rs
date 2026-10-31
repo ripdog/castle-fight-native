@@ -25,6 +25,7 @@ use bevy::{
     core_pipeline::core_3d::{CORE_3D_DEPTH_FORMAT, Transparent3d, TransparentSortingInfo3d},
     core_pipeline::prepass::MotionVectorPrepass,
     ecs::{
+        entity::{EntityGeneration, EntityIndex},
         query::ROQueryItem,
         system::{
             SystemParamItem,
@@ -864,13 +865,13 @@ fn queue_wc3_particles(
             // Sorted phases require a unique (render entity, main entity) key.
             // The render entity identifies the texture slab; the synthetic main
             // entity only distinguishes particles within that transient slab item.
-            let synthetic_main = Entity::from_bits(u64::from(particle_index) + 1);
+            let synthetic_main = transient_particle_main_entity(particle_index);
             phase.add_transient(Transparent3d {
                 sorting_info: TransparentSortingInfo3d::Sorted {
                     mesh_center: Vec3::new(x, y, z),
                     depth_bias: 0.0,
                 },
-                entity: (particle.slab_entity, MainEntity::from(synthetic_main)),
+                entity: (particle.slab_entity, synthetic_main),
                 pipeline: pipeline_for(particle.blend_mode),
                 draw_function,
                 distance: 0.0,
@@ -908,7 +909,7 @@ fn queue_wc3_particles(
                 },
                 entity: (
                     first.slab_entity,
-                    MainEntity::from(Entity::from_bits(u64::from(batch_index) + 1)),
+                    transient_particle_main_entity(batch_index),
                 ),
                 pipeline: pipeline_for(first.blend_mode),
                 draw_function,
@@ -920,6 +921,22 @@ fn queue_wc3_particles(
         }
         entries.clear();
     }
+}
+
+/// Main-world id that distinguishes one transient particle phase item.
+///
+/// Bevy's sorted-phase batching looks every item's main entity up in
+/// `RenderMeshInstances`. A synthetic id equal to a live mesh entity (as the
+/// generation-0 ids of early-spawned doodads were) made Bevy rewrite the
+/// particle item's batch range and extra index as if it were that mesh, so
+/// whole emitters vanished or drew another emitter's instances for a frame.
+/// The final generation of an index is unreachable in practice.
+fn transient_particle_main_entity(index: u32) -> MainEntity {
+    let index = EntityIndex::from_raw_u32(index).expect("particle item index below u32::MAX");
+    MainEntity::from(Entity::from_index_and_generation(
+        index,
+        EntityGeneration::FIRST.after_versions(u32::MAX),
+    ))
 }
 
 fn pending_particle_texture_slots(
@@ -1171,71 +1188,103 @@ fn batch_and_upload_wc3_particles(
                 &mut stats,
             );
         }
-        let mut item_index = 0usize;
-        while item_index < phase.items.len() {
-            let item = &phase.items[item_index];
-            let item_span = item.batch_range.len().max(1);
-            if item.draw_function != draw_function {
-                item_index += item_span;
-                continue;
-            }
-
-            let texture_entity = item.entity.0;
-            let run_pipeline = item.pipeline;
-            let run_start = item_index;
-            let gpu_start = gpu.instances.len() as u32;
-            let mut run_end = run_start;
-
-            while run_end < phase.items.len() {
-                let candidate = &phase.items[run_end];
-                if candidate.draw_function != draw_function
-                    || candidate.entity.0 != texture_entity
-                    || candidate.pipeline != run_pipeline
-                {
-                    break;
-                }
-                let PhaseItemExtraIndex::DynamicOffset(source_index) = candidate.extra_index else {
-                    break;
-                };
+        let instances = &mut gpu.instances;
+        let instance_start = instances.len() as u32;
+        plan_particle_draws(
+            phase,
+            draw_function,
+            batched,
+            &mut batches.runs,
+            instance_start,
+            |source_index| {
                 if batched {
-                    let Some(range) = batches.ranges.get(source_index as usize) else {
-                        break;
-                    };
-                    let range = range.start as usize..range.end as usize;
-                    for &particle in &batches.order[range] {
-                        gpu.instances
-                            .push(extracted.particles[particle as usize].instance);
+                    let range = batches.ranges.get(source_index as usize)?;
+                    for &particle in &batches.order[range.start as usize..range.end as usize] {
+                        instances.push(extracted.particles[particle as usize].instance);
                     }
+                    Some(range.len() as u32)
                 } else {
-                    let Some(source) = extracted.particles.get(source_index as usize) else {
-                        break;
-                    };
-                    gpu.instances.push(source.instance);
+                    instances.push(extracted.particles.get(source_index as usize)?.instance);
+                    Some(1)
                 }
-                run_end += 1;
-            }
-
-            let gpu_end = gpu.instances.len() as u32;
-            if batched {
-                // The representative must still span the merged items so the
-                // phase skips them; its instances are looked up by run.
-                phase.items[run_start].batch_range = 0..(run_end - run_start) as u32;
-                phase.items[run_start].extra_index =
-                    PhaseItemExtraIndex::DynamicOffset(batches.runs.len() as u32);
-                batches.runs.push(gpu_start..gpu_end);
-            } else {
-                phase.items[run_start].batch_range = gpu_start..gpu_end;
-                phase.items[run_start].extra_index = PhaseItemExtraIndex::None;
-            }
-            for skipped in run_start + 1..run_end {
-                phase.items[skipped].batch_range = 0..0;
-                phase.items[skipped].extra_index = PhaseItemExtraIndex::None;
-            }
-            item_index = run_end.max(run_start + 1);
-        }
+            },
+        );
     }
 
     gpu.instances.write_buffer(&render_device, &render_queue);
+}
+
+/// Merges adjacent particle items that share a texture slab and pipeline into
+/// one draw and records each draw's instance range, starting at
+/// `instance_start`. `push` appends a source item's instances and returns how
+/// many it pushed, or `None` for an unknown source index. Returns the end of
+/// the instances pushed.
+///
+/// This runs before Bevy batches the phase's meshes in Prepare. Transparent
+/// mesh items are retained between frames, so their `batch_range` still holds
+/// the previous frame's batch length here. Stepping over them by that length
+/// skipped this frame's particle items, which then drew another run's
+/// instances through their stale queue-time extra index, so whole emitters
+/// vanished or drew twice. Non-particle items are stepped over one at a time.
+fn plan_particle_draws(
+    phase: &mut SortedRenderPhase<Transparent3d>,
+    draw_function: DrawFunctionId,
+    batched: bool,
+    runs: &mut Vec<Range<u32>>,
+    instance_start: u32,
+    mut push: impl FnMut(u32) -> Option<u32>,
+) -> u32 {
+    let mut instance_end = instance_start;
+    let mut item_index = 0usize;
+    while item_index < phase.items.len() {
+        let item = &phase.items[item_index];
+        if item.draw_function != draw_function {
+            item_index += 1;
+            continue;
+        }
+
+        let texture_entity = item.entity.0;
+        let run_pipeline = item.pipeline;
+        let run_start = item_index;
+        let gpu_start = instance_end;
+        let mut run_end = run_start;
+
+        while run_end < phase.items.len() {
+            let candidate = &phase.items[run_end];
+            if candidate.draw_function != draw_function
+                || candidate.entity.0 != texture_entity
+                || candidate.pipeline != run_pipeline
+            {
+                break;
+            }
+            let PhaseItemExtraIndex::DynamicOffset(source_index) = candidate.extra_index else {
+                break;
+            };
+            let Some(pushed) = push(source_index) else {
+                break;
+            };
+            instance_end += pushed;
+            run_end += 1;
+        }
+
+        if batched {
+            // The representative must still span the merged items so the
+            // phase skips them; its instances are looked up by run.
+            phase.items[run_start].batch_range = 0..(run_end - run_start) as u32;
+            phase.items[run_start].extra_index =
+                PhaseItemExtraIndex::DynamicOffset(runs.len() as u32);
+            runs.push(gpu_start..instance_end);
+        } else {
+            phase.items[run_start].batch_range = gpu_start..instance_end;
+            phase.items[run_start].extra_index = PhaseItemExtraIndex::None;
+        }
+        for skipped in run_start + 1..run_end {
+            phase.items[skipped].batch_range = 0..0;
+            phase.items[skipped].extra_index = PhaseItemExtraIndex::None;
+        }
+        item_index = run_end.max(run_start + 1);
+    }
+    instance_end
 }
 
 type Wc3ParticleMeshPrefixSources<'w, 's> = (
@@ -1592,6 +1641,61 @@ mod tests {
             distance,
             index,
         }
+    }
+
+    #[test]
+    fn particle_runs_ignore_stale_batch_ranges_of_retained_mesh_items() {
+        let particle_draw = DrawFunctionId(0);
+        let mesh_draw = DrawFunctionId(1);
+        let slab = Entity::from_raw_u32(1).unwrap();
+        let item = |draw_function, entity, main, extra_index, batch_range| Transparent3d {
+            sorting_info: TransparentSortingInfo3d::Sorted {
+                mesh_center: Vec3::ZERO,
+                depth_bias: 0.0,
+            },
+            entity: (entity, transient_particle_main_entity(main)),
+            pipeline: bevy::render::render_resource::CachedRenderPipelineId::INVALID,
+            draw_function,
+            distance: 0.0,
+            batch_range,
+            extra_index,
+            indexed: false,
+        };
+        let mut phase = SortedRenderPhase::<Transparent3d>::default();
+        // A retained mesh item still carrying last frame's four-item batch range.
+        phase.add_retained(item(
+            mesh_draw,
+            Entity::from_raw_u32(2).unwrap(),
+            100,
+            PhaseItemExtraIndex::None,
+            7..11,
+        ));
+        for source in 0..3 {
+            phase.add_transient(item(
+                particle_draw,
+                slab,
+                source,
+                PhaseItemExtraIndex::DynamicOffset(source),
+                0..1,
+            ));
+        }
+
+        let mut runs = Vec::new();
+        let mut pushed = Vec::new();
+        let end = plan_particle_draws(&mut phase, particle_draw, true, &mut runs, 0, |source| {
+            pushed.push(source);
+            Some(2)
+        });
+
+        assert_eq!(pushed, [0, 1, 2]);
+        assert_eq!(end, 6);
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0], 0..6);
+        assert_eq!(phase.items[1].batch_range, 0..3);
+        assert!(matches!(
+            phase.items[1].extra_index,
+            PhaseItemExtraIndex::DynamicOffset(0)
+        ));
     }
 
     #[test]
