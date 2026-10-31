@@ -24,6 +24,7 @@ mod match_ui;
 mod menu_focus;
 mod minimap;
 mod network;
+mod network_sim;
 mod notifications;
 mod offscreen_animation;
 mod particle_renderer;
@@ -61,16 +62,15 @@ use bevy::{
     window::PresentMode,
 };
 use castle_fight_protocol::{
-    CatchUpComplete, CheckpointReport, ClientMessage, CommandAcknowledgement, CommandRequest,
-    CompatibilityIdentity, MAX_SNAPSHOT_BYTES, ProtocolErrorCode, SNAPSHOT_CHUNK_BYTES,
-    ServerMessage, SnapshotChunk, SnapshotTransferBegin, WireCommandExecution,
+    CatchUpComplete, ClientMessage, CommandRequest, CompatibilityIdentity, MAX_SNAPSHOT_BYTES,
+    SNAPSHOT_CHUNK_BYTES, SnapshotChunk, SnapshotTransferBegin, WireCommandExecution,
 };
 use castle_fight_sim::{
     AUTHORITATIVE_SNAPSHOT_SCHEMA_VERSION, CANONICAL_CHECKSUM_SCHEMA_VERSION,
-    CASTLE_FIGHT_SIMULATION_HZ, CanonicalStreamError, CanonicalStreamRecord,
-    CastleFightBuilderRace, CastleFightContentAvailability, CastleFightContentBundle,
-    CastleFightMatchConfig, CastleFightMatchSetupError, CastleFightParticipantConfig,
-    CommandExecution, CommandExecutionResult, CommandOutcome, CommandSubmission, DriverTickResult,
+    CASTLE_FIGHT_SIMULATION_HZ, CanonicalStreamError, CastleFightBuilderRace,
+    CastleFightContentAvailability, CastleFightContentBundle, CastleFightMatchConfig,
+    CastleFightMatchSetupError, CastleFightParticipantConfig, CommandExecution,
+    CommandExecutionResult, CommandOutcome, CommandSubmission, DriverTickResult,
     InputStreamPosition, MapVersion, MatchDriver, PlayerCommand, PlayerId, Simulation,
     SimulationSnapshot, castle_fight_registered_releases,
     debug::{
@@ -80,7 +80,9 @@ use castle_fight_sim::{
 };
 
 #[cfg(test)]
-use castle_fight_sim::SimPoint;
+use castle_fight_protocol::{CommandAcknowledgement, ServerMessage};
+#[cfg(test)]
+use castle_fight_sim::{CanonicalStreamRecord, SimPoint};
 
 use bridge::{PresentationSamples, PresentationSnapshot};
 use build_ui::{ActionPanelState, BuildUiPlugin};
@@ -93,7 +95,7 @@ use inspection::InspectionPlugin;
 use item_ui::ItemUiPlugin;
 use lobby::{LobbyPlugin, LobbyState};
 use main_menu::{MainMenuPlugin, MainMenuState};
-use network::{NetworkClient, NetworkClientError, NetworkEvent};
+use network::NetworkClient;
 use performance_ui::{
     PerformanceCounters, PerformanceUiPlugin, SystemTraceDisplay, SystemTraceSink,
     performance_trace_layer,
@@ -154,6 +156,8 @@ pub(crate) struct AuthoritativeSimulation {
     pending_build_commands: build_orders::PendingBuildCommands,
     pending_status: Vec<String>,
     expected_execution_batch: Option<(u64, Vec<WireCommandExecution>)>,
+    /// Server records and checks received this frame, applied by the next simulation job.
+    network_queue: Vec<network_sim::NetItem>,
     catch_up: Option<SnapshotCatchUp>,
     authority: AuthorityMode,
     network_lobby_status: Option<castle_fight_protocol::LobbyStatus>,
@@ -178,6 +182,7 @@ impl AuthoritativeSimulation {
             pending_build_commands: default(),
             pending_status: Vec::new(),
             expected_execution_batch: None,
+            network_queue: Vec::new(),
             catch_up: None,
             authority: AuthorityMode::Local,
             network_lobby_status: None,
@@ -206,6 +211,7 @@ impl AuthoritativeSimulation {
             pending_build_commands: default(),
             pending_status: Vec::new(),
             expected_execution_batch: None,
+            network_queue: Vec::new(),
             catch_up: None,
             authority: AuthorityMode::Network {
                 client: Box::new(client),
@@ -1869,405 +1875,38 @@ pub(crate) fn advance_authoritative_simulation_once(
     Ok(result)
 }
 
+/// Drains network events and applies them synchronously. The running client instead splits this
+/// across the frame (see `network_sim`); tests use this single-call form.
+#[cfg(test)]
 fn process_network_events(
     authoritative: &mut AuthoritativeSimulation,
     presentation: &mut PresentationSamples,
     selected_match: &mut SelectedMatch,
     mut performance: Option<&mut PerformanceCounters>,
 ) -> Result<(), String> {
-    let events = match &mut authoritative.authority {
-        AuthorityMode::Local => return Ok(()),
-        AuthorityMode::Network { client, .. } => {
-            // A finished match is over for good: the server stops and drops its clients, and there
-            // is nothing to rejoin.
-            if !matches!(
-                authoritative.simulation.lifecycle(),
-                castle_fight_sim::MatchLifecycle::Finished { .. }
-            ) {
-                client.poll_reconnect();
-            }
-            client.drain_events()
-        }
-    };
-    presentation.enable_network_timeline();
-    for event in events {
-        match event {
-            NetworkEvent::Disconnected(reason) => {
-                authoritative.pending_build_commands.clear();
-                presentation.freeze_network_timeline();
-                authoritative.catch_up = None;
-                authoritative.expected_execution_batch = None;
-                if let AuthorityMode::Network {
-                    connected,
-                    pending_handoff_position,
-                    ..
-                } = &mut authoritative.authority
-                {
-                    *connected = false;
-                    *pending_handoff_position = None;
-                }
-                if !matches!(
-                    authoritative.simulation.lifecycle(),
-                    castle_fight_sim::MatchLifecycle::Finished { .. }
-                ) {
-                    authoritative
-                        .pending_status
-                        .push(format!("Disconnected from server: {reason}"));
-                    authoritative.connection_issue = Some(reason);
-                }
-            }
-            NetworkEvent::Reconnected(assignment) => {
-                authoritative.connection_issue = None;
-                presentation.freeze_network_timeline();
-                let (assigned_player, expected_team) = match &authoritative.authority {
-                    AuthorityMode::Network {
-                        assigned_player, ..
-                    } => {
-                        let expected_team = authoritative
-                            .simulation
-                            .player(*assigned_player)
-                            .ok_or_else(|| {
-                                "assigned network player disappeared locally".to_owned()
-                            })?
-                            .team
-                            .0;
-                        (*assigned_player, expected_team)
-                    }
-                    AuthorityMode::Local => unreachable!("network event in local mode"),
-                };
-                if assignment.player_id != assigned_player.0 || assignment.team != expected_team {
-                    return Err("server reconnect assignment changed player identity".to_owned());
-                }
-                authoritative.catch_up = None;
-                authoritative.expected_execution_batch = None;
-                authoritative.pending_feedback.clear();
-                if let AuthorityMode::Network {
-                    next_sequence,
-                    connected,
-                    pending_handoff_position,
-                    ..
-                } = &mut authoritative.authority
-                {
-                    *next_sequence = assignment.next_client_sequence;
-                    *connected = false;
-                    *pending_handoff_position = Some(assignment.next_stream_position);
-                }
-                authoritative
-                    .pending_status
-                    .push("Reconnected; synchronizing authoritative state.".to_owned());
-            }
-            NetworkEvent::ReconnectFailed(reason) => {
-                // Retried every second, so it updates the connection banner rather than adding a
-                // new message each time.
-                authoritative.connection_issue =
-                    Some(format!("Reconnect attempt failed: {reason}"));
-            }
-            NetworkEvent::Message(message) => match message {
-                ServerMessage::LobbyStatus { status } => {
-                    apply_network_lobby_roster(
-                        authoritative,
-                        presentation,
-                        selected_match,
-                        &status,
-                    )?;
-                    authoritative.network_lobby_error = None;
-                    authoritative.network_lobby_status = Some(status);
-                }
-                ServerMessage::SlotAssigned { player_id, team } => {
-                    if let AuthorityMode::Network {
-                        assigned_player, ..
-                    } = &mut authoritative.authority
-                    {
-                        *assigned_player = PlayerId(player_id);
-                    }
-                    selected_match.local_player = PlayerId(player_id);
-                    presentation.set_observer_team(Some(castle_fight_sim::Team(team)));
-                }
-                ServerMessage::LobbyTeamSizeRejected { reason } => {
-                    use castle_fight_protocol::LobbyTeamSizeRejectReason as Reason;
-                    authoritative.network_lobby_error = Some(
-                        match reason {
-                            Reason::NotHost => "Only the host can change the team size.",
-                            Reason::AlreadyStarted => "The match has already started.",
-                            Reason::InvalidSize => "That team size is not supported.",
-                            Reason::TooManyPlayers => {
-                                "More players are connected than the smaller match has slots."
-                            }
-                        }
-                        .to_owned(),
-                    );
-                }
-                ServerMessage::LobbySlotRejected { reason } => {
-                    use castle_fight_protocol::LobbySlotRejectReason as Reason;
-                    authoritative.network_lobby_error = Some(
-                        match reason {
-                            Reason::AlreadyStarted => "The match has already started.",
-                            Reason::SlotUnavailable => "That slot is taken or no longer exists.",
-                        }
-                        .to_owned(),
-                    );
-                }
-                ServerMessage::Kicked => authoritative.kicked = true,
-                ServerMessage::Chat {
-                    player_id,
-                    text,
-                    team_only,
-                } => authoritative.pending_chat.push(chat::IncomingChat {
-                    player_id,
-                    text,
-                    team_only,
-                }),
-                ServerMessage::LobbyMatchRulesRejected => {
-                    authoritative.network_lobby_error =
-                        Some("Only the host may change match settings before start.".to_owned());
-                }
-                ServerMessage::LobbyRaceRejected { reason } => {
-                    authoritative.network_lobby_error = Some(match reason {
-                        castle_fight_protocol::LobbyRaceRejectReason::AlreadyStarted => {
-                            "Race selection is closed after the match starts.".to_owned()
-                        }
-                        castle_fight_protocol::LobbyRaceRejectReason::RaceUnavailable => {
-                            "That race is unavailable in this release.".to_owned()
-                        }
-                    });
-                }
-                ServerMessage::LobbyStartRejected { reason } => {
-                    authoritative.network_lobby_error = Some(match reason {
-                        castle_fight_protocol::LobbyStartRejectReason::NotHost => {
-                            "Only the host can start the match.".to_owned()
-                        }
-                        castle_fight_protocol::LobbyStartRejectReason::WaitingForPlayers => {
-                            "Waiting for all configured player slots to connect.".to_owned()
-                        }
-                        castle_fight_protocol::LobbyStartRejectReason::AlreadyStarted => {
-                            "The match has already started.".to_owned()
-                        }
-                    });
-                }
-                ServerMessage::SnapshotBegin { begin } => {
-                    begin_snapshot_catch_up(authoritative, begin)?;
-                }
-                ServerMessage::SnapshotChunk { chunk } => {
-                    append_snapshot_chunk(authoritative, chunk)?;
-                }
-                ServerMessage::CatchUpComplete { complete } => {
-                    finish_snapshot_catch_up(authoritative, presentation, complete)?;
-                }
-                ServerMessage::CommandAcknowledged { acknowledgement } => {
-                    let status = match acknowledgement {
-                        CommandAcknowledgement::Scheduled {
-                            client_sequence,
-                            tick,
-                            duplicate,
-                            ..
-                        } => {
-                            if duplicate {
-                                format!(
-                                    "Command #{client_sequence} already scheduled for tick {tick}."
-                                )
-                            } else {
-                                format!("Command #{client_sequence} accepted for tick {tick}.")
-                            }
-                        }
-                        CommandAcknowledgement::Rejected {
-                            client_sequence,
-                            reason,
-                            duplicate,
-                        } => {
-                            if let AuthorityMode::Network {
-                                assigned_player, ..
-                            } = authoritative.authority
-                            {
-                                authoritative
-                                    .pending_build_commands
-                                    .resolve(assigned_player, client_sequence);
-                            }
-                            let duplicate = if duplicate { " duplicate" } else { "" };
-                            format!(
-                                "Command #{client_sequence}{duplicate} rejected by server: {reason:?}."
-                            )
-                        }
-                    };
-                    authoritative.pending_status.push(status);
-                }
-                ServerMessage::StreamRecord { record } => {
-                    let canonical: CanonicalStreamRecord = record.into();
-                    if let Some((snapshot_loaded, handoff_stream_position)) =
-                        authoritative.catch_up.as_ref().map(|catch_up| {
-                            (
-                                catch_up.snapshot_loaded,
-                                catch_up.begin.handoff_stream_position,
-                            )
-                        })
-                    {
-                        if !snapshot_loaded {
-                            return Err(
-                                "received reconnect history before snapshot completion".to_owned()
-                            );
-                        }
-                        if authoritative.driver.next_stream_position().0 >= handoff_stream_position
-                        {
-                            return Err(
-                                "received reconnect history beyond pinned handoff boundary"
-                                    .to_owned(),
-                            );
-                        }
-                        let applied = authoritative
-                            .driver
-                            .apply_stream_record(&mut authoritative.simulation, canonical)
-                            .map_err(|error| {
-                                format!("canonical catch-up stream error: {error:?}")
-                            })?;
-                        if let (Some(result), Some(performance)) =
-                            (applied, performance.as_deref_mut())
-                        {
-                            performance.record_sim_tick(
-                                result.tick_result.completed_tick,
-                                result.tick_result.timings,
-                                result.tick_result.collision_fallback_searches,
-                                result.tick_result.collision_fallback_candidate_checks,
-                                result.tick_result.collision_fallback_max_ring,
-                            );
-                        }
-                        authoritative.simulation.clear_presentation_events();
-                        if authoritative.driver.next_stream_position().0 > handoff_stream_position {
-                            return Err(
-                                "reconnect history crossed pinned handoff boundary".to_owned()
-                            );
-                        }
-                    } else {
-                        let applied = authoritative
-                            .driver
-                            .apply_stream_record(&mut authoritative.simulation, canonical)
-                            .map_err(|error| format!("canonical stream error: {error:?}"))?;
-                        if let Some(result) = applied {
-                            if let Some(performance) = performance.as_deref_mut() {
-                                performance.record_sim_tick(
-                                    result.tick_result.completed_tick,
-                                    result.tick_result.timings,
-                                    result.tick_result.collision_fallback_searches,
-                                    result.tick_result.collision_fallback_candidate_checks,
-                                    result.tick_result.collision_fallback_max_ring,
-                                );
-                            }
-                            let expected = result
-                                .executions
-                                .iter()
-                                .copied()
-                                .map(WireCommandExecution::from)
-                                .collect();
-                            authoritative.expected_execution_batch =
-                                Some((result.finalized.tick, expected));
-                            authoritative
-                                .pending_feedback
-                                .extend(result.executions.iter().copied());
-                            for execution in &result.executions {
-                                authoritative.pending_build_commands.resolve(
-                                    execution.scheduled.player,
-                                    execution.scheduled.client_sequence.0,
-                                );
-                            }
-                            presentation.enqueue_network_tick(PresentationSnapshot::capture(
-                                &authoritative.simulation,
-                            ));
-                        } else {
-                            presentation.enqueue_network_boundary(PresentationSnapshot::capture(
-                                &authoritative.simulation,
-                            ));
-                        }
-                    }
-                }
-                ServerMessage::TickExecutions { batch } => {
-                    let Some((expected_tick, expected_executions)) =
-                        authoritative.expected_execution_batch.take()
-                    else {
-                        return Err(format!(
-                            "received execution batch for tick {} before its finalized input record",
-                            batch.tick
-                        ));
-                    };
-                    if expected_tick != batch.tick || expected_executions != batch.executions {
-                        return Err(format!(
-                            "server execution batch disagrees with deterministic local execution for tick {}",
-                            batch.tick
-                        ));
-                    }
-                }
-                ServerMessage::Checkpoint { checkpoint } => {
-                    let completed_tick = authoritative.simulation.tick().checked_sub(1);
-                    if completed_tick != Some(checkpoint.completed_tick) {
-                        return Err(format!(
-                            "checkpoint for tick {} arrived while local completed tick is {completed_tick:?}",
-                            checkpoint.completed_tick
-                        ));
-                    }
-                    let local_checksum = authoritative.simulation.checksum();
-                    let report = ClientMessage::CheckpointReport {
-                        report: CheckpointReport {
-                            completed_tick: checkpoint.completed_tick,
-                            checksum: local_checksum,
-                        },
-                    };
-                    let send_result = match &authoritative.authority {
-                        AuthorityMode::Network { client, .. } => client.send(report),
-                        AuthorityMode::Local => unreachable!("network event in local mode"),
-                    };
-                    match send_result {
-                        Ok(()) => {}
-                        // A checkpoint can be queued ahead of the disconnect that closed the
-                        // transport in the same event batch. The disconnect event itself resets
-                        // the session and reconnect resynchronizes, so this is not an invariant
-                        // failure.
-                        Err(NetworkClientError::Disconnected) => {
-                            authoritative.pending_status.push(format!(
-                                "Checkpoint for tick {} not reported: network connection is closed.",
-                                checkpoint.completed_tick
-                            ));
-                            continue;
-                        }
-                        Err(error) => {
-                            return Err(format!("could not report checkpoint: {error}"));
-                        }
-                    }
-                    if local_checksum != checkpoint.checksum {
-                        if let AuthorityMode::Network { connected, .. } =
-                            &mut authoritative.authority
-                        {
-                            *connected = false;
-                        }
-                        authoritative.pending_status.push(format!(
-                            "Checksum mismatch at tick {}; requesting authoritative state replacement.",
-                            checkpoint.completed_tick
-                        ));
-                    }
-                }
-                ServerMessage::ProtocolError { code } => {
-                    authoritative
-                        .pending_status
-                        .push(format!("Server protocol error: {code:?}."));
-                    if matches!(
-                        code,
-                        ProtocolErrorCode::MalformedMessage | ProtocolErrorCode::Unauthorized
-                    ) {
-                        return Err(format!("fatal server protocol error: {code:?}"));
-                    }
-                }
-                ServerMessage::HelloAccepted { .. } | ServerMessage::HelloRejected { .. } => {
-                    return Err("received handshake response after session startup".to_owned());
-                }
-            },
-        }
-    }
-    Ok(())
+    network_sim::ingest_events(
+        authoritative,
+        presentation,
+        selected_match,
+        performance.as_deref_mut(),
+    )?;
+    network_sim::run_queue_inline(authoritative, presentation, performance)
 }
 
-fn apply_network_lobby_roster(
-    authoritative: &mut AuthoritativeSimulation,
-    presentation: &mut PresentationSamples,
-    selected_match: &mut SelectedMatch,
+/// Validates a lobby status against the authenticated slots. Returns the replacement match
+/// configuration when the roster or rules changed, or `None` when nothing about the simulation
+/// has to change. Reads no simulation state, so it may run while the simulation is on the worker.
+fn plan_network_lobby_roster(
+    authority: &AuthorityMode,
+    content: &'static CastleFightContentBundle,
     status: &castle_fight_protocol::LobbyStatus,
-) -> Result<(), String> {
-    let AuthorityMode::Network { match_config, .. } = &authoritative.authority else {
+) -> Result<Option<CastleFightMatchConfig>, String> {
+    let AuthorityMode::Network {
+        match_config,
+        assigned_player,
+        ..
+    } = authority
+    else {
         return Err("network lobby status arrived in local mode".to_owned());
     };
     let mut roster = status.participants.clone();
@@ -2301,10 +1940,9 @@ fn apply_network_lobby_roster(
         .iter()
         .zip(&slots)
         .map(|(wire, &(id, team))| {
-            let builder_race = selected_match
-                .content
+            let builder_race = content
                 .builder_race_for_rawcode(wire.builder_rawcode)
-                .filter(|race| selected_match.content.supports_builder_race(*race))
+                .filter(|race| content.supports_builder_race(*race))
                 .ok_or_else(|| "server lobby selected an unavailable builder".to_owned())?;
             Ok(CastleFightParticipantConfig {
                 id,
@@ -2316,13 +1954,24 @@ fn apply_network_lobby_roster(
     if !config
         .participants
         .iter()
-        .any(|participant| Some(participant.id) == authoritative.assigned_player())
+        .any(|participant| participant.id == *assigned_player)
     {
         return Err("server lobby removed the local player's slot".to_owned());
     }
-    if config == *match_config {
+    Ok((config != *match_config).then_some(config))
+}
+
+fn apply_network_lobby_roster(
+    authoritative: &mut AuthoritativeSimulation,
+    presentation: &mut PresentationSamples,
+    selected_match: &mut SelectedMatch,
+    status: &castle_fight_protocol::LobbyStatus,
+) -> Result<(), String> {
+    let Some(config) =
+        plan_network_lobby_roster(&authoritative.authority, selected_match.content, status)?
+    else {
         return Ok(());
-    }
+    };
     if authoritative.simulation.tick() != 0
         || authoritative.driver.next_stream_position().0 != 0
         || authoritative.catch_up.is_some()
@@ -3312,10 +2961,13 @@ mod tests {
             CASTLE_FIGHT_SIMULATION_HZ,
         )))
         .init_resource::<Publications>()
+        .init_resource::<sim_thread::SimWorker>()
         .add_systems(
             Update,
             (
-                sim_thread::advance_network_simulation,
+                sim_thread::ingest_network_events,
+                sim_thread::launch_sim_ticks,
+                sim_thread::join_sim_ticks,
                 advance_network_presentation,
                 count_publications,
             )

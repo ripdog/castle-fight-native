@@ -307,9 +307,17 @@ impl NetworkClient {
 
     #[cfg(test)]
     pub(crate) fn connected_test_fixture(compatibility: CompatibilityIdentity) -> Self {
+        Self::connected_test_fixture_with_outbound(compatibility).0
+    }
+
+    /// Like `connected_test_fixture`, also returning what the client sends to the server.
+    #[cfg(test)]
+    pub(crate) fn connected_test_fixture_with_outbound(
+        compatibility: CompatibilityIdentity,
+    ) -> (Self, mpsc::Receiver<ClientMessage>) {
         let (events_tx, events_rx) = mpsc::channel();
-        let (outbound, _outbound_rx) = mpsc::sync_channel(OUTBOUND_QUEUE_CAPACITY);
-        Self {
+        let (outbound, outbound_rx) = mpsc::sync_channel(OUTBOUND_QUEUE_CAPACITY);
+        let client = Self {
             address: "127.0.0.1:9".parse().unwrap(),
             compatibility,
             session_id: 1,
@@ -322,7 +330,8 @@ impl NetworkClient {
             active_generation: 0,
             reconnecting: false,
             next_reconnect_attempt: Instant::now(),
-        }
+        };
+        (client, outbound_rx)
     }
 
     #[cfg(test)]
