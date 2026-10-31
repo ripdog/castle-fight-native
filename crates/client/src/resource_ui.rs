@@ -1,6 +1,7 @@
 use bevy::{ecs::system::SystemParam, prelude::*};
 use castle_fight_sim::{PlayerId, SimId, Simulation};
 
+use crate::ui_change::SetFieldIfNeq;
 use crate::{
     AuthoritativeSimulation, SelectedMatch,
     bridge::PresentationSamples,
@@ -694,7 +695,10 @@ fn update_resource_bar(
         .copied()
         .unwrap_or(economy.resources);
 
-    progress.width = percent(f32::from(economy.income_progress_per_10k) / 100.0);
+    progress.set_field_if_neq(
+        |node| &mut node.width,
+        percent(f32::from(economy.income_progress_per_10k) / 100.0),
+    );
 
     let local = presentation
         .current
@@ -735,27 +739,31 @@ fn update_resource_bar(
                 .fps()
                 .map_or_else(|| "--".to_owned(), |fps| format!("{fps:.0}"));
             // Developer readout: shown only with the F1 debug overlays on.
-            text.0 = if readout.debug.as_ref().is_none_or(|debug| debug.overlays) {
-                format!("FPS {fps}\nTICK {}", presentation.current.tick)
-            } else {
-                String::new()
-            };
+            text.set_if_neq(Text(
+                if readout.debug.as_ref().is_none_or(|debug| debug.overlays) {
+                    format!("FPS {fps}\nTICK {}", presentation.current.tick)
+                } else {
+                    String::new()
+                },
+            ));
         } else if selected_player.is_some() {
-            text.0.clone_from(&player_label);
+            if text.0 != player_label {
+                text.0.clone_from(&player_label);
+            }
             if let Some(color) = text_color.as_mut() {
-                color.0 = player_text_color;
+                color.set_if_neq(TextColor(player_text_color));
             }
         } else if gold.is_some() {
-            text.0 = resources.gold.to_string();
+            text.set_if_neq(Text(resources.gold.to_string()));
         } else if gold_income.is_some() {
-            text.0 = format!("income +{}", economy.income);
+            text.set_if_neq(Text(format!("income +{}", economy.income)));
         } else if lumber.is_some() {
-            text.0 = resources.lumber.to_string();
+            text.set_if_neq(Text(resources.lumber.to_string()));
         } else if legendary.is_some() {
-            text.0 = format!(
+            text.set_if_neq(Text(format!(
                 "{} / {}",
                 resources.legendary_points_used, resources.legendary_points_cap
-            );
+            )));
         }
     }
 }

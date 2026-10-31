@@ -11,6 +11,7 @@ use castle_fight_sim::{
     PlayerCommand, PlayerId, SimId, Simulation, Team,
 };
 
+use crate::ui_change::{SetFieldIfNeq, set_ui_image};
 use crate::{
     AuthoritativeSimulation, ClientCommandSubmission, SelectedMatch,
     bridge::{BuildingSample, BuildingVisualKind, PresentationSamples},
@@ -999,30 +1000,35 @@ fn populate_action_panel(
 
     for (slot, mut action, mut visibility) in &mut buttons {
         action.0 = layout[slot.0];
-        *visibility = if action.0.is_some() {
+        visibility.set_if_neq(if action.0.is_some() {
             Visibility::Visible
         } else {
             Visibility::Hidden
-        };
+        });
     }
     let catalog = item_catalog(selected_match.content);
     for (slot, mut text) in &mut labels {
-        text.0 = layout[slot.0].map_or_else(String::new, |action| match (action, catalog) {
-            (PanelAction::BuyItem(entry), Some(catalog)) => {
-                shop_button_label(catalog, &authoritative.simulation, state.team, entry)
-            }
-            _ => action_label(action, selected_match.content),
-        });
+        text.set_if_neq(Text(layout[slot.0].map_or_else(
+            String::new,
+            |action| match (action, catalog) {
+                (PanelAction::BuyItem(entry), Some(catalog)) => {
+                    shop_button_label(catalog, &authoritative.simulation, state.team, entry)
+                }
+                _ => action_label(action, selected_match.content),
+            },
+        )));
     }
     for (slot, mut text) in &mut hotkeys {
-        text.0 = layout[slot.0]
-            .and_then(|action| {
-                action_hotkey_for_state(action, &state, &authoritative, selected_match.content)
-            })
-            .map_or_else(String::new, |hotkey| hotkey.to_string());
+        text.set_if_neq(Text(
+            layout[slot.0]
+                .and_then(|action| {
+                    action_hotkey_for_state(action, &state, &authoritative, selected_match.content)
+                })
+                .map_or_else(String::new, |hotkey| hotkey.to_string()),
+        ));
     }
     for (slot, mut image) in &mut icons {
-        *image = layout[slot.0]
+        let handle = layout[slot.0]
             .map(|action| {
                 action_icon_key(
                     action,
@@ -1032,8 +1038,8 @@ fn populate_action_panel(
                     presentation,
                 )
             })
-            .and_then(|key| icon_assets.image(key, &asset_server))
-            .map_or_else(ImageNode::default, ImageNode::new);
+            .and_then(|key| icon_assets.image(key, &asset_server));
+        set_ui_image(&mut image, handle);
     }
 }
 
@@ -1903,11 +1909,11 @@ fn animate_autocast_particles(
     let animation_phase = time.elapsed_secs() / AUTOCAST_LOOP_SECONDS;
     for (slot, particle, mut node, mut visibility) in &mut particles {
         let active = active_slots[slot.0];
-        *visibility = if active {
+        visibility.set_if_neq(if active {
             Visibility::Visible
         } else {
             Visibility::Hidden
-        };
+        });
         if !active {
             continue;
         }
@@ -2035,11 +2041,12 @@ fn style_action_panel_buttons(
         };
     }
     for (slot, mut image) in &mut icons {
-        image.color = if disabled_slots[slot.0] {
+        let color = if disabled_slots[slot.0] {
             BUTTON_ICON_DISABLED
         } else {
             Color::WHITE
         };
+        image.set_field_if_neq(|image| &mut image.color, color);
     }
 }
 
@@ -2106,21 +2113,24 @@ fn update_build_tooltip(
     tooltip.state.0 = hovered;
 
     let Some(kind) = hovered else {
-        **tooltip.visibility = Visibility::Hidden;
+        tooltip.visibility.set_if_neq(Visibility::Hidden);
         return;
     };
 
     let (basic, extended) = kind.tooltips(selected_match.content);
     set_wc3_text(&mut commands, *tooltip.title, basic, TOOLTIP_TITLE_COLOR);
     let cost = kind.cost_label(selected_match.content);
-    tooltip.cost.1.display = if cost.is_empty() {
-        Display::None
-    } else {
-        Display::Flex
-    };
-    tooltip.cost.0.0 = cost;
+    tooltip.cost.1.set_field_if_neq(
+        |node| &mut node.display,
+        if cost.is_empty() {
+            Display::None
+        } else {
+            Display::Flex
+        },
+    );
+    tooltip.cost.0.set_field_if_neq(|text| &mut text.0, cost);
     set_wc3_text(&mut commands, *tooltip.body, extended, TOOLTIP_TEXT_COLOR);
-    **tooltip.visibility = Visibility::Visible;
+    tooltip.visibility.set_if_neq(Visibility::Visible);
 }
 
 fn set_wc3_text(commands: &mut Commands, entity: Entity, source: &str, default_color: Color) {

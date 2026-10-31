@@ -11,6 +11,7 @@ use castle_fight_sim::{
     items::{ItemCatalog, ItemDefinition, ItemEffect, item_catalog_for_version},
 };
 
+use crate::ui_change::{SetFieldIfNeq, set_ui_image};
 use crate::{
     AuthoritativeSimulation, SelectedMatch, SimulationPlayback,
     bridge::PresentationSamples,
@@ -375,11 +376,11 @@ fn sync_inventory_buttons(
             .copied()
     };
     for (button, interaction, mut visibility, mut background) in &mut buttons {
-        *visibility = if owner.is_some() {
+        visibility.set_if_neq(if owner.is_some() {
             Visibility::Inherited
         } else {
             Visibility::Hidden
-        };
+        });
         *background = BackgroundColor(
             if stack_at(button.0).is_some() && *interaction != Interaction::None {
                 HOVER_TINT
@@ -389,19 +390,19 @@ fn sync_inventory_buttons(
         );
     }
     for (icon, mut image) in &mut icons {
-        *image = stack_at(icon.0)
-            .and_then(|stack| icon_assets.image(item_icon_key(stack.item.0), &asset_server))
-            .map_or_else(ImageNode::default, ImageNode::new);
+        let handle = stack_at(icon.0)
+            .and_then(|stack| icon_assets.image(item_icon_key(stack.item.0), &asset_server));
+        set_ui_image(&mut image, handle);
     }
     for (label, mut text, mut visibility) in &mut charges {
         let count = stack_at(label.0).map_or(0, |stack| stack.charges);
-        *visibility = if count > 0 {
+        visibility.set_if_neq(if count > 0 {
             Visibility::Inherited
         } else {
             Visibility::Hidden
-        };
+        });
         if count > 0 {
-            text.0 = count.to_string();
+            text.set_if_neq(Text(count.to_string()));
         }
     }
     for (cooldown, mut node) in &mut cooldowns {
@@ -413,7 +414,7 @@ fn sync_inventory_buttons(
                 cooldown_fraction(definition, stack, &view.inventory, now)
             })
             .unwrap_or(0.0);
-        node.height = percent(fraction * 100.0);
+        node.set_field_if_neq(|node| &mut node.height, percent(fraction * 100.0));
     }
 
     let (node, image, visibility) = &mut *ghost;
@@ -429,7 +430,9 @@ fn sync_inventory_buttons(
             node.top = px(cursor.y - window.height() * 0.015);
             **visibility = Visibility::Inherited;
         }
-        _ => **visibility = Visibility::Hidden,
+        _ => {
+            visibility.set_if_neq(Visibility::Hidden);
+        }
     }
 }
 

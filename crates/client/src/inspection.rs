@@ -4,6 +4,7 @@ use castle_fight_sim::{
     CastleFightContentBundle, DamageType, PlayerId, SUBUNITS_PER_WORLD_UNIT, SimId, Team,
 };
 
+use crate::ui_change::{SetFieldIfNeq, set_ui_image};
 use crate::{
     SelectedMatch, SimulationPlayback,
     bridge::{
@@ -1693,11 +1694,14 @@ fn update_production_tooltip(
             .or_else(|| selected_match.content.unit_tooltips_for_rawcode(rawcode))
             .filter(|(basic, extended)| !basic.is_empty() || !extended.is_empty())
     });
-    ui.button.1.display = if tooltips.is_some() {
-        Display::Flex
-    } else {
-        Display::None
-    };
+    ui.button.1.set_field_if_neq(
+        |node| &mut node.display,
+        if tooltips.is_some() {
+            Display::Flex
+        } else {
+            Display::None
+        },
+    );
     let hovered = if tooltips.is_some()
         && matches!(*ui.button.0, Interaction::Hovered | Interaction::Pressed)
     {
@@ -1750,12 +1754,16 @@ fn update_production_ui(
         .and_then(|id| samples.current.buildings.get(&id))
         .filter(|building| building.production_queue.is_some());
     let Some(building) = building else {
-        ui.root.0.display = Display::None;
-        *ui.root.1 = Visibility::Hidden;
+        ui.root
+            .0
+            .set_field_if_neq(|node| &mut node.display, Display::None);
+        ui.root.1.set_if_neq(Visibility::Hidden);
         return;
     };
-    ui.root.0.display = Display::Flex;
-    *ui.root.1 = Visibility::Visible;
+    ui.root
+        .0
+        .set_field_if_neq(|node| &mut node.display, Display::Flex);
+    ui.root.1.set_if_neq(Visibility::Visible);
     let queued = building.production_queue.unwrap_or(0);
     let interval = u64::from(building.production_interval_ticks.unwrap_or(0));
     let remaining = building
@@ -1763,16 +1771,19 @@ fn update_production_ui(
         .unwrap_or(0)
         .saturating_sub(samples.current.tick);
     let hz = CASTLE_FIGHT_SIMULATION_HZ as u64;
-    ui.label.0 = if queued == 0 {
+    ui.label.set_if_neq(Text(if queued == 0 {
         "Production stopped".into()
     } else {
         format!("Training ({}s remaining)", remaining.div_ceil(hz))
-    };
-    ui.fill.width = percent(if queued == 0 || interval == 0 {
-        0.0
-    } else {
-        (1.0 - remaining.min(interval) as f32 / interval as f32) * 100.0
-    });
+    }));
+    ui.fill.set_field_if_neq(
+        |node| &mut node.width,
+        percent(if queued == 0 || interval == 0 {
+            0.0
+        } else {
+            (1.0 - remaining.min(interval) as f32 / interval as f32) * 100.0
+        }),
+    );
     let unit_rawcode = building.content.and_then(|identity| {
         let CastleFightBuildingKind::Production(kind) = selected_match
             .content
@@ -1790,14 +1801,12 @@ fn update_production_ui(
             .image(UiIconKey::unit_game_interface(rawcode), &asset_server)
     });
     for (slot, mut image, mut visibility) in &mut ui.icons {
-        *visibility = if slot.0 < usize::from(queued) {
+        visibility.set_if_neq(if slot.0 < usize::from(queued) {
             Visibility::Visible
         } else {
             Visibility::Hidden
-        };
-        *image = handle
-            .clone()
-            .map_or_else(ImageNode::default, ImageNode::new);
+        });
+        set_ui_image(&mut image, handle.clone());
     }
 }
 
@@ -1821,25 +1830,29 @@ fn update_combat_tooltip(
             CombatTooltipKind::Attack(slot) => attacks[slot].is_some(),
             CombatTooltipKind::Armor => armor.is_some(),
         };
-        node.display = if visible {
-            Display::Flex
-        } else {
-            Display::None
-        };
+        node.set_field_if_neq(
+            |node| &mut node.display,
+            if visible {
+                Display::Flex
+            } else {
+                Display::None
+            },
+        );
         if visible && matches!(interaction, Interaction::Hovered | Interaction::Pressed) {
             hovered = Some(button.0);
         }
     }
     for (span, mut text) in &mut effect_spans {
-        text.0 = match span.0 {
+        let value = match span.0 {
             CombatTooltipKind::Attack(slot) => attacks[slot]
                 .filter(|attack| attack.effect_damage != 0)
                 .map_or_else(String::new, |attack| format!(" {:+}", attack.effect_damage)),
             CombatTooltipKind::Armor => String::new(),
         };
+        text.set_field_if_neq(|text| &mut text.0, value);
     }
     for (mut text, kind, stat, armor_reduction) in &mut labels {
-        text.0 = if let Some(label) = kind {
+        let value = if let Some(label) = kind {
             match label.0 {
                 CombatTooltipKind::Attack(slot) => attacks[slot]
                     .map_or_else(String::new, |attack| attack.profile.damage.to_string()),
@@ -1868,6 +1881,7 @@ fn update_combat_tooltip(
         } else {
             String::new()
         };
+        text.set_field_if_neq(|text| &mut text.0, value);
     }
     for (slot, mut image) in &mut badge_icons.images {
         let key = match slot.0 {
@@ -1876,30 +1890,29 @@ fn update_combat_tooltip(
             }
             CombatTooltipKind::Armor => armor.map(|armor| UiIconKey::InfoArmor(armor.armor_type)),
         };
-        *image = key
-            .and_then(|key| {
-                badge_icons
-                    .icon_assets
-                    .image(key, &badge_icons.asset_server)
-                    .or_else(|| {
-                        // Older local UI packs predate the info-panel bindings. Keep a visible
-                        // Warcraft icon until the player re-runs UI extraction for exact art.
-                        let fallback = match key {
-                            UiIconKey::InfoDamage(_) => UiIconKey::Command(UiCommandIcon::Attack),
-                            UiIconKey::InfoArmor(_) => {
-                                UiIconKey::ability(u32::from_be_bytes(*b"AM08"), UiIconRole::Normal)
-                            }
-                            _ => return None,
-                        };
-                        badge_icons
-                            .icon_assets
-                            .image(fallback, &badge_icons.asset_server)
-                    })
-            })
-            .map_or_else(ImageNode::default, ImageNode::new);
+        let handle = key.and_then(|key| {
+            badge_icons
+                .icon_assets
+                .image(key, &badge_icons.asset_server)
+                .or_else(|| {
+                    // Older local UI packs predate the info-panel bindings. Keep a visible
+                    // Warcraft icon until the player re-runs UI extraction for exact art.
+                    let fallback = match key {
+                        UiIconKey::InfoDamage(_) => UiIconKey::Command(UiCommandIcon::Attack),
+                        UiIconKey::InfoArmor(_) => {
+                            UiIconKey::ability(u32::from_be_bytes(*b"AM08"), UiIconRole::Normal)
+                        }
+                        _ => return None,
+                    };
+                    badge_icons
+                        .icon_assets
+                        .image(fallback, &badge_icons.asset_server)
+                })
+        });
+        set_ui_image(&mut image, handle);
     }
     let (text, visibility) = &mut *tooltip;
-    text.0 = match hovered {
+    text.set_if_neq(Text(match hovered {
         Some(CombatTooltipKind::Attack(slot)) => attacks[slot].map_or_else(String::new, |attack| {
             format!(
                 "{} damage, {:.0} range, {:.2}s cooldown\n{}",
@@ -1918,12 +1931,12 @@ fn update_combat_tooltip(
             )
         }),
         None => String::new(),
-    };
-    **visibility = if hovered.is_some() {
+    }));
+    visibility.set_if_neq(if hovered.is_some() {
         Visibility::Visible
     } else {
         Visibility::Hidden
-    };
+    });
 }
 
 #[derive(Clone, Copy)]
@@ -2076,13 +2089,13 @@ fn update_debug_inspector_text(
     mut panel: Single<&mut Visibility, With<DebugInspectionPanel>>,
     mut text: Single<&mut Text, With<DebugInspectionText>>,
 ) {
-    **panel = if debug.overlays && selection.selected.is_some() {
+    panel.set_if_neq(if debug.overlays && selection.selected.is_some() {
         Visibility::Visible
     } else {
         Visibility::Hidden
-    };
+    });
     if let Some(id) = selection.selected {
-        text.0 = inspector_text(id, &samples);
+        text.set_if_neq(Text(inspector_text(id, &samples)));
     }
 }
 
@@ -2594,11 +2607,14 @@ fn update_active_effect_icons(
     let mut hovered = None;
     for (slot, interaction, mut node, mut border) in &mut ui.buttons {
         let effect = effects.get(slot.0);
-        node.display = if effect.is_some() {
-            Display::Flex
-        } else {
-            Display::None
-        };
+        node.set_field_if_neq(
+            |node| &mut node.display,
+            if effect.is_some() {
+                Display::Flex
+            } else {
+                Display::None
+            },
+        );
         if let Some(effect) = effect {
             *border = BorderColor::all(if effect.beneficial {
                 Color::srgb(0.25, 0.72, 0.35)
@@ -2611,23 +2627,24 @@ fn update_active_effect_icons(
         }
     }
     for (slot, mut image) in &mut ui.images {
-        *image = effects
-            .get(slot.0)
-            .and_then(|effect| match effect.icon {
-                UiIconKey::StatusEffect { ability, role } => {
-                    ui.icon_assets.status_image(ability, role, &asset_server)
-                }
-                icon => ui.icon_assets.image(icon, &asset_server),
-            })
-            .map_or_else(ImageNode::default, ImageNode::new);
+        let handle = effects.get(slot.0).and_then(|effect| match effect.icon {
+            UiIconKey::StatusEffect { ability, role } => {
+                ui.icon_assets.status_image(ability, role, &asset_server)
+            }
+            icon => ui.icon_assets.image(icon, &asset_server),
+        });
+        set_ui_image(&mut image, handle);
     }
     let (text, visibility) = &mut *ui.tooltip;
-    text.0 = hovered.unwrap_or_default().to_owned();
-    **visibility = if hovered.is_some() {
+    let hovered_text = hovered.unwrap_or_default();
+    if text.0 != hovered_text {
+        hovered_text.clone_into(&mut text.0);
+    }
+    visibility.set_if_neq(if hovered.is_some() {
         Visibility::Visible
     } else {
         Visibility::Hidden
-    };
+    });
 }
 
 fn update_selection_tiles(
@@ -2638,14 +2655,20 @@ fn update_selection_tiles(
 ) {
     // One selected thing shows its details beside the portrait; several show the icon grid.
     let grid = selection.members.len() > 1;
-    ui.tile_root.display = if grid { Display::Flex } else { Display::None };
-    ui.details.display = if grid { Display::None } else { Display::Flex };
+    ui.tile_root.set_field_if_neq(
+        |node| &mut node.display,
+        if grid { Display::Flex } else { Display::None },
+    );
+    ui.details.set_field_if_neq(
+        |node| &mut node.display,
+        if grid { Display::None } else { Display::Flex },
+    );
     for (slot, mut visibility, mut border) in &mut ui.tiles {
-        *visibility = if slot.0 < selection.members.len() {
+        visibility.set_if_neq(if slot.0 < selection.members.len() {
             Visibility::Visible
         } else {
             Visibility::Hidden
-        };
+        });
         *border = BorderColor::all(
             if selection.members.get(slot.0).copied() == selection.selected {
                 Color::srgb(0.95, 0.76, 0.22)
@@ -2676,12 +2699,11 @@ fn update_selection_tiles(
                         .and_then(|building| building.content.map(|content| content.rawcode))
                 })
         });
-        *image = rawcode
-            .and_then(|code| {
-                ui.icon_assets
-                    .image(UiIconKey::unit_game_interface(code), &asset_server)
-            })
-            .map_or_else(ImageNode::default, ImageNode::new);
+        let handle = rawcode.and_then(|code| {
+            ui.icon_assets
+                .image(UiIconKey::unit_game_interface(code), &asset_server)
+        });
+        set_ui_image(&mut image, handle);
     }
     for (slot, mut node) in &mut ui.bars {
         let fraction = selection
@@ -2708,7 +2730,7 @@ fn update_selection_tiles(
                     0.0
                 }
             });
-        node.width = percent(fraction * 100.0);
+        node.set_field_if_neq(|node| &mut node.width, percent(fraction * 100.0));
     }
 }
 
@@ -2746,11 +2768,11 @@ fn update_portrait_resources(
             PortraitResource::Health => Some(health),
             PortraitResource::Mana => mana,
         });
-        *visibility = if values.is_some() {
+        visibility.set_if_neq(if values.is_some() {
             Visibility::Visible
         } else {
             Visibility::Hidden
-        };
+        });
     }
     for (resource, mut fill) in &mut fills {
         let values = resources.and_then(|(health, mana)| match resource.0 {
@@ -2758,11 +2780,14 @@ fn update_portrait_resources(
             PortraitResource::Mana => mana,
         });
         if let Some((current, maximum)) = values {
-            fill.width = percent(if maximum > 0 {
-                (current as f32 / maximum as f32).clamp(0.0, 1.0) * 100.0
-            } else {
-                0.0
-            });
+            fill.set_field_if_neq(
+                |node| &mut node.width,
+                percent(if maximum > 0 {
+                    (current as f32 / maximum as f32).clamp(0.0, 1.0) * 100.0
+                } else {
+                    0.0
+                }),
+            );
         }
     }
     for (resource, mut text) in &mut labels {
@@ -2771,7 +2796,7 @@ fn update_portrait_resources(
             PortraitResource::Mana => mana,
         });
         if let Some((current, maximum)) = values {
-            text.0 = format!("{current} / {maximum}");
+            text.set_if_neq(Text(format!("{current} / {maximum}")));
         }
     }
 }

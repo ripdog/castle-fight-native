@@ -995,11 +995,11 @@ fn update_performance_panel(
     mut panel: Single<&mut Visibility, With<PerformancePanel>>,
     mut text: Single<&mut Text, With<PerformancePanelText>>,
 ) {
-    **panel = if debug.overlays {
+    panel.set_if_neq(if debug.overlays {
         Visibility::Visible
     } else {
         Visibility::Hidden
-    };
+    });
     let now = Instant::now();
     let frame = average_frame_samples(&counters.frame_samples, now);
     let sim = average_sim_samples(&counters.sim_samples, now);

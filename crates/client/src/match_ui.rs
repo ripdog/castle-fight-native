@@ -1,4 +1,5 @@
 //! Match HUD and Rescue Strike targeting/presentation.
+use crate::ui_change::SetFieldIfNeq;
 use crate::{
     AuthoritativeSimulation, SelectedMatch,
     build_ui::{ActionPanelState, TargetingAction, cursor_over_action_panel},
@@ -124,10 +125,10 @@ fn update_match_hud(
         return;
     };
     if lobby.as_ref().is_some_and(|lobby| lobby.active()) {
-        *visibility = Visibility::Hidden;
+        visibility.set_if_neq(Visibility::Hidden);
         return;
     }
-    *visibility = Visibility::Visible;
+    visibility.set_if_neq(Visibility::Visible);
     let sim = &authoritative.simulation;
     let wins = sim.round_wins();
     let strikes = [
@@ -175,12 +176,13 @@ fn update_match_hud(
             MatchHudSegment::Rescue => format!("RESCUE {} / {}", strikes[0], strikes[1]),
             MatchHudSegment::Status => status.to_owned(),
         };
-        node.display = if value.is_empty() {
+        let display = if value.is_empty() {
             Display::None
         } else {
             Display::Flex
         };
-        text.0 = value;
+        node.set_field_if_neq(|node| &mut node.display, display);
+        text.set_if_neq(Text(value));
     }
 }
 

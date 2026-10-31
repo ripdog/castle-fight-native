@@ -41,6 +41,7 @@ mod sim_thread;
 mod skin_influences;
 mod skinned_bounds;
 mod terrain;
+mod ui_change;
 mod ui_icons;
 mod unanimated_targets;
 mod unit_models;
@@ -1820,11 +1821,11 @@ fn update_simulation_pause_ui(
     playback: Res<SimulationPlayback>,
     mut visibility: Single<&mut Visibility, With<SimulationPausePanel>>,
 ) {
-    **visibility = if playback.paused {
+    visibility.set_if_neq(if playback.paused {
         Visibility::Visible
     } else {
         Visibility::Hidden
-    };
+    });
 }
 
 fn advance_network_presentation(

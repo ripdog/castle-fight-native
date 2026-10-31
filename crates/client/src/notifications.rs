@@ -12,6 +12,7 @@ use castle_fight_sim::{
     MatchLifecycle, ResourcePurchaseError,
 };
 
+use crate::ui_change::SetFieldIfNeq;
 use crate::{
     AuthoritativeSimulation, AuthorityMode,
     console::{TOP_BAR_UNITS, wc3},
@@ -226,10 +227,10 @@ fn update_connection_banner(
         }
     );
     if !(on_match_screen && down && !finished) {
-        banner.display = Display::None;
+        banner.set_field_if_neq(|node| &mut node.display, Display::None);
         return;
     }
-    banner.display = Display::Flex;
+    banner.set_field_if_neq(|node| &mut node.display, Display::Flex);
     let reason = authoritative
         .connection_issue
         .as_deref()

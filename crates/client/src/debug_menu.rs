@@ -252,7 +252,7 @@ fn toggle_debug_menu(
     if !authoritative.debug_available() {
         state.open = false;
         state.control_all_players = false;
-        **visibility = Visibility::Hidden;
+        visibility.set_if_neq(Visibility::Hidden);
         return;
     }
     if !keys.just_pressed(KeyCode::F8) {
