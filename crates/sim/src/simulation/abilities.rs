@@ -1448,6 +1448,7 @@ impl Simulation {
                                 frost: None,
                                 charm: None,
                                 acid_bomb: None,
+                                bash: None,
                                 damage_type: DamageType::Siege,
                                 launch_position,
                                 destination: position,

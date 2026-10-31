@@ -1522,6 +1522,14 @@ pub(super) fn canonical_checksum(world: &World, state: CanonicalMatchState<'_>) 
                     }
                     None => hash.write_u8(0),
                 }
+                match projectile.projectile.bash {
+                    Some(bash) => {
+                        hash.write_u8(1);
+                        hash.write_u64(bash.target.0);
+                        hash.write_u16(bash.stun_duration_ticks);
+                    }
+                    None => hash.write_u8(0),
+                }
                 match projectile.projectile.burning_oil {
                     Some(profile) => {
                         hash.write_u8(1);

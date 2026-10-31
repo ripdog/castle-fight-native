@@ -696,7 +696,8 @@ impl Simulation {
                         speed_per_tick,
                         impact_radius,
                     } => {
-                        // Orb Charm is carried to impact; other triggered spells stay unsupported.
+                        // Bash, Orb Charm and Acid Bomb are carried to impact; other triggered
+                        // spells stay unsupported.
                         let unsupported_triggered_spell = on_hit.triggered_spell.filter(|spell| {
                             !matches!(
                                 spell,
@@ -706,13 +707,18 @@ impl Simulation {
                         });
                         assert_eq!(
                             (
-                                on_hit.stun_duration_ticks,
                                 unsupported_triggered_spell,
                                 on_hit.feedback,
                                 on_hit.corruption
                             ),
-                            (0, None, None, None),
-                            "ballistic stun/triggered-spell/Feedback passives are unsupported"
+                            (None, None, None),
+                            "ballistic triggered-spell/Feedback/Corruption passives are unsupported"
+                        );
+                        let bash = (on_hit.stun_duration_ticks > 0).then_some(
+                            crate::components::BallisticBash {
+                                target: intent.target_id,
+                                stun_duration_ticks: on_hit.stun_duration_ticks,
+                            },
                         );
                         let charm = match on_hit.triggered_spell {
                             Some(TriggeredAttackEffect::Charm(profile)) => {
@@ -749,6 +755,7 @@ impl Simulation {
                             frost: on_hit.frost,
                             charm,
                             acid_bomb,
+                            bash,
                             damage_type: intent.damage_type,
                             launch_position: intent.source_position,
                             destination: target_position,

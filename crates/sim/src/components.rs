@@ -329,6 +329,14 @@ pub(crate) struct BallisticOrbCharm {
     pub profile: OrbCharmProfile,
 }
 
+/// Bash stun rolled at attack launch and applied when a ballistic attack lands on its original
+/// target. The duration already reflects that target's hero rules; splash victims are not stunned.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct BallisticBash {
+    pub target: SimId,
+    pub stun_duration_ticks: u16,
+}
+
 /// Orb Acid Bomb rolled at attack launch and cast when a ballistic attack lands on its original target.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct BallisticOrbAcidBomb {
@@ -350,6 +358,7 @@ pub(crate) struct BallisticProjectile {
     pub frost: Option<FrostAttackEffectProfile>,
     pub charm: Option<BallisticOrbCharm>,
     pub acid_bomb: Option<BallisticOrbAcidBomb>,
+    pub bash: Option<BallisticBash>,
     pub damage_type: DamageType,
     pub launch_position: SimPoint,
     pub destination: SimPoint,

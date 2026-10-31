@@ -375,6 +375,72 @@ fn ranged_bash_uses_intrinsic_hero_duration_at_impact_and_retains_profiles_on_wi
 }
 
 #[test]
+fn ballistic_bash_stuns_only_the_original_target_when_the_projectile_lands() {
+    use crate::components::BashEffectProfile;
+    let world = SUBUNITS_PER_WORLD_UNIT;
+    let mut sim = simulation(1);
+    sim.spawn_unit_with_properties(
+        unit(
+            0,
+            20,
+            10,
+            AttackDelivery::RangedBallistic {
+                speed_per_tick: 10 * world,
+                impact_radius: 200 * world,
+            },
+        ),
+        UnitGameplayProperties {
+            passive_effects: PassiveUnitEffects::single(PassiveUnitEffect::Bash(
+                BashEffectProfile {
+                    ability: AbilityId(20),
+                    chance_per_10k: 10_000,
+                    bonus_damage: 0,
+                    stun_duration_ticks: 9,
+                    hero_stun_duration_ticks: 3,
+                    targets: AttackTargetMask::GROUND_UNITS,
+                },
+            )),
+            ..UnitGameplayProperties::default()
+        },
+    );
+    let target = sim.spawn_unit(unit(1, 50, 0, AttackDelivery::Melee));
+    let splashed = sim.spawn_unit(unit(1, 51, 0, AttackDelivery::Melee));
+    let is_ballistic = |sim: &Simulation| {
+        sim.projectiles()
+            .iter()
+            .any(|p| matches!(p.kind, ProjectileViewKind::Ballistic { .. }))
+    };
+    for _ in 0..8 {
+        if is_ballistic(&sim) {
+            break;
+        }
+        sim.step();
+    }
+    assert!(is_ballistic(&sim), "ballistic attack must launch");
+    let restored = wire_restored(&sim, 4);
+    assert_eq!(sim.checksum(), restored.checksum());
+    while is_ballistic(&sim) {
+        assert_eq!(
+            sim.unit(target).unwrap().stunned_until_tick,
+            0,
+            "stunned before impact"
+        );
+        sim.step();
+    }
+    let impact_tick = sim.tick() - 1;
+    assert_eq!(
+        sim.unit(target).unwrap().stunned_until_tick,
+        impact_tick + 9
+    );
+    let splashed_view = sim.unit(splashed).unwrap();
+    assert!(
+        splashed_view.health < splashed_view.health_max,
+        "splash must land"
+    );
+    assert_eq!(splashed_view.stunned_until_tick, 0);
+}
+
+#[test]
 fn evasion_uses_only_the_highest_chance_independent_of_inventory_order() {
     fn trace(effects: &[PassiveUnitEffect], workers: usize) -> Vec<bool> {
         let mut sim = simulation(workers);

@@ -845,6 +845,19 @@ impl Simulation {
                                 completed_tick,
                             );
                         }
+                        if let Some(bash) = snapshot.projectile.bash
+                            && let TargetIndex::Unit(index) = target
+                            && units[index].id == bash.target
+                            && unit_health[index] > 0
+                        {
+                            let stunned_until_tick = completed_tick
+                                .checked_add(u64::from(bash.stun_duration_ticks))
+                                .expect("passive stun expiry tick overflow");
+                            units[index].status.stunned_until_tick = units[index]
+                                .status
+                                .stunned_until_tick
+                                .max(stunned_until_tick);
+                        }
                         if let Some(acid) = snapshot.projectile.acid_bomb
                             && let TargetIndex::Unit(index) = target
                             && units[index].id == acid.target
@@ -993,6 +1006,7 @@ impl Simulation {
                     frost: launch.frost,
                     charm: launch.charm,
                     acid_bomb: launch.acid_bomb,
+                    bash: launch.bash,
                     damage_type: launch.damage_type,
                     launch_position: launch.launch_position,
                     destination: launch.destination,
