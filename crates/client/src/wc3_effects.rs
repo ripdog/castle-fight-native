@@ -10,7 +10,10 @@ use bevy::{
     asset::{AssetId, RenderAssetUsages},
     audio::{AudioPlayer, AudioSource, PlaybackSettings, SpatialListener, SpatialScale, Volume},
     camera::visibility::DynamicSkinnedMeshBounds,
-    ecs::{entity_disabling::Disabled, system::SystemParam},
+    ecs::{
+        entity_disabling::Disabled,
+        system::{EntityCommands, SystemParam},
+    },
     gltf::{Gltf, GltfExtras, GltfMaterialExtras},
     image::{ImageAddressMode, ImageLoaderSettings, ImageSampler, ImageSamplerDescriptor},
     mesh::{Indices, MeshTag, MeshVertexBufferLayoutRef, PrimitiveTopology, skinning::SkinnedMesh},
@@ -1174,6 +1177,35 @@ impl Wc3NonInheritance {
     }
 }
 
+/// Fallible parenting for presentation entities spawned under models that can die in the
+/// same command flush (a unit's death despawns its model root while an effect for it is
+/// still queued).
+pub(crate) trait AttachChildOrDespawn {
+    /// Adds `child` under this entity, or despawns `child` if this entity no longer exists
+    /// when the command applies, instead of panicking or leaving an orphan at the origin.
+    fn attach_child_or_despawn(&mut self, child: Entity) -> &mut Self;
+}
+
+impl AttachChildOrDespawn for EntityCommands<'_> {
+    fn attach_child_or_despawn(&mut self, child: Entity) -> &mut Self {
+        let parent = self.id();
+        self.commands_mut().queue(move |world: &mut World| {
+            if world.get_entity(child).is_err() {
+                return;
+            }
+            match world.get_entity_mut(parent) {
+                Ok(mut parent) => {
+                    parent.add_child(child);
+                }
+                Err(_) => {
+                    world.entity_mut(child).despawn();
+                }
+            }
+        });
+        self
+    }
+}
+
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct Wc3GeosetVisibility {
     hidden: bool,
@@ -1795,7 +1827,7 @@ fn spawn_registered_converted_model(
     }
     let child = child.id();
     if let Some(parent) = parent {
-        commands.entity(parent).add_child(child);
+        commands.entity(parent).attach_child_or_despawn(child);
     }
     child
 }
@@ -4205,7 +4237,9 @@ pub fn fix_wc3_scene_materials(
                     underlay_entity.insert((skin.clone(), DynamicSkinnedMeshBounds));
                 }
                 let underlay_entity = underlay_entity.id();
-                commands.entity(entity).add_child(underlay_entity);
+                commands
+                    .entity(entity)
+                    .attach_child_or_despawn(underlay_entity);
             }
         }
 
@@ -6446,6 +6480,19 @@ fn system_model_identity(source_model: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn attaching_under_a_parent_despawned_in_the_same_flush_despawns_the_child() {
+        let mut world = World::new();
+        let parent = world.spawn_empty().id();
+        let child = world.spawn_empty().id();
+        let mut queue = bevy::ecs::world::CommandQueue::default();
+        let mut commands = Commands::new(&mut queue, &world);
+        commands.entity(parent).despawn();
+        commands.entity(parent).attach_child_or_despawn(child);
+        queue.apply(&mut world);
+        assert!(world.get_entity(child).is_err());
+    }
 
     #[test]
     fn shrine_visual_binding_preserves_projection_model_identity_and_native_lifetime() {
