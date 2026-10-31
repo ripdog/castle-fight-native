@@ -27,6 +27,7 @@ use bevy::{
         storage::ShaderBuffer,
     },
     shader::ShaderRef,
+    tasks::{ComputeTaskPool, ParallelSliceMut, TaskPool},
     utils::Parallel,
     world_serialization::{
         WorldAssetRoot, WorldInstance, WorldInstanceReady, WorldInstanceSpawner,
@@ -2757,6 +2758,8 @@ struct EmitterRuntime {
     sequence: u32,
     /// Billboard texture, loaded on first emission rather than looked up per frame.
     compact_texture: Option<Handle<Image>>,
+    /// Particles to emit this frame and the parameters sampled for them.
+    pending_emission: Option<(u32, Wc3EmitterSample)>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -2873,36 +2876,45 @@ impl Wc3BillboardParticles {
     }
 
     fn update(&mut self, dt: f32) {
-        self.particles.retain_mut(|particle| {
-            particle.age += dt;
-            if particle.age >= particle.lifespan {
-                return false;
-            }
+        // Each particle advances on its own; removing the expired ones afterwards keeps order.
+        self.particles.par_chunk_map_mut(
+            ComputeTaskPool::get_or_init(TaskPool::default),
+            BILLBOARD_PARTICLES_PER_TASK,
+            |_, chunk| chunk.iter_mut().for_each(|particle| particle.advance(dt)),
+        );
+        self.particles
+            .retain(|particle| particle.age < particle.lifespan);
+    }
+}
 
-            particle.velocity.y -= particle.gravity * dt;
-            particle.position += particle.velocity * dt;
-            let t = (particle.age / particle.lifespan).clamp(0.0, 1.0);
-            particle.scale = three_stage_lerp(particle.scales, t, particle.middle_time).max(0.01);
-            // Color and UVs are functions of the quantized step and atlas frame, which change a
-            // few times per lifetime; `push` sets both for the initial step and frame.
-            let atlas_frame = particle_atlas_frame(particle.atlas, t);
-            if atlas_frame != particle.atlas_frame {
-                particle.atlas_frame = atlas_frame;
-                particle.uv_rect = particle_atlas_uv_rect(
-                    particle.atlas.rows,
-                    particle.atlas.columns,
-                    atlas_frame,
-                );
-            }
-            let material_step = particle_material_step(t);
-            if material_step != particle.material_step {
-                particle.material_step = material_step;
-                let quantized_t = f32::from(material_step) / f32::from(PARTICLE_MATERIAL_STEPS);
-                let (color, alpha) = particle_lifecycle_color_alpha(&particle.visual, quantized_t);
-                particle.color = [color[0], color[1], color[2], alpha];
-            }
-            true
-        });
+/// Billboard particles advanced per compute task; enough to amortize task overhead.
+const BILLBOARD_PARTICLES_PER_TASK: usize = 4096;
+
+impl Wc3BillboardParticle {
+    fn advance(&mut self, dt: f32) {
+        self.age += dt;
+        if self.age >= self.lifespan {
+            return;
+        }
+
+        self.velocity.y -= self.gravity * dt;
+        self.position += self.velocity * dt;
+        let t = (self.age / self.lifespan).clamp(0.0, 1.0);
+        self.scale = three_stage_lerp(self.scales, t, self.middle_time).max(0.01);
+        // Color and UVs are functions of the quantized step and atlas frame, which change a
+        // few times per lifetime; `push` sets both for the initial step and frame.
+        let atlas_frame = particle_atlas_frame(self.atlas, t);
+        if atlas_frame != self.atlas_frame {
+            self.atlas_frame = atlas_frame;
+            self.uv_rect = particle_atlas_uv_rect(self.atlas.rows, self.atlas.columns, atlas_frame);
+        }
+        let material_step = particle_material_step(t);
+        if material_step != self.material_step {
+            self.material_step = material_step;
+            let quantized_t = f32::from(material_step) / f32::from(PARTICLE_MATERIAL_STEPS);
+            let (color, alpha) = particle_lifecycle_color_alpha(&self.visual, quantized_t);
+            self.color = [color[0], color[1], color[2], alpha];
+        }
     }
 }
 
@@ -3295,6 +3307,7 @@ impl Wc3EmitterSource {
                     accumulator: 0.0,
                     sequence: 0,
                     compact_texture: None,
+                    pending_emission: None,
                 }
             })
             .collect::<Vec<_>>();
@@ -5397,19 +5410,29 @@ type Wc3ParticleQuery<'w, 's> = Query<
     ),
 >;
 
+/// Sources with an emission this frame, collected per thread and merged in entity order.
+#[derive(Default)]
+pub(crate) struct EmittingSources {
+    per_thread: Parallel<Vec<Entity>>,
+    sorted: Vec<Entity>,
+}
+
 pub fn emit_wc3_particles(
-    visibility_world: (Query<&ChildOf>, Query<&Visibility>),
+    hierarchy: (Query<&ChildOf>, Query<&Visibility>, Query<&GlobalTransform>),
     mut commands: Commands,
     time: Res<Time>,
     mut assets: Wc3ParticleRenderAssets,
     mut billboard_particles: ResMut<Wc3BillboardParticles>,
     mut sources: Query<(Entity, &GlobalTransform, &mut Wc3EmitterSource), Without<Wc3EffectWarmup>>,
-    transforms: Query<&GlobalTransform>,
+    mut emitting: Local<EmittingSources>,
 ) {
-    let (parents, visibility) = visibility_world;
+    let (parents, visibility, transforms) = &hierarchy;
     let dt = time.delta_secs().min(0.1);
-    for (entity, transform, mut source) in &mut sources {
-        let visible = wc3_effect_visible(entity, &parents, &visibility);
+    // Sampling emitters and advancing their clocks is independent per source. Most emitters do
+    // not emit on a given frame; those that do spawn below, where asset access is exclusive.
+    let EmittingSources { per_thread, sorted } = &mut *emitting;
+    sources.par_iter_mut().for_each(|(entity, _, mut source)| {
+        let visible = wc3_effect_visible(entity, parents, visibility);
         let sequence_time_ms = source
             .sequence_clock
             .as_ref()
@@ -5417,7 +5440,9 @@ pub fn emit_wc3_particles(
             .unwrap_or(source.global_elapsed_ms);
         let sequence_clock = source.sequence_clock;
         let global_elapsed_ms = source.global_elapsed_ms;
-        for (emitter_index, emitter) in source.emitters.iter_mut().enumerate() {
+        let mut emits = false;
+        for emitter in &mut source.emitters {
+            emitter.pending_emission = None;
             if !visible {
                 emitter.accumulator = 0.0;
                 continue;
@@ -5445,6 +5470,27 @@ pub fn emit_wc3_particles(
             if count == 0 || emitter.spec.lifespan <= 0.0 {
                 continue;
             }
+            emitter.pending_emission = Some((count, sample));
+            emits = true;
+        }
+        if let Some(clock) = source.sequence_clock.as_mut() {
+            clock.advance(dt);
+        }
+        source.global_elapsed_ms += dt * 1000.0;
+        if emits {
+            per_thread.borrow_local_mut().push(entity);
+        }
+    });
+    per_thread.drain_into(sorted);
+    sorted.sort_unstable();
+    for entity in sorted.drain(..) {
+        let Ok((entity, transform, mut source)) = sources.get_mut(entity) else {
+            continue;
+        };
+        for (emitter_index, emitter) in source.emitters.iter_mut().enumerate() {
+            let Some((count, sample)) = emitter.pending_emission.take() else {
+                continue;
+            };
             let material_step = particle_material_step(0.0);
             let compact_blend_mode = compact_particle_blend_mode(emitter.visual.filter_mode);
             let atlas = Wc3ParticleAtlasAnimation {
@@ -5581,10 +5627,6 @@ pub fn emit_wc3_particles(
                 ));
             }
         }
-        if let Some(clock) = source.sequence_clock.as_mut() {
-            clock.advance(dt);
-        }
-        source.global_elapsed_ms += dt * 1000.0;
     }
 }
 
