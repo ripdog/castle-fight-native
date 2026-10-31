@@ -59,18 +59,19 @@ use crate::{
     terrain::{TerrainSurface, TerrainTextureLayout, TerrainTextureMesh, TerrainTextureSet},
     unit_models::{UnitAnimationClip, UnitAnimationSet, UnitModelAsset, UnitModelSet},
     wc3_effects::{
-        AttachChildOrDespawn, Wc3AbilityVisualAnchor, Wc3AnimatedAlphaMaterial, Wc3AttachToNode,
-        Wc3AttachmentOwner, Wc3ComposedMetadataCache, Wc3ConvertedModelRegistry,
-        Wc3EffectReusePending, Wc3EffectSize, Wc3EffectWarmup, Wc3EmitterSource,
-        Wc3LightningVisual, Wc3MaterialProcessed, Wc3ModelSequenceSelection, Wc3ParticleAssets,
-        Wc3RibbonSource, Wc3SplatMaterial, Wc3StatusVisualKind, Wc3TeamColorMaterial, Wc3TeamTint,
-        Wc3VertexOpacity, Wc3VertexTint, Wc3VisualAnimationGraphs, Wc3VisualAnimationSource,
-        Wc3VisualModel, Wc3VisualSet, advance_wc3_model_sequence_clocks, apply_wc3_non_inheritance,
-        emit_wc3_model_particles, emit_wc3_particles, emit_wc3_sound_events, emit_wc3_spawn_events,
-        emit_wc3_splat_events, fix_wc3_scene_materials, flush_wc3_particle_buffers,
-        index_wc3_model_attachments, mark_wc3_effect_warmup_hierarchy,
-        reset_reused_wc3_effect_instances, resolve_wc3_emitter_nodes,
-        resolve_wc3_visual_attachments, setup_wc3_model_composed_features, setup_wc3_model_lights,
+        AnimationPlayerCandidates, AttachChildOrDespawn, Wc3AbilityVisualAnchor,
+        Wc3AnimatedAlphaMaterial, Wc3AttachToNode, Wc3AttachmentOwner, Wc3ComposedMetadataCache,
+        Wc3ConvertedModelRegistry, Wc3EffectReusePending, Wc3EffectSize, Wc3EffectWarmup,
+        Wc3EmitterSource, Wc3LightningVisual, Wc3MaterialProcessed, Wc3ModelSequenceSelection,
+        Wc3ParticleAssets, Wc3RibbonSource, Wc3SplatMaterial, Wc3StatusVisualKind,
+        Wc3TeamColorMaterial, Wc3TeamTint, Wc3VertexOpacity, Wc3VertexTint,
+        Wc3VisualAnimationGraphs, Wc3VisualAnimationSource, Wc3VisualModel, Wc3VisualSet,
+        advance_wc3_model_sequence_clocks, apply_wc3_non_inheritance, emit_wc3_model_particles,
+        emit_wc3_particles, emit_wc3_sound_events, emit_wc3_spawn_events, emit_wc3_splat_events,
+        fix_wc3_scene_materials, flush_wc3_particle_buffers, index_wc3_model_attachments,
+        mark_wc3_effect_warmup_hierarchy, reset_reused_wc3_effect_instances,
+        resolve_wc3_emitter_nodes, resolve_wc3_visual_attachments,
+        setup_wc3_model_composed_features, setup_wc3_model_lights,
         setup_wc3_visual_animation_players, spawn_wc3_ribbon_trails, update_wc3_material_alpha,
         update_wc3_material_texture, update_wc3_model_attachments, update_wc3_model_lights,
         update_wc3_model_particles, update_wc3_particles, update_wc3_ribbon_trails,
@@ -1102,6 +1103,7 @@ impl Plugin for CastlePresentationPlugin {
             .init_resource::<Wc3ConvertedModelRegistry>()
             .init_resource::<Wc3ComposedMetadataCache>()
             .init_resource::<Wc3VisualAnimationGraphs>()
+            .init_resource::<AnimationPlayerCandidates>()
             .init_resource::<FpsDisplay>()
             .init_resource::<MapGridState>()
             .init_resource::<BuildingGridSnapState>()
@@ -1149,6 +1151,7 @@ impl Plugin for CastlePresentationPlugin {
                     resolve_wc3_visual_attachments,
                     resolve_wc3_emitter_nodes,
                     (
+                        collect_animation_player_candidates,
                         setup_wc3_visual_animation_players,
                         retain_prewarmed_wc3_effects,
                     )
@@ -1805,18 +1808,58 @@ fn spawn_air_wings(
     });
 }
 
+type AnimationPlayerHierarchyChanges<'w, 's> = Query<
+    'w,
+    's,
+    (Entity, Option<&'static ChildOf>),
+    Or<(
+        Changed<ChildOf>,
+        Changed<ImportedUnitModelRoot>,
+        Changed<ImportedBuildingModelRoot>,
+        Changed<Wc3VisualAnimationSource>,
+        Added<AnimationPlayer>,
+    )>,
+>;
+
+/// Gathers the animation players below entities whose ancestry or model root marker changed.
+fn collect_animation_player_candidates(
+    mut candidates: ResMut<AnimationPlayerCandidates>,
+    changes: AnimationPlayerHierarchyChanges,
+    children: Query<&Children>,
+    players: Query<(), With<AnimationPlayer>>,
+) {
+    candidates.0.clear();
+    for (entity, parent) in &changes {
+        // The subtree of a changed parent already includes this one.
+        if parent.is_some_and(|parent| changes.contains(parent.parent())) {
+            continue;
+        }
+        candidates.0.extend(
+            std::iter::once(entity)
+                .chain(children.iter_descendants(entity))
+                .filter(|&entity| players.contains(entity)),
+        );
+    }
+}
+
 fn setup_imported_unit_animation_players(
     mut commands: Commands,
     unit_models: Res<UnitModelSet>,
-    parents: Query<&ChildOf>,
-    roots: Query<&ImportedUnitModelRoot>,
+    hierarchy: (Query<&ChildOf>, Query<&ImportedUnitModelRoot>),
+    candidates: Res<AnimationPlayerCandidates>,
+    mut deferred: Local<Vec<Entity>>,
     mut players: Query<(Entity, &mut AnimationPlayer), Without<ImportedUnitAnimationController>>,
 ) {
-    for (entity, mut player) in &mut players {
-        let Some((model_root, root)) = imported_model_root(entity, &parents, &roots) else {
+    let (parents, roots) = &hierarchy;
+    for entity in candidates.with_deferred(&mut deferred) {
+        let Ok((entity, mut player)) = players.get_mut(entity) else {
+            continue;
+        };
+        let Some((model_root, root)) = imported_model_root(entity, parents, roots) else {
             continue;
         };
         let Some(animations) = unit_models.animations(root.rawcode) else {
+            deferred.push(entity);
             continue;
         };
 
@@ -1865,20 +1908,28 @@ fn setup_imported_building_animation_players(
     mut commands: Commands,
     building_models: Res<BuildingModelSet>,
     samples: Res<PresentationSamples>,
-    parents: Query<&ChildOf>,
-    roots: Query<&ImportedBuildingModelRoot>,
-    dying_roots: Query<(), With<ImportedBuildingDeathRemnant>>,
+    hierarchy: (
+        Query<&ChildOf>,
+        Query<&ImportedBuildingModelRoot>,
+        Query<(), With<ImportedBuildingDeathRemnant>>,
+    ),
+    candidates: Res<AnimationPlayerCandidates>,
+    mut deferred: Local<Vec<Entity>>,
     mut players: Query<
         (Entity, &mut AnimationPlayer),
         Without<ImportedBuildingAnimationController>,
     >,
 ) {
-    for (entity, mut player) in &mut players {
-        let Some((model_root, root)) = imported_building_model_root(entity, &parents, &roots)
-        else {
+    let (parents, roots, dying_roots) = &hierarchy;
+    for entity in candidates.with_deferred(&mut deferred) {
+        let Ok((entity, mut player)) = players.get_mut(entity) else {
+            continue;
+        };
+        let Some((model_root, root)) = imported_building_model_root(entity, parents, roots) else {
             continue;
         };
         let Some(animations) = building_models.animations(root.rawcode) else {
+            deferred.push(entity);
             continue;
         };
 
@@ -1903,6 +1954,7 @@ fn setup_imported_building_animation_players(
             if dying {
                 commands.entity(root.presentation_root).try_despawn();
             }
+            deferred.push(entity);
             continue;
         };
 
@@ -8209,6 +8261,41 @@ mod tests {
     use castle_fight_sim::{AttackProfile, CorpseDefinitionId, NavCell, Team, TerrainElevationMap};
 
     use super::*;
+
+    #[test]
+    fn animation_player_candidates_follow_reparented_ancestors() {
+        let mut app = App::new();
+        app.init_resource::<AnimationPlayerCandidates>()
+            .add_systems(Update, collect_animation_player_candidates);
+        let attachment = app.world_mut().spawn_empty().id();
+        let player = app
+            .world_mut()
+            .spawn((AnimationPlayer::default(), ChildOf(attachment)))
+            .id();
+        let bystander = app.world_mut().spawn(AnimationPlayer::default()).id();
+        let candidates = |app: &App| {
+            let mut candidates = app
+                .world()
+                .resource::<AnimationPlayerCandidates>()
+                .0
+                .clone();
+            candidates.sort_unstable();
+            candidates
+        };
+        app.update();
+        let mut spawned = vec![player, bystander];
+        spawned.sort_unstable();
+        assert_eq!(candidates(&app), spawned);
+
+        app.update();
+        assert!(candidates(&app).is_empty());
+
+        // Attaching the player's ancestor below a model root must re-examine the player alone.
+        let root = app.world_mut().spawn_empty().id();
+        app.world_mut().entity_mut(attachment).insert(ChildOf(root));
+        app.update();
+        assert_eq!(candidates(&app), [player]);
+    }
 
     #[test]
     fn building_script_attachment_preserves_world_geometry_without_model_scale_inheritance() {

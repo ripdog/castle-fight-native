@@ -594,6 +594,27 @@ pub(crate) struct Wc3AnimatedMaterialTexture {
 #[derive(Component)]
 pub struct Wc3VisualAnimationController;
 
+/// Animation players that may have come under a model root since the previous frame.
+///
+/// The controller setup systems attach a controller to animation players below a model root of
+/// their kind. A player can only start to match when it is added, its ancestry changes or a root
+/// marker above it changes, so instead of walking every player's ancestors each frame the setup
+/// systems examine the players below such entities, plus the ones they deferred while assets
+/// loaded.
+#[derive(Resource, Default)]
+pub(crate) struct AnimationPlayerCandidates(pub(crate) Vec<Entity>);
+
+impl AnimationPlayerCandidates {
+    /// This frame's candidates and the drained `deferred` players, in entity order without repeats.
+    pub(crate) fn with_deferred(&self, deferred: &mut Vec<Entity>) -> Vec<Entity> {
+        let mut players = std::mem::take(deferred);
+        players.extend_from_slice(&self.0);
+        players.sort_unstable();
+        players.dedup();
+        players
+    }
+}
+
 #[derive(Component)]
 pub(crate) struct Wc3EffectReusePending;
 
@@ -3943,29 +3964,31 @@ pub fn setup_wc3_visual_animation_players(
     mut commands: Commands,
     animation_assets: Wc3AnimationAssets<'_>,
     mut cache: ResMut<Wc3VisualAnimationGraphs>,
-    parents: Query<&ChildOf>,
-    roots: Query<&Wc3VisualAnimationSource>,
+    hierarchy: (Query<&ChildOf>, Query<&Wc3VisualAnimationSource>),
+    candidates: Res<AnimationPlayerCandidates>,
+    mut deferred: Local<Vec<Entity>>,
     mut players: Query<(Entity, &mut AnimationPlayer), Without<Wc3VisualAnimationController>>,
 ) {
     let (gltfs, clips, mut graphs) = animation_assets;
-    for (entity, mut player) in &mut players {
-        let Some((model_root, source)) = wc3_visual_animation_source(entity, &parents, &roots)
-        else {
+    let (parents, roots) = &hierarchy;
+    for entity in candidates.with_deferred(&mut deferred) {
+        let Ok((entity, mut player)) = players.get_mut(entity) else {
             continue;
         };
-        let Some(gltf) = gltfs.get(&source.gltf) else {
+        let Some((model_root, source)) = wc3_visual_animation_source(entity, parents, roots) else {
             continue;
         };
-        let Some((_, clip)) = gltf
-            .named_animations
-            .iter()
-            .find(|(name, _)| name.eq_ignore_ascii_case(&source.animation_name))
-        else {
+        let clip = gltfs.get(&source.gltf).and_then(|gltf| {
+            gltf.named_animations
+                .iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case(&source.animation_name))
+                .map(|(_, clip)| clip)
+                .filter(|clip| clips.get(*clip).is_some())
+        });
+        let Some(clip) = clip else {
+            deferred.push(entity);
             continue;
         };
-        if clips.get(clip).is_none() {
-            continue;
-        }
         let key = (source.gltf.id(), source.animation_name.clone());
         let (graph, node) = cache.entries.entry(key).or_insert_with(|| {
             let (graph, nodes) = AnimationGraph::from_clips(vec![clip.clone()]);
