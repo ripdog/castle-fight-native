@@ -1839,14 +1839,13 @@ pub fn update_wc3_model_attachments(
     mut commands: Commands,
     time: Res<Time>,
     asset_server: Res<AssetServer>,
-    parents: Query<&ChildOf>,
-    clocks: Query<&Wc3ModelSequenceClock>,
+    clock_tree: Wc3ClockTree,
     mut attachments: Query<(Entity, &mut Wc3ModelAttachmentRuntime), Without<Wc3EffectWarmup>>,
 ) {
     let dt_ms = time.delta_secs().max(0.0) * 1000.0;
     for (entity, mut attachment) in &mut attachments {
         attachment.fallback_elapsed_ms += dt_ms;
-        let clock = inherited_wc3_model_sequence_clock(entity, &parents, &clocks);
+        let clock = inherited_wc3_model_sequence_clock(entity, &clock_tree);
         let visible = model_attachment_visibility(&attachment, clock) > 0.001;
         match (visible, attachment.child) {
             (true, None) => {
@@ -1931,12 +1930,11 @@ fn legacy_model_particle_velocity(
 }
 
 pub fn emit_wc3_model_particles(
-    visibility: Query<&Visibility>,
+    visibility_tree: Wc3VisibilityTree,
     mut commands: Commands,
     time: Res<Time>,
     asset_server: Res<AssetServer>,
-    parents: Query<&ChildOf>,
-    clocks: Query<&Wc3ModelSequenceClock>,
+    clock_tree: Wc3ClockTree,
     mut emitters: Query<
         (Entity, &GlobalTransform, &mut Wc3LegacyModelEmitterRuntime),
         Without<Wc3EffectWarmup>,
@@ -1945,10 +1943,10 @@ pub fn emit_wc3_model_particles(
     let dt = time.delta_secs().min(0.1);
     let dt_ms = dt * 1000.0;
     for (entity, transform, mut emitter) in &mut emitters {
-        let clock = inherited_wc3_model_sequence_clock(entity, &parents, &clocks);
+        let clock = inherited_wc3_model_sequence_clock(entity, &clock_tree);
         let sample = sample_legacy_model_emitter(&emitter, clock);
         emitter.fallback_elapsed_ms += dt_ms;
-        if sample.visibility <= 0.001 || !wc3_effect_visible(entity, &parents, &visibility) {
+        if sample.visibility <= 0.001 || !wc3_effect_visible(entity, &visibility_tree) {
             emitter.accumulator = 0.0;
             continue;
         }
@@ -2163,8 +2161,7 @@ pub fn emit_wc3_spawn_events(
     mut commands: Commands,
     time: Res<Time>,
     asset_server: Res<AssetServer>,
-    parents: Query<&ChildOf>,
-    clocks: Query<&Wc3ModelSequenceClock>,
+    clock_tree: Wc3ClockTree,
     mut events: Query<
         (Entity, &GlobalTransform, &mut Wc3SpawnEventRuntime),
         Without<Wc3EffectWarmup>,
@@ -2172,7 +2169,7 @@ pub fn emit_wc3_spawn_events(
 ) {
     let dt_ms = time.delta_secs().max(0.0) * 1000.0;
     for (entity, source_transform, mut runtime) in &mut events {
-        let Some(clock) = inherited_wc3_model_sequence_clock(entity, &parents, &clocks) else {
+        let Some(clock) = inherited_wc3_model_sequence_clock(entity, &clock_tree) else {
             continue;
         };
         let count = wc3_spawn_event_crossings(&mut runtime, clock, dt_ms);
@@ -2240,8 +2237,7 @@ fn wc3_sound_pitch(sound: &Wc3EventSoundSpec, random: f32) -> f32 {
 pub fn emit_wc3_sound_events(
     mut commands: Commands,
     time: Res<Time>,
-    parents: Query<&ChildOf>,
-    clocks: Query<&Wc3ModelSequenceClock>,
+    clock_tree: Wc3ClockTree,
     listeners: Query<&GlobalTransform, With<SpatialListener>>,
     mut events: Query<
         (Entity, &GlobalTransform, &mut Wc3SoundEventRuntime),
@@ -2251,7 +2247,7 @@ pub fn emit_wc3_sound_events(
     let dt_ms = time.delta_secs().max(0.0) * 1000.0;
     let listener_position = listeners.iter().next().map(GlobalTransform::translation);
     for (entity, source_transform, mut runtime) in &mut events {
-        let Some(clock) = inherited_wc3_model_sequence_clock(entity, &parents, &clocks) else {
+        let Some(clock) = inherited_wc3_model_sequence_clock(entity, &clock_tree) else {
             continue;
         };
         let count = {
@@ -2448,8 +2444,7 @@ pub fn emit_wc3_splat_events(
     mut commands: Commands,
     time: Res<Time>,
     experiment: Option<Res<RenderExperiment>>,
-    parents: Query<&ChildOf>,
-    clocks: Query<&Wc3ModelSequenceClock>,
+    clock_tree: Wc3ClockTree,
     mut assets: Wc3SplatSpawnAssets,
     mut events: Query<
         (Entity, &GlobalTransform, &mut Wc3SplatEventRuntime),
@@ -2458,7 +2453,7 @@ pub fn emit_wc3_splat_events(
 ) {
     let dt_ms = time.delta_secs().max(0.0) * 1000.0;
     for (entity, source_transform, mut runtime) in &mut events {
-        let Some(clock) = inherited_wc3_model_sequence_clock(entity, &parents, &clocks) else {
+        let Some(clock) = inherited_wc3_model_sequence_clock(entity, &clock_tree) else {
             continue;
         };
         let count = {
@@ -4604,20 +4599,32 @@ pub(crate) fn reset_reused_wc3_effect_instances(
     }
 }
 
+/// Parent links fetched with each entity's sequence clock, so walking up a model hierarchy
+/// costs one entity lookup per ancestor.
+pub(crate) type Wc3ClockTree<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Option<&'static ChildOf>,
+        Option<&'static Wc3ModelSequenceClock>,
+    ),
+>;
+
+/// Parent links fetched with each entity's [`Visibility`], for [`wc3_effect_visible`].
+pub(crate) type Wc3VisibilityTree<'w, 's> =
+    Query<'w, 's, (Option<&'static ChildOf>, Option<&'static Visibility>)>;
+
 fn inherited_wc3_model_sequence_clock<'a>(
     entity: Entity,
-    parents: &Query<&ChildOf>,
-    clocks: &'a Query<&Wc3ModelSequenceClock>,
+    tree: &'a Wc3ClockTree,
 ) -> Option<&'a Wc3ModelSequenceClock> {
     let mut current = entity;
     for _ in 0..128 {
-        if let Ok(clock) = clocks.get(current) {
-            return Some(clock);
+        let (parent, clock) = tree.get(current).ok()?;
+        if clock.is_some() {
+            return clock;
         }
-        let Ok(parent) = parents.get(current) else {
-            return None;
-        };
-        current = parent.parent();
+        current = parent?.parent();
     }
     None
 }
@@ -4693,8 +4700,7 @@ pub fn setup_wc3_model_lights(
 
 pub fn update_wc3_model_lights(
     time: Res<Time>,
-    parents: Query<&ChildOf>,
-    clocks: Query<&Wc3ModelSequenceClock>,
+    clock_tree: Wc3ClockTree,
     mut lights: Query<(
         Entity,
         &GlobalTransform,
@@ -4705,7 +4711,7 @@ pub fn update_wc3_model_lights(
     let dt_ms = time.delta_secs().max(0.0) * 1000.0;
     for (entity, transform, mut light, mut animation) in &mut lights {
         animation.fallback_elapsed_ms += dt_ms;
-        let inherited = inherited_wc3_model_sequence_clock(entity, &parents, &clocks);
+        let inherited = inherited_wc3_model_sequence_clock(entity, &clock_tree);
         let (sequence_time_ms, global_elapsed_ms) = inherited.map_or(
             (animation.fallback_elapsed_ms, animation.fallback_elapsed_ms),
             |clock| {
@@ -4774,7 +4780,7 @@ struct MaterialAlphaChange {
 pub fn update_wc3_material_alpha(
     time: Res<Time>,
     experiment: Option<Res<RenderExperiment>>,
-    clock_hierarchy: (Query<&ChildOf>, Query<&Wc3ModelSequenceClock>),
+    clock_tree: Wc3ClockTree,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut effect_assets: ResMut<Wc3ParticleAssets>,
     mut animated: Query<(
@@ -4785,7 +4791,6 @@ pub fn update_wc3_material_alpha(
     mut scratch: Local<MaterialAlphaScratch>,
 ) {
     let MaterialAlphaScratch { changes, sorted } = &mut *scratch;
-    let (parents, clocks) = &clock_hierarchy;
     if experiment.is_some_and(|experiment| *experiment == RenderExperiment::FreezeMaterials) {
         return;
     }
@@ -4795,7 +4800,7 @@ pub fn update_wc3_material_alpha(
         .par_iter_mut()
         .for_each(|(entity, material_handle, mut animation)| {
             animation.fallback_elapsed_ms += dt_ms;
-            let inherited = inherited_wc3_model_sequence_clock(entity, parents, clocks);
+            let inherited = inherited_wc3_model_sequence_clock(entity, &clock_tree);
             let (sequence_time_ms, global_elapsed_ms) = inherited.map_or(
                 (animation.fallback_elapsed_ms, animation.fallback_elapsed_ms),
                 |clock| {
@@ -4859,8 +4864,7 @@ type Wc3AnimatedTextureQuery<'w, 's> = Query<
 pub fn update_wc3_material_texture(
     time: Res<Time>,
     experiment: Option<Res<RenderExperiment>>,
-    parents: Query<&ChildOf>,
-    clocks: Query<&Wc3ModelSequenceClock>,
+    clock_tree: Wc3ClockTree,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut animated: Wc3AnimatedTextureQuery,
 ) {
@@ -4870,7 +4874,7 @@ pub fn update_wc3_material_texture(
     let dt_ms = time.delta_secs().max(0.0) * 1000.0;
     for (entity, mut standard_handle, mut alpha_handle, mut animation) in &mut animated {
         animation.fallback_elapsed_ms += dt_ms;
-        let inherited = inherited_wc3_model_sequence_clock(entity, &parents, &clocks);
+        let inherited = inherited_wc3_model_sequence_clock(entity, &clock_tree);
         let (sequence_time_ms, global_elapsed_ms) = inherited.map_or(
             (animation.fallback_elapsed_ms, animation.fallback_elapsed_ms),
             |clock| {
@@ -5091,20 +5095,16 @@ fn wc3_vertex_tint(
     None
 }
 
-fn wc3_effect_visible(
-    entity: Entity,
-    parents: &Query<&ChildOf>,
-    roots: &Query<&Visibility>,
-) -> bool {
+fn wc3_effect_visible(entity: Entity, tree: &Wc3VisibilityTree) -> bool {
     let mut current = entity;
     for _ in 0..128 {
-        if roots
-            .get(current)
-            .is_ok_and(|visibility| *visibility == Visibility::Hidden)
-        {
+        let Ok((parent, visibility)) = tree.get(current) else {
+            return true;
+        };
+        if visibility == Some(&Visibility::Hidden) {
             return false;
         }
-        let Ok(parent) = parents.get(current) else {
+        let Some(parent) = parent else {
             return true;
         };
         current = parent.parent();
@@ -5419,7 +5419,7 @@ pub(crate) struct EmittingSources {
 }
 
 pub fn emit_wc3_particles(
-    hierarchy: (Query<&ChildOf>, Query<&Visibility>, Query<&GlobalTransform>),
+    hierarchy: (Wc3VisibilityTree, Query<&GlobalTransform>),
     mut commands: Commands,
     time: Res<Time>,
     mut assets: Wc3ParticleRenderAssets,
@@ -5427,13 +5427,13 @@ pub fn emit_wc3_particles(
     mut sources: Query<(Entity, &GlobalTransform, &mut Wc3EmitterSource), Without<Wc3EffectWarmup>>,
     mut emitting: Local<EmittingSources>,
 ) {
-    let (parents, visibility, transforms) = &hierarchy;
+    let (visibility_tree, transforms) = &hierarchy;
     let dt = time.delta_secs().min(0.1);
     // Sampling emitters and advancing their clocks is independent per source. Most emitters do
     // not emit on a given frame; those that do spawn below, where asset access is exclusive.
     let EmittingSources { per_thread, sorted } = &mut *emitting;
     sources.par_iter_mut().for_each(|(entity, _, mut source)| {
-        let visible = wc3_effect_visible(entity, parents, visibility);
+        let visible = wc3_effect_visible(entity, visibility_tree);
         let sequence_time_ms = source
             .sequence_clock
             .as_ref()
@@ -6945,20 +6945,17 @@ mod tests {
         let mesh = world.spawn(ChildOf(unit)).id();
         let effect = world.spawn((ChildOf(unit), Wc3VertexOpacity(255))).id();
         let effect_mesh = world.spawn(ChildOf(effect)).id();
-        let mut state: SystemState<(
-            Query<&ChildOf>,
-            Query<&Visibility>,
-            Query<&Wc3VertexOpacity>,
-        )> = SystemState::new(&mut world);
+        let mut state: SystemState<(Query<&ChildOf>, Wc3VisibilityTree, Query<&Wc3VertexOpacity>)> =
+            SystemState::new(&mut world);
         {
             let (parents, visibility, opacity) = state.get(&world).unwrap();
-            assert!(!wc3_effect_visible(effect_mesh, &parents, &visibility));
+            assert!(!wc3_effect_visible(effect_mesh, &visibility));
             assert_eq!(wc3_vertex_opacity(mesh, &parents, &opacity), 128.0 / 255.0);
             assert_eq!(wc3_vertex_opacity(effect_mesh, &parents, &opacity), 1.0);
         }
         world.entity_mut(unit).insert(Visibility::Inherited);
-        let (parents, visibility, _) = state.get(&world).unwrap();
-        assert!(wc3_effect_visible(effect_mesh, &parents, &visibility));
+        let (_, visibility, _) = state.get(&world).unwrap();
+        assert!(wc3_effect_visible(effect_mesh, &visibility));
     }
 
     #[test]
