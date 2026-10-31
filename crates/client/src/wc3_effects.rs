@@ -27,6 +27,7 @@ use bevy::{
         storage::ShaderBuffer,
     },
     shader::ShaderRef,
+    utils::Parallel,
     world_serialization::{
         WorldAssetRoot, WorldInstance, WorldInstanceReady, WorldInstanceSpawner,
     },
@@ -4741,11 +4742,25 @@ pub fn update_wc3_model_lights(
     }
 }
 
+/// Per-thread alpha changes from the parallel sampling pass, and their sorted merge.
+#[derive(Default)]
+pub(crate) struct MaterialAlphaScratch {
+    changes: Parallel<Vec<MaterialAlphaChange>>,
+    sorted: Vec<MaterialAlphaChange>,
+}
+
+/// An animated alpha that changed this frame: where it goes and its new value.
+struct MaterialAlphaChange {
+    entity: Entity,
+    slot: Option<u32>,
+    material: Option<AssetId<StandardMaterial>>,
+    alpha: f32,
+}
+
 pub fn update_wc3_material_alpha(
     time: Res<Time>,
     experiment: Option<Res<RenderExperiment>>,
-    parents: Query<&ChildOf>,
-    clocks: Query<&Wc3ModelSequenceClock>,
+    clock_hierarchy: (Query<&ChildOf>, Query<&Wc3ModelSequenceClock>),
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut effect_assets: ResMut<Wc3ParticleAssets>,
     mut animated: Query<(
@@ -4753,50 +4768,66 @@ pub fn update_wc3_material_alpha(
         Option<&MeshMaterial3d<StandardMaterial>>,
         &mut Wc3AnimatedMaterialAlpha,
     )>,
+    mut scratch: Local<MaterialAlphaScratch>,
 ) {
+    let MaterialAlphaScratch { changes, sorted } = &mut *scratch;
+    let (parents, clocks) = &clock_hierarchy;
     if experiment.is_some_and(|experiment| *experiment == RenderExperiment::FreezeMaterials) {
         return;
     }
     let dt_ms = time.delta_secs().max(0.0) * 1000.0;
-    for (entity, material_handle, mut animation) in &mut animated {
-        animation.fallback_elapsed_ms += dt_ms;
-        let inherited = inherited_wc3_model_sequence_clock(entity, &parents, &clocks);
-        let (sequence_time_ms, global_elapsed_ms) = inherited.map_or(
-            (animation.fallback_elapsed_ms, animation.fallback_elapsed_ms),
-            |clock| {
-                (
-                    material_sequence_time_ms(&animation.sequence_windows, clock),
-                    clock.global_elapsed_ms,
-                )
-            },
-        );
-        let alpha = sample_scalar_track(
-            Some(&animation.track),
-            animation.static_alpha,
-            sequence_time_ms,
-            global_elapsed_ms,
-            &animation.global_sequence_durations_ms,
-        )
-        .clamp(0.0, 1.0);
-        let alpha = alpha * animation.vertex_opacity;
-        let alpha_bits = alpha.to_bits();
-        if alpha_bits == animation.last_alpha_bits {
-            continue;
+    // Sampling is independent per entity; only the writes below need exclusive access.
+    animated
+        .par_iter_mut()
+        .for_each(|(entity, material_handle, mut animation)| {
+            animation.fallback_elapsed_ms += dt_ms;
+            let inherited = inherited_wc3_model_sequence_clock(entity, parents, clocks);
+            let (sequence_time_ms, global_elapsed_ms) = inherited.map_or(
+                (animation.fallback_elapsed_ms, animation.fallback_elapsed_ms),
+                |clock| {
+                    (
+                        material_sequence_time_ms(&animation.sequence_windows, clock),
+                        clock.global_elapsed_ms,
+                    )
+                },
+            );
+            let alpha = sample_scalar_track(
+                Some(&animation.track),
+                animation.static_alpha,
+                sequence_time_ms,
+                global_elapsed_ms,
+                &animation.global_sequence_durations_ms,
+            )
+            .clamp(0.0, 1.0);
+            let alpha = alpha * animation.vertex_opacity;
+            if alpha.to_bits() == animation.last_alpha_bits
+                || (animation.gpu_slot.is_none() && material_handle.is_none())
+            {
+                return;
+            }
+            changes.borrow_local_mut().push(MaterialAlphaChange {
+                entity,
+                slot: animation.gpu_slot,
+                material: material_handle.map(|handle| handle.id()),
+                alpha,
+            });
+        });
+    // Entities sharing a material write it in entity order, independent of thread scheduling.
+    changes.drain_into(sorted);
+    sorted.sort_unstable_by_key(|change| change.entity);
+    for change in sorted.drain(..) {
+        if let Some(slot) = change.slot {
+            effect_assets.update_animated_alpha_slot(slot, change.alpha);
+        } else {
+            let Some(mut material) = change.material.and_then(|id| materials.get_mut(id)) else {
+                continue;
+            };
+            let base = material.base_color.to_linear();
+            material.base_color = Color::linear_rgba(base.red, base.green, base.blue, change.alpha);
         }
-        if let Some(slot) = animation.gpu_slot {
-            effect_assets.update_animated_alpha_slot(slot, alpha);
-            animation.last_alpha_bits = alpha_bits;
-            continue;
+        if let Ok((_, _, mut animation)) = animated.get_mut(change.entity) {
+            animation.last_alpha_bits = change.alpha.to_bits();
         }
-        let Some(material_handle) = material_handle else {
-            continue;
-        };
-        let Some(mut material) = materials.get_mut(&material_handle.0) else {
-            continue;
-        };
-        let base = material.base_color.to_linear();
-        material.base_color = Color::linear_rgba(base.red, base.green, base.blue, alpha);
-        animation.last_alpha_bits = alpha_bits;
     }
 }
 
