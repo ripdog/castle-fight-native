@@ -21,6 +21,7 @@ use bevy::{
     },
     camera::visibility::{ViewVisibility, VisibilitySystems},
     prelude::*,
+    utils::Parallel,
 };
 
 use crate::{
@@ -56,43 +57,64 @@ impl Plugin for OffscreenAnimationPlugin {
 struct AnimationPlayerMeshStates {
     recorded: bool,
     states: Vec<u8>,
+    /// Player entity indices and mesh flags found by each thread of the parallel walk.
+    found: Parallel<Vec<(usize, u8)>>,
 }
+
+/// Each entity's parent, whether it is an animation player and its visibility, fetched together
+/// so the walk from a mesh to its player does one lookup per ancestor.
+type PlayerSearchTree<'w, 's> = Query<
+    'w,
+    's,
+    (
+        Option<&'static ChildOf>,
+        Has<AnimationPlayer>,
+        Option<&'static Visibility>,
+    ),
+>;
 
 fn record_animation_player_mesh_states(
     mut recorded: ResMut<AnimationPlayerMeshStates>,
     meshes: Query<(Entity, &ViewVisibility), With<Mesh3d>>,
-    parents: Query<&ChildOf>,
-    players: Query<(), With<AnimationPlayer>>,
-    visibility: Query<&Visibility>,
+    tree: PlayerSearchTree,
 ) {
-    let recorded = &mut *recorded;
-    recorded.states.fill(0);
-    for (mesh, view) in &meshes {
+    let AnimationPlayerMeshStates {
+        recorded,
+        states,
+        found,
+    } = &mut *recorded;
+    // Walks are independent per mesh and the flags merge by OR, so order does not matter.
+    meshes.par_iter().for_each(|(mesh, view)| {
         let flags = if view.get() {
             HAS_MESH | VISIBLE_MESH
         } else {
             HAS_MESH
         };
         let mut current = mesh;
-        loop {
-            if players.contains(current) {
-                let index = current.index_u32() as usize;
-                if index >= recorded.states.len() {
-                    recorded.states.resize(index + 1, 0);
-                }
-                recorded.states[index] |= flags;
+        while let Ok((parent, is_player, visibility)) = tree.get(current) {
+            if is_player {
+                found
+                    .borrow_local_mut()
+                    .push((current.index_u32() as usize, flags));
                 break;
             }
-            if visibility.get(current) == Ok(&Visibility::Hidden) {
+            if visibility == Some(&Visibility::Hidden) {
                 break;
             }
-            let Ok(parent) = parents.get(current) else {
+            let Some(parent) = parent else {
                 break;
             };
             current = parent.parent();
         }
+    });
+    states.fill(0);
+    for (index, flags) in found.iter_mut().flat_map(|found| found.drain(..)) {
+        if index >= states.len() {
+            states.resize(index + 1, 0);
+        }
+        states[index] |= flags;
     }
-    recorded.recorded = true;
+    *recorded = true;
 }
 
 type TransitionPlayers<'w, 's> = Query<
