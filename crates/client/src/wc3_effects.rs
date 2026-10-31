@@ -2565,12 +2565,27 @@ pub fn emit_wc3_splat_events(
     }
 }
 
+/// Splat work found by the parallel ageing pass, applied afterwards with exclusive asset access.
+#[derive(Default)]
+pub(crate) struct SplatScratch {
+    expired: Parallel<Vec<Entity>>,
+    slot_updates: Parallel<Vec<SplatSlotUpdate>>,
+    material_updates: Parallel<Vec<Entity>>,
+    sorted: Vec<Entity>,
+}
+
+/// A GPU-slot splat's colour and atlas frame for this frame.
+struct SplatSlotUpdate {
+    slot: u32,
+    color: [f32; 4],
+    uv_rect: [f32; 4],
+}
+
 pub fn update_wc3_spawned_splats(
     mut commands: Commands,
     time: Res<Time>,
     experiment: Option<Res<RenderExperiment>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
+    assets: (ResMut<Assets<Mesh>>, ResMut<Assets<StandardMaterial>>),
     mut effect_assets: ResMut<Wc3ParticleAssets>,
     mut splats: Query<(
         Entity,
@@ -2578,44 +2593,76 @@ pub fn update_wc3_spawned_splats(
         Option<&MeshMaterial3d<StandardMaterial>>,
         &mut Wc3SpawnedSplat,
     )>,
+    mut scratch: Local<SplatScratch>,
 ) {
+    let (mut meshes, mut materials) = assets;
     let legacy_updates = experiment
         .as_ref()
         .is_some_and(|experiment| **experiment == RenderExperiment::LegacySplatUpdates);
     let freeze_materials =
         experiment.is_some_and(|experiment| *experiment == RenderExperiment::FreezeMaterials);
-    for (entity, mesh, material, mut splat) in &mut splats {
-        splat.age += time.delta_secs().max(0.0);
+    let dt = time.delta_secs().max(0.0);
+    let SplatScratch {
+        expired,
+        slot_updates,
+        material_updates,
+        sorted,
+    } = &mut *scratch;
+    // Ageing and sampling are independent per splat; asset updates and despawns follow below,
+    // in entity order.
+    splats.par_iter_mut().for_each(|(entity, _, _, mut splat)| {
+        splat.age += dt;
         if splat.age >= splat_lifespan(&splat.spec) {
-            if let Some(material) = material {
-                materials.remove(material.0.id());
-            }
-            if let Some(slot) = splat.gpu_slot {
-                effect_assets.release_splat_slot(slot);
-            }
-            meshes.remove(mesh.0.id());
-            commands.entity(entity).try_despawn();
-            continue;
+            expired.borrow_local_mut().push(entity);
+            return;
         }
+        let Some(slot) = splat.gpu_slot else {
+            material_updates.borrow_local_mut().push(entity);
+            return;
+        };
         let (sampled_color, frame) = splat_sample(&splat.spec, splat.age);
-        if let Some(slot) = splat.gpu_slot {
-            let color = if freeze_materials {
-                splat_sample(&splat.spec, 0.0).0
-            } else {
-                sampled_color
-            };
-            effect_assets.update_splat_slot(
-                slot,
-                splat_gpu_color(color),
-                particle_atlas_uv_rect(splat.spec.rows, splat.spec.columns, frame),
-            );
-            splat.frame = frame;
-            continue;
-        }
+        let color = if freeze_materials {
+            splat_sample(&splat.spec, 0.0).0
+        } else {
+            sampled_color
+        };
+        slot_updates.borrow_local_mut().push(SplatSlotUpdate {
+            slot,
+            color: splat_gpu_color(color),
+            uv_rect: particle_atlas_uv_rect(splat.spec.rows, splat.spec.columns, frame),
+        });
+        splat.frame = frame;
+    });
+    for update in slot_updates
+        .iter_mut()
+        .flat_map(|updates| updates.drain(..))
+    {
+        effect_assets.update_splat_slot(update.slot, update.color, update.uv_rect);
+    }
 
-        let Some(material) = material else {
+    expired.drain_into(sorted);
+    sorted.sort_unstable();
+    for entity in sorted.drain(..) {
+        let Ok((_, mesh, material, splat)) = splats.get(entity) else {
             continue;
         };
+        if let Some(material) = material {
+            materials.remove(material.0.id());
+        }
+        if let Some(slot) = splat.gpu_slot {
+            effect_assets.release_splat_slot(slot);
+        }
+        meshes.remove(mesh.0.id());
+        commands.entity(entity).try_despawn();
+    }
+
+    material_updates.drain_into(sorted);
+    sorted.sort_unstable();
+    for entity in sorted.drain(..) {
+        let Ok((_, mesh, Some(material), mut splat)) = splats.get_mut(entity) else {
+            continue;
+        };
+        let (sampled_color, frame) = splat_sample(&splat.spec, splat.age);
         let color = splat_color(sampled_color);
         // A mutable asset lookup emits Modified even if we write the same value.
         // Blood/footprint splats can spend seconds at a constant authored colour:
