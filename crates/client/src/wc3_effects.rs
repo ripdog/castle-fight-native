@@ -5275,7 +5275,8 @@ pub fn spawn_wc3_ribbon_trails(
                 Mesh3d(mesh.clone()),
                 MeshMaterial3d(material),
                 Transform::IDENTITY,
-                Visibility::default(),
+                // Shown once the trail has a strip; see `update_wc3_ribbon_trails`.
+                Visibility::Hidden,
                 Wc3RibbonTrail {
                     source,
                     ribbon_index,
@@ -5299,7 +5300,7 @@ pub fn update_wc3_ribbon_trails(
     mut sources: Query<(Entity, &GlobalTransform, &mut Wc3RibbonSource)>,
     transforms: Query<&GlobalTransform>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut trails: Query<(Entity, &mut Wc3RibbonTrail)>,
+    mut trails: Query<(Entity, &mut Wc3RibbonTrail, &mut Visibility)>,
 ) {
     let dt = time.delta_secs().min(0.1);
     let mut source_times = HashMap::new();
@@ -5315,7 +5316,7 @@ pub fn update_wc3_ribbon_trails(
         }
         source.global_elapsed_ms += dt * 1000.0;
     }
-    for (entity, mut trail) in &mut trails {
+    for (entity, mut trail, mut visibility) in &mut trails {
         for point in &mut trail.points {
             point.age += dt;
         }
@@ -5392,6 +5393,14 @@ pub fn update_wc3_ribbon_trails(
         }
 
         let has_strip = trail.points.len() >= 2;
+        // Most emitters are idle at any moment (their visibility track is off outside the
+        // animations that trail). An idle trail's placeholder mesh draws nothing, so keep it out
+        // of the render phases rather than drawing an empty triangle per trail.
+        visibility.set_if_neq(if has_strip {
+            Visibility::Inherited
+        } else {
+            Visibility::Hidden
+        });
         if has_strip || trail.has_rendered_strip {
             if let Some(mut mesh) = meshes.get_mut(&trail.mesh) {
                 *mesh =
