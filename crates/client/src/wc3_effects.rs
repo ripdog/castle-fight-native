@@ -1663,14 +1663,12 @@ fn apply_wc3_non_inheritance_subtree(
     let Ok((local, children, non_inheritance)) = nodes.get(entity) else {
         return;
     };
-    let local = *local;
-    let non_inheritance = non_inheritance.copied();
-    let children = children
-        .map(|children| children.iter().collect::<Vec<_>>())
-        .unwrap_or_default();
-
-    let corrected =
-        corrected_wc3_global_transform(root_global, parent_global, local, non_inheritance);
+    let corrected = corrected_wc3_global_transform(
+        root_global,
+        parent_global,
+        *local,
+        non_inheritance.copied(),
+    );
     if let Ok(mut global) = globals.get_mut(entity) {
         *global = corrected;
     }
@@ -1682,7 +1680,7 @@ fn apply_wc3_non_inheritance_subtree(
     } else {
         root_global
     };
-    for child in children {
+    for &child in children.into_iter().flatten() {
         apply_wc3_non_inheritance_subtree(
             child,
             child_root_global,
