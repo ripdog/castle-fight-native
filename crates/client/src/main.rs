@@ -1,4 +1,5 @@
 mod alerts;
+mod animation_evaluation;
 mod bridge;
 mod build_orders;
 mod build_ui;
@@ -737,6 +738,7 @@ fn main() {
             skinned_bounds::SkinnedMeshBoundsPlugin,
             offscreen_animation::OffscreenAnimationPlugin,
             unanimated_targets::UnanimatedTargetsPlugin,
+            animation_evaluation::AnimationEvaluationPlugin,
             scene_budget::SceneBudgetPlugin,
         ))
         .add_plugins((

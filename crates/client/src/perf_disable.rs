@@ -18,11 +18,12 @@ pub(crate) struct PerfDisable {
     pub(crate) emitter_batching: bool,
     /// Keep evaluating animation targets that no clip of their graph animates.
     pub(crate) unanimated_targets: bool,
+    /// Evaluate animation targets with Bevy's `animate_targets` instead of per-player plans.
+    pub(crate) animation_evaluation: bool,
 }
 
 impl PerfDisable {
-    pub(crate) const NAMES: &'static str =
-        "offscreen-animation|frozen-bounds|particle-cull|emitter-batching|unanimated-targets|all";
+    pub(crate) const NAMES: &'static str = "offscreen-animation|frozen-bounds|particle-cull|emitter-batching|unanimated-targets|animation-evaluation|all";
 
     pub(crate) fn parse(list: &str) -> Result<Self, String> {
         let mut disable = Self::default();
@@ -33,6 +34,7 @@ impl PerfDisable {
                 "particle-cull" => disable.particle_cull = true,
                 "emitter-batching" => disable.emitter_batching = true,
                 "unanimated-targets" => disable.unanimated_targets = true,
+                "animation-evaluation" => disable.animation_evaluation = true,
                 "all" => {
                     disable = Self {
                         offscreen_animation: true,
@@ -40,6 +42,7 @@ impl PerfDisable {
                         particle_cull: true,
                         emitter_batching: true,
                         unanimated_targets: true,
+                        animation_evaluation: true,
                     }
                 }
                 other => {
