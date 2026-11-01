@@ -23,8 +23,34 @@ macro_rules! roster {
                 match self { $(Self::$variant => u32::from_be_bytes(*$rawcode)),+ }
             }
 
+            /// Every kind keyed by its retained rawcode, sorted so lookups can binary search.
+            /// Rawcodes are unique, so this answers exactly what a scan of `ALL` would.
+            const BY_RAWCODE_9_27: [(u32, Self); roster!(@count $($variant),+)] = {
+                let mut table = [$((u32::from_be_bytes(*$rawcode), Self::$variant)),+];
+                let mut i = 1;
+                while i < table.len() {
+                    let mut j = i;
+                    while j > 0 && table[j - 1].0 > table[j].0 {
+                        let swapped = table[j];
+                        table[j] = table[j - 1];
+                        table[j - 1] = swapped;
+                        j -= 1;
+                    }
+                    i += 1;
+                }
+                let mut k = 1;
+                while k < table.len() {
+                    assert!(table[k - 1].0 != table[k].0, "duplicate roster rawcode");
+                    k += 1;
+                }
+                table
+            };
+
             pub(super) fn from_retained_rawcode_9_27(rawcode: u32) -> Option<Self> {
-                Self::ALL.into_iter().find(|kind| kind.rawcode_9_27() == rawcode)
+                Self::BY_RAWCODE_9_27
+                    .binary_search_by_key(&rawcode, |&(code, _)| code)
+                    .ok()
+                    .map(|index| Self::BY_RAWCODE_9_27[index].1)
             }
         }
     };
