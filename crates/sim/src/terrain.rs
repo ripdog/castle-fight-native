@@ -27,7 +27,13 @@ pub struct TerrainElevationMap {
     height_tiles: u32,
     cliff_levels: Vec<u8>,
     ground_heights_raw: Vec<i32>,
+    /// Highest cliff level in each square of `CLIFF_BLOCK_VERTICES` vertices, row-major from the
+    /// top like `cliff_levels`. Derived from `cliff_levels` for [`Self::max_cliff_level_within`].
+    cliff_block_max: Vec<u8>,
 }
+
+/// Side length, in vertices, of the squares summarised by `cliff_block_max`.
+const CLIFF_BLOCK_VERTICES: usize = 8;
 
 impl TerrainElevationMap {
     pub fn from_vertex_samples(
@@ -63,6 +69,8 @@ impl TerrainElevationMap {
             return Err(TerrainLoadError::InvalidCliffLevel);
         }
 
+        let cliff_block_max =
+            cliff_block_maxima(&cliff_levels_north_to_south, width_tiles, height_tiles);
         Ok(Self {
             origin,
             tile_size,
@@ -70,6 +78,7 @@ impl TerrainElevationMap {
             height_tiles,
             cliff_levels: cliff_levels_north_to_south,
             ground_heights_raw: ground_heights_north_to_south,
+            cliff_block_max,
         })
     }
 
@@ -148,6 +157,39 @@ impl TerrainElevationMap {
             .checked_mul(row_width)?
             .checked_add(usize::try_from(vertex_x).ok()?)?;
         self.sample_at_index(index)
+    }
+
+    /// An upper bound on the cliff level [`Self::sample`] reports for any point inside the
+    /// inclusive rectangle `min..=max`, or `None` when no point of it lies on the map.
+    #[must_use]
+    pub fn max_cliff_level_within(&self, min: SimPoint, max: SimPoint) -> Option<u8> {
+        let tile_size = i64::from(self.tile_size);
+        let half_tile = tile_size / 2;
+        // Nearest-vertex lookup is monotonic per axis, so the rectangle's clamped corners bound
+        // every vertex its points can sample.
+        let vertex_range = |min: i32, max: i32, origin: i32, tiles: u32| {
+            let extent = i64::from(tiles) * tile_size;
+            let low = (i64::from(min) - i64::from(origin)).max(0);
+            let high = (i64::from(max) - i64::from(origin)).min(extent);
+            (low <= high).then(|| {
+                let vertex = |relative: i64| {
+                    ((relative + half_tile) / tile_size).min(i64::from(tiles)) as usize
+                };
+                (vertex(low), vertex(high))
+            })
+        };
+        let (first_x, last_x) = vertex_range(min.x, max.x, self.origin.x, self.width_tiles)?;
+        let (first_up, last_up) = vertex_range(min.y, max.y, self.origin.y, self.height_tiles)?;
+        let height = self.height_tiles as usize;
+        let (first_row, last_row) = (height - last_up, height - first_up);
+        let block_columns = (self.width_tiles as usize + 1).div_ceil(CLIFF_BLOCK_VERTICES);
+        let columns = first_x / CLIFF_BLOCK_VERTICES..=last_x / CLIFF_BLOCK_VERTICES;
+        (first_row / CLIFF_BLOCK_VERTICES..=last_row / CLIFF_BLOCK_VERTICES)
+            .flat_map(|block_row| {
+                let row = &self.cliff_block_max[block_row * block_columns..][..block_columns];
+                row[columns.clone()].iter().copied()
+            })
+            .max()
     }
 
     #[must_use]
@@ -285,6 +327,21 @@ struct Wc3TerrainOffset {
     y: f64,
 }
 
+fn cliff_block_maxima(cliff_levels: &[u8], width_tiles: u32, height_tiles: u32) -> Vec<u8> {
+    let width = width_tiles as usize + 1;
+    let height = height_tiles as usize + 1;
+    let block_columns = width.div_ceil(CLIFF_BLOCK_VERTICES);
+    let mut maxima = vec![0; block_columns * height.div_ceil(CLIFF_BLOCK_VERTICES)];
+    for (row, levels) in cliff_levels.chunks_exact(width).enumerate() {
+        let block_row = row / CLIFF_BLOCK_VERTICES * block_columns;
+        for (column, &level) in levels.iter().enumerate() {
+            let block = &mut maxima[block_row + column / CLIFF_BLOCK_VERTICES];
+            *block = (*block).max(level);
+        }
+    }
+    maxima
+}
+
 fn expected_vertex_count(width_tiles: u32, height_tiles: u32) -> Result<usize, TerrainLoadError> {
     let width = usize::try_from(width_tiles)
         .map_err(|_| TerrainLoadError::CoordinateOverflow)?
@@ -350,6 +407,47 @@ mod tests {
         );
         assert_eq!(terrain.sample(world_point(128, 64)).unwrap().cliff_level, 4);
         assert!(!terrain.contains(world_point(129, 64)));
+    }
+
+    #[test]
+    fn cliff_bound_covers_every_sample_in_the_rectangle() {
+        // A 19x13-tile map spans several blocks, including partial blocks on the far edges.
+        let (width, height) = (19_u32, 13_u32);
+        let vertices = ((width + 1) * (height + 1)) as usize;
+        let cliffs = (0..vertices)
+            .map(|index| ((index * 7 + index / 5) % 11) as u8)
+            .collect();
+        let tile = 128 * SUBUNITS_PER_WORLD_UNIT;
+        let terrain = TerrainElevationMap::from_vertex_samples(
+            world_point(-300, 200),
+            tile,
+            width,
+            height,
+            cliffs,
+            vec![0; vertices],
+        )
+        .unwrap();
+        let step = tile / 4;
+        let range = |origin: i32, tiles: u32| origin - 2 * tile..origin + (tiles as i32 + 2) * tile;
+        for min_x in range(terrain.origin().x, width).step_by(3 * step as usize) {
+            for min_y in range(terrain.origin().y, height).step_by(3 * step as usize) {
+                let size = 5 * step;
+                let (min, max) = (
+                    SimPoint::new(min_x, min_y),
+                    SimPoint::new(min_x + size, min_y + size),
+                );
+                let highest = (min_x..=max.x)
+                    .step_by(step as usize)
+                    .flat_map(|x| (min_y..=max.y).step_by(step as usize).map(move |y| (x, y)))
+                    .filter_map(|(x, y)| terrain.cliff_level_at(SimPoint::new(x, y)))
+                    .max();
+                let bound = terrain.max_cliff_level_within(min, max);
+                match highest {
+                    Some(highest) => assert!(bound.is_some_and(|bound| bound >= highest)),
+                    None => assert_eq!(bound, None),
+                }
+            }
+        }
     }
 
     #[test]

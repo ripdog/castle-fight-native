@@ -323,12 +323,8 @@ impl Simulation {
                              position: SimPoint,
                              radius: i32,
                              flying: bool| {
-            let cell_size = fog.cell_size;
-            let can_see = |point| {
-                flying || ground_line_visible(position, point, cell_size, terrain, blockers)
-            };
             if flying || radius <= 0 {
-                fog.unveil_circle(team, position, radius, can_see);
+                fog.unveil_circle(team, position, radius, |_| true);
                 return;
             }
             // Ground line of sight depends only on (position, radius) for the match's fixed fog
@@ -338,8 +334,15 @@ impl Simulation {
             if let Some(entry) = cache.entries.get_mut(&key) {
                 entry.last_used_call = cache.call;
                 fog.unveil_cached_circle(team, position, &entry.runs);
-            } else if cache.seen_last_call.contains(&key) && cache.seen_two_calls_ago.contains(&key)
-            {
+                return;
+            }
+            let cell_size = fog.cell_size;
+            let unobstructed =
+                ground_sight_unobstructed(position, radius, cell_size, terrain, blockers);
+            let can_see = |point| {
+                unobstructed || ground_line_visible(position, point, cell_size, terrain, blockers)
+            };
+            if cache.seen_last_call.contains(&key) && cache.seen_two_calls_ago.contains(&key) {
                 let runs = fog
                     .circle_runs(position, radius, can_see)
                     .into_boxed_slice();
@@ -462,6 +465,43 @@ fn merge_remembered_structures(
         }
     }
     merged
+}
+
+/// Whether [`ground_line_visible`] holds for every cell a ground source at `position` can see
+/// within `radius`: no terrain it can sample rises above the source's cliff level and no sight
+/// blocker overlaps the region its lines cross.
+fn ground_sight_unobstructed(
+    position: SimPoint,
+    radius: i32,
+    cell_size: i32,
+    terrain: Option<&TerrainElevationMap>,
+    blockers: &[(SimPoint, SimPoint)],
+) -> bool {
+    // Candidate cell centres lie within half a cell beyond the radius, and every sampled point
+    // lies between the source and a candidate centre.
+    let reach = radius.saturating_add(cell_size);
+    let min = SimPoint::new(
+        position.x.saturating_sub(reach),
+        position.y.saturating_sub(reach),
+    );
+    let max = SimPoint::new(
+        position.x.saturating_add(reach),
+        position.y.saturating_add(reach),
+    );
+    let terrain_clear = terrain.is_none_or(|terrain| {
+        terrain.sample(position).is_none_or(|source| {
+            terrain
+                .max_cliff_level_within(min, max)
+                .is_none_or(|highest| highest <= source.cliff_level)
+        })
+    });
+    terrain_clear
+        && !blockers.iter().any(|&(blocker_min, blocker_max)| {
+            blocker_min.x <= max.x
+                && blocker_max.x > min.x
+                && blocker_min.y <= max.y
+                && blocker_max.y > min.y
+        })
 }
 
 /// Ground vision stops at higher cliff levels and authored occluders; air vision bypasses both.
