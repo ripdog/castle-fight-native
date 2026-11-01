@@ -241,13 +241,22 @@ fn chunked_main_transparent_pass_3d(
     let command_buffers = if ranges.len() == 1 {
         Vec::from([record(0, 0..transparent_phase.items.len()).finish()])
     } else {
-        // Each range finishes on the pool while the next one is recorded here.
-        ComputeTaskPool::get().scope(|scope| {
+        // Each range finishes on the pool while the next one is recorded here; the last one,
+        // which nothing else overlaps, finishes inline. Waiting does not tick the shared executor,
+        // so an unrelated main-app task cannot delay the render graph.
+        let mut last_buffer = None;
+        let mut buffers = ComputeTaskPool::get().scope_with_executor(false, None, |scope| {
             for (chunk, range) in ranges.into_iter().enumerate() {
                 let encoder = record(chunk, range);
-                scope.spawn(async move { encoder.finish() });
+                if chunk == last {
+                    last_buffer = Some(encoder.finish());
+                } else {
+                    scope.spawn(async move { encoder.finish() });
+                }
             }
-        })
+        });
+        buffers.extend(last_buffer);
+        buffers
     };
     for command_buffer in command_buffers {
         ctx.add_command_buffer(command_buffer);
