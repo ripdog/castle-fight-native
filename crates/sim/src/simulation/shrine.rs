@@ -33,29 +33,29 @@ impl Simulation {
             .map_or(0, |support| support.chance)
     }
 
-    pub(super) fn golden_shrine_support(&self, team: Team) -> Option<ShrineSupport> {
+    pub(super) fn golden_shrine_support(&self, team_filter: Team) -> Option<ShrineSupport> {
         let mut version = None;
         let mut count = 0_u32;
-        for entity in self.world.iter_entities().filter(|entity| {
-            entity.get::<BuildingFootprint>().is_some()
-                && entity.get::<BuildingConstruction>().is_none()
-                && entity
-                    .get::<Health>()
-                    .is_some_and(|health| health.current > 0)
-                && entity
-                    .get::<Owner>()
-                    .and_then(|owner| self.player_state(owner.0))
-                    .map(|player| player.team)
-                    .or_else(|| entity.get::<Team>().copied())
-                    == Some(team)
-        }) {
-            let Some(content) = entity
-                .get::<ContentIdentity>()
-                .copied()
-                .filter(|content| is_golden_shrine(*content))
-            else {
-                continue;
-            };
+        let mut buildings = self
+            .world
+            .try_query_filtered::<(&ContentIdentity, &Health, Option<&Owner>, Option<&Team>), (
+                bevy_ecs::query::With<BuildingFootprint>,
+                bevy_ecs::query::Without<BuildingConstruction>,
+            )>()
+            .expect("simulation component types are registered at world construction");
+        for (content, ..) in buildings
+            .iter(&self.world)
+            .filter(|(content, health, owner, team)| {
+                health.current > 0
+                    && owner
+                        .and_then(|owner| self.player_state(owner.0))
+                        .map(|player| player.team)
+                        .or_else(|| team.copied())
+                        == Some(team_filter)
+                    && is_golden_shrine(**content)
+            })
+        {
+            let content = *content;
             if let Some(version) = version {
                 assert_eq!(
                     version, content.map_version,

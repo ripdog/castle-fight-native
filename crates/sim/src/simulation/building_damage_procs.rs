@@ -27,9 +27,15 @@ impl Simulation {
             profile,
             event_sequence: 0,
         };
-        if self.world.iter_entities().any(|e| {
-            matches!(e.get::<NativeAction>(), Some(NativeAction::BuildingDamageProc(p)) if p.source == state.source)
-        }) {
+        if self
+            .world
+            .try_query::<&NativeAction>()
+            .expect("simulation component types are registered at world construction")
+            .iter(&self.world)
+            .any(|action| {
+                matches!(action, NativeAction::BuildingDamageProc(p) if p.source == state.source)
+            })
+        {
             return;
         }
         let id = self.allocate_id();
@@ -41,11 +47,18 @@ impl Simulation {
         entity: Entity,
         state: BuildingDamageProcState,
     ) {
-        let referenced = self.world.iter_entities().any(|e| {
-            (e.get::<SimId>() == Some(&state.source) && e.get::<BuildingFootprint>().is_some())
-                || e.get::<GuaranteedHitProjectile>()
-                    .is_some_and(|p| p.source == state.source)
-        });
+        let referenced = self
+            .world
+            .try_query_filtered::<&SimId, bevy_ecs::query::With<BuildingFootprint>>()
+            .expect("simulation component types are registered at world construction")
+            .iter(&self.world)
+            .any(|id| *id == state.source)
+            || self
+                .world
+                .try_query::<&GuaranteedHitProjectile>()
+                .expect("simulation component types are registered at world construction")
+                .iter(&self.world)
+                .any(|projectile| projectile.source == state.source);
         if !referenced {
             self.world.despawn(entity);
         }

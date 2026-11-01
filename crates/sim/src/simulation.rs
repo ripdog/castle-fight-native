@@ -2859,68 +2859,84 @@ impl Simulation {
     #[must_use]
     pub fn unit_count(&self) -> usize {
         self.world
-            .iter_entities()
-            .filter(|entity| {
-                entity.get::<Position>().is_some()
-                    && entity.get::<Health>().is_some()
-                    && entity.get::<BuildingFootprint>().is_none()
-            })
+            .try_query_filtered::<(), (
+                bevy_ecs::query::With<Position>,
+                bevy_ecs::query::With<Health>,
+                bevy_ecs::query::Without<BuildingFootprint>,
+            )>()
+            .expect("simulation component types are registered at world construction")
+            .iter(&self.world)
             .count()
     }
 
     #[must_use]
     pub fn corpse_count(&self) -> usize {
         self.world
-            .iter_entities()
-            .filter(|entity| entity.get::<Corpse>().is_some())
+            .try_query_filtered::<(), bevy_ecs::query::With<Corpse>>()
+            .expect("simulation component types are registered at world construction")
+            .iter(&self.world)
             .count()
     }
 
     #[must_use]
     pub fn building_count(&self) -> usize {
         self.world
-            .iter_entities()
-            .filter(|entity| entity.get::<BuildingFootprint>().is_some())
+            .try_query_filtered::<(), bevy_ecs::query::With<BuildingFootprint>>()
+            .expect("simulation component types are registered at world construction")
+            .iter(&self.world)
             .count()
     }
 
     #[must_use]
     pub fn projectile_count(&self) -> usize {
+        use crate::components::NativeAction;
+        use bevy_ecs::query::Has;
         self.world
-            .iter_entities()
-            .map(|entity| {
-                let ordinary = matches!(
-                    entity.get::<crate::components::NativeAction>(),
-                    Some(
-                        crate::components::NativeAction::AcidBomb(_)
-                            | crate::components::NativeAction::Bolt(_)
-                            | crate::components::NativeAction::ConeWave(_)
-                            | crate::components::NativeAction::Ensnare(_)
-                            | crate::components::NativeAction::BuildingAttackProxy(_)
-                            | crate::components::NativeAction::Hailstone(_)
-                    )
-                ) || entity.get::<GuaranteedHitProjectile>().is_some()
-                    || entity.get::<ReflectedProjectile>().is_some()
-                    || entity.get::<BallisticProjectile>().is_some()
-                    || entity.get::<LineProjectile>().is_some()
-                    || entity.get::<BounceProjectile>().is_some()
-                    || matches!(
-                        entity.get::<crate::native_carriers::NativeCarrierState>(),
-                        Some(crate::native_carriers::NativeCarrierState::Bolt(_))
-                    );
-                usize::from(ordinary)
-                    + entity
-                        .get::<crate::components::NativeAction>()
-                        .map_or(0, |action| match action {
-                            crate::components::NativeAction::MasterProjectiles(state) => {
+            .try_query::<(
+                Option<&NativeAction>,
+                Option<&crate::native_carriers::NativeCarrierState>,
+                Option<&WorldFreezerState>,
+                (
+                    Has<GuaranteedHitProjectile>,
+                    Has<ReflectedProjectile>,
+                    Has<BallisticProjectile>,
+                    Has<LineProjectile>,
+                    Has<BounceProjectile>,
+                ),
+            )>()
+            .expect("simulation component types are registered at world construction")
+            .iter(&self.world)
+            .map(
+                |(action, carrier, freezer, (guaranteed, reflected, ballistic, line, bounce))| {
+                    let ordinary = matches!(
+                        action,
+                        Some(
+                            NativeAction::AcidBomb(_)
+                                | NativeAction::Bolt(_)
+                                | NativeAction::ConeWave(_)
+                                | NativeAction::Ensnare(_)
+                                | NativeAction::BuildingAttackProxy(_)
+                                | NativeAction::Hailstone(_)
+                        )
+                    ) || guaranteed
+                        || reflected
+                        || ballistic
+                        || line
+                        || bounce
+                        || matches!(
+                            carrier,
+                            Some(crate::native_carriers::NativeCarrierState::Bolt(_))
+                        );
+                    usize::from(ordinary)
+                        + action.map_or(0, |action| match action {
+                            NativeAction::MasterProjectiles(state) => {
                                 state.lightning.len() + state.frost.len() + state.minions.len()
                             }
                             _ => 0,
                         })
-                    + entity
-                        .get::<WorldFreezerState>()
-                        .map_or(0, |state| state.orbs.len())
-            })
+                        + freezer.map_or(0, |state| state.orbs.len())
+                },
+            )
             .sum()
     }
 
@@ -4393,6 +4409,7 @@ impl Simulation {
                 Option<&ContentIdentity>,
                 Option<&UnitClassifications>,
                 Option<&BuildingConstruction>,
+                Option<&Owner>,
             ),
         )>();
         let mut keys: Vec<(SimId, Entity)> =
@@ -4441,6 +4458,7 @@ impl Simulation {
                             content,
                             classifications,
                             construction,
+                            owner,
                         ),
                     )| {
                         let attack_targets = attack_targets.copied();
@@ -4466,10 +4484,11 @@ impl Simulation {
                         debug_assert!(
                             !(attack.is_some() || spellcasting.is_some()) || status.is_some()
                         );
-                        let entity_ref = self.world.entity(entity);
                         BuildingSnapshot {
                             death_heal_contribution: death_healing::building_contribution(
-                                &entity_ref,
+                                construction,
+                                content,
+                                owner,
                             ),
                             action_timing: action_timing.copied().unwrap_or_default(),
                             secondary_attack: secondary_attack.copied(),
@@ -5226,6 +5245,12 @@ pub(crate) fn register_simulation_components(world: &mut World) {
     world.register_component::<WorldFreezerState>();
     world.register_component::<crate::Inventory>();
     world.register_component::<crate::GroundItem>();
+    world.register_component::<GuaranteedHitProjectile>();
+    world.register_component::<ReflectedProjectile>();
+    world.register_component::<BallisticProjectile>();
+    world.register_component::<LineProjectile>();
+    world.register_component::<BounceProjectile>();
+    world.register_component::<crate::native_carriers::NativeCarrierState>();
 }
 
 fn validate_player_configs(players: &[PlayerConfig]) -> Vec<PlayerConfig> {

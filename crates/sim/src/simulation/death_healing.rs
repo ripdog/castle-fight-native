@@ -24,19 +24,21 @@ pub(super) struct DeathHealSupport {
 }
 
 pub(super) fn building_contribution(
-    entity: &bevy_ecs::world::EntityRef<'_>,
+    construction: Option<&BuildingConstruction>,
+    content: Option<&ContentIdentity>,
+    owner: Option<&Owner>,
 ) -> Option<DeathHealContribution> {
-    let content = if let Some(construction) = entity.get::<BuildingConstruction>() {
+    let content = if let Some(construction) = construction {
         // Native construction registers once; upgrade start retains the old registration.
         construction.upgrade_from?.properties.content?
     } else {
-        *entity.get::<ContentIdentity>()?
+        *content?
     };
     let definition = crate::building_mechanics::death_heal_for_version(content.map_version)?;
     if content.rawcode == definition.source_rawcode {
         Some(DeathHealContribution::Linker)
     } else if definition.production_rawcodes.contains(&content.rawcode) {
-        Some(DeathHealContribution::Production(entity.get::<Owner>()?.0))
+        Some(DeathHealContribution::Production(owner?.0))
     } else {
         None
     }
