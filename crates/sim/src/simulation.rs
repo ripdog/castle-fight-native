@@ -2953,18 +2953,22 @@ impl Simulation {
 
     #[must_use]
     pub fn burning_oil_zones(&self) -> Vec<BurningOilView> {
-        if !self
-            .world
-            .iter_entities()
-            .any(|entity| entity.contains::<BurningOilZone>())
-        {
+        if self.entities_with::<BurningOilZone>().next().is_none() {
             return Vec::new();
         }
-        let units = self.units();
-        let buildings = self.buildings();
+        self.burning_oil_zones_among(&self.units(), &self.buildings())
+    }
+
+    /// [`Self::burning_oil_zones`] for callers that already hold this tick's
+    /// [`Self::units`] and [`Self::buildings`].
+    #[must_use]
+    pub fn burning_oil_zones_among(
+        &self,
+        units: &[UnitView],
+        buildings: &[BuildingView],
+    ) -> Vec<BurningOilView> {
         let mut zones: Vec<_> = self
-            .world
-            .iter_entities()
+            .entities_with::<BurningOilZone>()
             .filter_map(|entity| {
                 let zone = entity.get::<BurningOilZone>()?;
                 let radius_sq = square_i32(zone.profile.radius);
@@ -3097,26 +3101,31 @@ impl Simulation {
     #[must_use]
     pub fn units(&self) -> Vec<UnitView> {
         let default_collision_radius = self.default_collision_radius();
-        let mut units: Vec<_> = self
-            .world
-            .iter_entities()
+        sorted_by_sim_id(self.entities_with::<PassiveUnitEffects>())
             .filter_map(|entity| {
                 unit_view_from_entity(entity, default_collision_radius, self.next_tick)
             })
-            .collect();
-        units.sort_unstable_by_key(|unit| unit.id);
-        units
+            .collect()
     }
 
     #[must_use]
     pub fn buildings(&self) -> Vec<BuildingView> {
-        let mut buildings: Vec<_> = self
-            .world
-            .iter_entities()
+        sorted_by_sim_id(self.entities_with::<BuildingFootprint>())
             .filter_map(building_view_from_entity)
-            .collect();
-        buildings.sort_unstable_by_key(|building| building.id);
-        buildings
+            .collect()
+    }
+
+    /// Entities whose archetype stores `T`, without probing every entity in the world.
+    fn entities_with<T: bevy_ecs::component::Component>(
+        &self,
+    ) -> impl Iterator<Item = bevy_ecs::world::EntityRef<'_>> {
+        let component = self.world.component_id::<T>();
+        self.world
+            .archetypes()
+            .iter()
+            .filter(move |archetype| component.is_some_and(|id| archetype.contains(id)))
+            .flat_map(|archetype| archetype.entities())
+            .map(|entity| self.world.entity(entity.id()))
     }
 
     #[must_use]
@@ -6610,6 +6619,18 @@ fn unit_view_from_entity(
         hex,
         negative_building_shield_level: control.shield_level,
     })
+}
+
+/// Orders entities by `SimId` before building views, so the sort moves small keys rather than
+/// large view structs. Entities without a `SimId` are dropped, as every view requires one.
+fn sorted_by_sim_id<'w>(
+    entities: impl Iterator<Item = bevy_ecs::world::EntityRef<'w>>,
+) -> impl Iterator<Item = bevy_ecs::world::EntityRef<'w>> {
+    let mut keyed: Vec<_> = entities
+        .filter_map(|entity| Some((*entity.get::<SimId>()?, entity)))
+        .collect();
+    keyed.sort_unstable_by_key(|(id, _)| *id);
+    keyed.into_iter().map(|(_, entity)| entity)
 }
 
 fn building_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<BuildingView> {

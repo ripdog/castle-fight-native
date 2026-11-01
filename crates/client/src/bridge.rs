@@ -218,8 +218,14 @@ pub struct PresentationSnapshot {
 impl PresentationSnapshot {
     #[must_use]
     pub fn capture(simulation: &Simulation) -> Self {
-        let units: BTreeMap<_, _> = simulation
-            .units()
+        let unit_views = simulation.units();
+        let building_views = simulation.buildings();
+        let burning_oil = simulation
+            .burning_oil_zones_among(&unit_views, &building_views)
+            .into_iter()
+            .map(|zone| (zone.id, zone))
+            .collect();
+        let units: BTreeMap<_, _> = unit_views
             .into_iter()
             .filter(|unit| !unit.classifications.locust)
             .map(|unit| {
@@ -284,8 +290,7 @@ impl PresentationSnapshot {
                 )
             })
             .collect();
-        let buildings: BTreeMap<_, _> = simulation
-            .buildings()
+        let buildings: BTreeMap<_, _> = building_views
             .into_iter()
             .map(|building| {
                 let visual_kind = BuildingVisualKind::from_roles(
@@ -447,11 +452,7 @@ impl PresentationSnapshot {
                 .into_iter()
                 .map(|view| (view.id, view))
                 .collect(),
-            burning_oil: simulation
-                .burning_oil_zones()
-                .into_iter()
-                .map(|zone| (zone.id, zone))
-                .collect(),
+            burning_oil,
             attacks: simulation.attacks_last_tick().to_vec(),
             ability_casts: simulation.ability_casts_last_tick().to_vec(),
             death_heals: simulation.death_heals_last_tick().to_vec(),
