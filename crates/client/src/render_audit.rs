@@ -76,6 +76,7 @@ pub(crate) enum RenderExperiment {
     ParticleOverlapBatching,
     ParticleDepthSort,
     ParticleSourceBatching,
+    LegacyTransparentPass,
 }
 
 impl RenderExperiment {
@@ -120,8 +121,9 @@ impl RenderExperiment {
             "particle-overlap-batching" => Ok(Self::ParticleOverlapBatching),
             "particle-depth-sort" => Ok(Self::ParticleDepthSort),
             "particle-source-batching" => Ok(Self::ParticleSourceBatching),
+            "legacy-transparent-pass" => Ok(Self::LegacyTransparentPass),
             _ => Err(format!(
-                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, bindless-auto, bindless-16, bindless-32, bindless-64, bindless-128, bindless-256, no-bindless, compact-material, compiled-event-tracks, skin-influences, particle-shared-view, particle-shared-mesh, particle-shared-mesh-partial-bindings, particle-cull, particle-partial-bindings, particle-uncached-bindings, cold-effect-pools, offscreen-effect-animation, budgeted-scene-spawn, particle-overlap-audit, particle-overlap-batching, particle-depth-sort, or particle-source-batching"
+                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, bindless-auto, bindless-16, bindless-32, bindless-64, bindless-128, bindless-256, no-bindless, compact-material, compiled-event-tracks, skin-influences, particle-shared-view, particle-shared-mesh, particle-shared-mesh-partial-bindings, particle-cull, particle-partial-bindings, particle-uncached-bindings, cold-effect-pools, offscreen-effect-animation, budgeted-scene-spawn, particle-overlap-audit, particle-overlap-batching, particle-depth-sort, particle-source-batching, or legacy-transparent-pass"
             )),
         }
     }
@@ -773,6 +775,7 @@ fn apply_render_experiment(
     {
         let hide = match *experiment {
             RenderExperiment::Baseline
+            | RenderExperiment::LegacyTransparentPass
             | RenderExperiment::LegacyTeamColor
             | RenderExperiment::LegacyGeosetVisibility
             | RenderExperiment::LegacyAttachmentSearch

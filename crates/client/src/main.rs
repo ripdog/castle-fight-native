@@ -42,6 +42,7 @@ mod sim_thread;
 mod skin_influences;
 mod skinned_bounds;
 mod terrain;
+mod transparent_pass;
 mod ui_change;
 mod ui_icons;
 mod unanimated_targets;
@@ -732,6 +733,7 @@ fn main() {
             options.render_experiment.standard_material_bindless_slots(),
         ))
         .add_plugins(compact_material::CompactMaterialPlugin)
+        .add_plugins(transparent_pass::ChunkedTransparentPassPlugin)
         .add_plugins(skin_influences::SkinInfluencePlugin)
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins((
