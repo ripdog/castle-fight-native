@@ -708,7 +708,7 @@ fn main() {
                     ..default()
                 })
                 .set(TaskPoolPlugin {
-                    task_pool_options: presentation_task_pools(),
+                    task_pool_options: presentation_task_pools(options.compute_threads),
                 })
                 .set(bevy::log::LogPlugin {
                     custom_layer: performance_trace_layer,
@@ -1209,6 +1209,8 @@ struct ClientOptions {
     list_map_versions: bool,
     /// Simulation worker threads for the offline match created at startup.
     sim_workers: usize,
+    /// Presentation compute pool threads; `None` uses [`presentation_task_pools`]'s default.
+    compute_threads: Option<usize>,
 }
 
 impl ClientOptions {
@@ -1246,6 +1248,7 @@ impl ClientOptions {
             server: None,
             list_map_versions: false,
             sim_workers: default_worker_count(),
+            compute_threads: None,
         };
         let mut explicit_warmup = false;
         let mut explicit_duration = false;
@@ -1377,6 +1380,18 @@ impl ClientOptions {
                         .filter(|workers| *workers >= 1)
                         .expect("--sim-workers requires a positive worker count");
                 }
+                "--compute-threads" => {
+                    let value = args
+                        .next()
+                        .expect("--compute-threads requires a positive thread count");
+                    options.compute_threads = Some(
+                        value
+                            .parse()
+                            .ok()
+                            .filter(|threads| *threads >= 1)
+                            .expect("--compute-threads requires a positive thread count"),
+                    );
+                }
                 "--map-version" => {
                     let value = args
                         .next()
@@ -1436,7 +1451,7 @@ impl ClientOptions {
                 "--list-map-versions" => options.list_map_versions = true,
                 "-h" | "--help" => {
                     println!(
-                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--builder SLOT:RAWCODE] [--list-map-versions] [--stress-units N] [--stress-visual RAWCODE N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS] [--profile-until-tick TICK] [--sim-workers N] [--profile-paused] [--profile] [--profile-screenshot PATH] [--benchmark] [--perf-disable LIST] [--capture-frames FIRST_TICK COUNT DIR] [--render-experiment baseline|freeze-bounds|hide-skinned|hide-particles|hide-transparent|legacy-team-color|legacy-geoset-visibility|legacy-attachment-search|legacy-attachment-index|legacy-effect-pooling|legacy-splat-updates|legacy-splat-material-state|legacy-animated-alpha-state|legacy-animated-texture-state|freeze-materials|freeze-poses|bindless-auto|bindless-64|bindless-128|bindless-256|no-bindless]"
+                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--builder SLOT:RAWCODE] [--list-map-versions] [--stress-units N] [--stress-visual RAWCODE N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS] [--profile-until-tick TICK] [--sim-workers N] [--compute-threads N] [--profile-paused] [--profile] [--profile-screenshot PATH] [--benchmark] [--perf-disable LIST] [--capture-frames FIRST_TICK COUNT DIR] [--render-experiment baseline|freeze-bounds|hide-skinned|hide-particles|hide-transparent|legacy-team-color|legacy-geoset-visibility|legacy-attachment-search|legacy-attachment-index|legacy-effect-pooling|legacy-splat-updates|legacy-splat-material-state|legacy-animated-alpha-state|legacy-animated-texture-state|freeze-materials|freeze-poses|bindless-auto|bindless-64|bindless-128|bindless-256|no-bindless]"
                     );
                     std::process::exit(0);
                 }
@@ -2323,14 +2338,20 @@ fn default_io_thread_count(total_threads: usize) -> usize {
 /// Bevy's default splits logical cores 25/25/50 between IO, async compute and compute, leaving
 /// PostUpdate's parallel transform, animation and visibility passes on half the cores. Those
 /// passes bound late-game frames, so compute gets every logical core but two.
-fn presentation_task_pools() -> TaskPoolOptions {
+fn presentation_task_pools(compute_threads: Option<usize>) -> TaskPoolOptions {
     let logical = std::thread::available_parallelism()
         .map(usize::from)
         .unwrap_or(1);
     let mut options = TaskPoolOptions::default();
     options.io.max_threads = 2;
     options.async_compute.max_threads = 2;
-    options.compute.min_threads = logical.saturating_sub(2).max(1);
+    match compute_threads {
+        Some(threads) => {
+            options.compute.min_threads = threads;
+            options.compute.max_threads = threads;
+        }
+        None => options.compute.min_threads = logical.saturating_sub(2).max(1),
+    }
     options
 }
 

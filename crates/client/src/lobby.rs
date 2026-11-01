@@ -1559,6 +1559,7 @@ mod tests {
             server: None,
             list_map_versions: false,
             sim_workers: 1,
+            compute_threads: None,
         }
     }
 
