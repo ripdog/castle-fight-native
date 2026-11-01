@@ -42,7 +42,7 @@ use bevy::{
 use crate::render_audit::RenderExperiment;
 
 /// Upper bound on sub-passes; each one rebinds its first draw's state.
-const MAX_TRANSPARENT_CHUNKS: usize = 6;
+const MAX_TRANSPARENT_CHUNKS: usize = 10;
 /// Draws below this per sub-pass do not repay a pass boundary.
 const MIN_DRAWS_PER_CHUNK: usize = 384;
 
