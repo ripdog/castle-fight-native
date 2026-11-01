@@ -335,9 +335,10 @@ mod tests {
     #[test]
     fn chunks_cover_items_without_splitting_batches() {
         // Runs of three items drawn by their first item, skipped items and
-        // single draws, interleaved like particle runs among meshes.
+        // single draws, interleaved like particle runs among meshes. Six draws per seven
+        // iterations, enough to fill every chunk.
         let mut lens = Vec::new();
-        for index in 0..3000 {
+        for index in 0..2 * MAX_TRANSPARENT_CHUNKS * MIN_DRAWS_PER_CHUNK {
             match index % 7 {
                 0 => lens.extend([3, 0, 0]),
                 3 => lens.push(0),
