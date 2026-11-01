@@ -15,6 +15,7 @@ use bevy::{
         visibility::{DynamicSkinnedMeshBounds, NoAutoAabb},
     },
     ecs::{
+        component::Mutable,
         entity_disabling::Disabled,
         system::{EntityCommands, SystemParam},
     },
@@ -2184,12 +2185,64 @@ fn wc3_event_crossings(
         .sum()
 }
 
-fn wc3_spawn_event_crossings(
-    runtime: &mut Wc3SpawnEventRuntime,
-    clock: &Wc3ModelSequenceClock,
-    dt_ms: f32,
-) -> u32 {
-    wc3_event_crossings(&runtime.track, &mut runtime.cursor, clock, dt_ms)
+/// A model event source whose key track [`Wc3EventCrossings::find`] advances.
+trait Wc3EventRuntime: bevy::ecs::component::Component<Mutability = Mutable> {
+    fn track_and_cursor(&mut self) -> (&Wc3EventTrack, &mut Wc3EventCursor);
+}
+
+impl Wc3EventRuntime for Wc3SpawnEventRuntime {
+    fn track_and_cursor(&mut self) -> (&Wc3EventTrack, &mut Wc3EventCursor) {
+        (&self.track, &mut self.cursor)
+    }
+}
+
+impl Wc3EventRuntime for Wc3SoundEventRuntime {
+    fn track_and_cursor(&mut self) -> (&Wc3EventTrack, &mut Wc3EventCursor) {
+        (&self.track, &mut self.cursor)
+    }
+}
+
+impl Wc3EventRuntime for Wc3SplatEventRuntime {
+    fn track_and_cursor(&mut self) -> (&Wc3EventTrack, &mut Wc3EventCursor) {
+        (&self.track, &mut self.cursor)
+    }
+}
+
+type Wc3EventSources<'w, 's, R> =
+    Query<'w, 's, (Entity, &'static GlobalTransform, &'static mut R), Without<Wc3EffectWarmup>>;
+
+/// Event sources that crossed at least one event key this frame.
+#[derive(Default)]
+pub(crate) struct Wc3EventCrossings {
+    found: Parallel<Vec<(Entity, u32)>>,
+    sorted: Vec<(Entity, u32)>,
+}
+
+impl Wc3EventCrossings {
+    /// Advances every source's event cursor in parallel and yields the sources that crossed
+    /// keys with their crossing counts, in entity order so the spawns that follow do not depend
+    /// on thread scheduling.
+    fn find<R: Wc3EventRuntime>(
+        &mut self,
+        events: &mut Wc3EventSources<R>,
+        clock_tree: &Wc3ClockTree,
+        dt_ms: f32,
+    ) -> std::vec::Drain<'_, (Entity, u32)> {
+        let found = &self.found;
+        events.par_iter_mut().for_each(|(entity, _, mut runtime)| {
+            let Some(clock) = inherited_wc3_model_sequence_clock(entity, clock_tree) else {
+                return;
+            };
+            let (track, cursor) = runtime.track_and_cursor();
+            let count = wc3_event_crossings(track, cursor, clock, dt_ms);
+            if count != 0 {
+                found.borrow_local_mut().push((entity, count));
+            }
+        });
+        self.found.drain_into(&mut self.sorted);
+        self.sorted.sort_unstable();
+        self.sorted.drain(..)
+    }
 }
 
 fn registered_model_event_lifespan_seconds(model: &RegisteredConvertedModel) -> f32 {
@@ -2205,21 +2258,14 @@ pub fn emit_wc3_spawn_events(
     time: Res<Time>,
     asset_server: Res<AssetServer>,
     clock_tree: Wc3ClockTree,
-    mut events: Query<
-        (Entity, &GlobalTransform, &mut Wc3SpawnEventRuntime),
-        Without<Wc3EffectWarmup>,
-    >,
+    mut events: Wc3EventSources<Wc3SpawnEventRuntime>,
+    mut crossings: Local<Wc3EventCrossings>,
 ) {
     let dt_ms = time.delta_secs().max(0.0) * 1000.0;
-    for (entity, source_transform, mut runtime) in &mut events {
-        let Some(clock) = inherited_wc3_model_sequence_clock(entity, &clock_tree) else {
+    for (entity, count) in crossings.find(&mut events, &clock_tree, dt_ms) {
+        let Ok((_, source_transform, runtime)) = events.get(entity) else {
             continue;
         };
-        let count = wc3_spawn_event_crossings(&mut runtime, clock, dt_ms);
-        if count == 0 {
-            continue;
-        }
-
         let lifespan = registered_model_event_lifespan_seconds(&runtime.child_model);
         let transform = source_transform.compute_transform();
         for _ in 0..count {
@@ -2282,22 +2328,16 @@ pub fn emit_wc3_sound_events(
     time: Res<Time>,
     clock_tree: Wc3ClockTree,
     listeners: Query<&GlobalTransform, With<SpatialListener>>,
-    mut events: Query<
-        (Entity, &GlobalTransform, &mut Wc3SoundEventRuntime),
-        Without<Wc3EffectWarmup>,
-    >,
+    mut events: Wc3EventSources<Wc3SoundEventRuntime>,
+    mut crossings: Local<Wc3EventCrossings>,
 ) {
     let dt_ms = time.delta_secs().max(0.0) * 1000.0;
     let listener_position = listeners.iter().next().map(GlobalTransform::translation);
-    for (entity, source_transform, mut runtime) in &mut events {
-        let Some(clock) = inherited_wc3_model_sequence_clock(entity, &clock_tree) else {
+    for (entity, count) in crossings.find(&mut events, &clock_tree, dt_ms) {
+        let Ok((_, source_transform, mut runtime)) = events.get_mut(entity) else {
             continue;
         };
-        let count = {
-            let runtime = &mut *runtime;
-            wc3_event_crossings(&runtime.track, &mut runtime.cursor, clock, dt_ms)
-        };
-        if count == 0 || runtime.files.is_empty() {
+        if runtime.files.is_empty() {
             continue;
         }
 
@@ -2489,23 +2529,14 @@ pub fn emit_wc3_splat_events(
     experiment: Option<Res<RenderExperiment>>,
     clock_tree: Wc3ClockTree,
     mut assets: Wc3SplatSpawnAssets,
-    mut events: Query<
-        (Entity, &GlobalTransform, &mut Wc3SplatEventRuntime),
-        Without<Wc3EffectWarmup>,
-    >,
+    mut events: Wc3EventSources<Wc3SplatEventRuntime>,
+    mut crossings: Local<Wc3EventCrossings>,
 ) {
     let dt_ms = time.delta_secs().max(0.0) * 1000.0;
-    for (entity, source_transform, mut runtime) in &mut events {
-        let Some(clock) = inherited_wc3_model_sequence_clock(entity, &clock_tree) else {
+    for (entity, count) in crossings.find(&mut events, &clock_tree, dt_ms) {
+        let Ok((_, source_transform, runtime)) = events.get(entity) else {
             continue;
         };
-        let count = {
-            let runtime = &mut *runtime;
-            wc3_event_crossings(&runtime.track, &mut runtime.cursor, clock, dt_ms)
-        };
-        if count == 0 {
-            continue;
-        }
         let (rgba, frame) = splat_sample(&runtime.splat, 0.0);
         let (source_scale, rotation, center) = source_transform.to_scale_rotation_translation();
         let scale = runtime.splat.scale.max(0.01) * source_scale.x.abs().max(source_scale.z.abs());
@@ -8052,14 +8083,20 @@ mod tests {
             sequence_elapsed_ms: 550.0,
             global_elapsed_ms: 550.0,
         };
-        assert_eq!(wc3_spawn_event_crossings(&mut runtime, &clock, 100.0), 1);
+        assert_eq!(
+            wc3_event_crossings(&runtime.track, &mut runtime.cursor, &clock, 100.0),
+            1
+        );
 
         let clock = Wc3ModelSequenceClock {
             sequence_name: "Death".to_owned(),
             sequence_elapsed_ms: 650.0,
             global_elapsed_ms: 650.0,
         };
-        assert_eq!(wc3_spawn_event_crossings(&mut runtime, &clock, 100.0), 0);
+        assert_eq!(
+            wc3_event_crossings(&runtime.track, &mut runtime.cursor, &clock, 100.0),
+            0
+        );
     }
 
     #[test]
@@ -8322,7 +8359,10 @@ mod tests {
             sequence_elapsed_ms: 1_250.0,
             global_elapsed_ms: 1_250.0,
         };
-        assert_eq!(wc3_spawn_event_crossings(&mut runtime, &clock, 350.0), 1);
+        assert_eq!(
+            wc3_event_crossings(&runtime.track, &mut runtime.cursor, &clock, 350.0),
+            1
+        );
     }
 
     #[test]
@@ -8334,7 +8374,10 @@ mod tests {
             sequence_elapsed_ms: 150.0,
             global_elapsed_ms: 1_150.0,
         };
-        assert_eq!(wc3_spawn_event_crossings(&mut runtime, &clock, 200.0), 1);
+        assert_eq!(
+            wc3_event_crossings(&runtime.track, &mut runtime.cursor, &clock, 200.0),
+            1
+        );
     }
 
     #[test]
