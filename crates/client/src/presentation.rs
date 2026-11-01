@@ -1168,16 +1168,18 @@ impl Plugin for CastlePresentationPlugin {
                     trigger_attack_animations,
                     update_imported_unit_animations,
                     advance_wc3_model_sequence_clocks,
+                    // Clock consumers that write disjoint state; the executor still
+                    // serializes the ones sharing an asset collection.
                     (
                         emit_wc3_spawn_events,
                         emit_wc3_sound_events,
                         emit_wc3_splat_events,
                         update_wc3_model_attachments,
+                        update_wc3_material_alpha,
+                        update_wc3_material_texture,
+                        update_wc3_model_lights,
+                        spawn_miss_indicators,
                     ),
-                    update_wc3_material_alpha,
-                    update_wc3_material_texture,
-                    update_wc3_model_lights,
-                    spawn_miss_indicators,
                     finish_animation_profile,
                     (interpolate_render_transforms, crate::fog::update_fog).chain(),
                     finish_transform_profile,
@@ -1199,21 +1201,28 @@ impl Plugin for CastlePresentationPlugin {
                     age_projectile_impacts,
                     age_ability_area_impacts,
                     age_timed_wc3_effects,
-                    spawn_wc3_ribbon_trails,
-                    update_wc3_ribbon_trails,
+                    // Ribbon trails and particles read none of each other's state.
                     (
-                        update_wc3_model_particles,
-                        update_wc3_spawned_event_models,
-                        update_wc3_spawned_splats,
+                        (spawn_wc3_ribbon_trails, update_wc3_ribbon_trails).chain(),
+                        (
+                            (
+                                update_wc3_model_particles,
+                                update_wc3_spawned_event_models,
+                                update_wc3_spawned_splats,
+                            ),
+                            update_wc3_particles,
+                            emit_wc3_model_particles,
+                            (emit_wc3_particles, flush_wc3_particle_buffers).chain(),
+                        )
+                            .chain(),
                     ),
-                    update_wc3_particles,
-                    emit_wc3_model_particles,
-                    (emit_wc3_particles, flush_wc3_particle_buffers).chain(),
                     finish_effects_profile,
-                    draw_projectile_effects,
-                    update_health_bar_batch,
-                    draw_map_grid,
-                    draw_presentation_gizmos,
+                    (
+                        draw_projectile_effects,
+                        update_health_bar_batch,
+                        draw_map_grid,
+                        draw_presentation_gizmos,
+                    ),
                     sample_display_fps,
                     finish_presentation_profile,
                 )
