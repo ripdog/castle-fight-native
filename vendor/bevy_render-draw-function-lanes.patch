@@ -1,0 +1,128 @@
+--- a/src/render_phase/draw.rs	2006-07-24 13:21:28.000000000 +1200
++++ b/src/render_phase/draw.rs	2026-11-02 05:50:19.834025320 +1300
+@@ -57,8 +57,14 @@
+ pub struct DrawFunctionsInternal<P: PhaseItem> {
+     pub draw_functions: Vec<Box<dyn Draw<P>>>,
+     pub indices: TypeIdMap<DrawFunctionId>,
++    /// Builds a fresh instance of each draw function, by id; `None` for one added without a
++    /// factory. See [`DrawFunctions::instantiate`].
++    factories: Vec<Option<DrawFunctionFactory<P>>>,
+ }
+ 
++/// Builds a new, independent instance of a registered draw function.
++pub type DrawFunctionFactory<P> = fn(&mut World) -> Box<dyn Draw<P>>;
++
+ impl<P: PhaseItem> DrawFunctionsInternal<P> {
+     /// Prepares all draw function. This is called once and only once before the phase begins.
+     pub fn prepare(&mut self, world: &World) {
+@@ -76,10 +82,23 @@
+     pub fn add_with<T: 'static, D: Draw<P>>(&mut self, draw_function: D) -> DrawFunctionId {
+         let id = DrawFunctionId(self.draw_functions.len().try_into().unwrap());
+         self.draw_functions.push(Box::new(draw_function));
++        self.factories.push(None);
+         self.indices.insert(TypeId::of::<T>(), id);
+         id
+     }
+ 
++    /// Adds the [`Draw`] function, maps it to the type `T`, and records how to build further
++    /// instances of it for [`DrawFunctions::instantiate`].
++    pub fn add_with_factory<T: 'static, D: Draw<P>>(
++        &mut self,
++        draw_function: D,
++        factory: DrawFunctionFactory<P>,
++    ) -> DrawFunctionId {
++        let id = self.add_with::<T, D>(draw_function);
++        self.factories[id.0 as usize] = Some(factory);
++        id
++    }
++
+     /// Retrieves the [`Draw`] function corresponding to the `id` mutably.
+     pub fn get_mut(&mut self, id: DrawFunctionId) -> Option<&mut dyn Draw<P>> {
+         self.draw_functions.get_mut(id.0 as usize).map(|f| &mut **f)
+@@ -121,6 +140,7 @@
+             internal: RwLock::new(DrawFunctionsInternal {
+                 draw_functions: Vec::new(),
+                 indices: Default::default(),
++                factories: Vec::new(),
+             }),
+         }
+     }
+@@ -138,6 +158,28 @@
+             .write()
+             .unwrap_or_else(PoisonError::into_inner)
+     }
++
++    /// Builds an independent instance of every registered draw function, under the same ids.
++    ///
++    /// Draw functions keep per-call ECS state, so one set can record into only one render pass
++    /// at a time. A separate set lets another pass record items of the same phase concurrently
++    /// (see [`SortedRenderPhase::render_range_with`](super::SortedRenderPhase::render_range_with)).
++    /// Returns `None` if a draw function was added without a factory.
++    pub fn instantiate(world: &mut World) -> Option<DrawFunctionsInternal<P>> {
++        let (factories, indices) = {
++            let internal = world.resource::<Self>().read();
++            (internal.factories.clone(), internal.indices.clone())
++        };
++        let draw_functions = factories
++            .iter()
++            .map(|factory| factory.map(|factory| factory(world)))
++            .collect::<Option<_>>()?;
++        Some(DrawFunctionsInternal {
++            draw_functions,
++            indices,
++            factories,
++        })
++    }
+ }
+ 
+ /// [`RenderCommand`]s are modular standardized pieces of render logic that can be composed into
+@@ -375,7 +417,11 @@
+                     core::any::type_name::<P>(),
+                 );
+             });
+-        draw_functions.write().add_with::<C, _>(draw_function);
++        draw_functions
++            .write()
++            .add_with_factory::<C, _>(draw_function, |world| {
++                Box::new(RenderCommandState::<P, C>::new(world))
++            });
+         self
+     }
+ }
+--- a/src/render_phase/mod.rs	2006-07-24 13:21:28.000000000 +1200
++++ b/src/render_phase/mod.rs	2026-11-02 05:50:26.566639341 +1300
+@@ -1881,6 +1881,34 @@
+ 
+         let draw_functions = world.resource::<DrawFunctions<I>>();
+         let mut draw_functions = draw_functions.write();
++        Self::render_items(items, render_pass, world, view, &mut draw_functions)
++    }
++
++    /// Like [`Self::render_range`], but draws with the given draw functions instead of the
++    /// world's [`DrawFunctions`], so that several passes can record ranges of this phase
++    /// concurrently, each with its own set from [`DrawFunctions::instantiate`].
++    pub fn render_range_with<'w>(
++        &self,
++        render_pass: &mut TrackedRenderPass<'w>,
++        world: &'w World,
++        view: Entity,
++        range: impl RangeBounds<usize>,
++        draw_functions: &mut DrawFunctionsInternal<I>,
++    ) -> Result<(), DrawError> {
++        let items = self
++            .items
++            .get_range(range)
++            .expect("`Range` provided to `render_range_with()` is out of bounds");
++        Self::render_items(items, render_pass, world, view, draw_functions)
++    }
++
++    fn render_items<'w>(
++        items: &indexmap::map::Slice<(Entity, MainEntity), I>,
++        render_pass: &mut TrackedRenderPass<'w>,
++        world: &'w World,
++        view: Entity,
++        draw_functions: &mut DrawFunctionsInternal<I>,
++    ) -> Result<(), DrawError> {
+         draw_functions.prepare(world);
+ 
+         let mut index = 0;

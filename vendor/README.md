@@ -54,3 +54,38 @@ frame-pointer profile shows propagation CPU down 21% with the same work samples.
    resolving by hand if `propagation_worker` changed, then regenerate the patch.
 3. If upstream workers stop busy-spinning, delete the fork and its
    `[patch.crates-io]` entry instead.
+
+## bevy_render 0.19.1
+
+`bevy_render/` is the crates.io release of `bevy_render` 0.19.1 with one
+change, wired in through `[patch.crates-io]` like `bevy_pbr`.
+
+The change is in `src/render_phase/draw.rs` and `src/render_phase/mod.rs`. A
+draw function keeps per-call ECS state (`SystemState::get` needs `&mut`), and
+`SortedRenderPhase::render_range` holds the `DrawFunctions` write lock, so a
+phase can record into only one render pass at a time. The client's chunked
+transparent pass spent about 6 ms per late-game frame recording ~5k draws on
+one thread. The patch:
+
+- records a factory for every draw function registered through
+  `add_render_command` (`DrawFunctionsInternal::add_with_factory`);
+- adds `DrawFunctions::instantiate`, which builds an independent set of every
+  draw function under the same ids (or `None` if one has no factory);
+- adds `SortedRenderPhase::render_range_with`, which draws a range with a given
+  set instead of the world's.
+
+Draw results are unchanged; only which `SystemState` instance fetches the
+parameters differs. In the 700-unit benchmark render/submit/present dropped
+from 9.9 to 8.6 ms.
+
+### Re-applying on a Bevy upgrade
+
+1. Replace `bevy_render/` with the new release from
+   `~/.cargo/registry/src/*/bevy_render-<version>` (drop `.cargo-ok`,
+   `.cargo_vcs_info.json`, `Cargo.lock` and `Cargo.toml.orig`).
+2. Apply `bevy_render-draw-function-lanes.patch` from inside `bevy_render/`
+   (`patch -p1 < ../bevy_render-draw-function-lanes.patch`), resolving by hand
+   if `DrawFunctionsInternal` or `render_range` changed, then regenerate the
+   patch.
+3. If upstream can record one phase into several passes concurrently, delete
+   the fork and its `[patch.crates-io]` entry instead.
