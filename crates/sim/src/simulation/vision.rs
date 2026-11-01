@@ -1,5 +1,8 @@
 use super::*;
-use crate::{FogOfWar, FogReveal, RememberedStructure, fog::CellRun};
+use crate::{
+    FogOfWar, FogReveal, RememberedStructure,
+    fog::{CellRun, TeamVisibility},
+};
 use std::collections::{HashMap, HashSet};
 
 impl Simulation {
@@ -95,22 +98,11 @@ impl Simulation {
             .fog
             .as_ref()
             .expect("fog rules accompany fog state");
-        cache.begin_call();
         for cells in &mut fog.visible {
             cells.fill(0);
         }
         fog.reveals
             .retain(|reveal| self.next_tick < reveal.expires_tick);
-        for team in [Team(0), Team(1)] {
-            for &(min, max) in &rules.permanent_rectangles[usize::from(team.0)] {
-                fog.unveil_rectangle(team, min, max);
-            }
-        }
-        // Explicit script fog modifiers ignore occlusion and never detect invisible units.
-        for index in 0..fog.reveals.len() {
-            let reveal = fog.reveals[index];
-            fog.unveil_circle(reveal.team, reveal.position, reveal.radius, |_| true);
-        }
         // Sources are sorted by their unique SimId below, so query visit order does not matter.
         let mut query = self
             .world
@@ -315,59 +307,51 @@ impl Simulation {
             }));
         }
         sources.sort_unstable_by_key(|source| source.0);
-        let terrain = self.combat_rules.terrain_elevation.as_ref();
-        let blockers = rules.sight_blockers.as_slice();
-        let unveil_source = |fog: &mut FogOfWar,
-                             cache: &mut VisionFootprintCache,
-                             team: Team,
-                             position: SimPoint,
-                             radius: i32,
-                             flying: bool| {
-            if flying || radius <= 0 {
-                fog.unveil_circle(team, position, radius, |_| true);
-                return;
-            }
-            // Ground line of sight depends only on (position, radius) for the match's fixed fog
-            // geometry, terrain and sight blockers. Cached footprints are the full visible set, so
-            // OR-ing them into the grid is order-independent and matches the skip-visible path.
-            let key = (position, radius);
-            if let Some(entry) = cache.entries.get_mut(&key) {
-                entry.last_used_call = cache.call;
-                fog.unveil_cached_circle(team, position, &entry.runs);
-                return;
-            }
-            let cell_size = fog.cell_size;
-            let unobstructed =
-                ground_sight_unobstructed(position, radius, cell_size, terrain, blockers);
-            let can_see = |point| {
-                unobstructed || ground_line_visible(position, point, cell_size, terrain, blockers)
-            };
-            if cache.seen_last_call.contains(&key) && cache.seen_two_calls_ago.contains(&key) {
-                let runs = fog
-                    .circle_runs(position, radius, can_see)
-                    .into_boxed_slice();
-                fog.unveil_cached_circle(team, position, &runs);
-                cache.entries.insert(
-                    key,
-                    CachedFootprint {
-                        runs,
-                        last_used_call: cache.call,
-                    },
-                );
-            } else {
-                fog.unveil_circle(team, position, radius, can_see);
-                cache.seen_this_call.insert(key);
-            }
-        };
-        for &(_, team, position, radius, flying, revealed_teams, _, _, _, _) in &sources {
-            unveil_source(fog, cache, team, position, radius, flying);
+        // A team's grid receives only its own permanent rectangles, script reveals and sources,
+        // plus Faerie Fire-shared sight. Marking is an order-independent OR, so the two teams are
+        // unveiled in parallel.
+        let mut team_reveals = [Vec::new(), Vec::new()];
+        for reveal in &fog.reveals {
+            team_reveals[usize::from(reveal.team.0)].push((reveal.position, reveal.radius));
+        }
+        let mut team_sources = [Vec::new(), Vec::new()];
+        for &(_, team, position, radius, flying, revealed_teams, ..) in &sources {
+            team_sources[usize::from(team.0)].push((position, radius, flying));
             // Faerie Fire shares the marked target's sight and tracks it as it moves.
             for observer in [Team(0), Team(1)] {
                 if observer != team && revealed_teams & (1 << observer.0) != 0 {
-                    unveil_source(fog, cache, observer, position, radius, flying);
+                    team_sources[usize::from(observer.0)].push((position, radius, flying));
                 }
             }
         }
+        let occlusion = Occlusion {
+            terrain: self.combat_rules.terrain_elevation.as_ref(),
+            blockers: rules.sight_blockers.as_slice(),
+        };
+        let [visibility0, visibility1] = fog.team_visibility();
+        let [cache0, cache1] = &mut cache.teams;
+        self.pool.join(
+            || {
+                unveil_team(
+                    visibility0,
+                    cache0,
+                    &rules.permanent_rectangles[0],
+                    &team_reveals[0],
+                    &team_sources[0],
+                    occlusion,
+                )
+            },
+            || {
+                unveil_team(
+                    visibility1,
+                    cache1,
+                    &rules.permanent_rectangles[1],
+                    &team_reveals[1],
+                    &team_sources[1],
+                    occlusion,
+                )
+            },
+        );
         // Sources are sorted by unique SimId, so the incoming records are already in id order.
         let mut incoming = Vec::new();
         for observer in [Team(0), Team(1)] {
@@ -402,15 +386,86 @@ impl Simulation {
             ));
             fog.remembered_structures[team] = merge_remembered_structures(memory, &incoming);
         }
-        cache.finish_call();
     }
 }
 
+/// What blocks ground line of sight for the match.
+#[derive(Clone, Copy)]
+struct Occlusion<'a> {
+    terrain: Option<&'a TerrainElevationMap>,
+    blockers: &'a [(SimPoint, SimPoint)],
+}
+
+/// Marks one team's permanent rectangles, script reveals and sight sources.
+fn unveil_team(
+    mut visibility: TeamVisibility<'_>,
+    cache: &mut TeamFootprintCache,
+    rectangles: &[(SimPoint, SimPoint)],
+    reveals: &[(SimPoint, i32)],
+    sources: &[(SimPoint, i32, bool)],
+    occlusion: Occlusion<'_>,
+) {
+    cache.begin_call();
+    for &(min, max) in rectangles {
+        visibility.unveil_rectangle(min, max);
+    }
+    // Explicit script fog modifiers ignore occlusion and never detect invisible units.
+    for &(position, radius) in reveals {
+        visibility.unveil_circle(position, radius, |_| true);
+    }
+    let Occlusion { terrain, blockers } = occlusion;
+    for &(position, radius, flying) in sources {
+        if flying || radius <= 0 {
+            visibility.unveil_circle(position, radius, |_| true);
+            continue;
+        }
+        // Ground line of sight depends only on (position, radius) for the match's fixed fog
+        // geometry, terrain and sight blockers. Cached footprints are the full visible set, so
+        // OR-ing them into the grid is order-independent and matches the skip-visible path.
+        let key = (position, radius);
+        if let Some(entry) = cache.entries.get_mut(&key) {
+            entry.last_used_call = cache.call;
+            visibility.unveil_cached_circle(position, &entry.runs);
+            continue;
+        }
+        let grid = visibility.grid();
+        let cell_size = grid.cell_size();
+        let unobstructed =
+            ground_sight_unobstructed(position, radius, cell_size, terrain, blockers);
+        let can_see = |point| {
+            unobstructed || ground_line_visible(position, point, cell_size, terrain, blockers)
+        };
+        if cache.seen_last_call.contains(&key) && cache.seen_two_calls_ago.contains(&key) {
+            let runs = grid
+                .circle_runs(position, radius, can_see)
+                .into_boxed_slice();
+            visibility.unveil_cached_circle(position, &runs);
+            cache.entries.insert(
+                key,
+                CachedFootprint {
+                    runs,
+                    last_used_call: cache.call,
+                },
+            );
+        } else {
+            visibility.unveil_circle(position, radius, can_see);
+            cache.seen_this_call.insert(key);
+        }
+    }
+    cache.finish_call();
+}
+
 /// Non-authoritative memo of full ground line-of-sight footprints, keyed by source position and
-/// radius. It never affects checksums, snapshots or equality, and it is only valid for one
-/// simulation's fixed fog geometry, terrain and sight blockers.
+/// radius, kept per team so the teams can be unveiled in parallel. It never affects checksums,
+/// snapshots or equality, and it is only valid for one simulation's fixed fog geometry, terrain
+/// and sight blockers.
 #[derive(Default)]
 pub(super) struct VisionFootprintCache {
+    teams: [TeamFootprintCache; 2],
+}
+
+#[derive(Default)]
+struct TeamFootprintCache {
     entries: HashMap<(SimPoint, i32), CachedFootprint>,
     /// Keys whose footprint was marked by the line-of-sight path in the previous two populate calls.
     /// A source must stay put across consecutive calls before its footprint is worth caching.
@@ -425,7 +480,7 @@ struct CachedFootprint {
     last_used_call: u64,
 }
 
-impl VisionFootprintCache {
+impl TeamFootprintCache {
     fn begin_call(&mut self) {
         self.call += 1;
     }

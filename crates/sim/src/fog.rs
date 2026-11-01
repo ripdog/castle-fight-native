@@ -143,11 +143,7 @@ impl FogOfWar {
     }
 
     pub fn index(&self, point: SimPoint) -> Option<usize> {
-        let divisor = CellDivisor::new(self.cell_size);
-        let x = divisor.floor_div_wide(i64::from(point.x) - i64::from(self.origin.x));
-        let y = divisor.floor_div_wide(i64::from(point.y) - i64::from(self.origin.y));
-        (x >= 0 && y >= 0 && (x as usize) < self.width && (y as usize) < self.height)
-            .then(|| y as usize * self.width + x as usize)
+        self.grid().index(point)
     }
 
     pub fn is_visible(&self, team: Team, point: SimPoint) -> bool {
@@ -174,7 +170,65 @@ impl FogOfWar {
         })
     }
 
-    pub(crate) fn center(&self, x: i32, y: i32) -> SimPoint {
+    pub(crate) fn grid(&self) -> FogGrid {
+        FogGrid {
+            origin: self.origin,
+            cell_size: self.cell_size,
+            width: self.width,
+            height: self.height,
+        }
+    }
+
+    /// Disjoint writable views of each team's live visibility, so teams can be unveiled in
+    /// parallel.
+    pub(crate) fn team_visibility(&mut self) -> [TeamVisibility<'_>; 2] {
+        let grid = self.grid();
+        let [team0, team1] = &mut self.visible;
+        [
+            TeamVisibility { grid, cells: team0 },
+            TeamVisibility { grid, cells: team1 },
+        ]
+    }
+
+    pub(crate) fn valid_shape(&self, expected: &Self) -> bool {
+        self.origin == expected.origin
+            && self.cell_size == expected.cell_size
+            && self.width == expected.width
+            && self.height == expected.height
+            && self.visible.iter().chain(&self.explored).all(|cells| {
+                cells.len() == self.width * self.height && cells.iter().all(|cell| *cell <= 1)
+            })
+            && self.reveals.iter().all(|r| r.team.0 < 2 && r.radius > 0)
+            && self
+                .remembered_structures
+                .iter()
+                .all(|structures| structures.windows(2).all(|p| p[0].id < p[1].id))
+    }
+}
+
+/// Cell geometry of a fog grid.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct FogGrid {
+    origin: SimPoint,
+    cell_size: i32,
+    width: usize,
+    height: usize,
+}
+
+impl FogGrid {
+    pub(crate) fn cell_size(self) -> i32 {
+        self.cell_size
+    }
+
+    fn index(self, point: SimPoint) -> Option<usize> {
+        let divisor = CellDivisor::new(self.cell_size);
+        let x = divisor.floor_div_wide(i64::from(point.x) - i64::from(self.origin.x));
+        let y = divisor.floor_div_wide(i64::from(point.y) - i64::from(self.origin.y));
+        (x >= 0 && y >= 0 && (x as usize) < self.width && (y as usize) < self.height)
+            .then(|| y as usize * self.width + x as usize)
+    }
+
+    fn center(self, x: i32, y: i32) -> SimPoint {
         SimPoint::new(
             self.origin.x + x * self.cell_size + self.cell_size / 2,
             self.origin.y + y * self.cell_size + self.cell_size / 2,
@@ -182,7 +236,7 @@ impl FogOfWar {
     }
 
     /// Inclusive cell bounds of a circle's bounding box, clamped to the grid; `None` when empty.
-    fn circle_bounds(&self, position: SimPoint, radius: i32) -> Option<(i32, i32, i32, i32)> {
+    fn circle_bounds(self, position: SimPoint, radius: i32) -> Option<(i32, i32, i32, i32)> {
         let divisor = CellDivisor::new(self.cell_size);
         let min_x = divisor
             .floor_div(position.x.saturating_sub(radius) - self.origin.x)
@@ -203,7 +257,7 @@ impl FogOfWar {
     /// ignoring current visibility, as ascending index runs. The origin cell is not included; see
     /// `unveil_cached_circle`.
     pub(crate) fn circle_runs(
-        &self,
+        self,
         position: SimPoint,
         radius: i32,
         mut can_see: impl FnMut(SimPoint) -> bool,
@@ -233,17 +287,24 @@ impl FogOfWar {
         }
         runs
     }
+}
+
+/// One team's live visibility cells, writable independently of the other team's.
+pub(crate) struct TeamVisibility<'a> {
+    grid: FogGrid,
+    cells: &'a mut [u8],
+}
+
+impl TeamVisibility<'_> {
+    pub(crate) fn grid(&self) -> FogGrid {
+        self.grid
+    }
 
     /// Marks runs previously produced by `circle_runs` for the same circle, plus its origin cell.
     /// Equivalent to `unveil_circle` with the same visibility predicate, for a positive radius.
-    pub(crate) fn unveil_cached_circle(
-        &mut self,
-        team: Team,
-        position: SimPoint,
-        runs: &[CellRun],
-    ) {
-        let origin = self.index(position);
-        let visible = &mut self.visible[usize::from(team.0)];
+    pub(crate) fn unveil_cached_circle(&mut self, position: SimPoint, runs: &[CellRun]) {
+        let origin = self.grid.index(position);
+        let visible = &mut *self.cells;
         for run in runs {
             let start = run.start as usize;
             visible[start..start + run.len as usize].fill(1);
@@ -256,7 +317,6 @@ impl FogOfWar {
 
     pub(crate) fn unveil_circle(
         &mut self,
-        team: Team,
         position: SimPoint,
         radius: i32,
         mut can_see: impl FnMut(SimPoint) -> bool,
@@ -264,56 +324,41 @@ impl FogOfWar {
         if radius <= 0 {
             return;
         }
-        let Some((min_x, min_y, max_x, max_y)) = self.circle_bounds(position, radius) else {
+        let Some((min_x, min_y, max_x, max_y)) = self.grid.circle_bounds(position, radius) else {
             return;
         };
         let radius_sq = i64::from(radius).pow(2) as u64;
         for y in min_y..=max_y {
-            let start = y as usize * self.width + min_x as usize;
-            let end = y as usize * self.width + max_x as usize + 1;
-            if !self.visible[usize::from(team.0)][start..end].contains(&0) {
+            let start = y as usize * self.grid.width + min_x as usize;
+            let end = y as usize * self.grid.width + max_x as usize + 1;
+            if !self.cells[start..end].contains(&0) {
                 continue;
             }
             for x in min_x..=max_x {
-                let index = y as usize * self.width + x as usize;
-                if self.visible[usize::from(team.0)][index] != 0 {
+                let index = y as usize * self.grid.width + x as usize;
+                if self.cells[index] != 0 {
                     continue;
                 }
-                let point = self.center(x, y);
+                let point = self.grid.center(x, y);
                 if position.distance_sq(point) <= radius_sq && can_see(point) {
-                    self.visible[usize::from(team.0)][index] = 1;
+                    self.cells[index] = 1;
                 }
             }
         }
         // A positive-radius source always occupies a visible cell, even below cell resolution.
-        if let Some(index) = self.index(position) {
-            self.visible[usize::from(team.0)][index] = 1;
+        if let Some(index) = self.grid.index(position) {
+            self.cells[index] = 1;
         }
     }
 
-    pub(crate) fn unveil_rectangle(&mut self, team: Team, min: SimPoint, max: SimPoint) {
-        for y in 0..self.height as i32 {
-            for x in 0..self.width as i32 {
-                let p = self.center(x, y);
+    pub(crate) fn unveil_rectangle(&mut self, min: SimPoint, max: SimPoint) {
+        for y in 0..self.grid.height as i32 {
+            for x in 0..self.grid.width as i32 {
+                let p = self.grid.center(x, y);
                 if p.x >= min.x && p.x < max.x && p.y >= min.y && p.y < max.y {
-                    self.visible[usize::from(team.0)][y as usize * self.width + x as usize] = 1;
+                    self.cells[y as usize * self.grid.width + x as usize] = 1;
                 }
             }
         }
-    }
-
-    pub(crate) fn valid_shape(&self, expected: &Self) -> bool {
-        self.origin == expected.origin
-            && self.cell_size == expected.cell_size
-            && self.width == expected.width
-            && self.height == expected.height
-            && self.visible.iter().chain(&self.explored).all(|cells| {
-                cells.len() == self.width * self.height && cells.iter().all(|cell| *cell <= 1)
-            })
-            && self.reveals.iter().all(|r| r.team.0 < 2 && r.radius > 0)
-            && self
-                .remembered_structures
-                .iter()
-                .all(|structures| structures.windows(2).all(|p| p[0].id < p[1].id))
     }
 }
