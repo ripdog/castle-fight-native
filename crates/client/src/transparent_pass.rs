@@ -5,9 +5,9 @@
 //! a single transparent pass with thousands of sorted draws finishes on one
 //! render-thread core. This replaces Bevy's `main_transparent_pass_3d` with
 //! consecutive sub-passes over contiguous ranges of the same sorted phase,
-//! recorded in order and finished in parallel. Command buffers are submitted
-//! in range order, so draw order and blending are unchanged; only the final
-//! sub-pass resolves multisampled colour.
+//! recorded in order and each finished on the compute pool while the next is
+//! recorded. Command buffers are submitted in range order, so draw order and
+//! blending are unchanged; only the final sub-pass resolves multisampled colour.
 
 use std::ops::Range;
 
@@ -36,9 +36,9 @@ use bevy::{
 use crate::render_audit::RenderExperiment;
 
 /// Upper bound on sub-passes; each one rebinds its first draw's state.
-const MAX_TRANSPARENT_CHUNKS: usize = 4;
+const MAX_TRANSPARENT_CHUNKS: usize = 6;
 /// Draws below this per sub-pass do not repay a pass boundary.
-const MIN_DRAWS_PER_CHUNK: usize = 512;
+const MIN_DRAWS_PER_CHUNK: usize = 384;
 
 pub(crate) struct ChunkedTransparentPassPlugin;
 
@@ -204,8 +204,7 @@ fn chunked_main_transparent_pass_3d(
     let last = ranges.len() - 1;
     let device = ctx.render_device().clone();
 
-    let mut encoders = Vec::with_capacity(ranges.len());
-    for (chunk, range) in ranges.into_iter().enumerate() {
+    let record = |chunk: usize, range: Range<usize>| {
         let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
             label: Some("main_transparent_pass_3d"),
         });
@@ -236,17 +235,16 @@ fn chunked_main_transparent_pass_3d(
             }
             pass_span.end(&mut render_pass);
         }
-        encoders.push(encoder);
-    }
+        encoder
+    };
 
-    let command_buffers = if encoders.len() == 1 {
-        encoders
-            .into_iter()
-            .map(|encoder| encoder.finish())
-            .collect()
+    let command_buffers = if ranges.len() == 1 {
+        Vec::from([record(0, 0..transparent_phase.items.len()).finish()])
     } else {
+        // Each range finishes on the pool while the next one is recorded here.
         ComputeTaskPool::get().scope(|scope| {
-            for encoder in encoders {
+            for (chunk, range) in ranges.into_iter().enumerate() {
+                let encoder = record(chunk, range);
                 scope.spawn(async move { encoder.finish() });
             }
         })
