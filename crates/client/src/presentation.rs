@@ -2057,7 +2057,7 @@ fn set_building_emitter_sequence(
 }
 
 fn update_imported_building_animations(
-    mut commands: Commands,
+    par_commands: ParallelCommands,
     building_models: Res<BuildingModelSet>,
     samples: Res<PresentationSamples>,
     dying_roots: Query<(), With<ImportedBuildingDeathRemnant>>,
@@ -2067,180 +2067,186 @@ fn update_imported_building_animations(
         &mut ImportedBuildingAnimationController,
     )>,
 ) {
-    for (mut player, mut transitions, mut controller) in &mut players {
-        if dying_roots.get(controller.presentation_root).is_ok() {
-            if controller.state != ImportedBuildingAnimationState::Death {
-                let Some(death) = controller.death.clone() else {
-                    commands.entity(controller.presentation_root).try_despawn();
-                    continue;
-                };
-                transitions.play(&mut player, death.node, Duration::from_millis(50));
-                set_building_emitter_sequence(
-                    &mut commands,
-                    &building_models,
-                    controller.model_root,
-                    controller.rawcode,
-                    Some(&death.name),
-                );
-                controller.state = ImportedBuildingAnimationState::Death;
-                continue;
-            }
-            let finished = controller
-                .death
-                .as_ref()
-                .and_then(|death| player.animation(death.node))
-                .is_some_and(|animation| animation.is_finished());
-            if finished {
-                commands.entity(controller.presentation_root).try_despawn();
-            }
-            continue;
-        }
-
-        let construction = samples
-            .current
-            .buildings
-            .get(&controller.sim_id)
-            .and_then(|building| {
-                building_construction_phase(samples.current.tick, building)
-                    .map(|phase| (building, phase))
-            });
-        if let Some((_, phase)) = construction {
-            let Some(birth) = controller.birth.clone() else {
-                continue;
-            };
-            if controller.state != ImportedBuildingAnimationState::Birth {
-                transitions.play(&mut player, birth.node, Duration::ZERO);
-                set_building_emitter_sequence(
-                    &mut commands,
-                    &building_models,
-                    controller.model_root,
-                    controller.rawcode,
-                    Some(&birth.name),
-                );
-                controller.state = ImportedBuildingAnimationState::Birth;
-            }
-            if let Some(animation) = player.animation_mut(birth.node) {
-                animation
-                    .set_seek_time(birth.duration_seconds * phase)
-                    .pause();
-            }
-            continue;
-        }
-
-        let native_cast = samples
-            .current
-            .buildings
-            .get(&controller.sim_id)
-            .and_then(|building| {
-                let content = building.content?;
-                let timing =
-                    castle_fight_sim::building_mechanics::world_freezer_visual_timing_for_version(
-                        content.map_version,
-                    );
-                if content.rawcode != timing.building_rawcode
-                    || building.ability_cast_sequence? == 0
-                {
-                    return None;
+    // Each controller only commands its own model and presentation roots, so command order
+    // between players does not matter.
+    players
+        .par_iter_mut()
+        .for_each(|(mut player, mut transitions, mut controller)| {
+            par_commands.command_scope(|mut commands| {
+                if dying_roots.get(controller.presentation_root).is_ok() {
+                    if controller.state != ImportedBuildingAnimationState::Death {
+                        let Some(death) = controller.death.clone() else {
+                            commands.entity(controller.presentation_root).try_despawn();
+                            return;
+                        };
+                        transitions.play(&mut player, death.node, Duration::from_millis(50));
+                        set_building_emitter_sequence(
+                            &mut commands,
+                            &building_models,
+                            controller.model_root,
+                            controller.rawcode,
+                            Some(&death.name),
+                        );
+                        controller.state = ImportedBuildingAnimationState::Death;
+                        return;
+                    }
+                    let finished = controller
+                        .death
+                        .as_ref()
+                        .and_then(|death| player.animation(death.node))
+                        .is_some_and(|animation| animation.is_finished());
+                    if finished {
+                        commands.entity(controller.presentation_root).try_despawn();
+                    }
+                    return;
                 }
-                let started = building
-                    .ability_ready_tick?
-                    .saturating_sub(u64::from(timing.cooldown_ticks));
-                let elapsed = samples.current.tick.saturating_sub(started);
-                (elapsed < u64::from(timing.death_ticks)).then_some(elapsed)
+
+                let construction = samples
+                    .current
+                    .buildings
+                    .get(&controller.sim_id)
+                    .and_then(|building| {
+                        building_construction_phase(samples.current.tick, building)
+                            .map(|phase| (building, phase))
+                    });
+                if let Some((_, phase)) = construction {
+                    let Some(birth) = controller.birth.clone() else {
+                        return;
+                    };
+                    if controller.state != ImportedBuildingAnimationState::Birth {
+                        transitions.play(&mut player, birth.node, Duration::ZERO);
+                        set_building_emitter_sequence(
+                            &mut commands,
+                            &building_models,
+                            controller.model_root,
+                            controller.rawcode,
+                            Some(&birth.name),
+                        );
+                        controller.state = ImportedBuildingAnimationState::Birth;
+                    }
+                    if let Some(animation) = player.animation_mut(birth.node) {
+                        animation
+                            .set_seek_time(birth.duration_seconds * phase)
+                            .pause();
+                    }
+                    return;
+                }
+
+                let native_cast = samples
+                    .current
+                    .buildings
+                    .get(&controller.sim_id)
+                    .and_then(|building| {
+                        let content = building.content?;
+                        let timing =
+                            castle_fight_sim::building_mechanics::world_freezer_visual_timing_for_version(
+                                content.map_version,
+                            );
+                        if content.rawcode != timing.building_rawcode
+                            || building.ability_cast_sequence? == 0
+                        {
+                            return None;
+                        }
+                        let started = building
+                            .ability_ready_tick?
+                            .saturating_sub(u64::from(timing.cooldown_ticks));
+                        let elapsed = samples.current.tick.saturating_sub(started);
+                        (elapsed < u64::from(timing.death_ticks)).then_some(elapsed)
+                    });
+                if let Some(elapsed) = native_cast
+                    && let Some(death) = controller.death.clone()
+                {
+                    if controller.state != ImportedBuildingAnimationState::Death {
+                        transitions.play(&mut player, death.node, Duration::ZERO);
+                        set_building_emitter_sequence(
+                            &mut commands,
+                            &building_models,
+                            controller.model_root,
+                            controller.rawcode,
+                            Some(&death.name),
+                        );
+                        controller.state = ImportedBuildingAnimationState::Death;
+                    }
+                    if let Some(animation) = player.animation_mut(death.node) {
+                        animation
+                            .set_seek_time(
+                                (elapsed as f32 / CASTLE_FIGHT_SIMULATION_HZ as f32)
+                                    .min(death.duration_seconds),
+                            )
+                            .pause();
+                    }
+                    return;
+                }
+                let action = samples
+                    .current
+                    .buildings
+                    .get(&controller.sim_id)
+                    .and_then(|building| building.status.action_animation);
+                if let Some(action) = action
+                    && action.kind == ActionAnimationKind::Attack
+                    && let Some(phase) = action_animation_phase(action, samples.current.tick as f64)
+                    && let Some(attack) = controller.attack.clone()
+                {
+                    if controller.state != ImportedBuildingAnimationState::Attack
+                        || controller.action_animation != Some(action)
+                    {
+                        player.stop_all();
+                        transitions.play(&mut player, attack.node, Duration::ZERO);
+                        set_building_emitter_sequence(
+                            &mut commands,
+                            &building_models,
+                            controller.model_root,
+                            controller.rawcode,
+                            Some(&attack.name),
+                        );
+                        controller.state = ImportedBuildingAnimationState::Attack;
+                        controller.action_animation = Some(action);
+                    }
+                    if let Some(animation) = player.animation_mut(attack.node) {
+                        animation
+                            .set_seek_time(attack.duration_seconds * phase)
+                            .pause();
+                    }
+                    return;
+                }
+                // The source intentionally plays Death while the building remains alive.
+                // Only a real death remnant above may despawn the presentation root.
+                let recovering_native_cast = matches!(
+                    controller.state,
+                    ImportedBuildingAnimationState::Death | ImportedBuildingAnimationState::Attack
+                );
+                controller.action_animation = None;
+                if recovering_native_cast {
+                    player.stop_all();
+                }
+                if controller.state != ImportedBuildingAnimationState::Birth && !recovering_native_cast {
+                    return;
+                }
+                if let Some(stand) = controller.stand.clone() {
+                    transitions
+                        .play(&mut player, stand.node, Duration::from_millis(50))
+                        .repeat()
+                        .set_speed(WC3_BUILDING_AMBIENT_ANIMATION_SPEED);
+                    set_building_emitter_sequence(
+                        &mut commands,
+                        &building_models,
+                        controller.model_root,
+                        controller.rawcode,
+                        Some(&stand.name),
+                    );
+                    controller.state = ImportedBuildingAnimationState::Stand;
+                } else {
+                    set_building_emitter_sequence(
+                        &mut commands,
+                        &building_models,
+                        controller.model_root,
+                        controller.rawcode,
+                        None,
+                    );
+                    controller.state = ImportedBuildingAnimationState::Stand;
+                }
             });
-        if let Some(elapsed) = native_cast
-            && let Some(death) = controller.death.clone()
-        {
-            if controller.state != ImportedBuildingAnimationState::Death {
-                transitions.play(&mut player, death.node, Duration::ZERO);
-                set_building_emitter_sequence(
-                    &mut commands,
-                    &building_models,
-                    controller.model_root,
-                    controller.rawcode,
-                    Some(&death.name),
-                );
-                controller.state = ImportedBuildingAnimationState::Death;
-            }
-            if let Some(animation) = player.animation_mut(death.node) {
-                animation
-                    .set_seek_time(
-                        (elapsed as f32 / CASTLE_FIGHT_SIMULATION_HZ as f32)
-                            .min(death.duration_seconds),
-                    )
-                    .pause();
-            }
-            continue;
-        }
-        let action = samples
-            .current
-            .buildings
-            .get(&controller.sim_id)
-            .and_then(|building| building.status.action_animation);
-        if let Some(action) = action
-            && action.kind == ActionAnimationKind::Attack
-            && let Some(phase) = action_animation_phase(action, samples.current.tick as f64)
-            && let Some(attack) = controller.attack.clone()
-        {
-            if controller.state != ImportedBuildingAnimationState::Attack
-                || controller.action_animation != Some(action)
-            {
-                player.stop_all();
-                transitions.play(&mut player, attack.node, Duration::ZERO);
-                set_building_emitter_sequence(
-                    &mut commands,
-                    &building_models,
-                    controller.model_root,
-                    controller.rawcode,
-                    Some(&attack.name),
-                );
-                controller.state = ImportedBuildingAnimationState::Attack;
-                controller.action_animation = Some(action);
-            }
-            if let Some(animation) = player.animation_mut(attack.node) {
-                animation
-                    .set_seek_time(attack.duration_seconds * phase)
-                    .pause();
-            }
-            continue;
-        }
-        // The source intentionally plays Death while the building remains alive.
-        // Only a real death remnant above may despawn the presentation root.
-        let recovering_native_cast = matches!(
-            controller.state,
-            ImportedBuildingAnimationState::Death | ImportedBuildingAnimationState::Attack
-        );
-        controller.action_animation = None;
-        if recovering_native_cast {
-            player.stop_all();
-        }
-        if controller.state != ImportedBuildingAnimationState::Birth && !recovering_native_cast {
-            continue;
-        }
-        if let Some(stand) = controller.stand.clone() {
-            transitions
-                .play(&mut player, stand.node, Duration::from_millis(50))
-                .repeat()
-                .set_speed(WC3_BUILDING_AMBIENT_ANIMATION_SPEED);
-            set_building_emitter_sequence(
-                &mut commands,
-                &building_models,
-                controller.model_root,
-                controller.rawcode,
-                Some(&stand.name),
-            );
-            controller.state = ImportedBuildingAnimationState::Stand;
-        } else {
-            set_building_emitter_sequence(
-                &mut commands,
-                &building_models,
-                controller.model_root,
-                controller.rawcode,
-                None,
-            );
-            controller.state = ImportedBuildingAnimationState::Stand;
-        }
-    }
+        });
 }
 
 fn building_presentation_needs_rebuild(
@@ -2396,7 +2402,7 @@ fn sync_unit_emitter_if_animation_changed(
 }
 
 fn update_imported_unit_animations(
-    mut commands: Commands,
+    par_commands: ParallelCommands,
     unit_models: Res<UnitModelSet>,
     samples: Res<PresentationSamples>,
     fixed_time: Res<Time<Fixed>>,
@@ -2408,89 +2414,95 @@ fn update_imported_unit_animations(
         &mut ImportedUnitAnimationController,
     )>,
 ) {
-    for (mut player, mut transitions, mut controller) in &mut players {
-        let previous_state = controller.state;
-        let previous_defend_active = controller.defend_active;
-        if let Some(current) = samples.current.builders.get(&controller.sim_id) {
-            update_live_imported_builder_animation(
-                &samples,
-                current,
-                locomotion_clock_multiplier(&fixed_time, playback.paused),
-                &mut player,
-                &mut transitions,
-                &mut controller,
-            );
-            sync_unit_emitter_if_animation_changed(
-                &mut commands,
-                &unit_models,
-                &controller,
-                previous_state,
-                previous_defend_active,
-            );
-            continue;
-        }
-        if let Some(current) = samples.current.units.get(&controller.sim_id) {
-            update_live_imported_unit_animation(
-                &samples,
-                interpolated_sim_tick(
-                    &samples,
-                    playback.interpolation_alpha(&fixed_time, &samples),
-                ),
-                current,
-                locomotion_clock_multiplier(&fixed_time, playback.paused),
-                &mut player,
-                &mut transitions,
-                &mut controller,
-            );
-            sync_unit_emitter_if_animation_changed(
-                &mut commands,
-                &unit_models,
-                &controller,
-                previous_state,
-                previous_defend_active,
-            );
-            continue;
-        }
+    // Each controller only commands its own model and presentation roots, so command order
+    // between players does not matter.
+    players
+        .par_iter_mut()
+        .for_each(|(mut player, mut transitions, mut controller)| {
+            par_commands.command_scope(|mut commands| {
+                let previous_state = controller.state;
+                let previous_defend_active = controller.defend_active;
+                if let Some(current) = samples.current.builders.get(&controller.sim_id) {
+                    update_live_imported_builder_animation(
+                        &samples,
+                        current,
+                        locomotion_clock_multiplier(&fixed_time, playback.paused),
+                        &mut player,
+                        &mut transitions,
+                        &mut controller,
+                    );
+                    sync_unit_emitter_if_animation_changed(
+                        &mut commands,
+                        &unit_models,
+                        &controller,
+                        previous_state,
+                        previous_defend_active,
+                    );
+                    return;
+                }
+                if let Some(current) = samples.current.units.get(&controller.sim_id) {
+                    update_live_imported_unit_animation(
+                        &samples,
+                        interpolated_sim_tick(
+                            &samples,
+                            playback.interpolation_alpha(&fixed_time, &samples),
+                        ),
+                        current,
+                        locomotion_clock_multiplier(&fixed_time, playback.paused),
+                        &mut player,
+                        &mut transitions,
+                        &mut controller,
+                    );
+                    sync_unit_emitter_if_animation_changed(
+                        &mut commands,
+                        &unit_models,
+                        &controller,
+                        previous_state,
+                        previous_defend_active,
+                    );
+                    return;
+                }
 
-        if let Some(corpse) = samples
-            .current
-            .corpses
-            .values()
-            .find(|corpse| corpse.source_unit == controller.sim_id)
-        {
-            update_imported_corpse_animation(
-                samples.current.tick,
-                corpse,
-                &mut player,
-                &mut transitions,
-                &mut controller,
-            );
-            sync_unit_emitter_if_animation_changed(
-                &mut commands,
-                &unit_models,
-                &controller,
-                previous_state,
-                previous_defend_active,
-            );
-            continue;
-        }
+                if let Some(corpse) = samples
+                    .current
+                    .corpses
+                    .values()
+                    .find(|corpse| corpse.source_unit == controller.sim_id)
+                {
+                    update_imported_corpse_animation(
+                        samples.current.tick,
+                        corpse,
+                        &mut player,
+                        &mut transitions,
+                        &mut controller,
+                    );
+                    sync_unit_emitter_if_animation_changed(
+                        &mut commands,
+                        &unit_models,
+                        &controller,
+                        previous_state,
+                        previous_defend_active,
+                    );
+                    return;
+                }
 
-        if dying_roots.get(controller.presentation_root).is_ok() {
-            update_imported_death_remnant(
-                &mut commands,
-                &mut player,
-                &mut transitions,
-                &mut controller,
-            );
-            sync_unit_emitter_if_animation_changed(
-                &mut commands,
-                &unit_models,
-                &controller,
-                previous_state,
-                previous_defend_active,
-            );
-        }
-    }
+                if dying_roots.get(controller.presentation_root).is_ok() {
+                    update_imported_death_remnant(
+                        &mut commands,
+                        &mut player,
+                        &mut transitions,
+                        &mut controller,
+                    );
+                    sync_unit_emitter_if_animation_changed(
+                        &mut commands,
+                        &unit_models,
+                        &controller,
+                        previous_state,
+                        previous_defend_active,
+                    );
+                }
+            });
+        });
 }
 
 fn update_live_imported_builder_animation(
