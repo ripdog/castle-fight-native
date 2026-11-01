@@ -29,3 +29,28 @@ why this is a fork rather than a system in the client.
    if `extract_skins` changed, then regenerate the patch.
 3. If upstream has made the joint walk parallel itself, delete the fork and the
    `[patch.crates-io]` entry instead.
+
+## bevy_transform 0.19.1
+
+`bevy_transform/` is the crates.io release of `bevy_transform` 0.19.1 with one
+change, wired in through `[patch.crates-io]` like `bevy_pbr`.
+
+The change is in `src/systems.rs`. Upstream's parallel `propagation_worker`
+busy-spins on the work queue until every busy worker finishes, and every
+compute-pool thread joins. In the 700-unit benchmark that spin was 4.2% of all
+process CPU samples, about as much as the propagation work itself, and it ran
+while the render and simulation threads competed for the same cores. The patch
+lets a worker spin for `WorkQueue::SPIN_POLLS` empty polls, then yield its
+thread between polls. Work hand-off and propagation results are unchanged; a
+frame-pointer profile shows propagation CPU down 21% with the same work samples.
+
+### Re-applying on a Bevy upgrade
+
+1. Replace `bevy_transform/` with the new release from
+   `~/.cargo/registry/src/*/bevy_transform-<version>` (drop `.cargo-ok`,
+   `.cargo_vcs_info.json`, `Cargo.lock` and `Cargo.toml.orig`).
+2. Apply `bevy_transform-yielding-propagation-workers.patch` from inside
+   `bevy_transform/` (`patch -p1 < ../bevy_transform-yielding-propagation-workers.patch`),
+   resolving by hand if `propagation_worker` changed, then regenerate the patch.
+3. If upstream workers stop busy-spinning, delete the fork and its
+   `[patch.crates-io]` entry instead.

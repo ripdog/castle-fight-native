@@ -45,3 +45,4 @@ debug = "line-tables-only"
 # Local fork of bevy_pbr 0.19.1; see vendor/README.md for the patch and how to re-apply it.
 [patch.crates-io]
 bevy_pbr = { path = "vendor/bevy_pbr" }
+bevy_transform = { path = "vendor/bevy_transform" }

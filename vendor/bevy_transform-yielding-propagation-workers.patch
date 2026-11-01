@@ -1,0 +1,52 @@
+--- a/src/systems.rs	2026-11-01 22:08:31.773574131 +1300
++++ b/src/systems.rs	2026-11-01 22:08:31.783776986 +1300
+@@ -592,11 +592,12 @@
+         let _span = tracing::info_span!("transform propagation worker").entered();
+ 
+         let mut outbox = queue.local_queue.borrow_local_mut();
++        let mut idle_polls = 0_u32;
+         loop {
+             // Try to acquire a lock on the work queue in a tight loop. Profiling shows this is much
+             // more efficient than relying on `.lock()`, which causes gaps to form between tasks.
+             let Ok(rx) = queue.receiver.try_lock() else {
+-                core::hint::spin_loop(); // No apparent impact on profiles, but best practice.
++                WorkQueue::wait_for_work(&mut idle_polls);
+                 continue;
+             };
+             // If the queue is empty and no other threads are busy processing work, we can conclude
+@@ -605,8 +606,12 @@
+                 if queue.busy_threads.load(Ordering::Relaxed) == 0 {
+                     break; // All work is complete, kill the worker
+                 }
+-                continue; // No work to do now, but another thread is busy creating more work.
++                // No work to do now, but another thread is busy creating more work.
++                drop(rx);
++                WorkQueue::wait_for_work(&mut idle_polls);
++                continue;
+             };
++            idle_polls = 0;
+             if tasks.is_empty() {
+                 continue; // This shouldn't happen, but if it does, we might as well stop early.
+             }
+@@ -784,6 +789,21 @@
+     }
+     impl WorkQueue {
+         const CHUNK_SIZE: usize = 512;
++        /// Empty polls a worker spins through before it starts yielding its thread.
++        const SPIN_POLLS: u32 = 64;
++
++        /// Backs off between polls of an empty queue. A short spin keeps hand-offs fast, then
++        /// the worker yields so threads outside the pool (render, simulation) can use the core
++        /// while the remaining subtrees finish.
++        #[inline]
++        fn wait_for_work(idle_polls: &mut u32) {
++            if *idle_polls < Self::SPIN_POLLS {
++                *idle_polls += 1;
++                core::hint::spin_loop();
++            } else {
++                std::thread::yield_now();
++            }
++        }
+ 
+         #[inline]
+         fn send_batches_with(sender: &Sender<Vec<Entity>>, outbox: &mut Vec<Entity>) {
