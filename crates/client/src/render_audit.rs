@@ -876,6 +876,7 @@ pub(crate) struct SceneCensus<'w, 's> {
     cameras: Query<'w, 's, &'static GlobalTransform, With<Camera3d>>,
     effect_reserves: Res<'w, crate::presentation::Wc3EffectPrewarmPlan>,
     event_metadata: Res<'w, crate::wc3_effects::Wc3ComposedMetadataCache>,
+    archetypes: &'w bevy::ecs::archetype::Archetypes,
 }
 
 impl SceneCensus<'_, '_> {
@@ -955,7 +956,7 @@ impl SceneCensus<'_, '_> {
             }
         }
         let mut output = format!(
-            "\nSCENE  entities={} meshes={} visible={} skinned={} dynamic_bounds={} particles={} transparent_visible={} no_auto_batch={}\n  mesh_assets={} material_assets={} visible_mesh_material_pairs={} animation_players={} animated_texture_tracks={} joint_references={} unique_joints={}\n",
+            "\nSCENE  entities={} meshes={} visible={} skinned={} dynamic_bounds={} particles={} transparent_visible={} no_auto_batch={}\n  mesh_assets={} material_assets={} visible_mesh_material_pairs={} animation_players={} animated_texture_tracks={} joint_references={} unique_joints={}\n  archetypes={} empty_archetypes={}\n",
             self.entities.iter().count(),
             total,
             visible,
@@ -972,7 +973,12 @@ impl SceneCensus<'_, '_> {
             self.players.iter().count(),
             self.animated_textures.iter().count(),
             joint_references,
-            joints.len()
+            joints.len(),
+            self.archetypes.len(),
+            self.archetypes
+                .iter()
+                .filter(|archetype| archetype.is_empty())
+                .count(),
         );
         output.push_str(&self.effect_reserves.format());
         for window in &self.windows {
