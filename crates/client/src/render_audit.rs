@@ -64,7 +64,6 @@ pub(crate) enum RenderExperiment {
     ParticleSharedMesh,
     ParticleSharedMeshPartialBindings,
     CompactMaterial,
-    CompiledEventTracks,
     SkinInfluences,
     ParticleCull,
     ParticlePartialBindings,
@@ -106,7 +105,6 @@ impl RenderExperiment {
             "bindless-256" => Ok(Self::Bindless256),
             "no-bindless" => Ok(Self::NoBindless),
             "compact-material" => Ok(Self::CompactMaterial),
-            "compiled-event-tracks" => Ok(Self::CompiledEventTracks),
             "skin-influences" => Ok(Self::SkinInfluences),
             "particle-shared-view" => Ok(Self::ParticleSharedView),
             "particle-shared-mesh" => Ok(Self::ParticleSharedMesh),
@@ -123,7 +121,7 @@ impl RenderExperiment {
             "particle-source-batching" => Ok(Self::ParticleSourceBatching),
             "legacy-transparent-pass" => Ok(Self::LegacyTransparentPass),
             _ => Err(format!(
-                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, bindless-auto, bindless-16, bindless-32, bindless-64, bindless-128, bindless-256, no-bindless, compact-material, compiled-event-tracks, skin-influences, particle-shared-view, particle-shared-mesh, particle-shared-mesh-partial-bindings, particle-cull, particle-partial-bindings, particle-uncached-bindings, cold-effect-pools, offscreen-effect-animation, budgeted-scene-spawn, particle-overlap-audit, particle-overlap-batching, particle-depth-sort, particle-source-batching, or legacy-transparent-pass"
+                "unknown render experiment {value:?}; expected baseline, freeze-bounds, hide-skinned, hide-particles, hide-transparent, legacy-team-color, legacy-geoset-visibility, legacy-attachment-search, legacy-attachment-index, legacy-effect-pooling, legacy-splat-updates, legacy-splat-material-state, legacy-animated-alpha-state, legacy-animated-texture-state, freeze-materials, freeze-poses, bindless-auto, bindless-16, bindless-32, bindless-64, bindless-128, bindless-256, no-bindless, compact-material, skin-influences, particle-shared-view, particle-shared-mesh, particle-shared-mesh-partial-bindings, particle-cull, particle-partial-bindings, particle-uncached-bindings, cold-effect-pools, offscreen-effect-animation, budgeted-scene-spawn, particle-overlap-audit, particle-overlap-batching, particle-depth-sort, particle-source-batching, or legacy-transparent-pass"
             )),
         }
     }
@@ -746,7 +744,6 @@ fn apply_render_experiment(
             | RenderExperiment::ParticleSharedMesh
             | RenderExperiment::ParticleSharedMeshPartialBindings
             | RenderExperiment::CompactMaterial
-            | RenderExperiment::CompiledEventTracks
             | RenderExperiment::SkinInfluences
             | RenderExperiment::ParticleCull
             | RenderExperiment::ParticlePartialBindings
@@ -798,7 +795,6 @@ fn apply_render_experiment(
             | RenderExperiment::ParticleSharedMesh
             | RenderExperiment::ParticleSharedMeshPartialBindings
             | RenderExperiment::CompactMaterial
-            | RenderExperiment::CompiledEventTracks
             | RenderExperiment::SkinInfluences
             | RenderExperiment::ParticleCull
             | RenderExperiment::ParticlePartialBindings

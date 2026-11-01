@@ -1133,7 +1133,14 @@ impl Wc3CompiledEventTrack {
 #[derive(Debug)]
 struct Wc3EventTrack {
     spec: Wc3EventObjectSpec,
-    compiled: Option<Wc3CompiledEventTrack>,
+    compiled: Wc3CompiledEventTrack,
+}
+
+impl Wc3EventTrack {
+    fn new(spec: Wc3EventObjectSpec) -> Self {
+        let compiled = Wc3CompiledEventTrack::new(&spec);
+        Self { spec, compiled }
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -1270,12 +1277,12 @@ struct Wc3ComposedNodeMetadata {
 }
 
 impl Wc3ComposedNodeMetadata {
-    fn parse(raw: &str, compiled: bool) -> Option<Self> {
+    fn parse(raw: &str) -> Option<Self> {
         let mut extras = serde_json::from_str::<Wc3NodeExtras>(raw).ok()?;
-        let event_track = extras.wc3_event_object.take().map(|spec| {
-            let compiled = compiled.then(|| Wc3CompiledEventTrack::new(&spec));
-            Arc::new(Wc3EventTrack { spec, compiled })
-        });
+        let event_track = extras
+            .wc3_event_object
+            .take()
+            .map(|spec| Arc::new(Wc3EventTrack::new(spec)));
         Some(Self {
             extras,
             event_track,
@@ -1297,7 +1304,7 @@ impl Wc3ComposedMetadataCache {
             .nodes
             .values()
             .filter_map(|node| node.event_track.as_ref())
-            .filter_map(|track| track.compiled.as_ref())
+            .map(|track| &track.compiled)
             .fold((0, 0, 0), |(tracks, windows, empty), track| {
                 (
                     tracks + 1,
@@ -1404,7 +1411,6 @@ fn registered_child_model_for_node(
 pub(crate) struct Wc3ComposedFeatureSetup<'w, 's> {
     asset_server: Res<'w, AssetServer>,
     registry: Res<'w, Wc3ConvertedModelRegistry>,
-    experiment: Option<Res<'w, RenderExperiment>>,
     metadata: ResMut<'w, Wc3ComposedMetadataCache>,
     nodes: Query<'w, 's, (Entity, Ref<'static, GltfExtras>), Changed<GltfExtras>>,
     removed: RemovedComponents<'w, 's, GltfExtras>,
@@ -1416,7 +1422,6 @@ pub fn setup_wc3_model_composed_features(mut commands: Commands, setup: Wc3Compo
     let Wc3ComposedFeatureSetup {
         asset_server,
         registry,
-        experiment,
         mut metadata,
         nodes,
         mut removed,
@@ -1432,8 +1437,6 @@ pub fn setup_wc3_model_composed_features(mut commands: Commands, setup: Wc3Compo
             )>();
         }
     }
-    let compiled =
-        experiment.is_some_and(|experiment| *experiment == RenderExperiment::CompiledEventTracks);
     for (entity, raw_extras) in &nodes {
         if !raw_extras.is_added() {
             // Replacing/removing an event spec must also replace its cursor and assets.
@@ -1443,25 +1446,18 @@ pub fn setup_wc3_model_composed_features(mut commands: Commands, setup: Wc3Compo
                 Wc3SplatEventRuntime,
             )>();
         }
-        let node = if compiled {
-            if let Some(node) = metadata.nodes.get(&raw_extras.value).cloned() {
-                metadata.hits += 1;
-                node
-            } else {
-                let Some(node) = Wc3ComposedNodeMetadata::parse(&raw_extras.value, true) else {
-                    continue;
-                };
-                let node = Arc::new(node);
-                metadata
-                    .nodes
-                    .insert(raw_extras.value.clone(), Arc::clone(&node));
-                node
-            }
+        let node = if let Some(node) = metadata.nodes.get(&raw_extras.value).cloned() {
+            metadata.hits += 1;
+            node
         } else {
-            let Some(node) = Wc3ComposedNodeMetadata::parse(&raw_extras.value, false) else {
+            let Some(node) = Wc3ComposedNodeMetadata::parse(&raw_extras.value) else {
                 continue;
             };
-            Arc::new(node)
+            let node = Arc::new(node);
+            metadata
+                .nodes
+                .insert(raw_extras.value.clone(), Arc::clone(&node));
+            node
         };
         let extras = &node.extras;
         // These composed features retain their existing setup and ownership lifecycle.
@@ -2073,14 +2069,8 @@ fn wc3_event_crossings(
     clock: &Wc3ModelSequenceClock,
     dt_ms: f32,
 ) -> u32 {
-    let spec = &track.spec;
-    if let Some(global_sequence_id) = spec.global_sequence_id
-        && let Some(duration) = spec
-            .global_sequence_durations_ms
-            .get(global_sequence_id as usize)
-            .copied()
-            .filter(|duration| *duration != 0)
-    {
+    let compiled = &track.compiled;
+    if let Some((duration, phases)) = &compiled.global {
         let current = clock.global_elapsed_ms.max(0.0);
         let previous = cursor.previous_global_elapsed_ms.unwrap_or_else(|| {
             let previous = (current - dt_ms).max(0.0);
@@ -2091,21 +2081,9 @@ fn wc3_event_crossings(
             }
         });
         cursor.previous_global_elapsed_ms = Some(current);
-        if let Some(compiled) = &track.compiled
-            && let Some((duration, phases)) = &compiled.global
-        {
-            return phases
-                .iter()
-                .map(|phase| periodic_event_crossings(previous, current, *phase, *duration))
-                .sum();
-        }
-        return spec
-            .event_track_times
+        return phases
             .iter()
-            .copied()
-            .map(|event_time| {
-                periodic_event_crossings(previous, current, event_time as f32, duration as f32)
-            })
+            .map(|phase| periodic_event_crossings(previous, current, *phase, *duration))
             .sum();
     }
 
@@ -2130,54 +2108,28 @@ fn wc3_event_crossings(
     };
     if !same_sequence {
         cursor.previous_sequence_name = Some(clock.sequence_name.clone());
-        if let Some(compiled) = &track.compiled {
-            cursor.selected_window_index = compiled
-                .windows
-                .iter()
-                .position(|window| window.name.eq_ignore_ascii_case(&clock.sequence_name));
-        }
+        cursor.selected_window_index = compiled
+            .windows
+            .iter()
+            .position(|window| window.name.eq_ignore_ascii_case(&clock.sequence_name));
     }
     cursor.previous_sequence_elapsed_ms = Some(current);
 
-    if let Some(compiled) = &track.compiled {
-        let Some(window) = cursor
-            .selected_window_index
-            .and_then(|index| compiled.windows.get(index))
-        else {
-            return 0;
-        };
-        // An empty window does no per-key work, but the instance cursor above still advances.
-        return window
-            .phases_ms
-            .iter()
-            .map(|phase| {
-                if window.non_looping {
-                    u32::from(*phase > previous && *phase <= current.min(window.duration_ms))
-                } else {
-                    periodic_event_crossings(previous, current, *phase, window.duration_ms)
-                }
-            })
-            .sum();
-    }
-
-    let Some(window) = spec
-        .sequence_windows
-        .iter()
-        .find(|window| window.name.eq_ignore_ascii_case(&clock.sequence_name))
+    let Some(window) = cursor
+        .selected_window_index
+        .and_then(|index| compiled.windows.get(index))
     else {
         return 0;
     };
-    let duration = window.end_ms.saturating_sub(window.start_ms).max(1) as f32;
-    spec.event_track_times
+    // An empty window does no per-key work, but the instance cursor above still advances.
+    window
+        .phases_ms
         .iter()
-        .copied()
-        .filter(|event_time| *event_time >= window.start_ms && *event_time <= window.end_ms)
-        .map(|event_time| {
-            let phase = event_time.saturating_sub(window.start_ms) as f32;
+        .map(|phase| {
             if window.non_looping {
-                u32::from(phase > previous && phase <= current.min(duration))
+                u32::from(*phase > previous && *phase <= current.min(window.duration_ms))
             } else {
-                periodic_event_crossings(previous, current, phase, duration)
+                periodic_event_crossings(previous, current, *phase, window.duration_ms)
             }
         })
         .sum()
@@ -8046,19 +7998,16 @@ mod tests {
                     attachments: Vec::new(),
                 },
             },
-            track: Arc::new(Wc3EventTrack {
-                spec: Wc3EventObjectSpec {
-                    kind: Wc3EventObjectKind::Spawn,
-                    gltf: Some("models/spawn.gltf".to_owned()),
-                    sound: None,
-                    splat: None,
-                    global_sequence_id,
-                    event_track_times,
-                    sequence_windows,
-                    global_sequence_durations_ms,
-                },
-                compiled: None,
-            }),
+            track: Arc::new(Wc3EventTrack::new(Wc3EventObjectSpec {
+                kind: Wc3EventObjectKind::Spawn,
+                gltf: Some("models/spawn.gltf".to_owned()),
+                sound: None,
+                splat: None,
+                global_sequence_id,
+                event_track_times,
+                sequence_windows,
+                global_sequence_durations_ms,
+            })),
             cursor: Wc3EventCursor::default(),
         }
     }
@@ -8352,6 +8301,7 @@ mod tests {
         );
         runtime.cursor.previous_sequence_name = Some("Stand".to_owned());
         runtime.cursor.previous_sequence_elapsed_ms = Some(900.0);
+        runtime.cursor.selected_window_index = Some(0);
         let clock = Wc3ModelSequenceClock {
             sequence_name: "Stand".to_owned(),
             sequence_elapsed_ms: 1_250.0,

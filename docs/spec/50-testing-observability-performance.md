@@ -373,8 +373,8 @@ mode and MUST NOT affect the authoritative simulation. They deliberately change 
   compiled main-view variants. Pipeline sampling MUST check readiness through a non-panicking lookup
   before reading descriptors; pending, compiling and failed pipelines are excluded. This control
   is opt-in.
-- `compiled-event-tracks` shares parsed composed-node extras and immutable event tracks for
-  byte-identical metadata. It precomputes each sequence window's relative event phases and caches
+- Composed model event tracks have no control: ordinary rendering always shares parsed
+  composed-node extras and immutable event tracks for byte-identical metadata. It precomputes each sequence window's relative event phases and caches
   the selected window per instance until the sequence changes. Empty windows MUST still advance
   that instance's cursor. Authored key ordering, duplicates, inclusive endpoints, initial/time-zero
   crossings, skipped frames, looping, global periods and invalid-global fallback MUST retain the
@@ -382,7 +382,8 @@ mode and MUST NOT affect the authoritative simulation. They deliberately change 
   MUST remain per instance. Changed/removed extras MUST replace/remove event runtimes; changed content
   MUST select fresh metadata. Reuse MUST reset the selected window and all crossing cursors. Clock
   owners are still resolved through the current hierarchy on every update. Census counters report
-  cumulative content sources/cache hits and unique compiled tracks/windows. This control is opt-in.
+  cumulative content sources/cache hits and unique compiled tracks/windows. Cached metadata is
+  retained for the process, so repeated hot reloads can accumulate obsolete entries.
 - `compact-material` uses render-only proxies for WC3 animated-alpha and team-colour extensions
   whose base material has no image inputs other than base colour. It retains the complete Bevy
   material uniform and delegates material/pipeline properties to StandardMaterial, binding only
