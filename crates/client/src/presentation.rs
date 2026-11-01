@@ -1105,6 +1105,8 @@ impl Plugin for CastlePresentationPlugin {
             .init_resource::<Wc3ComposedMetadataCache>()
             .init_resource::<Wc3VisualAnimationGraphs>()
             .init_resource::<AnimationPlayerCandidates>()
+            .init_resource::<ReparentedEntities>()
+            .add_observer(record_reparented_entity)
             .init_resource::<FpsDisplay>()
             .init_resource::<MapGridState>()
             .init_resource::<BuildingGridSnapState>()
@@ -1814,9 +1816,8 @@ fn spawn_air_wings(
 type AnimationPlayerHierarchyChanges<'w, 's> = Query<
     'w,
     's,
-    (Entity, Option<&'static ChildOf>),
+    Entity,
     Or<(
-        Changed<ChildOf>,
         Changed<ImportedUnitModelRoot>,
         Changed<ImportedBuildingModelRoot>,
         Changed<Wc3VisualAnimationSource>,
@@ -1824,17 +1825,40 @@ type AnimationPlayerHierarchyChanges<'w, 's> = Query<
     )>,
 >;
 
+/// Entities given a parent since candidates were last collected. `ChildOf` is immutable, so an
+/// insert observer sees every change without scanning every entity's change tick.
+#[derive(Resource, Default)]
+struct ReparentedEntities(Vec<Entity>);
+
+fn record_reparented_entity(
+    inserted: On<Insert, ChildOf>,
+    mut reparented: ResMut<ReparentedEntities>,
+) {
+    reparented.0.push(inserted.entity);
+}
+
 /// Gathers the animation players below entities whose ancestry or model root marker changed.
 fn collect_animation_player_candidates(
     mut candidates: ResMut<AnimationPlayerCandidates>,
+    mut reparented: ResMut<ReparentedEntities>,
     changes: AnimationPlayerHierarchyChanges,
-    children: Query<&Children>,
+    hierarchy: (Query<&ChildOf>, Query<&Children>),
     players: Query<(), With<AnimationPlayer>>,
+    mut changed: Local<Vec<Entity>>,
 ) {
+    let (parents, children) = &hierarchy;
     candidates.0.clear();
-    for (entity, parent) in &changes {
+    changed.clear();
+    changed.append(&mut reparented.0);
+    changed.extend(&changes);
+    changed.sort_unstable();
+    changed.dedup();
+    for &entity in changed.iter() {
         // The subtree of a changed parent already includes this one.
-        if parent.is_some_and(|parent| changes.contains(parent.parent())) {
+        if parents
+            .get(entity)
+            .is_ok_and(|parent| changed.binary_search(&parent.parent()).is_ok())
+        {
             continue;
         }
         candidates.0.extend(
@@ -8281,6 +8305,8 @@ mod tests {
     fn animation_player_candidates_follow_reparented_ancestors() {
         let mut app = App::new();
         app.init_resource::<AnimationPlayerCandidates>()
+            .init_resource::<ReparentedEntities>()
+            .add_observer(record_reparented_entity)
             .add_systems(Update, collect_animation_player_candidates);
         let attachment = app.world_mut().spawn_empty().id();
         let player = app
