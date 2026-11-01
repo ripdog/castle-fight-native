@@ -68,8 +68,8 @@ use crate::{
         Wc3VisualAnimationGraphs, Wc3VisualAnimationSource, Wc3VisualModel, Wc3VisualSet,
         advance_wc3_model_sequence_clocks, apply_wc3_non_inheritance, emit_wc3_model_particles,
         emit_wc3_particles, emit_wc3_sound_events, emit_wc3_spawn_events, emit_wc3_splat_events,
-        fix_wc3_scene_materials, flush_wc3_particle_buffers, index_wc3_model_attachments,
-        mark_wc3_effect_warmup_hierarchy, release_wc3_ribbon_slot,
+        finish_wc3_ribbon_trails, fix_wc3_scene_materials, flush_wc3_particle_buffers,
+        index_wc3_model_attachments, mark_wc3_effect_warmup_hierarchy, release_wc3_ribbon_slot,
         reset_reused_wc3_effect_instances, resolve_wc3_emitter_nodes,
         resolve_wc3_visual_attachments, setup_wc3_model_composed_features, setup_wc3_model_lights,
         setup_wc3_visual_animation_players, spawn_wc3_ribbon_trails, update_wc3_material_alpha,
@@ -1203,7 +1203,12 @@ impl Plugin for CastlePresentationPlugin {
                     age_timed_wc3_effects,
                     // Ribbon trails and particles read none of each other's state.
                     (
-                        (spawn_wc3_ribbon_trails, update_wc3_ribbon_trails).chain(),
+                        (
+                            spawn_wc3_ribbon_trails,
+                            update_wc3_ribbon_trails,
+                            finish_wc3_ribbon_trails,
+                        )
+                            .chain(),
                         (
                             (
                                 update_wc3_model_particles,

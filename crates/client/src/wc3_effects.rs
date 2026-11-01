@@ -3125,6 +3125,8 @@ pub(crate) struct Wc3RibbonBuffers {
     free: Vec<Vec<RibbonSlot>>,
     strips: HashMap<usize, Handle<Mesh>>,
     materials: HashMap<RibbonMaterialKey, Handle<Wc3RibbonMaterial>>,
+    /// Trails that outgrew their slot this frame, moved by [`finish_wc3_ribbon_trails`].
+    regrow: Vec<(Entity, Wc3RibbonSample)>,
 }
 
 /// Where a trail draws from; inserted onto the trail entity whenever its slot changes.
@@ -4904,8 +4906,10 @@ pub(crate) type Wc3ClockTree<'w, 's> = Query<
 >;
 
 /// Parent links fetched with each entity's [`Visibility`], for [`wc3_effect_visible`].
+/// Ribbon trails are root entities that hold no emitters, so leaving them out lets
+/// [`update_wc3_ribbon_trails`] write their visibility alongside the particle systems.
 pub(crate) type Wc3VisibilityTree<'w, 's> =
-    Query<'w, 's, (Option<&'static ChildOf>, Option<&'static Visibility>)>;
+    Query<'w, 's, (Option<&'static ChildOf>, Option<&'static Visibility>), Without<Wc3RibbonTrail>>;
 
 fn inherited_wc3_model_sequence_clock<'a>(
     entity: Entity,
@@ -5512,18 +5516,19 @@ type RibbonTrailItem<'a> = (
     &'a mut Visibility,
     &'a mut Aabb,
     &'a mut Transform,
-    &'a mut Mesh3d,
     &'a mut MeshMaterial3d<Wc3RibbonMaterial>,
-    &'a mut MeshTag,
 );
 
+/// Advances trails and writes their strips. It holds only the ribbon buffers, and its trail query
+/// excludes particles, so it runs alongside the particle systems; reallocation and the page
+/// upload, which need the shared mesh and buffer assets, wait for [`finish_wc3_ribbon_trails`].
 pub fn update_wc3_ribbon_trails(
     mut commands: Commands,
     time: Res<Time>,
     mut sources: Query<(Entity, &GlobalTransform, &mut Wc3RibbonSource)>,
     transforms: Query<&GlobalTransform>,
-    mut ribbon_assets: Wc3RibbonAssets,
-    mut trails: Query<RibbonTrailItem>,
+    mut buffers: ResMut<Wc3RibbonBuffers>,
+    mut trails: Query<RibbonTrailItem, (Without<Wc3Particle>, Without<Wc3LegacyModelParticle>)>,
 ) {
     let dt = time.delta_secs().min(0.1);
     let mut source_times = HashMap::new();
@@ -5539,17 +5544,7 @@ pub fn update_wc3_ribbon_trails(
         }
         source.global_elapsed_ms += dt * 1000.0;
     }
-    for (
-        entity,
-        mut trail,
-        mut visibility,
-        mut aabb,
-        mut transform,
-        mut mesh,
-        mut material,
-        mut tag,
-    ) in &mut trails
-    {
+    for (entity, mut trail, mut visibility, aabb, transform, material) in &mut trails {
         for point in &mut trail.points {
             point.age += dt;
         }
@@ -5637,39 +5632,87 @@ pub fn update_wc3_ribbon_trails(
             continue;
         }
         if trail.points.len() > trail.slot.capacity {
-            let allocation = ribbon_assets.allocate(
-                trail.points.len(),
-                trail.texture.as_ref(),
-                &trail.spec.filter_mode,
-            );
-            ribbon_assets.buffers.release(trail.slot);
-            trail.slot = allocation.slot;
-            mesh.0 = allocation.mesh;
-            material.0 = allocation.material;
-            *tag = allocation.slot.tag();
+            buffers.regrow.push((entity, sample));
+            continue;
         }
-        let bounds = write_wc3_ribbon_slot(
-            ribbon_assets.buffers.slot_data(trail.slot),
-            &trail.spec,
-            sample,
-            &trail.points,
-            trail.source_scale,
-        );
-        // Bevy depth-sorts transparent meshes at their bounds centre in world space; the strip
-        // mesh sits at the origin, so the entity carries the trail's centre and local bounds.
-        // The transparent phase keeps that centre from when the mesh was queued and requeues
-        // only on a mesh or material change, so flag the material to re-sort the moved trail.
-        let center = Vec3::from(bounds.center);
-        if transform.translation != center {
-            transform.translation = center;
-            material.set_changed();
-        }
-        aabb.set_if_neq(Aabb {
-            center: Vec3A::ZERO,
-            half_extents: bounds.half_extents,
-        });
+        place_wc3_ribbon_strip(&mut buffers, &trail, sample, transform, aabb, material);
     }
+}
+
+type RibbonRegrowItem<'a> = (
+    &'a mut Wc3RibbonTrail,
+    &'a mut Aabb,
+    &'a mut Transform,
+    &'a mut Mesh3d,
+    &'a mut MeshMaterial3d<Wc3RibbonMaterial>,
+    &'a mut MeshTag,
+);
+
+/// Moves trails that outgrew their slot into larger ones and uploads the pages trails wrote.
+pub fn finish_wc3_ribbon_trails(
+    mut ribbon_assets: Wc3RibbonAssets,
+    mut trails: Query<RibbonRegrowItem>,
+) {
+    let mut regrow = std::mem::take(&mut ribbon_assets.buffers.regrow);
+    for &(entity, sample) in &regrow {
+        let Ok((mut trail, aabb, transform, mut mesh, mut material, mut tag)) =
+            trails.get_mut(entity)
+        else {
+            continue;
+        };
+        let allocation = ribbon_assets.allocate(
+            trail.points.len(),
+            trail.texture.as_ref(),
+            &trail.spec.filter_mode,
+        );
+        ribbon_assets.buffers.release(trail.slot);
+        trail.slot = allocation.slot;
+        mesh.0 = allocation.mesh;
+        material.0 = allocation.material;
+        *tag = allocation.slot.tag();
+        place_wc3_ribbon_strip(
+            &mut ribbon_assets.buffers,
+            &trail,
+            sample,
+            transform,
+            aabb,
+            material,
+        );
+    }
+    regrow.clear();
+    ribbon_assets.buffers.regrow = regrow;
     ribbon_assets.flush();
+}
+
+/// Writes a trail's strip into its slot and centres the trail entity on the strip.
+fn place_wc3_ribbon_strip(
+    buffers: &mut Wc3RibbonBuffers,
+    trail: &Wc3RibbonTrail,
+    sample: Wc3RibbonSample,
+    mut transform: Mut<Transform>,
+    mut aabb: Mut<Aabb>,
+    mut material: Mut<MeshMaterial3d<Wc3RibbonMaterial>>,
+) {
+    let bounds = write_wc3_ribbon_slot(
+        buffers.slot_data(trail.slot),
+        &trail.spec,
+        sample,
+        &trail.points,
+        trail.source_scale,
+    );
+    // Bevy depth-sorts transparent meshes at their bounds centre in world space; the strip
+    // mesh sits at the origin, so the entity carries the trail's centre and local bounds.
+    // The transparent phase keeps that centre from when the mesh was queued and requeues
+    // only on a mesh or material change, so flag the material to re-sort the moved trail.
+    let center = Vec3::from(bounds.center);
+    if transform.translation != center {
+        transform.translation = center;
+        material.set_changed();
+    }
+    aabb.set_if_neq(Aabb {
+        center: Vec3A::ZERO,
+        half_extents: bounds.half_extents,
+    });
 }
 
 /// Writes a trail's strip into its storage slot (layout in `wc3_ribbon.wgsl`) and returns its
