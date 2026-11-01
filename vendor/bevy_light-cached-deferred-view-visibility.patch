@@ -1,0 +1,43 @@
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -21,6 +21,7 @@
+ use bevy_log::warn_once;
+ use bevy_math::Vec3A;
+ use bevy_mesh::Mesh3d;
++use bevy_platform::sync::{Arc, Mutex, PoisonError};
+ use bevy_reflect::prelude::*;
+ use bevy_transform::{components::GlobalTransform, TransformSystems};
+ use bevy_utils::Parallel;
+@@ -371,6 +372,7 @@
+     visible_entity_ranges: Option<Res<VisibleEntityRanges>>,
+     mut defer_visible_entities_queue: Local<Parallel<Vec<Entity>>>,
+     mut view_visible_entities_queue: Local<Parallel<Vec<Vec<Entity>>>>,
++    deferred_view_visibility: Local<DeferredViewVisibility>,
+ ) {
+     let visible_entity_ranges = visible_entity_ranges.as_deref();
+ 
+@@ -498,8 +500,12 @@
+     // Defer marking view visibility so this system can run in parallel with check_point_light_mesh_visibility
+     // TODO: use resource to avoid unnecessary memory alloc
+     let mut defer_queue = mem::take(defer_visible_entities_queue.deref_mut());
++    let deferred_view_visibility = Arc::clone(&deferred_view_visibility);
+     commands.queue(move |world: &mut World| {
+-        let mut query = world.query::<&mut ViewVisibility>();
++        let mut query = deferred_view_visibility
++            .lock()
++            .unwrap_or_else(PoisonError::into_inner);
++        let query = query.get_or_insert_with(|| world.query::<&mut ViewVisibility>());
+         for entities in defer_queue.iter_mut() {
+             let mut iter = query.iter_many_mut(world, entities.iter());
+             while let Some(mut view_visibility) = iter.fetch_next() {
+@@ -509,6 +515,10 @@
+     });
+ }
+ 
++/// The query [`check_dir_light_mesh_visibility`] marks visible entities through.
++/// Kept across frames because building a `QueryState` visits every archetype.
++type DeferredViewVisibility = Arc<Mutex<Option<QueryState<&'static mut ViewVisibility>>>>;
++
+ /// Updates the visibility for [`PointLight`]s and [`SpotLight`]s so that shadow
+ /// map rendering can work.
+ ///
