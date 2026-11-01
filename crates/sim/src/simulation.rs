@@ -3101,18 +3101,27 @@ impl Simulation {
     #[must_use]
     pub fn units(&self) -> Vec<UnitView> {
         let default_collision_radius = self.default_collision_radius();
-        sorted_by_sim_id(self.entities_with::<PassiveUnitEffects>())
-            .filter_map(|entity| {
-                unit_view_from_entity(entity, default_collision_radius, self.next_tick)
-            })
-            .collect()
+        let entities = sorted_by_sim_id(self.entities_with::<PassiveUnitEffects>());
+        // Views are independent per entity and the collect keeps `SimId` order.
+        self.pool.install(|| {
+            entities
+                .par_iter()
+                .filter_map(|entity| {
+                    unit_view_from_entity(*entity, default_collision_radius, self.next_tick)
+                })
+                .collect()
+        })
     }
 
     #[must_use]
     pub fn buildings(&self) -> Vec<BuildingView> {
-        sorted_by_sim_id(self.entities_with::<BuildingFootprint>())
-            .filter_map(building_view_from_entity)
-            .collect()
+        let entities = sorted_by_sim_id(self.entities_with::<BuildingFootprint>());
+        self.pool.install(|| {
+            entities
+                .par_iter()
+                .filter_map(|entity| building_view_from_entity(*entity))
+                .collect()
+        })
     }
 
     /// Entities whose archetype stores `T`, without probing every entity in the world.
@@ -6625,12 +6634,12 @@ fn unit_view_from_entity(
 /// large view structs. Entities without a `SimId` are dropped, as every view requires one.
 fn sorted_by_sim_id<'w>(
     entities: impl Iterator<Item = bevy_ecs::world::EntityRef<'w>>,
-) -> impl Iterator<Item = bevy_ecs::world::EntityRef<'w>> {
+) -> Vec<bevy_ecs::world::EntityRef<'w>> {
     let mut keyed: Vec<_> = entities
         .filter_map(|entity| Some((*entity.get::<SimId>()?, entity)))
         .collect();
     keyed.sort_unstable_by_key(|(id, _)| *id);
-    keyed.into_iter().map(|(_, entity)| entity)
+    keyed.into_iter().map(|(_, entity)| entity).collect()
 }
 
 fn building_view_from_entity(entity: bevy_ecs::world::EntityRef<'_>) -> Option<BuildingView> {
