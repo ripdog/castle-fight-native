@@ -9,14 +9,26 @@ impl Simulation {
     /// Readback also resolves tick-zero spawns and command-boundary teleports without advancing time.
     pub fn fog_of_war(&self) -> Option<FogOfWar> {
         let mut fog = self.fog.clone()?;
-        self.populate_vision(&mut fog, &mut VisionFootprintCache::default());
+        let sources = self.vision_sources();
+        // Populating is idempotent: the same tick and sources applied to the fog the last refresh
+        // produced yield that fog again, so the usual post-step readback skips the recomputation.
+        if !self
+            .vision_cache
+            .last_refresh
+            .as_ref()
+            .is_some_and(|last| last.matches(self.next_tick, &sources, &fog))
+        {
+            self.populate_vision(&mut fog, &mut VisionFootprintCache::default(), &sources);
+        }
         Some(fog)
     }
 
     pub(crate) fn refresh_vision(&mut self) {
         if let Some(mut fog) = self.fog.take() {
+            let sources = self.vision_sources();
             let mut cache = std::mem::take(&mut self.vision_cache);
-            self.populate_vision(&mut fog, &mut cache);
+            self.populate_vision(&mut fog, &mut cache, &sources);
+            cache.record_refresh(self.next_tick, sources, &fog);
             self.vision_cache = cache;
             self.fog = Some(fog);
         }
@@ -92,17 +104,13 @@ impl Simulation {
         }
     }
 
-    fn populate_vision(&self, fog: &mut FogOfWar, cache: &mut VisionFootprintCache) {
+    /// Every sight source this tick, sorted by unique `SimId`.
+    fn vision_sources(&self) -> Vec<VisionSource> {
         let rules = self
             .config
             .fog
             .as_ref()
             .expect("fog rules accompany fog state");
-        for cells in &mut fog.visible {
-            cells.fill(0);
-        }
-        fog.reveals
-            .retain(|reveal| self.next_tick < reveal.expires_tick);
         // Sources are sorted by their unique SimId below, so query visit order does not matter.
         let mut query = self
             .world
@@ -307,6 +315,25 @@ impl Simulation {
             }));
         }
         sources.sort_unstable_by_key(|source| source.0);
+        sources
+    }
+
+    fn populate_vision(
+        &self,
+        fog: &mut FogOfWar,
+        cache: &mut VisionFootprintCache,
+        sources: &[VisionSource],
+    ) {
+        let rules = self
+            .config
+            .fog
+            .as_ref()
+            .expect("fog rules accompany fog state");
+        for cells in &mut fog.visible {
+            cells.fill(0);
+        }
+        fog.reveals
+            .retain(|reveal| self.next_tick < reveal.expires_tick);
         // A team's grid receives only its own permanent rectangles, script reveals and sources,
         // plus Faerie Fire-shared sight. Marking is an order-independent OR, so the two teams are
         // unveiled in parallel.
@@ -315,7 +342,7 @@ impl Simulation {
             team_reveals[usize::from(reveal.team.0)].push((reveal.position, reveal.radius));
         }
         let mut team_sources = [Vec::new(), Vec::new()];
-        for &(_, team, position, radius, flying, revealed_teams, ..) in &sources {
+        for &(_, team, position, radius, flying, revealed_teams, ..) in sources {
             team_sources[usize::from(team.0)].push((position, radius, flying));
             // Faerie Fire shares the marked target's sight and tracks it as it moves.
             for observer in [Team(0), Team(1)] {
@@ -459,9 +486,57 @@ fn unveil_team(
 /// radius, kept per team so the teams can be unveiled in parallel. It never affects checksums,
 /// snapshots or equality, and it is only valid for one simulation's fixed fog geometry, terrain
 /// and sight blockers.
+/// A sight source: identity, team, position, radius, flying, the teams Faerie Fire shares it
+/// with, and the structure details an enemy remembers.
+type VisionSource = (
+    SimId,
+    Team,
+    SimPoint,
+    i32,
+    bool,
+    u8,
+    Option<BuildingFootprint>,
+    Option<ContentIdentity>,
+    Option<PlayerId>,
+    Option<crate::fog::RememberedConstruction>,
+);
+
 #[derive(Default)]
 pub(super) struct VisionFootprintCache {
     teams: [TeamFootprintCache; 2],
+    /// The inputs and result of the latest refresh, for [`Simulation::fog_of_war`].
+    last_refresh: Option<VisionRefresh>,
+}
+
+struct VisionRefresh {
+    next_tick: u64,
+    sources: Vec<VisionSource>,
+    fog: FogOfWar,
+}
+
+impl VisionRefresh {
+    fn matches(&self, next_tick: u64, sources: &[VisionSource], fog: &FogOfWar) -> bool {
+        self.next_tick == next_tick && self.sources == sources && self.fog == *fog
+    }
+}
+
+impl VisionFootprintCache {
+    fn record_refresh(&mut self, next_tick: u64, sources: Vec<VisionSource>, fog: &FogOfWar) {
+        match &mut self.last_refresh {
+            Some(last) => {
+                last.next_tick = next_tick;
+                last.sources = sources;
+                last.fog.clone_from(fog);
+            }
+            None => {
+                self.last_refresh = Some(VisionRefresh {
+                    next_tick,
+                    sources,
+                    fog: fog.clone(),
+                });
+            }
+        }
+    }
 }
 
 #[derive(Default)]
