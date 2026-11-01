@@ -2334,11 +2334,13 @@ fn presentation_task_pools() -> TaskPoolOptions {
     options
 }
 
+/// The sim pool shares the CPU with the presentation compute pool (`presentation_task_pools`).
+/// Its parallel phases stop scaling past four workers there, and extra workers only spin idle.
 fn default_worker_count() -> usize {
     std::thread::available_parallelism()
         .map(usize::from)
         .unwrap_or(1)
-        .min(8)
+        .min(4)
 }
 
 #[cfg(test)]
