@@ -9,6 +9,7 @@ members = [
     "crates/server",
     "crates/wc3-assets",
 ]
+exclude = ["vendor"]
 
 [workspace.package]
 edition = "2024"
@@ -40,3 +41,7 @@ codegen-units = 1
 [profile.bench]
 inherits = "release"
 debug = "line-tables-only"
+
+# Local fork of bevy_pbr 0.19.1; see vendor/README.md for the patch and how to re-apply it.
+[patch.crates-io]
+bevy_pbr = { path = "vendor/bevy_pbr" }

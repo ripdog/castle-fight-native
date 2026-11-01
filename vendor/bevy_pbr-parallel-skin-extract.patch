@@ -1,0 +1,161 @@
+--- a/src/render/skin.rs
++++ b/src/render/skin.rs
+@@ -14,6 +14,7 @@
+     renderer::{RenderDevice, RenderQueue},
+     Extract,
+ };
++use bevy_tasks::ComputeTaskPool;
+ use bevy_transform::prelude::GlobalTransform;
+ use offset_allocator::{Allocation, Allocator};
+ use tracing::error;
+@@ -300,16 +301,13 @@
+ 
+     // Extract the transforms for all joints from the scene, and write them into
+     // the staging buffer at the appropriate spot.
+-    for (skin_entity, skin) in &skinned_meshes {
+-        extract_joints_for_skin(
+-            skin_entity.into(),
+-            skin,
+-            skin_uniforms,
+-            &changed_skinned_meshes,
+-            &skinned_mesh_inverse_bindposes,
+-            &changed_transforms,
+-        );
+-    }
++    extract_joints_for_skins(
++        skin_uniforms,
++        &skinned_meshes,
++        &changed_skinned_meshes,
++        &skinned_mesh_inverse_bindposes,
++        &changed_transforms,
++    );
+ 
+     // Delete skins that became invisible.
+     for skinned_mesh_entity in removed_skinned_meshes_query.read() {
+@@ -362,12 +360,19 @@
+     }
+ }
+ 
+-/// Extracts all joints for a single skin and writes their transforms into the
+-/// CPU staging buffer.
+-fn extract_joints_for_skin(
+-    skin_entity: MainEntity,
+-    skin: &SkinnedMesh,
++/// Below this many joints the parallel split costs more than it saves.
++const PARALLEL_JOINT_THRESHOLD: usize = 4096;
++
++/// Extracts all joints for every skin that was not (re)initialized this frame
++/// and writes the changed ones' transforms into the CPU staging buffer.
++///
++/// Castle Fight Native patch (see vendor/README.md): upstream walks every
++/// skin's joints on one thread. Skins own disjoint ranges of the staging
++/// buffer, so they are gathered, ordered by offset, split into those ranges
++/// and written in parallel on the compute task pool.
++fn extract_joints_for_skins(
+     skin_uniforms: &mut SkinUniforms,
++    skinned_meshes: &Query<(Entity, &SkinnedMesh)>,
+     changed_skinned_meshes: &Query<
+         (Entity, &ViewVisibility, &SkinnedMesh),
+         Or<(
+@@ -379,38 +384,74 @@
+     skinned_mesh_inverse_bindposes: &Assets<SkinnedMeshInverseBindposes>,
+     changed_transforms: &Query<(Entity, &GlobalTransform), Changed<GlobalTransform>>,
+ ) {
+-    // If we initialized the skin this frame, we already populated all
+-    // the joints, so there's no need to populate them again.
+-    if changed_skinned_meshes.contains(*skin_entity) {
+-        return;
++    let mut skins = Vec::new();
++    let mut total_joints = 0;
++    for (skin_entity, skin) in skinned_meshes {
++        // If we initialized the skin this frame, we already populated all
++        // the joints, so there's no need to populate them again.
++        if changed_skinned_meshes.contains(skin_entity) {
++            continue;
++        }
++        let Some(skin_uniform_info) = skin_uniforms
++            .skin_uniform_info
++            .get(&MainEntity::from(skin_entity))
++        else {
++            continue;
++        };
++        let Some(inverse_bindposes) = skinned_mesh_inverse_bindposes.get(&skin.inverse_bindposes)
++        else {
++            continue;
++        };
++        // Clamped to the allocation so ranges stay disjoint even if the joint
++        // list changed without the skin being reallocated.
++        let joints = skin
++            .joints
++            .len()
++            .min(inverse_bindposes.len())
++            .min(skin_uniform_info.joints.len());
++        total_joints += joints;
++        skins.push((
++            skin_uniform_info.offset() as usize,
++            &skin.joints[..joints],
++            &inverse_bindposes[..joints],
++        ));
++    }
++
++    skins.sort_unstable_by_key(|&(offset, ..)| offset);
++    let mut rest = &mut skin_uniforms.current_staging_buffer[..];
++    let mut consumed = 0;
++    let mut ranges = Vec::with_capacity(skins.len());
++    for (offset, joints, inverse_bindposes) in skins {
++        let (_, tail) = mem::take(&mut rest).split_at_mut(offset - consumed);
++        let (matrices, tail) = tail.split_at_mut(joints.len());
++        rest = tail;
++        consumed = offset + joints.len();
++        ranges.push((matrices, joints, inverse_bindposes));
+     }
+ 
+-    // Fetch information about the skin.
+-    let Some(skin_uniform_info) = skin_uniforms.skin_uniform_info.get(&skin_entity) else {
+-        return;
++    // Calculate and write in the new joint matrices, if they changed this frame.
++    let write = |(matrices, joints, inverse_bindposes): &mut (&mut [Mat4], &[Entity], &[Mat4])| {
++        for ((matrix, &joint), inverse_bindpose) in
++            matrices.iter_mut().zip(*joints).zip(*inverse_bindposes)
++        {
++            // Skip if the global transform for this joint didn't change.
++            if let Ok((_, joint_transform)) = changed_transforms.get(joint) {
++                *matrix = joint_transform.affine() * *inverse_bindpose;
++            }
++        }
+     };
+-    let Some(skinned_mesh_inverse_bindposes) =
+-        skinned_mesh_inverse_bindposes.get(&skin.inverse_bindposes)
+-    else {
++    if total_joints < PARALLEL_JOINT_THRESHOLD {
++        ranges.iter_mut().for_each(write);
+         return;
+-    };
+-
+-    // Calculate and write in the new joint matrices, if they changed this frame.
+-    for (joint_index, (&joint, skinned_mesh_inverse_bindpose)) in skin
+-        .joints
+-        .iter()
+-        .zip(skinned_mesh_inverse_bindposes.iter())
+-        .enumerate()
+-    {
+-        // Skip if the global transform for this joint didn't change.
+-        let Ok((_, joint_transform)) = changed_transforms.get(joint) else {
+-            continue;
+-        };
+-
+-        let joint_matrix = joint_transform.affine() * *skinned_mesh_inverse_bindpose;
+-        skin_uniforms.current_staging_buffer[skin_uniform_info.offset() as usize + joint_index] =
+-            joint_matrix;
+     }
++    let pool = ComputeTaskPool::get();
++    let chunk = ranges.len().div_ceil(pool.thread_num() * 4).max(1);
++    let write = &write;
++    pool.scope(|scope| {
++        for part in ranges.chunks_mut(chunk) {
++            scope.spawn(async move { part.iter_mut().for_each(write) });
++        }
++    });
+ }
+ 
+ /// Allocates space for a new skin in the buffers, and populates its joints.
