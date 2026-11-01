@@ -1789,8 +1789,6 @@ dependencies = [
 [[package]]
 name = "bevy_world_serialization"
 version = "0.19.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "36855264b9b5d229bde74f01730eb6251c72dc052404ae144a9295cc0abdefc1"
 dependencies = [
  "bevy_app",
  "bevy_asset",

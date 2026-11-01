@@ -1,0 +1,210 @@
+diff -ruN ../../castle-fight-native-worktrees/bws-orig/src/world_asset.rs bevy_world_serialization/src/world_asset.rs
+--- a/src/world_asset.rs	2026-11-02 12:16:19.666067276 +1300
++++ b/src/world_asset.rs	2026-11-02 12:17:19.486687111 +1300
+@@ -1,18 +1,21 @@
+-use core::any::TypeId;
++use core::{alloc::Layout, any::TypeId, ptr::NonNull};
++
++use alloc::alloc::dealloc;
+ 
+ use crate::reflect_utils::clone_reflect_value;
+ use crate::{DynamicWorld, WorldInstanceSpawnError};
+ use bevy_asset::Asset;
+ use bevy_ecs::resource::IS_RESOURCE;
+ use bevy_ecs::{
+-    component::ComponentCloneBehavior,
++    component::{ComponentCloneBehavior, ComponentId},
+     entity::{Entity, EntityHashMap, SceneEntityMapper},
+     entity_disabling::DefaultQueryFilters,
+     reflect::{AppTypeRegistry, ReflectComponent, ReflectResource},
+     relationship::RelationshipHookMode,
+-    world::World,
++    ptr::OwningPtr,
++    world::{EntityWorldMut, World},
+ };
+-use bevy_reflect::{TypePath, TypeRegistry};
++use bevy_reflect::{Reflect, TypePath, TypeRegistry};
+ 
+ /// A composition of [`World`] objects.
+ ///
+@@ -142,65 +145,140 @@
+             }
+         }
+ 
++        // Resolve each archetype's components once, then clone an entity's components into a
++        // buffer and insert them together: one archetype move per entity rather than one per
++        // component. Relationships keep the per-component path, which skips their hooks.
++        let mut plan = Vec::new();
++        let mut batch = ReflectedBatch::default();
++        let mut deferred = Vec::new();
+         for archetype in self.world.archetypes().iter() {
+             if archetype.contains(IS_RESOURCE) {
+                 continue;
+             }
++            plan.clear();
++            for component_id in archetype.iter_components() {
++                let component_info = self
++                    .world
++                    .components()
++                    .get_info(component_id)
++                    .expect("component_ids in archetypes should have ComponentInfo");
++
++                if matches!(
++                    *component_info.clone_behavior(),
++                    ComponentCloneBehavior::Ignore
++                ) {
++                    continue;
++                }
++
++                let type_id = component_info.type_id().unwrap();
++                let registration = type_registry.get(type_id).ok_or_else(|| {
++                    WorldInstanceSpawnError::UnregisteredType {
++                        std_type_name: component_info.name(),
++                    }
++                })?;
++                let reflect_component =
++                    registration.data::<ReflectComponent>().ok_or_else(|| {
++                        WorldInstanceSpawnError::UnregisteredComponent {
++                            type_path: registration.type_info().type_path().to_string(),
++                        }
++                    })?;
++                let batched = component_info
++                    .relationship_accessor()
++                    .is_none()
++                    .then(|| (reflect_component.register_component(world), type_id));
++                plan.push((registration, reflect_component, batched));
++            }
++
+             for scene_entity in archetype.entities() {
+                 let entity = *entity_map
+                     .get(&scene_entity.id())
+                     .expect("should have previously spawned an entity");
++                let source = self.world.entity(scene_entity.id());
+ 
+-                for component_id in archetype.iter_components() {
+-                    let component_info = self
+-                        .world
+-                        .components()
+-                        .get_info(component_id)
+-                        .expect("component_ids in archetypes should have ComponentInfo");
+-
+-                    if matches!(
+-                        *component_info.clone_behavior(),
+-                        ComponentCloneBehavior::Ignore
+-                    ) {
+-                        continue;
++                // If a component references entities in the source world, update them to the
++                // entities in the destination world.
++                SceneEntityMapper::world_scope(entity_map, world, |world, mapper| {
++                    for &(registration, reflect_component, batched) in &plan {
++                        let Some(component) = reflect_component.reflect(source) else {
++                            continue;
++                        };
++                        if let Some((component_id, type_id)) = batched
++                            && !world.entity(entity).contains_id(component_id)
++                            && let Ok(mut value) = component.reflect_clone()
++                            && (*value).as_any().type_id() == type_id
++                        {
++                            reflect_component.map_entities(&mut *value, mapper);
++                            batch.push(component_id, value);
++                        } else {
++                            deferred.push((
++                                reflect_component,
++                                clone_reflect_value(component.as_partial_reflect(), registration),
++                            ));
++                        }
+                     }
+-
+-                    let registration = type_registry
+-                        .get(component_info.type_id().unwrap())
+-                        .ok_or_else(|| WorldInstanceSpawnError::UnregisteredType {
+-                            std_type_name: component_info.name(),
+-                        })?;
+-                    let reflect_component =
+-                        registration.data::<ReflectComponent>().ok_or_else(|| {
+-                            WorldInstanceSpawnError::UnregisteredComponent {
+-                                type_path: registration.type_info().type_path().to_string(),
+-                            }
+-                        })?;
+-
+-                    let Some(component) = reflect_component
+-                        .reflect(self.world.entity(scene_entity.id()))
+-                        .map(|component| {
+-                            clone_reflect_value(component.as_partial_reflect(), registration)
+-                        })
+-                    else {
+-                        continue;
+-                    };
+-
+-                    // If this component references entities in the source world,
+-                    // update them to the entities in the destination world.
+-                    SceneEntityMapper::world_scope(entity_map, world, |world, mapper| {
++                    let mut entity_mut = world.entity_mut(entity);
++                    batch.insert(&mut entity_mut);
++                    for (reflect_component, component) in deferred.drain(..) {
+                         reflect_component.apply_or_insert_mapped(
+-                            &mut world.entity_mut(entity),
++                            &mut entity_mut,
+                             component.as_partial_reflect(),
+                             &type_registry,
+                             mapper,
+                             RelationshipHookMode::Skip,
+                         );
+-                    });
+-                }
++                    }
++                });
+             }
+         }
+ 
+         Ok(())
+     }
+ }
++
++/// Reflected component values waiting to be inserted into one entity together.
++#[derive(Default)]
++struct ReflectedBatch {
++    ids: Vec<ComponentId>,
++    values: Vec<(NonNull<u8>, Layout)>,
++}
++
++impl ReflectedBatch {
++    /// Queues `value`, whose concrete type must be the component that `id` names.
++    fn push(&mut self, id: ComponentId, value: Box<dyn Reflect>) {
++        let layout = Layout::for_value(&*value);
++        let value = NonNull::from(Box::leak(value)).cast::<u8>();
++        self.ids.push(id);
++        self.values.push((value, layout));
++    }
++
++    /// Moves the queued values into `entity` with one insert and frees their boxes.
++    #[expect(
++        unsafe_code,
++        reason = "inserting several dynamically typed components at once needs `insert_by_ids`"
++    )]
++    fn insert(&mut self, entity: &mut EntityWorldMut) {
++        if self.ids.is_empty() {
++            return;
++        }
++        // SAFETY: each pointer is a leaked `Box` holding an initialized value whose type id was
++        // checked against the component that the matching entry of `ids` names, registered in
++        // this world, so it is valid, aligned and owned here. `insert_by_ids` moves every value
++        // out and nothing reads the boxes afterwards.
++        unsafe {
++            entity.insert_by_ids(
++                &self.ids,
++                self.values
++                    .iter()
++                    .map(|&(value, _)| OwningPtr::new(value)),
++            );
++        }
++        for (value, layout) in self.values.drain(..) {
++            if layout.size() != 0 {
++                // SAFETY: the pointer came from a `Box` allocated with this layout, and its
++                // value was moved out above, so it is freed without being dropped.
++                unsafe { dealloc(value.as_ptr(), layout) };
++            }
++        }
++        self.ids.clear();
++    }
++}

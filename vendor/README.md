@@ -115,3 +115,40 @@ entities are marked is unchanged.
    regenerate the patch.
 3. If upstream caches the query (its `TODO` there asks for a resource), delete
    the fork and its `[patch.crates-io]` entry instead.
+
+## bevy_world_serialization 0.19.1
+
+`bevy_world_serialization/` is the crates.io release of
+`bevy_world_serialization` 0.19.1 with one change, wired in through
+`[patch.crates-io]` like `bevy_pbr`.
+
+The change is in `src/world_asset.rs`. Upstream `WorldAsset::write_to_world_with`
+copies a scene's entities one component at a time: for each component it looks
+up the type registration, clones the value through reflection, converts it again
+with `from_reflect`, and inserts it, which moves the entity to a new archetype
+and table row every time and builds and finishes an entity mapper per component.
+WC3 unit and effect scenes spawn every frame in the 700-unit benchmark (about
+170 entities a frame, with spikes of 7,000), so this was about 8% of main-thread
+samples. The patch resolves registrations once per source archetype, maps
+entities once per entity, and inserts every non-relationship component of an
+entity together with `insert_by_ids`, so each entity moves archetype once.
+Relationship components (`ChildOf`, `Children`) and values that cannot be
+cloned into their concrete type still go through the upstream path, after the
+batch, with relationship hooks skipped as before. The components written are the
+same; hooks and observers for the batched components run once, after all of
+them are present.
+
+The batch insert is the crate's only `unsafe`: each value is a leaked `Box`
+whose concrete type id was checked against the destination component, and its
+allocation is freed without dropping once `insert_by_ids` has moved it out.
+
+### Re-applying on a Bevy upgrade
+
+1. Replace `bevy_world_serialization/` with the new release from
+   `~/.cargo/registry/src/*/bevy_world_serialization-<version>` (drop
+   `.cargo-ok`, `.cargo_vcs_info.json`, `Cargo.lock` and `Cargo.toml.orig`).
+2. Apply `bevy_world_serialization-batched-scene-inserts.patch` from inside
+   `bevy_world_serialization/` (`patch -p1 < ../bevy_world_serialization-batched-scene-inserts.patch`),
+   resolving by hand if `write_to_world_with` changed, then regenerate the patch.
+3. If upstream spawns scenes with batched or typed inserts, delete the fork and
+   its `[patch.crates-io]` entry instead.

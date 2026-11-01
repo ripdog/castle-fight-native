@@ -48,3 +48,4 @@ bevy_light = { path = "vendor/bevy_light" }
 bevy_pbr = { path = "vendor/bevy_pbr" }
 bevy_render = { path = "vendor/bevy_render" }
 bevy_transform = { path = "vendor/bevy_transform" }
+bevy_world_serialization = { path = "vendor/bevy_world_serialization" }
