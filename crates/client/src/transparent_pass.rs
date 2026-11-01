@@ -4,12 +4,15 @@
 //! merging and the driver's command recording) to `CommandEncoder::finish`, so
 //! a single transparent pass with thousands of sorted draws finishes on one
 //! render-thread core. This replaces Bevy's `main_transparent_pass_3d` with
-//! consecutive sub-passes over contiguous ranges of the same sorted phase,
-//! recorded in order and each finished on the compute pool while the next is
-//! recorded. Command buffers are submitted in range order, so draw order and
-//! blending are unchanged; only the final sub-pass resolves multisampled colour.
+//! consecutive sub-passes over contiguous ranges of the same sorted phase.
+//! Each sub-pass after the first records and finishes on the compute pool with
+//! its own draw-function set (see `vendor/README.md`), concurrently with the
+//! first; without those sets they record in order here and finish on the pool.
+//! Command buffers are submitted in range order, so draw order and blending are
+//! unchanged; only the final sub-pass resolves multisampled colour.
 
 use std::ops::Range;
+use std::sync::{Mutex, PoisonError};
 
 use bevy::{
     camera::{MainPassResolutionOverride, Viewport},
@@ -22,10 +25,13 @@ use bevy::{
     pbr::main_transmissive_pass_3d,
     prelude::*,
     render::{
-        Extract, ExtractSchedule, RenderApp,
+        Extract, ExtractSchedule, RenderApp, RenderStartup,
         camera::ExtractedCamera,
         diagnostic::RecordDiagnostics,
-        render_phase::{PhaseItem, TrackedRenderPass, ViewSortedRenderPhases},
+        render_phase::{
+            DrawFunctions, DrawFunctionsInternal, PhaseItem, TrackedRenderPass,
+            ViewSortedRenderPhases,
+        },
         render_resource::{CommandEncoderDescriptor, PipelineCache, RenderPassDescriptor, StoreOp},
         renderer::{RenderContext, ViewQuery},
         view::{ExtractedView, ViewDepthTexture, ViewTarget},
@@ -49,6 +55,8 @@ impl Plugin for ChunkedTransparentPassPlugin {
         };
         render_app
             .init_resource::<TransparentPassChunking>()
+            .init_resource::<TransparentDrawLanes>()
+            .add_systems(RenderStartup, build_transparent_draw_lanes)
             .add_systems(ExtractSchedule, extract_transparent_pass_chunking)
             .add_systems(
                 Core3d,
@@ -70,6 +78,32 @@ impl Plugin for ChunkedTransparentPassPlugin {
             .expect("Core3d schedule must contain Bevy's main transparent pass");
         assert_eq!(removed, 1, "expected exactly one main_transparent_pass_3d");
     }
+}
+
+/// Independent draw-function sets, one per sub-pass after the first, so those sub-passes can
+/// record concurrently (draw functions keep per-call ECS state and record one pass at a time).
+#[derive(Resource, Default)]
+struct TransparentDrawLanes {
+    lanes: Vec<Mutex<DrawFunctionsInternal<Transparent3d>>>,
+    /// Draw functions registered when the lanes were built; a mismatch falls back to serial
+    /// recording.
+    function_count: usize,
+}
+
+fn build_transparent_draw_lanes(world: &mut World) {
+    let function_count = world
+        .resource::<DrawFunctions<Transparent3d>>()
+        .read()
+        .draw_functions
+        .len();
+    let lanes = (1..MAX_TRANSPARENT_CHUNKS)
+        .map_while(|_| DrawFunctions::<Transparent3d>::instantiate(world))
+        .map(Mutex::new)
+        .collect();
+    world.insert_resource(TransparentDrawLanes {
+        lanes,
+        function_count,
+    });
 }
 
 #[derive(Resource, Clone, Copy)]
@@ -154,6 +188,8 @@ fn chunked_main_transparent_pass_3d(
     view: ViewQuery<TransparentPassView>,
     transparent_phases: Res<ViewSortedRenderPhases<Transparent3d>>,
     chunking: Res<TransparentPassChunking>,
+    draw_functions: Res<DrawFunctions<Transparent3d>>,
+    lanes: Res<TransparentDrawLanes>,
     mut ctx: RenderContext,
 ) {
     let view_entity = view.entity();
@@ -204,7 +240,9 @@ fn chunked_main_transparent_pass_3d(
     let last = ranges.len() - 1;
     let device = ctx.render_device().clone();
 
-    let record = |chunk: usize, range: Range<usize>| {
+    let record = |chunk: usize,
+                  range: Range<usize>,
+                  lane: Option<&mut DrawFunctionsInternal<Transparent3d>>| {
         let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
             label: Some("main_transparent_pass_3d"),
         });
@@ -228,9 +266,17 @@ fn chunked_main_transparent_pass_3d(
             if let Some(viewport) = viewport.as_ref() {
                 render_pass.set_camera_viewport(viewport);
             }
-            if let Err(err) =
-                transparent_phase.render_range(&mut render_pass, world, view_entity, range)
-            {
+            let result = match lane {
+                Some(lane) => transparent_phase.render_range_with(
+                    &mut render_pass,
+                    world,
+                    view_entity,
+                    range,
+                    lane,
+                ),
+                None => transparent_phase.render_range(&mut render_pass, world, view_entity, range),
+            };
+            if let Err(err) = result {
                 error!("Error encountered while rendering the transparent phase {err:?}");
             }
             pass_span.end(&mut render_pass);
@@ -238,8 +284,27 @@ fn chunked_main_transparent_pass_3d(
         encoder
     };
 
+    let parallel = lanes.function_count == draw_functions.read().draw_functions.len()
+        && lanes.lanes.len() + 1 >= ranges.len();
     let command_buffers = if ranges.len() == 1 {
-        Vec::from([record(0, 0..transparent_phase.items.len()).finish()])
+        Vec::from([record(0, 0..transparent_phase.items.len(), None).finish()])
+    } else if parallel {
+        // Every range after the first records and finishes on the pool with its own
+        // draw-function lane while the first records here with the world's draw functions.
+        let record = &record;
+        let mut ranges = ranges.into_iter().enumerate();
+        let (_, first_range) = ranges.next().expect("ranges are non-empty");
+        let mut first = None;
+        let rest = ComputeTaskPool::get().scope_with_executor(false, None, |scope| {
+            for ((chunk, range), lane) in ranges.zip(&lanes.lanes) {
+                scope.spawn(async move {
+                    let mut lane = lane.lock().unwrap_or_else(PoisonError::into_inner);
+                    record(chunk, range, Some(&mut lane)).finish()
+                });
+            }
+            first = Some(record(0, first_range, None).finish());
+        });
+        first.into_iter().chain(rest).collect()
     } else {
         // Each range finishes on the pool while the next one is recorded here; the last one,
         // which nothing else overlaps, finishes inline. Waiting does not tick the shared executor,
@@ -247,7 +312,7 @@ fn chunked_main_transparent_pass_3d(
         let mut last_buffer = None;
         let mut buffers = ComputeTaskPool::get().scope_with_executor(false, None, |scope| {
             for (chunk, range) in ranges.into_iter().enumerate() {
-                let encoder = record(chunk, range);
+                let encoder = record(chunk, range, None);
                 if chunk == last {
                     last_buffer = Some(encoder.finish());
                 } else {
