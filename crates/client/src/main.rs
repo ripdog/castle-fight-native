@@ -709,6 +709,9 @@ fn main() {
                     )),
                     ..default()
                 })
+                .set(TaskPoolPlugin {
+                    task_pool_options: presentation_task_pools(),
+                })
                 .set(bevy::log::LogPlugin {
                     custom_layer: performance_trace_layer,
                     ..default()
@@ -2325,6 +2328,20 @@ fn default_io_thread_count(total_threads: usize) -> usize {
     // Match Bevy's default IO assignment policy: 25% of available threads, rounded to nearest
     // integer (halves upward), with a floor of one thread and a ceiling of four.
     total_threads.saturating_add(2).div_euclid(4).clamp(1, 4)
+}
+
+/// Bevy's default splits logical cores 25/25/50 between IO, async compute and compute, leaving
+/// PostUpdate's parallel transform, animation and visibility passes on half the cores. Those
+/// passes bound late-game frames, so compute gets every logical core but two.
+fn presentation_task_pools() -> TaskPoolOptions {
+    let logical = std::thread::available_parallelism()
+        .map(usize::from)
+        .unwrap_or(1);
+    let mut options = TaskPoolOptions::default();
+    options.io.max_threads = 2;
+    options.async_compute.max_threads = 2;
+    options.compute.min_threads = logical.saturating_sub(2).max(1);
+    options
 }
 
 fn default_worker_count() -> usize {
