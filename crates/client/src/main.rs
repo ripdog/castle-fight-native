@@ -59,7 +59,6 @@ use std::{
 use bevy::{
     asset::AssetPlugin,
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin},
-    ecs::system::SystemParam,
     prelude::*,
     tasks::{IoTaskPool, TaskPoolBuilder, available_parallelism},
     time::{Fixed, Virtual},
@@ -101,8 +100,7 @@ use lobby::{LobbyPlugin, LobbyState};
 use main_menu::{MainMenuPlugin, MainMenuState};
 use network::NetworkClient;
 use performance_ui::{
-    PerformanceCounters, PerformanceUiPlugin, SystemTraceDisplay, SystemTraceSink,
-    performance_trace_layer,
+    PerformanceCounters, PerformanceUiPlugin, SystemTraceSink, performance_trace_layer,
 };
 use presentation::CastlePresentationPlugin;
 use render_audit::{
@@ -1048,19 +1046,12 @@ struct AutomatedProfileRun {
     finished: Option<Instant>,
 }
 
-#[derive(SystemParam)]
-struct ProfileSystemTrace<'w> {
-    /// Rolling one-second per-system averages shown by the in-game panel.
-    window: Res<'w, SystemTraceDisplay>,
-    /// Absent when no trace layer is installed.
-    capture: Option<Res<'w, SystemTraceSink>>,
-}
-
 fn finish_automated_profile(
     mut run: ResMut<AutomatedProfileRun>,
     mut counters: ResMut<PerformanceCounters>,
     presentation: Res<PresentationSamples>,
-    trace: ProfileSystemTrace,
+    // Absent when no trace layer is installed.
+    trace: Option<Res<SystemTraceSink>>,
     mut playback: ResMut<SimulationPlayback>,
     mut exit: MessageWriter<AppExit>,
     mut audit: (
@@ -1085,7 +1076,7 @@ fn finish_automated_profile(
         }
         playback.paused = run.paused;
         counters.start_capture();
-        if let Some(trace_sink) = trace.capture.as_deref() {
+        if let Some(trace_sink) = trace.as_deref() {
             trace_sink.begin_capture();
         }
         audit.0.start_capture();
@@ -1128,8 +1119,7 @@ fn finish_automated_profile(
     print!("{}", audit.0.format());
     print!("{}", audit.2.format());
     print!("{}", format_render_passes(&audit.1));
-    print!("{}", trace.window.format());
-    match trace.capture.as_deref() {
+    match trace.as_deref() {
         Some(trace_sink) => print!("{}", trace_sink.format_capture(report.frame_count())),
         None => println!("SYSTEM CPU  whole capture: no trace sink"),
     }
