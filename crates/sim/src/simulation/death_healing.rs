@@ -50,25 +50,67 @@ pub(super) fn refresh_support(
     buildings: &[BuildingSnapshot],
     health: Option<&[i32]>,
 ) {
-    if !units.iter().any(|u| u.death_heal.is_some()) {
-        return;
-    }
-    let mut presence = [false; 2];
-    let mut counts = BTreeMap::<PlayerId, i32>::new();
-    for (i, b) in buildings.iter().enumerate() {
-        if health.map_or(b.health, |h| h[i]) <= 0 {
-            continue;
+    SupportMembers::of(units, buildings).refresh(units, buildings, health);
+}
+
+/// The snapshot indices of buildings that contribute death-heal support and of units that receive
+/// it. Both are fixed when the snapshots are built, so a pass that refreshes support after every
+/// action gathers them once. Health, team and owner stay live: they are read on each refresh.
+pub(super) struct SupportMembers {
+    buildings: Vec<usize>,
+    units: Vec<usize>,
+}
+
+impl SupportMembers {
+    pub(super) fn of(units: &[UnitSnapshot], buildings: &[BuildingSnapshot]) -> Self {
+        let units: Vec<_> = units
+            .iter()
+            .enumerate()
+            .filter_map(|(i, u)| u.death_heal.is_some().then_some(i))
+            .collect();
+        if units.is_empty() {
+            return Self {
+                buildings: Vec::new(),
+                units,
+            };
         }
-        match b.death_heal_contribution {
-            Some(DeathHealContribution::Linker) => presence[usize::from(b.team.0)] = true,
-            Some(DeathHealContribution::Production(owner)) => {
-                *counts.entry(owner).or_default() += 1
+        let buildings = buildings
+            .iter()
+            .enumerate()
+            .filter_map(|(i, b)| b.death_heal_contribution.is_some().then_some(i))
+            .collect();
+        Self { buildings, units }
+    }
+
+    pub(super) fn refresh(
+        &self,
+        units: &mut [UnitSnapshot],
+        buildings: &[BuildingSnapshot],
+        health: Option<&[i32]>,
+    ) {
+        if self.units.is_empty() {
+            return;
+        }
+        let mut presence = [false; 2];
+        let mut counts = BTreeMap::<PlayerId, i32>::new();
+        for &i in &self.buildings {
+            let b = &buildings[i];
+            if health.map_or(b.health, |h| h[i]) <= 0 {
+                continue;
             }
-            None => {}
+            match b.death_heal_contribution {
+                Some(DeathHealContribution::Linker) => presence[usize::from(b.team.0)] = true,
+                Some(DeathHealContribution::Production(owner)) => {
+                    *counts.entry(owner).or_default() += 1
+                }
+                None => {}
+            }
         }
-    }
-    for u in units {
-        if let Some(support) = &mut u.death_heal {
+        for &i in &self.units {
+            let u = &mut units[i];
+            let Some(support) = &mut u.death_heal else {
+                continue;
+            };
             let p = crate::building_mechanics::death_heal_for_version(support.version).unwrap();
             support.active = presence[usize::from(u.team.0)];
             support.healing = if presence[usize::from(u.team.0)] {

@@ -182,6 +182,7 @@ impl Simulation {
             })
             .collect::<Vec<_>>();
         self.refresh_carrier_auras(units);
+        let support_members = death_healing::SupportMembers::of(units, buildings);
         for (_, entity, action) in actions {
             if self.world.get::<NativeAction>(entity).is_none() {
                 continue;
@@ -554,7 +555,7 @@ impl Simulation {
                     }
                 }
             }
-            death_healing::refresh_support(units, buildings, None);
+            support_members.refresh(units, buildings, None);
         }
     }
 }
