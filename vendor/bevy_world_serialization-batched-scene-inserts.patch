@@ -1,6 +1,5 @@
-diff -ruN ../../castle-fight-native-worktrees/bws-orig/src/world_asset.rs bevy_world_serialization/src/world_asset.rs
---- a/src/world_asset.rs	2026-11-02 12:16:19.666067276 +1300
-+++ b/src/world_asset.rs	2026-11-02 12:17:19.486687111 +1300
+--- a/src/world_asset.rs
++++ b/src/world_asset.rs
 @@ -1,18 +1,21 @@
 -use core::any::TypeId;
 +use core::{alloc::Layout, any::TypeId, ptr::NonNull};

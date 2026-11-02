@@ -213,16 +213,24 @@ pub struct SpotLightTexture {
 /// The [`Sphere`] component is used for frustum culling.
 pub fn update_spot_light_bounding_spheres(
     mut commands: Commands,
-    spot_lights_query: Query<
-        (Entity, &SpotLight, &GlobalTransform),
+    mut spot_lights_query: Query<
+        (Entity, &SpotLight, &GlobalTransform, Option<&mut Sphere>),
         Or<(Changed<SpotLight>, Changed<GlobalTransform>)>,
     >,
 ) {
-    for (spot_light_entity, spot_light, global_transform) in &spot_lights_query {
-        commands.entity(spot_light_entity).insert(Sphere {
+    for (spot_light_entity, spot_light, global_transform, sphere) in &mut spot_lights_query {
+        let bounds = Sphere {
             center: global_transform.translation_vec3a(),
             radius: spot_light.range,
-        });
+        };
+        // Moving lights change every frame; update their sphere in place instead of
+        // queueing an insert for each one.
+        match sphere {
+            Some(mut sphere) => *sphere = bounds,
+            None => {
+                commands.entity(spot_light_entity).insert(bounds);
+            }
+        }
     }
 }
 

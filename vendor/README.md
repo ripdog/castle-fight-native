@@ -92,10 +92,10 @@ from 9.9 to 8.6 ms.
 
 ## bevy_light 0.19.1
 
-`bevy_light/` is the crates.io release of `bevy_light` 0.19.1 with one change,
+`bevy_light/` is the crates.io release of `bevy_light` 0.19.1 with two changes,
 wired in through `[patch.crates-io]` like `bevy_pbr`.
 
-The change is in `src/lib.rs`. `check_dir_light_mesh_visibility` defers marking
+The first change is in `src/lib.rs`. `check_dir_light_mesh_visibility` defers marking
 shadow-casting entities visible to a command, so it can run alongside
 `check_point_light_mesh_visibility`, and that command built a fresh
 `QueryState<&mut ViewVisibility>` every frame. Building one visits every
@@ -104,17 +104,27 @@ about 2% of main-thread samples. The patch keeps the query state in a `Local`
 shared with the command, so later frames only visit new archetypes. Which
 entities are marked is unchanged.
 
+The second is in `src/point_light.rs` and `src/spot_light.rs`.
+`update_point_light_bounding_spheres` queued a command inserting a fresh
+`Sphere` for every light whose transform changed, and WC3 model lights move
+with their units every frame. The patch writes the sphere in place when the
+light already has one and only queues the insert for new lights. Both run before
+`VisibilitySystems::UpdateFrusta`, ahead of the visibility check that reads the
+sphere, so the value it sees is unchanged.
+
 ### Re-applying on a Bevy upgrade
 
 1. Replace `bevy_light/` with the new release from
    `~/.cargo/registry/src/*/bevy_light-<version>` (drop `.cargo-ok`,
    `.cargo_vcs_info.json`, `Cargo.lock` and `Cargo.toml.orig`).
-2. Apply `bevy_light-cached-deferred-view-visibility.patch` from inside
-   `bevy_light/` (`patch -p1 < ../bevy_light-cached-deferred-view-visibility.patch`),
-   resolving by hand if `check_dir_light_mesh_visibility` changed, then
-   regenerate the patch.
-3. If upstream caches the query (its `TODO` there asks for a resource), delete
-   the fork and its `[patch.crates-io]` entry instead.
+2. Apply `bevy_light-cached-deferred-view-visibility.patch` and
+   `bevy_light-in-place-light-spheres.patch` from inside `bevy_light/`
+   (`patch -p1 < ../<name>.patch`), resolving by hand if
+   `check_dir_light_mesh_visibility` or the bounding-sphere systems changed,
+   then regenerate the patches.
+3. Drop a patch once upstream does the same (its `TODO` in
+   `check_dir_light_mesh_visibility` asks for a cached query), and delete the
+   fork and its `[patch.crates-io]` entry when neither is left.
 
 ## bevy_world_serialization 0.19.1
 

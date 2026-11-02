@@ -194,16 +194,24 @@ impl Default for PointLightShadowMap {
 /// The [`Sphere`] component is used for frustum culling.
 pub fn update_point_light_bounding_spheres(
     mut commands: Commands,
-    point_lights_query: Query<
-        (Entity, &PointLight, &GlobalTransform),
+    mut point_lights_query: Query<
+        (Entity, &PointLight, &GlobalTransform, Option<&mut Sphere>),
         Or<(Changed<PointLight>, Changed<GlobalTransform>)>,
     >,
 ) {
-    for (point_light_entity, point_light, global_transform) in &point_lights_query {
-        commands.entity(point_light_entity).insert(Sphere {
+    for (point_light_entity, point_light, global_transform, sphere) in &mut point_lights_query {
+        let bounds = Sphere {
             center: global_transform.translation_vec3a(),
             radius: point_light.range,
-        });
+        };
+        // Moving lights change every frame; update their sphere in place instead of
+        // queueing an insert for each one.
+        match sphere {
+            Some(mut sphere) => *sphere = bounds,
+            None => {
+                commands.entity(point_light_entity).insert(bounds);
+            }
+        }
     }
 }
 
