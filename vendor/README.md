@@ -19,16 +19,27 @@ upstream's, so results do not depend on scheduling.
 The allocator and skin bookkeeping it needs are private to `bevy_pbr`, which is
 why this is a fork rather than a system in the client.
 
+A second, smaller change is in `src/prepass/mod.rs`.
+`update_mesh_previous_global_transforms` keeps a `PreviousGlobalTransform` on
+every mesh whenever any 3D camera is active: it inserts one on each new mesh by
+command and walks every mesh each frame to refresh it. Those transforms only
+feed motion vectors, and the client's cameras use a depth prepass without
+`MotionVectorPrepass`, so the patch runs the system only while a camera has
+`MotionVectorPrepass`. Extraction falls back to the current transform for meshes
+without one. In the 700-unit benchmark this took PreUpdate from 0.53 to 0.37 ms.
+
 ### Re-applying on a Bevy upgrade
 
 1. Replace `bevy_pbr/` with the new release from
    `~/.cargo/registry/src/*/bevy_pbr-<version>` (drop `.cargo-ok`,
    `.cargo_vcs_info.json`, `Cargo.lock` and `Cargo.toml.orig`).
-2. Apply `bevy_pbr-parallel-skin-extract.patch` from inside `bevy_pbr/`
-   (`patch -p1 < ../bevy_pbr-parallel-skin-extract.patch`), resolving by hand
-   if `extract_skins` changed, then regenerate the patch.
-3. If upstream has made the joint walk parallel itself, delete the fork and the
-   `[patch.crates-io]` entry instead.
+2. Apply `bevy_pbr-parallel-skin-extract.patch` and
+   `bevy_pbr-motion-vector-previous-transforms.patch` from inside `bevy_pbr/`
+   (`patch -p1 < ../<name>.patch`), resolving by hand if `extract_skins` or
+   `update_mesh_previous_global_transforms` changed, then regenerate the
+   patches.
+3. Drop a patch once upstream does the same, and delete the fork and the
+   `[patch.crates-io]` entry when neither is left.
 
 ## bevy_transform 0.19.1
 

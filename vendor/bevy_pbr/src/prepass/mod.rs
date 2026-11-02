@@ -222,7 +222,9 @@ type PreviousMeshFilter = Or<(With<Mesh3d>, With<MeshletMesh3d>)>;
 
 pub fn update_mesh_previous_global_transforms(
     mut commands: Commands,
-    views: Query<&Camera, Or<(With<Camera3d>, With<ShadowView>)>>,
+    // Previous transforms only feed motion vectors, so without a camera that writes them,
+    // keeping one per mesh is wasted work.
+    views: Query<&Camera, With<MotionVectorPrepass>>,
     new_meshes: Query<
         (Entity, &GlobalTransform),
         (PreviousMeshFilter, Without<PreviousGlobalTransform>),
