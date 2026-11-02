@@ -42,10 +42,11 @@ codegen-units = 1
 inherits = "release"
 debug = "line-tables-only"
 
-# Local fork of bevy_pbr 0.19.1; see vendor/README.md for the patch and how to re-apply it.
+# Local forks of Bevy 0.19.1 crates; see vendor/README.md for the patches and how to re-apply them.
 [patch.crates-io]
 bevy_light = { path = "vendor/bevy_light" }
 bevy_pbr = { path = "vendor/bevy_pbr" }
 bevy_render = { path = "vendor/bevy_render" }
+bevy_tasks = { path = "vendor/bevy_tasks" }
 bevy_transform = { path = "vendor/bevy_transform" }
 bevy_world_serialization = { path = "vendor/bevy_world_serialization" }

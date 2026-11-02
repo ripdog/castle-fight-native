@@ -75,10 +75,10 @@ frame-pointer profile shows propagation CPU down 21% with the same work samples.
 
 ## bevy_render 0.19.1
 
-`bevy_render/` is the crates.io release of `bevy_render` 0.19.1 with one
-change, wired in through `[patch.crates-io]` like `bevy_pbr`.
+`bevy_render/` is the crates.io release of `bevy_render` 0.19.1 with two
+changes, wired in through `[patch.crates-io]` like `bevy_pbr`.
 
-The change is in `src/render_phase/draw.rs` and `src/render_phase/mod.rs`. A
+The first change is in `src/render_phase/draw.rs` and `src/render_phase/mod.rs`. A
 draw function keeps per-call ECS state (`SystemState::get` needs `&mut`), and
 `SortedRenderPhase::render_range` holds the `DrawFunctions` write lock, so a
 phase can record into only one render pass at a time. The client's chunked
@@ -96,17 +96,24 @@ Draw results are unchanged; only which `SystemState` instance fetches the
 parameters differs. In the 700-unit benchmark render/submit/present dropped
 from 9.9 to 8.6 ms.
 
+The second is in `src/pipelined_rendering.rs`: the render thread calls
+`ComputeTaskPool::use_secondary_on_this_thread()` before it first takes the
+pool, so the render app runs on the secondary compute pool when the
+application created one (see `bevy_tasks` below).
+
 ### Re-applying on a Bevy upgrade
 
 1. Replace `bevy_render/` with the new release from
    `~/.cargo/registry/src/*/bevy_render-<version>` (drop `.cargo-ok`,
    `.cargo_vcs_info.json`, `Cargo.lock` and `Cargo.toml.orig`).
-2. Apply `bevy_render-draw-function-lanes.patch` from inside `bevy_render/`
-   (`patch -p1 < ../bevy_render-draw-function-lanes.patch`), resolving by hand
-   if `DrawFunctionsInternal` or `render_range` changed, then regenerate the
-   patch.
-3. If upstream can record one phase into several passes concurrently, delete
-   the fork and its `[patch.crates-io]` entry instead.
+2. Apply `bevy_render-draw-function-lanes.patch` and
+   `bevy_render-secondary-compute-pool.patch` from inside `bevy_render/`
+   (`patch -p1 < ../<name>.patch`), resolving by hand if
+   `DrawFunctionsInternal`, `render_range` or the render thread's start changed,
+   then regenerate the patches.
+3. Drop the lanes patch if upstream can record one phase into several passes
+   concurrently, and the pool patch together with the `bevy_tasks` fork. Delete
+   the fork and its `[patch.crates-io]` entry when neither is left.
 
 ## bevy_light 0.19.1
 
@@ -180,3 +187,37 @@ allocation is freed without dropping once `insert_by_ids` has moved it out.
    resolving by hand if `write_to_world_with` changed, then regenerate the patch.
 3. If upstream spawns scenes with batched or typed inserts, delete the fork and
    its `[patch.crates-io]` entry instead.
+
+## bevy_tasks 0.19.1
+
+`bevy_tasks/` is the crates.io release of `bevy_tasks` 0.19.1 with one change,
+wired in through `[patch.crates-io]` like `bevy_pbr`.
+
+The change is in `src/usages.rs`. The main app and the pipelined render app
+share one `ComputeTaskPool`, and a thread that waits on a scope (every
+`par_iter`, and every multithreaded schedule) runs whatever task the pool's
+executor hands it until the scope finishes. A main-app system on the Update
+chain therefore often ran a multi-millisecond render system before it could
+return: in one traced frame `update_wc3_particles` (normally 0.8 ms) spanned
+4.3 ms, 3.2 ms of it `batch_and_prepare_sorted_render_phase` and
+`write_binned_instance_buffers`. The patch adds an optional secondary compute
+pool (`ComputeTaskPool::init_secondary`) and a thread-local flag
+(`ComputeTaskPool::use_secondary_on_this_thread`); on flagged threads
+`get`, `try_get` and `get_or_init` return the secondary pool. The client
+creates one for the render app, whose workers set the flag, and the render
+thread sets it through the `bevy_render` patch, so each app's scope waits only
+pick up that app's tasks. Without a secondary pool every accessor behaves as
+upstream. In the 700-unit benchmark, pooled over five sessions, separate pools
+(7/7 and nearby splits) beat one shared pool of 10: avg FPS 46.0 to 46.5,
+1% low 23.7 to 24.7, late-game FPS 34.7 to 35.3.
+
+### Re-applying on a Bevy upgrade
+
+1. Replace `bevy_tasks/` with the new release from
+   `~/.cargo/registry/src/*/bevy_tasks-<version>` (drop `.cargo-ok`,
+   `.cargo_vcs_info.json`, `Cargo.lock` and `Cargo.toml.orig`).
+2. Apply `bevy_tasks-secondary-compute-pool.patch` from inside `bevy_tasks/`
+   (`patch -p1 < ../bevy_tasks-secondary-compute-pool.patch`), resolving by hand
+   if the `taskpool!` pools changed, then regenerate the patch.
+3. If upstream lets a sub-app use its own compute pool, delete the fork, its
+   `[patch.crates-io]` entry and the `bevy_render` pool patch instead.

@@ -476,6 +476,7 @@ fn main() {
     raise_open_file_limit();
     configure_asset_io_task_pool();
     let options = ClientOptions::parse();
+    configure_render_compute_task_pool(options.render_threads);
     let mut client_settings = client_settings::ClientSettings::load();
     if let Some(theme) = options.profile_theme {
         client_settings.ui_theme = theme;
@@ -1211,6 +1212,9 @@ struct ClientOptions {
     sim_workers: usize,
     /// Presentation compute pool threads; `None` uses [`presentation_task_pools`]'s default.
     compute_threads: Option<usize>,
+    /// Render app compute pool threads, `Some(0)` to share the presentation pool; `None` uses
+    /// [`PresentationThreads::default_for`].
+    render_threads: Option<usize>,
 }
 
 impl ClientOptions {
@@ -1249,6 +1253,7 @@ impl ClientOptions {
             list_map_versions: false,
             sim_workers: default_worker_count(),
             compute_threads: None,
+            render_threads: None,
         };
         let mut explicit_warmup = false;
         let mut explicit_duration = false;
@@ -1392,6 +1397,16 @@ impl ClientOptions {
                             .expect("--compute-threads requires a positive thread count"),
                     );
                 }
+                "--render-threads" => {
+                    let value = args
+                        .next()
+                        .expect("--render-threads requires a thread count");
+                    options.render_threads = Some(
+                        value
+                            .parse()
+                            .expect("--render-threads requires a thread count"),
+                    );
+                }
                 "--map-version" => {
                     let value = args
                         .next()
@@ -1451,7 +1466,7 @@ impl ClientOptions {
                 "--list-map-versions" => options.list_map_versions = true,
                 "-h" | "--help" => {
                     println!(
-                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--builder SLOT:RAWCODE] [--list-map-versions] [--stress-units N] [--stress-visual RAWCODE N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS] [--profile-until-tick TICK] [--sim-workers N] [--compute-threads N] [--profile-paused] [--profile] [--profile-screenshot PATH] [--benchmark] [--perf-disable LIST] [--capture-frames FIRST_TICK COUNT DIR] [--render-experiment baseline|freeze-bounds|hide-skinned|hide-particles|hide-transparent|legacy-team-color|legacy-geoset-visibility|legacy-attachment-search|legacy-attachment-index|legacy-effect-pooling|legacy-splat-updates|legacy-splat-material-state|legacy-animated-alpha-state|legacy-animated-texture-state|freeze-materials|freeze-poses|bindless-auto|bindless-64|bindless-128|bindless-256|no-bindless]"
+                        "Usage: cargo run -p castle-fight-client -- [--server 127.0.0.1:6112] [--map-version 9.27] [--map-revision r1] [--seed N] [--team-size 1|2|3] [--builder SLOT:RAWCODE] [--list-map-versions] [--stress-units N] [--stress-visual RAWCODE N] [--no-health-bars] [--perf-log] [--profile-quicksave] [--profile-quicksave-path PATH] [--profile-warmup SECONDS] [--profile-duration SECONDS] [--profile-until-tick TICK] [--sim-workers N] [--compute-threads N] [--render-threads N] [--profile-paused] [--profile] [--profile-screenshot PATH] [--benchmark] [--perf-disable LIST] [--capture-frames FIRST_TICK COUNT DIR] [--render-experiment baseline|freeze-bounds|hide-skinned|hide-particles|hide-transparent|legacy-team-color|legacy-geoset-visibility|legacy-attachment-search|legacy-attachment-index|legacy-effect-pooling|legacy-splat-updates|legacy-splat-material-state|legacy-animated-alpha-state|legacy-animated-texture-state|freeze-materials|freeze-poses|bindless-auto|bindless-64|bindless-128|bindless-256|no-bindless]"
                     );
                     std::process::exit(0);
                 }
@@ -2329,29 +2344,79 @@ fn configure_asset_io_task_pool() {
     });
 }
 
+/// Gives the render app its own compute pool unless `render_threads` (or the default for this
+/// machine) is zero. See [`PresentationThreads`].
+fn configure_render_compute_task_pool(render_threads: Option<usize>) {
+    let threads =
+        render_threads.unwrap_or_else(|| PresentationThreads::default_for(logical_cores()).render);
+    if threads == 0 {
+        return;
+    }
+    bevy::tasks::ComputeTaskPool::init_secondary(|| {
+        TaskPoolBuilder::new()
+            .num_threads(threads)
+            .thread_name("Render Compute Task Pool".to_owned())
+            .on_thread_spawn(bevy::tasks::ComputeTaskPool::use_secondary_on_this_thread)
+            .build()
+    });
+}
+
 fn default_io_thread_count(total_threads: usize) -> usize {
     // Match Bevy's default IO assignment policy: 25% of available threads, rounded to nearest
     // integer (halves upward), with a floor of one thread and a ceiling of four.
     total_threads.saturating_add(2).div_euclid(4).clamp(1, 4)
 }
 
+fn logical_cores() -> usize {
+    std::thread::available_parallelism()
+        .map(usize::from)
+        .unwrap_or(1)
+}
+
+/// Compute threads for the main app's pool and the render app's pool.
+///
+/// The main and render apps each spend about as long per late-game frame, mostly in systems
+/// that wait on parallel scopes. A thread waiting on a scope runs whatever task the pool hands
+/// it, so with one shared pool a main-app system regularly finished a multi-millisecond render
+/// system before returning to its own chain (and the render thread likewise). Separate pools keep
+/// each app's waits to its own work. With 8 or more logical cores each pool gets half of them plus
+/// one: on 12, 7/7 and 6/6 to 6/8 splits beat a shared pool of 10 by about 1% average and 4% 1%-low
+/// FPS, and render pools of 4 or 5 starved the render app. Smaller machines keep a single pool
+/// with every logical core but two.
+struct PresentationThreads {
+    compute: usize,
+    /// Zero shares the compute pool.
+    render: usize,
+}
+
+impl PresentationThreads {
+    fn default_for(logical: usize) -> Self {
+        if logical >= 8 {
+            Self {
+                compute: logical / 2 + 1,
+                render: logical / 2 + 1,
+            }
+        } else {
+            Self {
+                compute: logical.saturating_sub(2).max(1),
+                render: 0,
+            }
+        }
+    }
+}
+
 /// Bevy's default splits logical cores 25/25/50 between IO, async compute and compute, leaving
 /// PostUpdate's parallel transform, animation and visibility passes on half the cores. Those
-/// passes bound late-game frames, so compute gets every logical core but two.
+/// passes bound late-game frames, so the presentation pools get them (see
+/// [`PresentationThreads`]).
 fn presentation_task_pools(compute_threads: Option<usize>) -> TaskPoolOptions {
-    let logical = std::thread::available_parallelism()
-        .map(usize::from)
-        .unwrap_or(1);
     let mut options = TaskPoolOptions::default();
     options.io.max_threads = 2;
     options.async_compute.max_threads = 2;
-    match compute_threads {
-        Some(threads) => {
-            options.compute.min_threads = threads;
-            options.compute.max_threads = threads;
-        }
-        None => options.compute.min_threads = logical.saturating_sub(2).max(1),
-    }
+    let threads = compute_threads
+        .unwrap_or_else(|| PresentationThreads::default_for(logical_cores()).compute);
+    options.compute.min_threads = threads;
+    options.compute.max_threads = threads;
     options
 }
 

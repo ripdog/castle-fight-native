@@ -150,6 +150,9 @@ impl Plugin for PipelinedRenderingPlugin {
             #[cfg(feature = "trace")]
             let _span = bevy_log::info_span!("render thread").entered();
 
+            // The render app's systems and parallel iteration use the secondary compute pool when
+            // the application created one.
+            ComputeTaskPool::use_secondary_on_this_thread();
             let compute_task_pool = ComputeTaskPool::get();
             loop {
                 // run a scope here to allow main world to use this thread while it's waiting for the render app
