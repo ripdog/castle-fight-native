@@ -3965,10 +3965,38 @@ fn retain_prewarmed_wc3_effects(
         commands
             .entity(entity)
             .remove::<PrewarmingWc3Effect>()
-            .insert_recursive::<Children>(Disabled);
+            .queue(disable_effect_tree);
         pool.recycle(warmup.key, entity);
         plan.prepared_total += 1;
     }
+}
+
+/// Disables a pooled effect's whole hierarchy, like `insert_recursive::<Children>(Disabled)` but in
+/// one walk rather than a world re-borrow and child list copy per entity.
+fn disable_effect_tree(root: EntityWorldMut) {
+    for_each_in_tree(root, |entity| {
+        entity.insert(Disabled);
+    });
+}
+
+/// Re-enables a reused effect's hierarchy, also clearing the prewarm marker in the same walk.
+fn enable_effect_tree(root: EntityWorldMut) {
+    for_each_in_tree(root, |entity| {
+        entity.remove::<(Disabled, Wc3EffectWarmup)>();
+    });
+}
+
+fn for_each_in_tree(mut root: EntityWorldMut, mut apply: impl FnMut(&mut EntityWorldMut)) {
+    let mut pending = vec![root.id()];
+    root.world_scope(|world| {
+        while let Some(entity) = pending.pop() {
+            let mut entity = world.entity_mut(entity);
+            apply(&mut entity);
+            if let Some(children) = entity.get::<Children>() {
+                pending.extend(children);
+            }
+        }
+    });
 }
 
 fn spawn_or_reuse_timed_wc3_visual(
@@ -4002,8 +4030,7 @@ fn spawn_or_reuse_wc3_visual(
         commands
             .entity(entity)
             .remove::<(ChildOf, Wc3AttachToNode)>()
-            .remove_recursive::<Children, Disabled>()
-            .remove_recursive::<Children, Wc3EffectWarmup>()
+            .queue(enable_effect_tree)
             .insert((transform, Visibility::Inherited, Wc3EffectReusePending));
         // Scene-local emitter bindings survive reuse; the reset system rewinds
         // counters/clocks without reparsing the hierarchy. Ribbon scenes are
@@ -4422,7 +4449,7 @@ fn sync_render_entities(
                 commands
                     .entity(model_root)
                     .remove::<ChildOf>()
-                    .insert_recursive::<Children>(Disabled);
+                    .queue(disable_effect_tree);
                 effect_pool.recycle(key, model_root);
             }
             commands.entity(projectile_entry.entity).try_despawn();
@@ -6491,7 +6518,7 @@ fn release_attached_timed_wc3_effect(
         commands
             .entity(effect.entity)
             .remove::<(ChildOf, Wc3AttachToNode)>()
-            .insert_recursive::<Children>(Disabled);
+            .queue(disable_effect_tree);
         pool.recycle(key, effect.entity);
     } else {
         commands.entity(effect.entity).try_despawn();
@@ -6508,7 +6535,7 @@ fn release_status_visual(
         commands
             .entity(effect.entity)
             .remove::<(ChildOf, Wc3AttachToNode)>()
-            .insert_recursive::<Children>(Disabled);
+            .queue(disable_effect_tree);
         pool.recycle(key, effect.entity);
     } else {
         commands.entity(effect.entity).try_despawn();
@@ -6764,7 +6791,7 @@ fn age_timed_wc3_effects(
                         .entity(effect.entity)
                         .remove::<ChildOf>()
                         .remove::<Wc3AttachToNode>()
-                        .insert_recursive::<Children>(Disabled);
+                        .queue(disable_effect_tree);
                     effect_pool.recycle(pool_key, effect.entity);
                 } else {
                     commands.entity(effect.entity).try_despawn();
