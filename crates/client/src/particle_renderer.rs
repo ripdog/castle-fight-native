@@ -65,6 +65,7 @@ use bevy::{
         view::{ExtractedView, Msaa, ViewUniform, ViewUniformOffset, ViewUniforms},
     },
     shader::ShaderDefVal,
+    tasks::ComputeTaskPool,
 };
 use bytemuck::{Pod, Zeroable};
 
@@ -155,8 +156,10 @@ struct ExtractedWc3Particles {
     slab_textures: Vec<Vec<Option<AssetId<Image>>>>,
     experiment: RenderExperiment,
     batching: ParticleBatching,
-    /// Drop zero-alpha and off-frustum particles at queue time.
+    /// Drop zero-alpha and off-frustum particles at extraction and queue time.
     cull: bool,
+    /// Particles dropped at extraction because no view could draw them.
+    rejects: ParticleExtractRejects,
 }
 
 impl Default for ExtractedWc3Particles {
@@ -168,20 +171,47 @@ impl Default for ExtractedWc3Particles {
             experiment: RenderExperiment::default(),
             batching: ParticleBatching::Emitter,
             cull: true,
+            rejects: ParticleExtractRejects::default(),
         }
     }
 }
 
+/// Camera frustums and per-chunk output reused across extractions.
+#[derive(Default)]
+struct ParticleExtractScratch {
+    frustums: Vec<Frustum>,
+    chunks: Vec<Vec<ExtractedWc3Particle>>,
+}
+
+/// Particles that cannot draw in any view, dropped before they are copied.
+#[derive(Clone, Copy, Default)]
+struct ParticleExtractRejects {
+    zero_alpha: usize,
+    outside: usize,
+}
+
+/// Main-world 3D cameras whose frustums bound which particles any view can draw.
+type ParticleCameras<'w, 's> =
+    Query<'w, 's, (&'static Camera, Option<&'static Frustum>), With<Camera3d>>;
+
+/// Billboard particles extracted per compute task; enough to amortize task overhead.
+const EXTRACTED_PARTICLES_PER_TASK: usize = 4096;
+
 fn extract_wc3_particles(
     mut commands: Commands,
     particles: Extract<Res<Wc3BillboardParticles>>,
-    experiment: Extract<Res<RenderExperiment>>,
-    disable: Extract<Option<Res<PerfDisable>>>,
+    cameras: Extract<ParticleCameras>,
+    settings: (
+        Extract<Res<RenderExperiment>>,
+        Extract<Option<Res<PerfDisable>>>,
+    ),
     pipeline: Res<Wc3ParticlePipeline>,
     mut extracted: ResMut<ExtractedWc3Particles>,
+    mut scratch: Local<ParticleExtractScratch>,
 ) {
+    let (experiment, disable) = settings;
     extracted.particles.clear();
-    extracted.slab_textures.clear();
+    extracted.rejects = ParticleExtractRejects::default();
     extracted.experiment = **experiment;
     let disable = disable.as_deref().copied().unwrap_or_default();
     extracted.batching = if disable.emitter_batching {
@@ -191,6 +221,20 @@ fn extract_wc3_particles(
     };
     extracted.cull = !disable.particle_cull;
 
+    // Texture slabs follow the particle store's texture list, so a slab keeps its contents
+    // (and its bind group) for as long as no new particle texture appears.
+    let slab_size = pipeline.texture_slab_size();
+    let textures = particles.textures();
+    let slab_count = textures.len().div_ceil(slab_size);
+    extracted.slab_textures.resize_with(slab_count, Vec::new);
+    extracted.slab_textures.iter_mut().for_each(Vec::clear);
+    for (index, texture) in textures.enumerate() {
+        extracted.slab_textures[index / slab_size].push(texture);
+    }
+    while extracted.slab_entities.len() < slab_count {
+        extracted.slab_entities.push(commands.spawn_empty().id());
+    }
+
     let hide_particles = matches!(
         **experiment,
         RenderExperiment::HideParticles | RenderExperiment::HideTransparent
@@ -199,51 +243,118 @@ fn extract_wc3_particles(
         return;
     }
 
-    let slab_size = pipeline.texture_slab_size();
-    let mut texture_slots = HashMap::<Option<AssetId<Image>>, (usize, u32)>::new();
-    for Wc3BillboardParticleRenderData {
-        source,
-        emitter_index,
-        texture,
-        blend_mode,
-        position,
-        scale,
-        color,
-        uv_rect,
-    } in particles.render_data()
-    {
-        let (slab_index, texture_slot) = if let Some(&slot) = texture_slots.get(&texture) {
-            slot
-        } else {
-            let texture_index = texture_slots.len();
-            let slab_index = texture_index / slab_size;
-            let texture_slot = (texture_index % slab_size) as u32;
-            if extracted.slab_textures.len() <= slab_index {
-                extracted.slab_textures.push(Vec::with_capacity(slab_size));
-            }
-            extracted.slab_textures[slab_index].push(texture);
-            texture_slots.insert(texture, (slab_index, texture_slot));
-            (slab_index, texture_slot)
-        };
-
-        while extracted.slab_entities.len() <= slab_index {
-            extracted.slab_entities.push(commands.spawn_empty().id());
+    // A particle is dropped here only when no 3D view can draw it; each view still culls
+    // against its own frustum at queue time.
+    let ParticleExtractScratch { frustums, chunks } = &mut *scratch;
+    frustums.clear();
+    let mut frustum_cull = extracted.cull;
+    for (camera, frustum) in &cameras {
+        if !camera.is_active {
+            continue;
         }
-        let slab_entity = extracted.slab_entities[slab_index];
-        extracted.particles.push(ExtractedWc3Particle {
-            instance: Wc3ParticleInstance {
-                position_scale: [position.x, position.y, position.z, scale],
-                color,
-                uv_rect,
-                texture_slot,
-                _padding: [0; 3],
-            },
-            source,
-            emitter_index,
-            slab_entity,
-            slab_index: slab_index as u32,
-            blend_mode,
-        });
+        match frustum {
+            Some(frustum) => frustums.push(*frustum),
+            None => frustum_cull = false,
+        }
+    }
+    if frustums.is_empty() {
+        frustum_cull = false;
+    }
+    let filter = ParticleExtractFilter {
+        zero_alpha: extracted.cull,
+        frustums: if frustum_cull { frustums } else { &[] },
+        slab_size,
+        slab_entities: &extracted.slab_entities,
+    };
+
+    let chunk_count = particles.len().div_ceil(EXTRACTED_PARTICLES_PER_TASK);
+    if chunks.len() < chunk_count {
+        chunks.resize_with(chunk_count, Vec::new);
+    }
+    let sources = particles.render_data_chunks(EXTRACTED_PARTICLES_PER_TASK);
+    let rejects = if chunk_count <= 1 {
+        sources
+            .zip(chunks.iter_mut())
+            .map(|(source, out)| filter.extract(source, out))
+            .collect::<Vec<_>>()
+    } else {
+        let filter = &filter;
+        ComputeTaskPool::get().scope(|scope| {
+            for (source, out) in sources.zip(chunks.iter_mut()) {
+                scope.spawn(async move { filter.extract(source, out) });
+            }
+        })
+    };
+    let ExtractedWc3Particles {
+        particles: out,
+        rejects: total,
+        ..
+    } = &mut *extracted;
+    for (chunk, rejects) in chunks.iter().zip(rejects) {
+        out.extend_from_slice(chunk);
+        total.zero_alpha += rejects.zero_alpha;
+        total.outside += rejects.outside;
+    }
+}
+
+/// What every extracted particle is checked against and resolved with.
+struct ParticleExtractFilter<'a> {
+    zero_alpha: bool,
+    /// Active 3D camera frustums; empty when particles are not frustum culled.
+    frustums: &'a [Frustum],
+    slab_size: usize,
+    slab_entities: &'a [Entity],
+}
+
+impl ParticleExtractFilter<'_> {
+    fn extract(
+        &self,
+        particles: impl Iterator<Item = Wc3BillboardParticleRenderData>,
+        out: &mut Vec<ExtractedWc3Particle>,
+    ) -> ParticleExtractRejects {
+        out.clear();
+        let mut rejects = ParticleExtractRejects::default();
+        for particle in particles {
+            // All three transparent blend modes leave the destination unchanged at exactly
+            // zero alpha.
+            if self.zero_alpha && particle.color[3] == 0.0 {
+                rejects.zero_alpha += 1;
+                continue;
+            }
+            if !self.frustums.is_empty() {
+                // A camera-facing square fits inside this sphere at any camera angle.
+                let sphere = Sphere {
+                    center: particle.position.into(),
+                    radius: particle.scale.abs() * std::f32::consts::FRAC_1_SQRT_2,
+                };
+                if !self
+                    .frustums
+                    .iter()
+                    .any(|frustum| frustum.intersects_sphere(&sphere, false))
+                {
+                    rejects.outside += 1;
+                    continue;
+                }
+            }
+            let texture = particle.texture as usize;
+            let slab_index = texture / self.slab_size;
+            let [x, y, z] = particle.position.to_array();
+            out.push(ExtractedWc3Particle {
+                instance: Wc3ParticleInstance {
+                    position_scale: [x, y, z, particle.scale],
+                    color: particle.color,
+                    uv_rect: particle.uv_rect,
+                    texture_slot: (texture % self.slab_size) as u32,
+                    _padding: [0; 3],
+                },
+                source: particle.source,
+                emitter_index: particle.emitter_index,
+                slab_entity: self.slab_entities[slab_index],
+                slab_index: slab_index as u32,
+                blend_mode: particle.blend_mode,
+            });
+        }
+        rejects
     }
 }
 
@@ -768,6 +879,9 @@ fn queue_wc3_particles(
             .iter()
             .map(|textures| pipeline.bound_texture_count(extracted.experiment, textures.len()))
             .sum(),
+        candidates: extracted.rejects.zero_alpha + extracted.rejects.outside,
+        zero_alpha: extracted.rejects.zero_alpha,
+        outside: extracted.rejects.outside,
         ..default()
     };
     if extracted.particles.is_empty() {

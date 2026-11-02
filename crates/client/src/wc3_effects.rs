@@ -2894,7 +2894,8 @@ struct Wc3BillboardParticle {
     atlas_frame: u32,
     visual: Arc<Wc3ParticleVisualSpec>,
     material_step: u8,
-    texture: Option<Handle<Image>>,
+    /// Index into [`Wc3BillboardParticles::textures`].
+    texture: u32,
     blend_mode: Wc3ParticleBlendMode,
     color: [f32; 4],
     uv_rect: [f32; 4],
@@ -2905,7 +2906,8 @@ struct Wc3BillboardParticle {
 pub(crate) struct Wc3BillboardParticleRenderData {
     pub(crate) source: Entity,
     pub(crate) emitter_index: u32,
-    pub(crate) texture: Option<AssetId<Image>>,
+    /// Index into [`Wc3BillboardParticles::textures`].
+    pub(crate) texture: u32,
     pub(crate) blend_mode: Wc3ParticleBlendMode,
     pub(crate) position: Vec3,
     pub(crate) scale: f32,
@@ -2916,6 +2918,11 @@ pub(crate) struct Wc3BillboardParticleRenderData {
 #[derive(Resource, Default)]
 pub(crate) struct Wc3BillboardParticles {
     particles: Vec<Wc3BillboardParticle>,
+    /// Every texture a billboard particle has used, in first-use order. Particles refer to it by
+    /// index, so the renderer neither hashes textures per particle nor reshuffles its texture
+    /// slabs from frame to frame.
+    textures: Vec<Option<Handle<Image>>>,
+    texture_indices: HashMap<Option<AssetId<Image>>, u32>,
 }
 
 impl Wc3BillboardParticles {
@@ -2923,18 +2930,40 @@ impl Wc3BillboardParticles {
         self.particles.len()
     }
 
-    pub(crate) fn render_data(&self) -> impl Iterator<Item = Wc3BillboardParticleRenderData> + '_ {
-        self.particles
+    /// Textures by the index in [`Wc3BillboardParticleRenderData::texture`].
+    pub(crate) fn textures(&self) -> impl ExactSizeIterator<Item = Option<AssetId<Image>>> + '_ {
+        self.textures
             .iter()
-            .map(|particle| Wc3BillboardParticleRenderData {
+            .map(|texture| texture.as_ref().map(Handle::id))
+    }
+
+    /// Render data in consecutive chunks of `size` particles, for extracting in parallel.
+    pub(crate) fn render_data_chunks(
+        &self,
+        size: usize,
+    ) -> impl Iterator<Item = impl Iterator<Item = Wc3BillboardParticleRenderData> + '_> + '_ {
+        self.particles.chunks(size).map(|chunk| {
+            chunk.iter().map(|particle| Wc3BillboardParticleRenderData {
                 source: particle.source,
                 emitter_index: particle.emitter_index,
-                texture: particle.texture.as_ref().map(Handle::id),
+                texture: particle.texture,
                 blend_mode: particle.blend_mode,
                 position: particle.position,
                 scale: particle.scale,
                 color: particle.color,
                 uv_rect: particle.uv_rect,
+            })
+        })
+    }
+
+    fn texture_index(&mut self, texture: Option<&Handle<Image>>) -> u32 {
+        let next = self.textures.len() as u32;
+        *self
+            .texture_indices
+            .entry(texture.map(Handle::id))
+            .or_insert_with(|| {
+                self.textures.push(texture.cloned());
+                next
             })
     }
 
@@ -5905,7 +5934,8 @@ pub fn emit_wc3_particles(
                         .load(format!("{}/{texture}", emitter.visual.asset_prefix)),
                 );
             }
-            let compact_texture = compact_blend_mode.and(emitter.compact_texture.as_ref());
+            let compact_texture = compact_blend_mode
+                .map(|_| billboard_particles.texture_index(emitter.compact_texture.as_ref()));
             let bound_transform = emitter
                 .source_node
                 .and_then(|node| transforms.get(node).ok());
@@ -5953,7 +5983,7 @@ pub fn emit_wc3_particles(
                         atlas_frame: initial_frame,
                         visual: emitter.visual.clone(),
                         material_step,
-                        texture: compact_texture.cloned(),
+                        texture: compact_texture.expect("compact particles have a texture index"),
                         blend_mode,
                         color: [color[0], color[1], color[2], alpha],
                         uv_rect: particle_atlas_uv_rect(
@@ -8632,7 +8662,7 @@ mod tests {
             atlas_frame: 0,
             visual,
             material_step: 0,
-            texture: Some(Handle::<Image>::default()),
+            texture: 0,
             blend_mode: Wc3ParticleBlendMode::Add,
             color: [1.0, 0.0, 0.0, 1.0],
             uv_rect: [0.0, 0.0, 1.0, 1.0],
