@@ -16,6 +16,13 @@ writes the changed joint matrices on the compute task pool. Below
 `PARALLEL_JOINT_THRESHOLD` joints it stays serial. The writes are the same as
 upstream's, so results do not depend on scheduling.
 
+Gathering the skins was then most of what was left: for each of ~24k skinned
+meshes upstream asks the changed-skin query (`Changed` and `AssetChanged`
+filters) whether it was reinitialized this frame. The patch records the
+reinitialized skins in a set while it handles them and gathers the rest in
+parallel; sorting by offset keeps the result independent of thread order. In the
+700-unit benchmark extraction dropped from 2.46 to 1.75 ms.
+
 The allocator and skin bookkeeping it needs are private to `bevy_pbr`, which is
 why this is a fork rather than a system in the client.
 

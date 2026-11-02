@@ -2,7 +2,7 @@ use core::mem::{self, size_of};
 
 use bevy_asset::{prelude::AssetChanged, Assets};
 use bevy_camera::visibility::ViewVisibility;
-use bevy_ecs::prelude::*;
+use bevy_ecs::{entity::EntityHashSet, prelude::*};
 use bevy_math::Mat4;
 use bevy_mesh::skinning::{SkinnedMesh, SkinnedMeshInverseBindposes};
 use bevy_render::render_resource::{Buffer, BufferDescriptor};
@@ -16,6 +16,7 @@ use bevy_render::{
 };
 use bevy_tasks::ComputeTaskPool;
 use bevy_transform::prelude::GlobalTransform;
+use bevy_utils::Parallel;
 use offset_allocator::{Allocation, Allocator};
 use tracing::error;
 
@@ -287,8 +288,10 @@ pub fn extract_skins(
     changed_transforms: Extract<Query<(Entity, &GlobalTransform), Changed<GlobalTransform>>>,
     joints: Extract<Query<&GlobalTransform>>,
     mut removed_skinned_meshes_query: Extract<RemovedComponents<SkinnedMesh>>,
+    mut reinitialized: Local<EntityHashSet>,
 ) {
     let skin_uniforms = skin_uniforms.into_inner();
+    reinitialized.clear();
 
     // Find skins that have become visible or invisible on this frame. Allocate,
     // reallocate, or free space for them as necessary.
@@ -297,6 +300,7 @@ pub fn extract_skins(
         &changed_skinned_meshes,
         &skinned_mesh_inverse_bindposes,
         &joints,
+        &mut reinitialized,
     );
 
     // Extract the transforms for all joints from the scene, and write them into
@@ -304,7 +308,7 @@ pub fn extract_skins(
     extract_joints_for_skins(
         skin_uniforms,
         &skinned_meshes,
-        &changed_skinned_meshes,
+        &reinitialized,
         &skinned_mesh_inverse_bindposes,
         &changed_transforms,
     );
@@ -314,7 +318,7 @@ pub fn extract_skins(
         // Only remove a skin if we didn't pick it up in `add_or_delete_skins`.
         // It's possible that a necessary component was removed and re-added in
         // the same frame.
-        if !changed_skinned_meshes.contains(skinned_mesh_entity) {
+        if !reinitialized.contains(&skinned_mesh_entity) {
             remove_skin(skin_uniforms, skinned_mesh_entity.into());
         }
     }
@@ -334,12 +338,14 @@ fn add_or_delete_skins(
     >,
     skinned_mesh_inverse_bindposes: &Assets<SkinnedMeshInverseBindposes>,
     joints: &Query<&GlobalTransform>,
+    reinitialized: &mut EntityHashSet,
 ) {
     // Find every skinned mesh that changed one of (1) visibility; (2) joint
     // entities (part of `SkinnedMesh`); (3) the associated
     // `SkinnedMeshInverseBindposes` asset.
     for (skinned_mesh_entity, skinned_mesh_view_visibility, skinned_mesh) in changed_skinned_meshes
     {
+        reinitialized.insert(skinned_mesh_entity);
         // Remove the skin if it existed last frame.
         let skinned_mesh_entity = MainEntity::from(skinned_mesh_entity);
         remove_skin(skin_uniforms, skinned_mesh_entity);
@@ -368,39 +374,29 @@ const PARALLEL_JOINT_THRESHOLD: usize = 4096;
 ///
 /// Castle Fight Native patch (see vendor/README.md): upstream walks every
 /// skin's joints on one thread. Skins own disjoint ranges of the staging
-/// buffer, so they are gathered, ordered by offset, split into those ranges
-/// and written in parallel on the compute task pool.
+/// buffer, so they are gathered in parallel, ordered by offset, split into
+/// those ranges and written in parallel on the compute task pool.
 fn extract_joints_for_skins(
     skin_uniforms: &mut SkinUniforms,
     skinned_meshes: &Query<(Entity, &SkinnedMesh)>,
-    changed_skinned_meshes: &Query<
-        (Entity, &ViewVisibility, &SkinnedMesh),
-        Or<(
-            Changed<ViewVisibility>,
-            Changed<SkinnedMesh>,
-            AssetChanged<SkinnedMesh>,
-        )>,
-    >,
+    reinitialized: &EntityHashSet,
     skinned_mesh_inverse_bindposes: &Assets<SkinnedMeshInverseBindposes>,
     changed_transforms: &Query<(Entity, &GlobalTransform), Changed<GlobalTransform>>,
 ) {
-    let mut skins = Vec::new();
-    let mut total_joints = 0;
-    for (skin_entity, skin) in skinned_meshes {
+    let skin_uniform_info = &skin_uniforms.skin_uniform_info;
+    let mut gathered = Parallel::<Vec<(usize, &[Entity], &[Mat4])>>::default();
+    skinned_meshes.par_iter().for_each(|(skin_entity, skin)| {
         // If we initialized the skin this frame, we already populated all
         // the joints, so there's no need to populate them again.
-        if changed_skinned_meshes.contains(skin_entity) {
-            continue;
+        if reinitialized.contains(&skin_entity) {
+            return;
         }
-        let Some(skin_uniform_info) = skin_uniforms
-            .skin_uniform_info
-            .get(&MainEntity::from(skin_entity))
-        else {
-            continue;
+        let Some(skin_uniform_info) = skin_uniform_info.get(&MainEntity::from(skin_entity)) else {
+            return;
         };
         let Some(inverse_bindposes) = skinned_mesh_inverse_bindposes.get(&skin.inverse_bindposes)
         else {
-            continue;
+            return;
         };
         // Clamped to the allocation so ranges stay disjoint even if the joint
         // list changed without the skin being reallocated.
@@ -409,13 +405,15 @@ fn extract_joints_for_skins(
             .len()
             .min(inverse_bindposes.len())
             .min(skin_uniform_info.joints.len());
-        total_joints += joints;
-        skins.push((
+        gathered.borrow_local_mut().push((
             skin_uniform_info.offset() as usize,
             &skin.joints[..joints],
             &inverse_bindposes[..joints],
         ));
-    }
+    });
+    let mut skins = Vec::new();
+    gathered.drain_into(&mut skins);
+    let total_joints: usize = skins.iter().map(|(_, joints, _)| joints.len()).sum();
 
     skins.sort_unstable_by_key(|&(offset, ..)| offset);
     let mut rest = &mut skin_uniforms.current_staging_buffer[..];
